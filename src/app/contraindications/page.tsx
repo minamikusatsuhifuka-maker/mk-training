@@ -4,6 +4,7 @@ import { useState } from "react";
 import { contraindications, type Severity } from "@/data/contraindications";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { PageHeader } from "@/components/PageHeader";
 
 const severityConfig: Record<
   Severity,
@@ -40,14 +41,11 @@ export default function ContraindicationsPage() {
   });
 
   return (
-    <div className="p-8 max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">禁忌事項</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          薬剤・施術の禁忌・注意事項を確認できます（絶対禁忌 / 要注意 / 参考 の3段階）
-        </p>
-      </div>
+    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6">
+      <PageHeader
+        title="禁忌事項"
+        description="薬剤・施術の禁忌・注意事項を確認できます（絶対禁忌 / 要注意 / 参考 の3段階）"
+      />
 
       {/* Search */}
       <input

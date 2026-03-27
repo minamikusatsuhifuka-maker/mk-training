@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageHeader } from "@/components/PageHeader";
 
 const categoryLabels: Record<string, { label: string; filter: QuizCategory | null }> = {
   all: { label: "すべて", filter: null },
@@ -79,19 +80,12 @@ export default function QuizPage() {
     scorePct >= 80 ? "素晴らしい！" : scorePct >= 60 ? "もう少し！" : "復習しましょう";
 
   return (
-    <div className="p-8 max-w-3xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold">確認テスト</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            学んだ知識をクイズで確認しましょう
-          </p>
-        </div>
-        <Badge className="bg-teal text-teal-foreground text-sm px-3 py-1">
-          全{quizQuestions.length}問
-        </Badge>
-      </div>
+    <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-6">
+      <PageHeader
+        title="確認テスト"
+        description="学んだ知識をクイズで確認しましょう"
+        badge={`全${quizQuestions.length}問`}
+      />
 
       {/* Category tabs */}
       <Tabs value={tab} onValueChange={handleTabChange}>

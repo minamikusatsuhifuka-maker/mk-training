@@ -22,7 +22,7 @@ const stats = [
 
 export default function Home() {
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-8">
+    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-8">
       {/* Welcome Header */}
       <div>
         <h1 className="text-2xl font-bold text-teal">スタッフ研修ポータル</h1>

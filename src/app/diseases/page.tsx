@@ -5,6 +5,7 @@ import { diseases, type Disease } from "@/data/diseases";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { PageHeader } from "@/components/PageHeader";
 
 const badgeColorMap: Record<Disease["badgeColor"], string> = {
   blue: "bg-blue-100 text-blue-700 border-blue-200",
@@ -31,19 +32,12 @@ export default function DiseasesPage() {
   });
 
   return (
-    <div className="p-8 max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold">疾患一覧</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            当院で扱う主要な皮膚疾患の知識を確認できます
-          </p>
-        </div>
-        <Badge className="bg-teal text-teal-foreground text-sm px-3 py-1">
-          疾患数: {diseases.length}
-        </Badge>
-      </div>
+    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6">
+      <PageHeader
+        title="疾患一覧"
+        description="当院で扱う主要な皮膚疾患の知識を確認できます"
+        badge={`疾患数: ${diseases.length}`}
+      />
 
       {/* Search */}
       <input

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { cosmeticItems, cosmeticCategories, type CosmeticCategory } from "@/data/cosmetic";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { PageHeader } from "@/components/PageHeader";
 
 export default function CosmeticPage() {
   const [search, setSearch] = useState("");
@@ -22,19 +23,12 @@ export default function CosmeticPage() {
   });
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold">当院の美容施術・機器</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            美容皮膚科で提供している施術・機器の一覧です
-          </p>
-        </div>
-        <Badge className="bg-teal text-teal-foreground text-sm px-3 py-1">
-          {cosmeticItems.length}メニュー
-        </Badge>
-      </div>
+    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
+      <PageHeader
+        title="当院の美容施術・機器"
+        description="美容皮膚科で提供している施術・機器の一覧です"
+        badge={`${cosmeticItems.length}メニュー`}
+      />
 
       {/* Search */}
       <input

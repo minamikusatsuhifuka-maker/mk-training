@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { drugs, drugCategories, type DrugCategory } from "@/data/drugs";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/PageHeader";
 import {
   Table,
   TableBody,
@@ -29,19 +30,12 @@ export default function DrugsPage() {
   });
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold">薬剤規格リスト</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            当院で使用する主要薬剤の規格・適応を確認できます
-          </p>
-        </div>
-        <Badge className="bg-teal text-teal-foreground text-sm px-3 py-1">
-          収録数: {drugs.length}件
-        </Badge>
-      </div>
+    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
+      <PageHeader
+        title="薬剤規格リスト"
+        description="当院で使用する主要薬剤の規格・適応を確認できます"
+        badge={`収録数: ${drugs.length}件`}
+      />
 
       {/* Search */}
       <input
