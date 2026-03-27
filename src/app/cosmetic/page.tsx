@@ -1,11 +1,132 @@
+"use client";
+
+import { useState } from "react";
+import { cosmeticItems, cosmeticCategories, type CosmeticCategory } from "@/data/cosmetic";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 export default function CosmeticPage() {
+  const [search, setSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<CosmeticCategory | null>(null);
+
+  const filtered = cosmeticItems.filter((item) => {
+    const matchesCat = !selectedCategory || item.category === selectedCategory;
+    if (!matchesCat) return false;
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      item.name.toLowerCase().includes(q) ||
+      item.concern.toLowerCase().includes(q) ||
+      item.description.toLowerCase().includes(q)
+    );
+  });
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
-      <Badge variant="outline" className="text-teal border-teal">当院の美容</Badge>
-      <h1 className="text-xl font-bold">美容メニュー</h1>
-      <p className="text-muted-foreground text-sm">現在準備中です</p>
+    <div className="p-8 max-w-5xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold">当院の美容施術・機器</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            美容皮膚科で提供している施術・機器の一覧です
+          </p>
+        </div>
+        <Badge className="bg-teal text-teal-foreground text-sm px-3 py-1">
+          {cosmeticItems.length}メニュー
+        </Badge>
+      </div>
+
+      {/* Search */}
+      <input
+        type="text"
+        placeholder="施術名・対象悩みで検索..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-teal/40 placeholder:text-muted-foreground"
+      />
+
+      {/* Category filter */}
+      <div className="flex flex-wrap gap-1.5">
+        <button
+          type="button"
+          onClick={() => setSelectedCategory(null)}
+          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+            selectedCategory === null
+              ? "bg-teal text-teal-foreground"
+              : "bg-muted text-muted-foreground hover:bg-accent"
+          }`}
+        >
+          すべて
+        </button>
+        {cosmeticCategories.map((cat) => (
+          <button
+            key={cat}
+            type="button"
+            onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              selectedCategory === cat
+                ? "bg-teal text-teal-foreground"
+                : "bg-muted text-muted-foreground hover:bg-accent"
+            }`}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      {/* Count */}
+      <p className="text-sm text-muted-foreground">
+        {filtered.length}件表示中
+      </p>
+
+      {/* Cards */}
+      <div className="space-y-4">
+        {filtered.map((item) => (
+          <Card key={item.id} className="overflow-hidden">
+            <CardHeader>
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <Badge
+                  variant="outline"
+                  className={
+                    item.type === "機器"
+                      ? "bg-blue-50 text-blue-700 border-blue-200"
+                      : "bg-purple-50 text-purple-700 border-purple-200"
+                  }
+                >
+                  {item.type}
+                </Badge>
+                <Badge variant="outline" className="bg-teal-light text-teal border-teal/20">
+                  {item.category}
+                </Badge>
+              </div>
+              <CardTitle className="text-base">{item.name}</CardTitle>
+              <CardDescription className="text-sm mt-1">
+                {item.description}
+              </CardDescription>
+
+              <div className="flex flex-wrap gap-2 mt-3">
+                <Badge variant="outline" className="bg-teal-light text-teal border-teal/20 text-xs">
+                  対象: {item.concern}
+                </Badge>
+                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs">
+                  DT: {item.downtime}
+                </Badge>
+              </div>
+
+              <div className="mt-3 rounded-md bg-red-50 p-3 text-sm text-red-700">
+                <span className="mr-1">⚠</span>
+                {item.caution}
+              </div>
+            </CardHeader>
+          </Card>
+        ))}
+      </div>
+
+      {filtered.length === 0 && (
+        <p className="text-center text-muted-foreground py-12">
+          該当する施術・機器が見つかりません
+        </p>
+      )}
     </div>
   );
 }
