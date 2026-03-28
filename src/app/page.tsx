@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { drugs } from "@/data/drugs";
+import { diseases } from "@/data/diseases";
+import { quizQuestions } from "@/data/quiz";
 
 const modules = [
   { title: "疾患", description: "皮膚科の主要疾患を学ぶ", href: "/diseases", emoji: "🩺" },
@@ -14,10 +17,10 @@ const modules = [
 ];
 
 const stats = [
-  { label: "疾患数", value: "30" },
-  { label: "薬剤数", value: "100" },
+  { label: "疾患数", value: String(diseases.length) },
+  { label: "薬剤数", value: String(drugs.length) },
   { label: "美容施術", value: "16" },
-  { label: "クイズ問題", value: "100" },
+  { label: "クイズ問題", value: String(quizQuestions.length) },
 ];
 
 export default function Home() {
