@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { quizQuestions as initialQuiz, type QuizQuestion, type QuizCategory } from "@/data/quiz";
 import { AdminBanner } from "@/components/AdminBanner";
+import { supabase } from "@/lib/supabase";
+import { useAuthContext } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -65,17 +67,38 @@ function emptyQuiz(): QuizQuestion {
 }
 
 export default function AdminQuizPage() {
-  const [data, setData] = useState<QuizQuestion[]>(() => {
-    if (typeof window !== "undefined") {
-      const saved = sessionStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
-    }
-    return initialQuiz;
-  });
+  const { user } = useAuthContext();
+  const [data, setData] = useState<QuizQuestion[]>(initialQuiz);
   const [tab, setTab] = useState<string>("all");
   const [editItem, setEditItem] = useState<QuizQuestion | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const { data: rows } = await supabase.from("content_quiz").select("id, data");
+        if (rows && rows.length > 0) {
+          setData(rows.map((r) => r.data as QuizQuestion));
+          setConnected(true);
+          return;
+        }
+      } catch {}
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (saved) setData(JSON.parse(saved));
+    }
+    load();
+  }, []);
+
+  const saveToSupabase = useCallback(async (items: QuizQuestion[]) => {
+    if (!user) return;
+    try {
+      const rows = items.map((q) => ({ id: q.id, data: q, updated_at: new Date().toISOString(), updated_by: user.id }));
+      await supabase.from("content_quiz").upsert(rows);
+      setConnected(true);
+    } catch {}
+  }, [user]);
 
   useEffect(() => {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -92,8 +115,11 @@ export default function AdminQuizPage() {
     if (!editItem) return;
     setData((prev) => {
       const idx = prev.findIndex((q) => q.id === editItem.id);
-      if (idx >= 0) { const next = [...prev]; next[idx] = editItem; return next; }
-      return [...prev, editItem];
+      let next: QuizQuestion[];
+      if (idx >= 0) { next = [...prev]; next[idx] = editItem; }
+      else { next = [...prev, editItem]; }
+      saveToSupabase(next);
+      return next;
     });
     setDialogOpen(false);
     setEditItem(null);
@@ -101,6 +127,7 @@ export default function AdminQuizPage() {
 
   const handleDelete = () => {
     if (!deleteId) return;
+    supabase.from("content_quiz").delete().eq("id", deleteId).then(() => {});
     setData((prev) => prev.filter((q) => q.id !== deleteId));
     setDeleteId(null);
   };
@@ -114,7 +141,7 @@ export default function AdminQuizPage() {
 
   return (
     <div className="max-w-5xl space-y-4">
-      <AdminBanner />
+      <AdminBanner connected={connected} />
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-bold text-slate-800">クイズ管理（{data.length}問）</h1>
         <Button onClick={openNew}>新規追加</Button>

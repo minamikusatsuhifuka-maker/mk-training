@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { drugs as initialDrugs, type Drug, type DrugCategory } from "@/data/drugs";
 import { AdminBanner } from "@/components/AdminBanner";
+import { supabase } from "@/lib/supabase";
+import { useAuthContext } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -53,17 +55,38 @@ function emptyDrug(): Drug {
 }
 
 export default function AdminDrugsPage() {
-  const [data, setData] = useState<Drug[]>(() => {
-    if (typeof window !== "undefined") {
-      const saved = sessionStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
-    }
-    return initialDrugs;
-  });
+  const { user } = useAuthContext();
+  const [data, setData] = useState<Drug[]>(initialDrugs);
   const [editItem, setEditItem] = useState<Drug | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const { data: rows } = await supabase.from("content_drugs").select("id, data");
+        if (rows && rows.length > 0) {
+          setData(rows.map((r) => r.data as Drug));
+          setConnected(true);
+          return;
+        }
+      } catch {}
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (saved) setData(JSON.parse(saved));
+    }
+    load();
+  }, []);
+
+  const saveToSupabase = useCallback(async (items: Drug[]) => {
+    if (!user) return;
+    try {
+      const rows = items.map((d) => ({ id: d.id, data: d, updated_at: new Date().toISOString(), updated_by: user.id }));
+      await supabase.from("content_drugs").upsert(rows);
+      setConnected(true);
+    } catch {}
+  }, [user]);
 
   useEffect(() => {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -82,8 +105,11 @@ export default function AdminDrugsPage() {
     if (!editItem) return;
     setData((prev) => {
       const idx = prev.findIndex((d) => d.id === editItem.id);
-      if (idx >= 0) { const next = [...prev]; next[idx] = editItem; return next; }
-      return [...prev, editItem];
+      let next: Drug[];
+      if (idx >= 0) { next = [...prev]; next[idx] = editItem; }
+      else { next = [...prev, editItem]; }
+      saveToSupabase(next);
+      return next;
     });
     setDialogOpen(false);
     setEditItem(null);
@@ -91,13 +117,14 @@ export default function AdminDrugsPage() {
 
   const handleDelete = () => {
     if (!deleteId) return;
+    supabase.from("content_drugs").delete().eq("id", deleteId).then(() => {});
     setData((prev) => prev.filter((d) => d.id !== deleteId));
     setDeleteId(null);
   };
 
   return (
     <div className="max-w-5xl space-y-4">
-      <AdminBanner />
+      <AdminBanner connected={connected} />
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-bold text-slate-800">薬剤管理（{data.length}件）</h1>
         <Button onClick={openNew}>新規追加</Button>

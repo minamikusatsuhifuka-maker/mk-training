@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { diseases as initialDiseases, type Disease } from "@/data/diseases";
 import { AdminBanner } from "@/components/AdminBanner";
+import { supabase } from "@/lib/supabase";
+import { useAuthContext } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -60,17 +62,38 @@ function emptyDisease(): Disease {
 }
 
 export default function AdminDiseasesPage() {
-  const [data, setData] = useState<Disease[]>(() => {
-    if (typeof window !== "undefined") {
-      const saved = sessionStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
-    }
-    return initialDiseases;
-  });
+  const { user } = useAuthContext();
+  const [data, setData] = useState<Disease[]>(initialDiseases);
   const [editItem, setEditItem] = useState<Disease | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const { data: rows } = await supabase.from("content_diseases").select("id, data");
+        if (rows && rows.length > 0) {
+          setData(rows.map((r) => r.data as Disease));
+          setConnected(true);
+          return;
+        }
+      } catch {}
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (saved) setData(JSON.parse(saved));
+    }
+    load();
+  }, []);
+
+  const saveToSupabase = useCallback(async (items: Disease[]) => {
+    if (!user) return;
+    try {
+      const rows = items.map((d) => ({ id: d.id, data: d, updated_at: new Date().toISOString(), updated_by: user.id }));
+      await supabase.from("content_diseases").upsert(rows);
+      setConnected(true);
+    } catch {}
+  }, [user]);
 
   useEffect(() => {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -96,12 +119,15 @@ export default function AdminDiseasesPage() {
     if (!editItem) return;
     setData((prev) => {
       const idx = prev.findIndex((d) => d.id === editItem.id);
+      let next: Disease[];
       if (idx >= 0) {
-        const next = [...prev];
+        next = [...prev];
         next[idx] = editItem;
-        return next;
+      } else {
+        next = [...prev, editItem];
       }
-      return [...prev, editItem];
+      saveToSupabase(next);
+      return next;
     });
     setDialogOpen(false);
     setEditItem(null);
@@ -109,13 +135,17 @@ export default function AdminDiseasesPage() {
 
   const handleDelete = () => {
     if (!deleteId) return;
-    setData((prev) => prev.filter((d) => d.id !== deleteId));
+    supabase.from("content_diseases").delete().eq("id", deleteId).then(() => {});
+    setData((prev) => {
+      const next = prev.filter((d) => d.id !== deleteId);
+      return next;
+    });
     setDeleteId(null);
   };
 
   return (
     <div className="max-w-5xl space-y-4">
-      <AdminBanner />
+      <AdminBanner connected={connected} />
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-bold text-slate-800">疾患管理（{data.length}件）</h1>
         <Button onClick={openNew}>新規追加</Button>

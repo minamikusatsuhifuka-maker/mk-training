@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { quizQuestions, type QuizCategory } from "@/data/quiz";
+import { supabase } from "@/lib/supabase";
+import { useAuthContext } from "@/components/AuthProvider";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -35,6 +37,7 @@ function shuffle<T>(arr: T[]): T[] {
 const OPTION_LABELS = ["A", "B", "C", "D"];
 
 export default function QuizPage() {
+  const { user } = useAuthContext();
   const [tab, setTab] = useState("all");
   const [questions, setQuestions] = useState(() => shuffle(quizQuestions).slice(0, 10));
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -77,6 +80,19 @@ export default function QuizPage() {
       setShowExplanation(false);
     }
   };
+
+  useEffect(() => {
+    if (!isFinished || !user) return;
+    const total = questions.length;
+    const percentage = Math.round((score / total) * 100);
+    const category = tab === "all" ? "all" : tab;
+    supabase
+      .from("quiz_results")
+      .insert({ user_id: user.id, category, score, total, percentage })
+      .then(({ error }) => {
+        if (error) console.error("クイズ結果の保存に失敗:", error);
+      });
+  }, [isFinished, user, score, questions.length, tab]);
 
   const q = questions[currentIndex];
   const total = questions.length;
