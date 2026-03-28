@@ -19,12 +19,31 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      setError("メールアドレスまたはパスワードが正しくありません");
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) {
+        console.error("Login error:", error);
+        if (error.message.includes("Invalid login credentials")) {
+          setError("メールアドレスまたはパスワードが正しくありません");
+        } else if (error.message.includes("Email not confirmed")) {
+          setError("メールアドレスが確認されていません");
+        } else {
+          setError(`ログインエラー: ${error.message}`);
+        }
+        return;
+      }
+      if (data.user) {
+        router.push("/");
+        router.refresh();
+      }
+    } catch (err) {
+      console.error("Unexpected error:", err);
+      setError("予期しないエラーが発生しました。再度お試しください。");
+    } finally {
       setLoading(false);
-    } else {
-      router.push("/");
     }
   };
 
