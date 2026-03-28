@@ -1,26 +1,26 @@
-"use client";
-
-import { createContext, useContext } from "react";
-import { useAuth } from "@/hooks/useAuth";
-import type { User, Session } from "@supabase/supabase-js";
+'use client'
+import { createContext, useContext } from 'react'
 
 type AuthContextType = {
-  user: User | null;
-  session: Session | null;
-  loading: boolean;
-  role: "admin" | "staff";
-};
+  user: null
+  session: null
+  loading: false
+  role: 'admin'
+}
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   session: null,
-  loading: true,
-  role: "staff",
-});
+  loading: false,
+  role: 'admin',
+})
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const auth = useAuth();
-  return <AuthContext.Provider value={auth}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user: null, session: null, loading: false, role: 'admin' }}>
+      {children}
+    </AuthContext.Provider>
+  )
 }
 
-export const useAuthContext = () => useContext(AuthContext);
+export const useAuthContext = () => useContext(AuthContext)

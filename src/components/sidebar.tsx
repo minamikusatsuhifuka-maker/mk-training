@@ -4,9 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
-import { LogoutButton } from "@/components/LogoutButton";
-import { useAuthContext } from "@/components/AuthProvider";
 
 const navSections = [
   {
@@ -43,7 +40,6 @@ const navSections = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { user, role, loading } = useAuthContext();
 
   return (
     <aside className="w-[220px] shrink-0 border-r border-border bg-[var(--sidebar)] flex flex-col h-screen sticky top-0">
@@ -84,26 +80,6 @@ export function Sidebar() {
           ))}
         </nav>
       </ScrollArea>
-
-      {/* User info */}
-      <Separator />
-      <div className="px-3 py-3 space-y-2">
-        {loading ? (
-          <div className="h-8 bg-muted animate-pulse rounded-md" />
-        ) : user ? (
-          <div className="space-y-2">
-            <div className="flex items-center gap-1.5 px-2">
-              <p className="text-xs text-muted-foreground truncate flex-1">{user.email}</p>
-              {role === "admin" && (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-purple-100 text-purple-700 border-purple-200">
-                  管理者
-                </Badge>
-              )}
-            </div>
-            <LogoutButton />
-          </div>
-        ) : null}
-      </div>
 
       {/* Admin link */}
       <Separator />

@@ -5,7 +5,6 @@ import { quizQuestions as initialQuiz, type QuizQuestion, type QuizCategory } fr
 import { AdminBanner } from "@/components/AdminBanner";
 import { AIGeneratePanel, type GeneratedResult } from "@/components/admin/AIGeneratePanel";
 import { supabase } from "@/lib/supabase";
-import { useAuthContext } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -68,7 +67,6 @@ function emptyQuiz(): QuizQuestion {
 }
 
 export default function AdminQuizPage() {
-  const { user } = useAuthContext();
   const [data, setData] = useState<QuizQuestion[]>(initialQuiz);
   const [tab, setTab] = useState<string>("all");
   const [editItem, setEditItem] = useState<QuizQuestion | null>(null);
@@ -93,13 +91,12 @@ export default function AdminQuizPage() {
   }, []);
 
   const saveToSupabase = useCallback(async (items: QuizQuestion[]) => {
-    if (!user) return;
     try {
-      const rows = items.map((q) => ({ id: q.id, data: q, updated_at: new Date().toISOString(), updated_by: user.id }));
+      const rows = items.map((q) => ({ id: q.id, data: q, updated_at: new Date().toISOString() }));
       await supabase.from("content_quiz").upsert(rows);
       setConnected(true);
     } catch {}
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));

@@ -1,13 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import type { CheckSection } from "@/data/operations";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
-import { supabase } from "@/lib/supabase";
-import { useAuthContext } from "@/components/AuthProvider";
 
 type Props = {
   sections: CheckSection[];
@@ -17,62 +15,20 @@ type Props = {
 export function ChecklistSection({ sections, storageKey }: Props) {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [loaded, setLoaded] = useState(false);
-  const { user } = useAuthContext();
 
   useEffect(() => {
-    async function load() {
-      if (user) {
-        try {
-          const { data } = await supabase
-            .from("checklist_progress")
-            .select("checked_items")
-            .eq("user_id", user.id)
-            .eq("checklist_key", storageKey)
-            .single();
-          if (data?.checked_items) {
-            setChecked(data.checked_items as Record<string, boolean>);
-            setLoaded(true);
-            return;
-          }
-        } catch {
-          // Supabase取得失敗時はlocalStorageにフォールバック
-        }
-      }
-      try {
-        const saved = localStorage.getItem(`checklist-${storageKey}`);
-        if (saved) setChecked(JSON.parse(saved));
-      } catch {}
-      setLoaded(true);
-    }
-    load();
-  }, [storageKey, user]);
-
-  const saveToSupabase = useCallback(
-    async (newChecked: Record<string, boolean>) => {
-      if (!user) return;
-      try {
-        await supabase.from("checklist_progress").upsert(
-          {
-            user_id: user.id,
-            checklist_key: storageKey,
-            checked_items: newChecked,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id,checklist_key" }
-        );
-      } catch {
-        // 保存失敗時は静かに無視
-      }
-    },
-    [user, storageKey]
-  );
+    try {
+      const saved = localStorage.getItem(`checklist-${storageKey}`);
+      if (saved) setChecked(JSON.parse(saved));
+    } catch {}
+    setLoaded(true);
+  }, [storageKey]);
 
   useEffect(() => {
     if (loaded) {
       localStorage.setItem(`checklist-${storageKey}`, JSON.stringify(checked));
-      saveToSupabase(checked);
     }
-  }, [checked, storageKey, loaded, saveToSupabase]);
+  }, [checked, storageKey, loaded]);
 
   const allItems = sections.flatMap((s) => s.items);
   const total = allItems.length;

@@ -5,7 +5,6 @@ import { drugs as initialDrugs, type Drug, type DrugCategory } from "@/data/drug
 import { AdminBanner } from "@/components/AdminBanner";
 import { AIGeneratePanel, type GeneratedResult } from "@/components/admin/AIGeneratePanel";
 import { supabase } from "@/lib/supabase";
-import { useAuthContext } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -56,7 +55,6 @@ function emptyDrug(): Drug {
 }
 
 export default function AdminDrugsPage() {
-  const { user } = useAuthContext();
   const [data, setData] = useState<Drug[]>(initialDrugs);
   const [editItem, setEditItem] = useState<Drug | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -81,13 +79,12 @@ export default function AdminDrugsPage() {
   }, []);
 
   const saveToSupabase = useCallback(async (items: Drug[]) => {
-    if (!user) return;
     try {
-      const rows = items.map((d) => ({ id: d.id, data: d, updated_at: new Date().toISOString(), updated_by: user.id }));
+      const rows = items.map((d) => ({ id: d.id, data: d, updated_at: new Date().toISOString() }));
       await supabase.from("content_drugs").upsert(rows);
       setConnected(true);
     } catch {}
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));

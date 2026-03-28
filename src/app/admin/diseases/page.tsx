@@ -5,7 +5,6 @@ import { diseases as initialDiseases, type Disease } from "@/data/diseases";
 import { AdminBanner } from "@/components/AdminBanner";
 import { AIGeneratePanel, type GeneratedResult } from "@/components/admin/AIGeneratePanel";
 import { supabase } from "@/lib/supabase";
-import { useAuthContext } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -63,7 +62,6 @@ function emptyDisease(): Disease {
 }
 
 export default function AdminDiseasesPage() {
-  const { user } = useAuthContext();
   const [data, setData] = useState<Disease[]>(initialDiseases);
   const [editItem, setEditItem] = useState<Disease | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -88,13 +86,12 @@ export default function AdminDiseasesPage() {
   }, []);
 
   const saveToSupabase = useCallback(async (items: Disease[]) => {
-    if (!user) return;
     try {
-      const rows = items.map((d) => ({ id: d.id, data: d, updated_at: new Date().toISOString(), updated_by: user.id }));
+      const rows = items.map((d) => ({ id: d.id, data: d, updated_at: new Date().toISOString() }));
       await supabase.from("content_diseases").upsert(rows);
       setConnected(true);
     } catch {}
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
