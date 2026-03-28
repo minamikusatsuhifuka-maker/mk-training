@@ -31,14 +31,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 const STORAGE_KEY = "admin_drugs";
 
@@ -158,40 +150,46 @@ export default function AdminDrugsPage() {
         className="w-full rounded-md border border-slate-300 bg-white px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-400"
       />
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>薬品名</TableHead>
-            <TableHead className="w-[120px]">規格</TableHead>
-            <TableHead className="hidden sm:table-cell w-[140px]">カテゴリ</TableHead>
-            <TableHead className="hidden md:table-cell">適応</TableHead>
-            <TableHead className="w-[120px]">操作</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {filtered.map((d) => (
-            <TableRow key={d.id}>
-              <TableCell>
-                <div>
-                  <div className="font-medium text-sm">{d.name}</div>
-                  {d.genericName && (
-                    <div className="text-xs text-muted-foreground mt-0.5">{d.genericName}</div>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell className="text-sm text-muted-foreground">{d.spec}</TableCell>
-              <TableCell className="hidden sm:table-cell text-xs">{d.category}</TableCell>
-              <TableCell className="hidden md:table-cell text-xs text-muted-foreground truncate max-w-[200px]">{d.indication}</TableCell>
-              <TableCell>
-                <div className="flex gap-1">
-                  <Button variant="outline" size="sm" onClick={() => openEdit(d)}>編集</Button>
-                  <Button variant="destructive" size="sm" onClick={() => setDeleteId(d.id)}>削除</Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <div className="border rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr>
+                <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2 border-b w-[240px]">薬品名</th>
+                <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2 border-b w-[120px]">規格</th>
+                <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2 border-b w-[130px] hidden sm:table-cell">カテゴリ</th>
+                <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2 border-b hidden md:table-cell min-w-[150px]">適応</th>
+                <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2 border-b w-[100px]">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((d) => (
+                <tr key={d.id} className="hover:bg-muted/50">
+                  <td className="px-2 py-1.5 border-b align-top w-[240px]">
+                    <div className="font-medium text-sm leading-snug">{d.name}</div>
+                    {d.genericName && (
+                      <div className="text-xs text-muted-foreground mt-0.5 leading-snug">{d.genericName}</div>
+                    )}
+                  </td>
+                  <td className="px-2 py-1.5 border-b align-top w-[120px]">
+                    <span className="text-xs">{d.spec}</span>
+                  </td>
+                  <td className="px-2 py-1.5 border-b align-top w-[130px] hidden sm:table-cell">
+                    <span className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{d.category}</span>
+                  </td>
+                  <td className="px-2 py-1.5 border-b align-top text-xs text-muted-foreground hidden md:table-cell">{d.indication}</td>
+                  <td className="px-2 py-1.5 border-b align-top w-[100px]">
+                    <div className="flex gap-1">
+                      <Button variant="outline" size="sm" onClick={() => openEdit(d)}>編集</Button>
+                      <Button variant="destructive" size="sm" onClick={() => setDeleteId(d.id)}>削除</Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">

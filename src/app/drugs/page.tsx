@@ -5,14 +5,6 @@ import { drugs, drugCategories, type Drug, type DrugCategory } from "@/data/drug
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/PageHeader";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 const groupedDrugs = drugCategories.reduce((acc, category) => {
   const items = drugs.filter((d) => d.category === category);
@@ -114,42 +106,38 @@ export default function DrugsPage() {
       {/* Table view */}
       {view === "table" && (
         filtered.length > 0 ? (
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[280px]">薬品名</TableHead>
-                  <TableHead className="w-[140px]">規格</TableHead>
-                  <TableHead className="w-[130px]">カテゴリ</TableHead>
-                  <TableHead>主な適応</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((d) => (
-                  <TableRow key={d.id}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium text-sm">{d.name}</div>
+          <div className="border rounded-lg overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2 border-b w-[240px]">薬品名</th>
+                    <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2 border-b w-[120px]">規格</th>
+                    <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2 border-b w-[130px]">カテゴリ</th>
+                    <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2 border-b min-w-[150px]">主な適応</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((d) => (
+                    <tr key={d.id} className="hover:bg-muted/50">
+                      <td className="px-2 py-1.5 border-b align-top w-[240px]">
+                        <div className="font-medium text-sm leading-snug">{d.name}</div>
                         {d.genericName && (
-                          <div className="text-xs text-muted-foreground mt-0.5">{d.genericName}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5 leading-snug">{d.genericName}</div>
                         )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="bg-teal-light text-teal border-teal/20 text-xs">
-                        {d.spec}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
-                        {d.category}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{d.indication}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      </td>
+                      <td className="px-2 py-1.5 border-b align-top w-[120px]">
+                        <span className="text-xs">{d.spec}</span>
+                      </td>
+                      <td className="px-2 py-1.5 border-b align-top w-[130px]">
+                        <span className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{d.category}</span>
+                      </td>
+                      <td className="px-2 py-1.5 border-b align-top text-xs text-muted-foreground">{d.indication}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : (
           <p className="text-center text-muted-foreground py-12">該当する薬剤が見つかりませんでした</p>
