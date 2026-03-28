@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { drugs as initialDrugs, type Drug, type DrugCategory } from "@/data/drugs";
 import { AdminBanner } from "@/components/AdminBanner";
+import { AIGeneratePanel, type GeneratedResult } from "@/components/admin/AIGeneratePanel";
 import { supabase } from "@/lib/supabase";
 import { useAuthContext } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
@@ -129,6 +130,27 @@ export default function AdminDrugsPage() {
         <h1 className="text-xl font-bold text-slate-800">薬剤管理（{data.length}件）</h1>
         <Button onClick={openNew}>新規追加</Button>
       </div>
+
+      <AIGeneratePanel
+        type="drug"
+        placeholderExamples={["ネイリン", "デュピクセント", "ラミシール", "オルミエント", "タリクスタ"]}
+        onGenerated={(results: GeneratedResult[]) => {
+          const newDrugs: Drug[] = results
+            .filter((r) => r.data)
+            .map((r) => ({
+              id: r.id,
+              name: (r.data as Record<string, string>).name ?? r.keyword,
+              spec: (r.data as Record<string, string>).spec ?? "",
+              category: ((r.data as Record<string, string>).category ?? "保湿剤") as DrugCategory,
+              indication: (r.data as Record<string, string>).indication ?? "",
+            }));
+          setData((prev) => {
+            const next = [...prev, ...newDrugs];
+            saveToSupabase(next);
+            return next;
+          });
+        }}
+      />
 
       <input
         type="text"

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { quizQuestions as initialQuiz, type QuizQuestion, type QuizCategory } from "@/data/quiz";
 import { AdminBanner } from "@/components/AdminBanner";
+import { AIGeneratePanel, type GeneratedResult } from "@/components/admin/AIGeneratePanel";
 import { supabase } from "@/lib/supabase";
 import { useAuthContext } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
@@ -146,6 +147,31 @@ export default function AdminQuizPage() {
         <h1 className="text-xl font-bold text-slate-800">クイズ管理（{data.length}問）</h1>
         <Button onClick={openNew}>新規追加</Button>
       </div>
+
+      <AIGeneratePanel
+        type="quiz"
+        placeholderExamples={["帯状疱疹の治療", "ステロイドの使い方", "医療脱毛の禁忌", "アトピー性皮膚炎の生物学的製剤"]}
+        onGenerated={(results: GeneratedResult[]) => {
+          const newItems: QuizQuestion[] = results
+            .filter((r) => r.data)
+            .map((r) => {
+              const d = r.data as Record<string, unknown>;
+              return {
+                id: r.id,
+                category: ((d.category as string) ?? "disease") as QuizCategory,
+                question: (d.question as string) ?? "",
+                options: (d.options as string[]) ?? ["", "", "", ""],
+                answerIndex: (d.answerIndex as number) ?? 0,
+                explanation: (d.explanation as string) ?? "",
+              };
+            });
+          setData((prev) => {
+            const next = [...prev, ...newItems];
+            saveToSupabase(next);
+            return next;
+          });
+        }}
+      />
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="w-full justify-start flex-wrap h-auto gap-1">

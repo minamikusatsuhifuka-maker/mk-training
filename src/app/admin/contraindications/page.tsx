@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { contraindications as initialData, type Contraindication, type Severity } from "@/data/contraindications";
 import { AdminBanner } from "@/components/AdminBanner";
+import { AIGeneratePanel, type GeneratedResult } from "@/components/admin/AIGeneratePanel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -94,6 +95,26 @@ export default function AdminContraindicationsPage() {
         <h1 className="text-xl font-bold text-slate-800">禁忌管理（{data.length}件）</h1>
         <Button onClick={openNew}>新規追加</Button>
       </div>
+
+      <AIGeneratePanel
+        type="contraindication"
+        placeholderExamples={["ネイリン", "ミノキシジル内服", "フラクショナルレーザー", "ヒアルロン酸注入"]}
+        onGenerated={(results: GeneratedResult[]) => {
+          const newItems: Contraindication[] = results
+            .filter((r) => r.data)
+            .map((r) => {
+              const d = r.data as Record<string, string>;
+              return {
+                id: r.id,
+                drug: d.drug ?? r.keyword,
+                disease: d.disease ?? "",
+                detail: d.detail ?? "",
+                severity: (d.severity ?? "caution") as Severity,
+              };
+            });
+          setData((prev) => [...prev, ...newItems]);
+        }}
+      />
 
       <div className="space-y-3">
         {data.map((c) => (

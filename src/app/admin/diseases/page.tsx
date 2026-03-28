@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { diseases as initialDiseases, type Disease } from "@/data/diseases";
 import { AdminBanner } from "@/components/AdminBanner";
+import { AIGeneratePanel, type GeneratedResult } from "@/components/admin/AIGeneratePanel";
 import { supabase } from "@/lib/supabase";
 import { useAuthContext } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
@@ -150,6 +151,36 @@ export default function AdminDiseasesPage() {
         <h1 className="text-xl font-bold text-slate-800">疾患管理（{data.length}件）</h1>
         <Button onClick={openNew}>新規追加</Button>
       </div>
+
+      <AIGeneratePanel
+        type="disease"
+        placeholderExamples={["酒さ性ざ瘡", "類天疱瘡", "多形性紅斑", "結節性痒疹", "皮膚筋炎"]}
+        onGenerated={(results: GeneratedResult[]) => {
+          const newItems: Disease[] = results
+            .filter((r) => r.data)
+            .map((r) => {
+              const d = r.data as Record<string, unknown>;
+              return {
+                id: r.id,
+                name: (d.name as string) ?? r.keyword,
+                nameEn: (d.nameEn as string) ?? "",
+                badge: (d.badge as string) ?? "",
+                badgeColor: ((d.badgeColor as string) ?? "teal") as Disease["badgeColor"],
+                description: (d.description as string) ?? "",
+                cause: (d.cause as string) ?? "",
+                treatment: (d.treatment as string) ?? "",
+                patientExplanation: (d.patientExplanation as string) ?? "",
+                keyPoints: (d.keyPoints as string[]) ?? [],
+                relatedTreatments: (d.relatedTreatments as string[]) ?? [],
+              };
+            });
+          setData((prev) => {
+            const next = [...prev, ...newItems];
+            saveToSupabase(next);
+            return next;
+          });
+        }}
+      />
 
       <input
         type="text"
