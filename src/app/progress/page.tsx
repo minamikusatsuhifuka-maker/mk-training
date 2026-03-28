@@ -41,7 +41,8 @@ export default function ProgressPage() {
         .from("quiz_results")
         .select("*")
         .eq("user_id", user!.id)
-        .order("answered_at", { ascending: false });
+        .order("answered_at", { ascending: false })
+        .limit(20);
       setResults(data ?? []);
       setLoading(false);
     }
@@ -62,7 +63,7 @@ export default function ProgressPage() {
       <div className="p-4 md:p-8 max-w-3xl mx-auto">
         <PageHeader title="学習進捗" description="ログインすると進捗が記録されます" />
         <Card className="mt-6 p-8 text-center">
-          <p className="text-muted-foreground">ログインすると、クイズの結果や学習進捗を確認できます。</p>
+          <p className="text-muted-foreground">ログインすると進捗が記録・表示されます</p>
         </Card>
       </div>
     );
@@ -81,7 +82,7 @@ export default function ProgressPage() {
     return { category: cat, label: categoryLabels[cat], count: catResults.length, avg };
   }).filter((s) => s.count > 0);
 
-  const recent = results.slice(0, 5);
+  const recent = results.slice(0, 10);
 
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-6">
@@ -155,7 +156,7 @@ export default function ProgressPage() {
 
       {totalAttempts === 0 && (
         <Card className="p-8 text-center">
-          <p className="text-muted-foreground">まだクイズに挑戦していません。クイズページから始めましょう！</p>
+          <p className="text-muted-foreground">まだクイズに挑戦していません。クイズに挑戦して進捗を記録しましょう！</p>
         </Card>
       )}
     </div>

@@ -2,11 +2,13 @@ type Props = {
   connected?: boolean;
 };
 
+const hasSupabase = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
+
 export function AdminBanner({ connected = false }: Props) {
-  if (connected) {
+  if (connected || hasSupabase) {
     return (
       <div className="rounded-md bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800">
-        Supabase連携済み：編集内容は自動保存されます
+        ✅ Supabase連携済み：編集内容はデータベースに自動保存されます
       </div>
     );
   }
