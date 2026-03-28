@@ -27,7 +27,9 @@ export default function DiseasesPage() {
       d.nameEn.toLowerCase().includes(q) ||
       d.description.toLowerCase().includes(q) ||
       d.cause.toLowerCase().includes(q) ||
-      d.badge.toLowerCase().includes(q)
+      d.badge.toLowerCase().includes(q) ||
+      d.keyPoints.some((kp) => kp.toLowerCase().includes(q)) ||
+      d.relatedTreatments.some((rt) => rt.toLowerCase().includes(q))
     );
   });
 
@@ -121,6 +123,43 @@ export default function DiseasesPage() {
                       {d.patientExplanation}
                     </p>
                   </section>
+
+                  {d.keyPoints.length > 0 && (
+                    <section>
+                      <h3 className="text-sm font-semibold mb-2">
+                        スタッフが覚えるべきポイント
+                      </h3>
+                      <ul className="space-y-1">
+                        {d.keyPoints.map((kp, i) => (
+                          <li
+                            key={i}
+                            className="text-sm text-muted-foreground"
+                          >
+                            ・{kp}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+
+                  {d.relatedTreatments.length > 0 && (
+                    <section>
+                      <h3 className="text-sm font-semibold mb-2">
+                        当院での関連施術・検査
+                      </h3>
+                      <div className="flex flex-wrap gap-2">
+                        {d.relatedTreatments.map((rt, i) => (
+                          <Badge
+                            key={i}
+                            variant="outline"
+                            className="bg-teal-light text-teal border-teal/20"
+                          >
+                            {rt}
+                          </Badge>
+                        ))}
+                      </div>
+                    </section>
+                  )}
                 </div>
               )}
             </Card>
