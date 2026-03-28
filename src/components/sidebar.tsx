@@ -77,6 +77,16 @@ export function Sidebar() {
           ))}
         </nav>
       </ScrollArea>
+      <Separator />
+      <div className="px-3 py-3">
+        <Link
+          href="/admin"
+          className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+        >
+          <span>⚙</span>
+          <span>管理画面</span>
+        </Link>
+      </div>
     </aside>
   );
 }

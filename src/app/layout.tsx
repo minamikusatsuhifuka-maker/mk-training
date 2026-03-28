@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Noto_Sans_JP } from "next/font/google";
-import { Sidebar } from "@/components/sidebar";
+import { AppShell } from "@/components/AppShell";
 import "./globals.css";
 
 const notoSansJP = Noto_Sans_JP({
@@ -28,13 +28,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ja" className={`${notoSansJP.variable} h-full antialiased`}>
-      <body className="min-h-full flex">
-        <div className="hidden md:block">
-          <Sidebar />
-        </div>
-        <main className="flex-1 min-h-screen overflow-y-auto p-4 md:p-6">
-          {children}
-        </main>
+      <body className="min-h-full">
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );
