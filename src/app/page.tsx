@@ -17,7 +17,7 @@ const stats = [
   { label: "疾患数", value: "30" },
   { label: "薬剤数", value: "38" },
   { label: "美容施術", value: "16" },
-  { label: "クイズ問題", value: "15" },
+  { label: "クイズ問題", value: "100" },
 ];
 
 export default function Home() {

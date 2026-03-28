@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { quizQuestions, type QuizCategory } from "@/data/quiz";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
+import { Card, CardHeader, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/PageHeader";
@@ -14,6 +14,13 @@ const categoryLabels: Record<string, { label: string; filter: QuizCategory | nul
   drug: { label: "薬剤", filter: "drug" },
   cosmetic: { label: "当院の美容", filter: "cosmetic" },
   ops: { label: "業務", filter: "ops" },
+};
+
+const categoryCounts = {
+  disease: quizQuestions.filter((q) => q.category === "disease").length,
+  drug: quizQuestions.filter((q) => q.category === "drug").length,
+  cosmetic: quizQuestions.filter((q) => q.category === "cosmetic").length,
+  ops: quizQuestions.filter((q) => q.category === "ops").length,
 };
 
 function shuffle<T>(arr: T[]): T[] {
@@ -86,6 +93,23 @@ export default function QuizPage() {
         description="学んだ知識をクイズで確認しましょう"
         badge={`全${quizQuestions.length}問`}
       />
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {([
+          { label: "疾患", count: categoryCounts.disease },
+          { label: "薬剤", count: categoryCounts.drug },
+          { label: "美容", count: categoryCounts.cosmetic },
+          { label: "業務", count: categoryCounts.ops },
+        ] as const).map((s) => (
+          <Card key={s.label} className="text-center">
+            <CardHeader className="pb-2 pt-3 px-3">
+              <p className="text-2xl font-bold text-teal">{s.count}</p>
+              <CardDescription className="text-xs">{s.label}</CardDescription>
+            </CardHeader>
+          </Card>
+        ))}
+      </div>
 
       {/* Category tabs */}
       <Tabs value={tab} onValueChange={handleTabChange}>
