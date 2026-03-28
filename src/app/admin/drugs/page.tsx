@@ -12,7 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -31,6 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -42,13 +42,20 @@ import {
 
 const STORAGE_KEY = "admin_drugs";
 
+function sortDrugsByCategory(items: Drug[]): Drug[] {
+  return [...items].sort((a, b) => {
+    const ai = drugCategories.indexOf(a.category);
+    const bi = drugCategories.indexOf(b.category);
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+  });
+}
 
 function emptyDrug(): Drug {
-  return { id: `new_${Date.now()}`, name: "", spec: "", category: "保湿剤", indication: "" };
+  return { id: `new_${Date.now()}`, name: "", genericName: "", spec: "", category: "保湿剤", indication: "", usage: "" };
 }
 
 export default function AdminDrugsPage() {
-  const [data, setData] = useState<Drug[]>(initialDrugs);
+  const [data, setData] = useState<Drug[]>(sortDrugsByCategory(initialDrugs));
   const [editItem, setEditItem] = useState<Drug | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -60,13 +67,13 @@ export default function AdminDrugsPage() {
       try {
         const { data: rows } = await supabase.from("content_drugs").select("id, data");
         if (rows && rows.length > 0) {
-          setData(rows.map((r) => r.data as Drug));
+          setData(sortDrugsByCategory(rows.map((r) => r.data as Drug)));
           setConnected(true);
           return;
         }
       } catch {}
       const saved = sessionStorage.getItem(STORAGE_KEY);
-      if (saved) setData(JSON.parse(saved));
+      if (saved) setData(sortDrugsByCategory(JSON.parse(saved)));
     }
     load();
   }, []);
@@ -86,7 +93,7 @@ export default function AdminDrugsPage() {
   const filtered = data.filter((d) => {
     if (!search) return true;
     const q = search.toLowerCase();
-    return d.name.toLowerCase().includes(q) || d.category.toLowerCase().includes(q);
+    return d.name.toLowerCase().includes(q) || d.category.toLowerCase().includes(q) || (d.genericName?.toLowerCase().includes(q) ?? false);
   });
 
   const openNew = () => { setEditItem(emptyDrug()); setDialogOpen(true); };
@@ -99,6 +106,7 @@ export default function AdminDrugsPage() {
       let next: Drug[];
       if (idx >= 0) { next = [...prev]; next[idx] = editItem; }
       else { next = [...prev, editItem]; }
+      next = sortDrugsByCategory(next);
       saveToSupabase(next);
       return next;
     });
@@ -135,7 +143,7 @@ export default function AdminDrugsPage() {
               indication: (r.data as Record<string, string>).indication ?? "",
             }));
           setData((prev) => {
-            const next = [...prev, ...newDrugs];
+            const next = sortDrugsByCategory([...prev, ...newDrugs]);
             saveToSupabase(next);
             return next;
           });
@@ -144,7 +152,7 @@ export default function AdminDrugsPage() {
 
       <input
         type="text"
-        placeholder="薬品名・カテゴリで検索..."
+        placeholder="薬品名・一般名・カテゴリで検索..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="w-full rounded-md border border-slate-300 bg-white px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-400"
@@ -163,7 +171,14 @@ export default function AdminDrugsPage() {
         <TableBody>
           {filtered.map((d) => (
             <TableRow key={d.id}>
-              <TableCell className="font-medium">{d.name}</TableCell>
+              <TableCell>
+                <div>
+                  <div className="font-medium text-sm">{d.name}</div>
+                  {d.genericName && (
+                    <div className="text-xs text-muted-foreground mt-0.5">{d.genericName}</div>
+                  )}
+                </div>
+              </TableCell>
               <TableCell className="text-sm text-muted-foreground">{d.spec}</TableCell>
               <TableCell className="hidden sm:table-cell text-xs">{d.category}</TableCell>
               <TableCell className="hidden md:table-cell text-xs text-muted-foreground truncate max-w-[200px]">{d.indication}</TableCell>
@@ -179,7 +194,7 @@ export default function AdminDrugsPage() {
       </Table>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editItem && data.some((d) => d.id === editItem.id) ? "薬剤を編集" : "新規薬剤を追加"}</DialogTitle>
           </DialogHeader>
@@ -188,6 +203,10 @@ export default function AdminDrugsPage() {
               <label className="space-y-1 block">
                 <span className="text-xs font-medium">薬品名</span>
                 <input className="w-full rounded-md border px-3 py-1.5 text-sm" value={editItem.name} onChange={(e) => setEditItem({ ...editItem, name: e.target.value })} />
+              </label>
+              <label className="space-y-1 block">
+                <span className="text-xs font-medium">一般名（成分名）</span>
+                <input className="w-full rounded-md border px-3 py-1.5 text-sm" placeholder="例: セチリジン塩酸塩" value={editItem.genericName ?? ""} onChange={(e) => setEditItem({ ...editItem, genericName: e.target.value })} />
               </label>
               <label className="space-y-1 block">
                 <span className="text-xs font-medium">規格</span>
@@ -207,6 +226,10 @@ export default function AdminDrugsPage() {
               <label className="space-y-1 block">
                 <span className="text-xs font-medium">適応</span>
                 <input className="w-full rounded-md border px-3 py-1.5 text-sm" value={editItem.indication} onChange={(e) => setEditItem({ ...editItem, indication: e.target.value })} />
+              </label>
+              <label className="space-y-1 block">
+                <span className="text-xs font-medium">用法・用量</span>
+                <Textarea placeholder="例: 1日1回就寝前" value={editItem.usage ?? ""} onChange={(e) => setEditItem({ ...editItem, usage: e.target.value })} rows={2} />
               </label>
             </div>
           )}

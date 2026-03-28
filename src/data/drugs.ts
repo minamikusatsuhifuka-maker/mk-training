@@ -36,9 +36,11 @@ export type DrugCategory =
 export type Drug = {
   id: string
   name: string
+  genericName?: string
   spec: string
   category: DrugCategory
   indication: string
+  usage?: string
 }
 
 export const drugCategories: DrugCategory[] = [
