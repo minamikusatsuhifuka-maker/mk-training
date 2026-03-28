@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { drugs as initialDrugs, type Drug, type DrugCategory } from "@/data/drugs";
+import { drugs as initialDrugs, drugCategories, type Drug, type DrugCategory } from "@/data/drugs";
 import { AdminBanner } from "@/components/AdminBanner";
 import { AIGeneratePanel, type GeneratedResult } from "@/components/admin/AIGeneratePanel";
 import { supabase } from "@/lib/supabase";
@@ -42,13 +42,6 @@ import {
 
 const STORAGE_KEY = "admin_drugs";
 
-const drugCategories: DrugCategory[] = [
-  "保湿剤", "ステロイド外用", "タクロリムス外用", "JAK阻害薬外用",
-  "抗真菌外用", "抗真菌内服", "抗ウイルス外用", "抗ウイルス内服",
-  "抗ヒスタミン薬", "抗菌薬", "外用レチノイド", "BPO外用",
-  "ざ瘡配合薬", "レチノイド内服", "生物学的製剤", "JAK阻害薬内服",
-  "免疫抑制薬", "ステロイド内服", "神経障害性疼痛薬", "NSAIDs", "美容内服",
-];
 
 function emptyDrug(): Drug {
   return { id: `new_${Date.now()}`, name: "", spec: "", category: "保湿剤", indication: "" };
