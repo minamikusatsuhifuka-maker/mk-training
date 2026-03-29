@@ -5,7 +5,6 @@ import { counselingGuides } from "@/data/counseling";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/PageHeader";
 
 const categoryConfig: Record<string, { label: string; color: string }> = {
@@ -39,14 +38,23 @@ export default function CounselingPage() {
         badge={`${counselingGuides.length}施術`}
       />
 
-      {/* Tabs */}
-      <Tabs value={selectedId} onValueChange={(v) => { setSelectedId(v ?? selectedId); }}>
-        <TabsList className="w-full justify-start flex-wrap h-auto gap-1 overflow-x-auto">
-          {counselingGuides.map((g) => (
-            <TabsTrigger key={g.id} value={g.id} className="text-xs">{g.treatment}</TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+      {/* Treatment Selection */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+        {counselingGuides.map((g) => (
+          <button
+            key={g.id}
+            type="button"
+            onClick={() => setSelectedId(g.id)}
+            className={`rounded-md px-3 py-2 text-xs font-medium transition-colors ${
+              selectedId === g.id
+                ? "bg-teal text-teal-foreground"
+                : "bg-muted text-muted-foreground hover:bg-accent"
+            }`}
+          >
+            {g.treatment}
+          </button>
+        ))}
+      </div>
 
       {/* Clear Checklist */}
       <Card>
