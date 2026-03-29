@@ -21,6 +21,7 @@ const navSections = [
     items: [
       { label: "美容メニュー", href: "/cosmetic" },
       { label: "スキンケア", href: "/skincare" },
+      { label: "💬 カウンセリングガイド", href: "/counseling" },
     ],
   },
   {

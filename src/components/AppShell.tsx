@@ -16,6 +16,7 @@ const mobileNavSections = [
   { title: "当院の美容", items: [
     { label: "美容メニュー", href: "/cosmetic" },
     { label: "スキンケア", href: "/skincare" },
+    { label: "💬 カウンセリングガイド", href: "/counseling" },
   ]},
   { title: "業務・接遇", items: [
     { label: "受付", href: "/reception" },

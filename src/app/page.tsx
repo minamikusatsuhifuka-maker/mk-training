@@ -16,6 +16,7 @@ const modules = [
   { title: "カウンセラー", description: "カウンセリング技術", href: "/counselor", emoji: "💬" },
   { title: "妊娠・授乳と薬剤", description: "使用可能・禁忌薬剤の一覧", href: "/pregnancy", emoji: "🤰" },
   { title: "相互作用チェック", description: "薬剤間の相互作用を確認", href: "/interactions", emoji: "⚡" },
+  { title: "カウンセリングガイド", description: "トークスクリプト・クリアチェック", href: "/counseling", emoji: "💬" },
 ];
 
 const stats = [
