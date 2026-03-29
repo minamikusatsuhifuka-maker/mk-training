@@ -30,6 +30,7 @@ const navSections = [
       { label: "受付", href: "/reception" },
       { label: "事務", href: "/clerk" },
       { label: "カウンセラー", href: "/counselor" },
+      { label: "💴 算定・点数表", href: "/medical-fees" },
     ],
   },
   {
