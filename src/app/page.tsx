@@ -14,6 +14,7 @@ const modules = [
   { title: "受付", description: "受付業務の基本フロー", href: "/reception", emoji: "🏥" },
   { title: "事務", description: "事務・会計の手順", href: "/clerk", emoji: "📋" },
   { title: "カウンセラー", description: "カウンセリング技術", href: "/counselor", emoji: "💬" },
+  { title: "妊娠・授乳と薬剤", description: "使用可能・禁忌薬剤の一覧", href: "/pregnancy", emoji: "🤰" },
 ];
 
 const stats = [
