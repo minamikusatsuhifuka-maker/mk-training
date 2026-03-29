@@ -98,7 +98,7 @@ export default function AdminContraindicationsPage() {
 
       <AIGeneratePanel
         type="contraindication"
-        placeholderExamples={["ネイリン", "ミノキシジル内服", "フラクショナルレーザー", "ヒアルロン酸注入"]}
+        placeholderExamples={["ネオーラル（シクロスポリン）", "デルモベート顔面長期使用", "ボトックス多汗症", "ベセルナクリーム"]}
         onGenerated={(results: GeneratedResult[]) => {
           const newItems: Contraindication[] = results
             .filter((r) => r.data)

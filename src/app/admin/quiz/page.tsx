@@ -147,7 +147,7 @@ export default function AdminQuizPage() {
 
       <AIGeneratePanel
         type="quiz"
-        placeholderExamples={["帯状疱疹の治療", "ステロイドの使い方", "医療脱毛の禁忌", "アトピー性皮膚炎の生物学的製剤"]}
+        placeholderExamples={["スキリージとトレムフィアの違い", "結節性痒疹の新しい治療", "エクロックゲルの使い方", "ケロイドと肥厚性瘢痕の鑑別"]}
         onGenerated={(results: GeneratedResult[]) => {
           const newItems: QuizQuestion[] = results
             .filter((r) => r.data)

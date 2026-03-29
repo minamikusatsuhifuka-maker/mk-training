@@ -151,7 +151,7 @@ export default function AdminDiseasesPage() {
 
       <AIGeneratePanel
         type="disease"
-        placeholderExamples={["酒さ性ざ瘡", "類天疱瘡", "多形性紅斑", "結節性痒疹", "皮膚筋炎"]}
+        placeholderExamples={["類天疱瘡", "環状肉芽腫", "リベド血管炎", "皮膚サルコイドーシス", "壊疽性膿皮症"]}
         onGenerated={(results: GeneratedResult[]) => {
           const newItems: Disease[] = results
             .filter((r) => r.data)
