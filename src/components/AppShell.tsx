@@ -11,6 +11,7 @@ const mobileNavSections = [
     { label: "薬剤", href: "/drugs" },
     { label: "禁忌・注意", href: "/contraindications" },
     { label: "🤰 妊娠・授乳と薬剤", href: "/pregnancy" },
+    { label: "⚡ 相互作用チェック", href: "/interactions" },
   ]},
   { title: "当院の美容", items: [
     { label: "美容メニュー", href: "/cosmetic" },
