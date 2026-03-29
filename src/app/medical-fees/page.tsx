@@ -22,11 +22,14 @@ export default function MedicalFeesPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      <PageHeader
-        title="保険診療算定項目・点数表"
-        description="皮膚科外来でよく使用する診療報酬算定項目の点数一覧です"
-        badge={`${medicalFees.length}項目`}
-      />
+      <div className="flex items-start justify-between gap-4">
+        <PageHeader
+          title="保険診療算定項目・点数表"
+          description="皮膚科外来でよく使用する診療報酬算定項目の点数一覧です"
+          badge={`${medicalFees.length}項目`}
+        />
+        <a href="/print/medical-fees" target="_blank" className="shrink-0 rounded-md border px-3 py-1.5 text-xs hover:bg-accent transition-colors">印刷用</a>
+      </div>
 
       <div className="rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
         点数は2024年度改定版を基準としています。定期的に改定があるため最新の点数表で確認してください。

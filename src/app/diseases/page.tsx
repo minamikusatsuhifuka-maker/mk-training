@@ -35,11 +35,14 @@ export default function DiseasesPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6">
-      <PageHeader
-        title="疾患一覧"
-        description="当院で扱う主要な皮膚疾患の知識を確認できます"
-        badge={`疾患数: ${diseases.length}`}
-      />
+      <div className="flex items-start justify-between gap-4">
+        <PageHeader
+          title="疾患一覧"
+          description="当院で扱う主要な皮膚疾患の知識を確認できます"
+          badge={`疾患数: ${diseases.length}`}
+        />
+        <a href="/print/diseases" target="_blank" className="shrink-0 rounded-md border px-3 py-1.5 text-xs hover:bg-accent transition-colors">印刷用</a>
+      </div>
 
       {/* Search */}
       <input

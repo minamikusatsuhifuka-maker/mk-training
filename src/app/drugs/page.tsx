@@ -34,11 +34,14 @@ export default function DrugsPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
-      <PageHeader
-        title="薬剤規格リスト"
-        description="当院で使用する主要薬剤の規格・適応を確認できます"
-        badge={`収録数: ${drugs.length}件`}
-      />
+      <div className="flex items-start justify-between gap-4">
+        <PageHeader
+          title="薬剤規格リスト"
+          description="当院で使用する主要薬剤の規格・適応を確認できます"
+          badge={`収録数: ${drugs.length}件`}
+        />
+        <a href="/print/drugs" target="_blank" className="shrink-0 rounded-md border px-3 py-1.5 text-xs hover:bg-accent transition-colors">印刷用</a>
+      </div>
 
       {/* Search */}
       <input

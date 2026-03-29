@@ -100,3 +100,17 @@
     @apply font-sans;
   }
 }
+
+/* Print styles */
+@media print {
+  nav, aside, header, .no-print, button, .sidebar { display: none !important; }
+  main { width: 100% !important; margin: 0 !important; padding: 0 !important; }
+  @page { size: A4; margin: 15mm; }
+  body { font-size: 10pt; color: black; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #999; padding: 4px 6px; }
+  .page-break { page-break-before: always; }
+  .no-page-break { page-break-inside: avoid; }
+  .print-header { display: block !important; }
+}
+.print-header { display: none; }

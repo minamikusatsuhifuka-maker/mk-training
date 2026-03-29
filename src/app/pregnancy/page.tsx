@@ -39,11 +39,14 @@ export default function PregnancyPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      <PageHeader
-        title="妊娠・授乳中の薬剤安全性"
-        description="スタッフ研修用の参考情報です"
-        badge={`${pregnancyDrugs.length}品目`}
-      />
+      <div className="flex items-start justify-between gap-4">
+        <PageHeader
+          title="妊娠・授乳中の薬剤安全性"
+          description="スタッフ研修用の参考情報です"
+          badge={`${pregnancyDrugs.length}品目`}
+        />
+        <a href="/print/pregnancy" target="_blank" className="shrink-0 rounded-md border px-3 py-1.5 text-xs hover:bg-accent transition-colors">印刷用</a>
+      </div>
 
       {/* Warning banner */}
       <div className="rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
