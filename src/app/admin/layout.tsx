@@ -5,12 +5,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const adminNav = [
-  { label: "ダッシュボード", href: "/admin" },
-  { label: "疾患管理", href: "/admin/diseases" },
-  { label: "薬剤管理", href: "/admin/drugs" },
-  { label: "クイズ管理", href: "/admin/quiz" },
-  { label: "禁忌管理", href: "/admin/contraindications" },
-  { label: "📋 更新履歴", href: "/admin/changelog" },
+  { label: "📊 ダッシュボード", href: "/admin" },
+  { label: "🦠 疾患管理", href: "/admin/diseases" },
+  { label: "💊 薬剤管理", href: "/admin/drugs" },
+  { label: "❓ クイズ管理", href: "/admin/quiz" },
+  { label: "⚠️ 禁忌管理", href: "/admin/contraindications" },
+  { label: "💬 カウンセリング管理", href: "/admin/counseling" },
+  { label: "✨ 美容施術管理", href: "/admin/cosmetic" },
+  { label: "🧴 スキンケア管理", href: "/admin/skincare" },
+  { label: "🤰 妊娠授乳管理", href: "/admin/pregnancy" },
+  { label: "⚡ 相互作用管理", href: "/admin/interactions" },
+  { label: "💴 算定点数管理", href: "/admin/medical-fees" },
+  { label: "📋 業務チェック管理", href: "/admin/operations" },
+  { label: "📝 更新履歴", href: "/admin/changelog" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
