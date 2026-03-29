@@ -113,7 +113,7 @@ export default function QuizPage() {
 
       {/* Category tabs */}
       <Tabs value={tab} onValueChange={handleTabChange}>
-        <TabsList className="w-full justify-start flex-wrap h-auto gap-1">
+        <TabsList className="w-full justify-start flex-wrap h-auto gap-1 overflow-x-auto">
           {Object.entries(categoryLabels).map(([key, { label }]) => (
             <TabsTrigger key={key} value={key} className="text-xs">
               {label}

@@ -25,17 +25,17 @@ const stats = [
 
 export default function Home() {
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-8">
+    <div className="max-w-5xl mx-auto space-y-6 md:space-y-8">
       {/* Welcome Header */}
       <div>
-        <h1 className="text-2xl font-bold text-teal">スタッフ研修ポータル</h1>
-        <p className="text-muted-foreground mt-1">
+        <h1 className="text-xl md:text-2xl font-bold text-teal">スタッフ研修ポータル</h1>
+        <p className="text-sm md:text-base text-muted-foreground mt-1">
           肌すこやかに、心かろやかに ── 南草津皮フ科の理念に基づいた研修教材です
         </p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {stats.map((s) => (
           <Card key={s.label} className="text-center">
             <CardHeader className="pb-2 pt-4 px-4">
@@ -49,7 +49,7 @@ export default function Home() {
       {/* Module Grid */}
       <div>
         <h2 className="text-lg font-semibold mb-4">学習モジュール</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {modules.map((m) => (
             <Link key={m.href} href={m.href}>
               <Card className="h-full hover:shadow-md transition-shadow cursor-pointer hover:border-teal/40">

@@ -50,7 +50,7 @@ export default function DrugsPage() {
       />
 
       {/* View toggle + Category filter */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap overflow-x-auto">
         <div className="flex gap-1 mr-2">
           <button
             type="button"
@@ -106,7 +106,23 @@ export default function DrugsPage() {
       {/* Table view */}
       {view === "table" && (
         filtered.length > 0 ? (
-          <div className="border rounded-lg overflow-hidden">
+          <>
+          {/* Mobile cards */}
+          <div className="md:hidden space-y-2">
+            {filtered.map((d) => (
+              <div key={d.id} className="border rounded-lg p-3 bg-white space-y-1">
+                <div className="font-medium text-sm">{d.name}</div>
+                {d.genericName && <div className="text-xs text-muted-foreground">{d.genericName}</div>}
+                <div className="flex gap-2 flex-wrap">
+                  <span className="text-xs bg-teal-light text-teal px-1.5 py-0.5 rounded">{d.spec}</span>
+                  <span className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{d.category}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">{d.indication}</p>
+              </div>
+            ))}
+          </div>
+          {/* Desktop table */}
+          <div className="hidden md:block border rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -139,6 +155,7 @@ export default function DrugsPage() {
               </table>
             </div>
           </div>
+          </>
         ) : (
           <p className="text-center text-muted-foreground py-12">該当する薬剤が見つかりませんでした</p>
         )
