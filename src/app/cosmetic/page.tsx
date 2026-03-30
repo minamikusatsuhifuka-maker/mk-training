@@ -1,16 +1,22 @@
 "use client";
 
-import { useState } from "react";
-import { cosmeticItems, cosmeticCategories, type CosmeticCategory } from "@/data/cosmetic";
+import { useState, useEffect } from "react";
+import { cosmeticItems as initialData, cosmeticCategories, type CosmeticItem, type CosmeticCategory } from "@/data/cosmetic";
+import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PageHeader } from "@/components/PageHeader";
 
 export default function CosmeticPage() {
+  const [items, setItems] = useState<CosmeticItem[]>(initialData);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<CosmeticCategory | null>(null);
 
-  const filtered = cosmeticItems.filter((item) => {
+  useEffect(() => {
+    getContent<CosmeticItem>(CONTENT_KEYS.cosmetic, initialData).then(setItems).catch(() => {});
+  }, []);
+
+  const filtered = items.filter((item) => {
     const matchesCat = !selectedCategory || item.category === selectedCategory;
     if (!matchesCat) return false;
     if (!search) return true;
@@ -27,7 +33,7 @@ export default function CosmeticPage() {
       <PageHeader
         title="当院の美容施術・機器"
         description="美容皮膚科で提供している施術・機器の一覧です"
-        badge={`${cosmeticItems.length}メニュー`}
+        badge={`${items.length}メニュー`}
       />
 
       {/* Search */}

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { skincareItems as initialData, type SkincareItem } from "@/data/skincare";
+import { getContent, saveContent, CONTENT_KEYS } from "@/lib/content-store";
 import { AdminBanner } from "@/components/AdminBanner";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,8 +42,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-const STORAGE_KEY = "mk_skincare_items";
-
 const pregnancyBadge: Record<
   SkincareItem["pregnancySafety"],
   { label: string; className: string }
@@ -70,20 +69,30 @@ function emptyItem(): SkincareItem {
 }
 
 export default function AdminSkincarePage() {
-  const [data, setData] = useState<SkincareItem[]>(() => {
-    if (typeof window !== "undefined") {
-      const saved = sessionStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
-    }
-    return initialData;
-  });
+  const [data, setData] = useState<SkincareItem[]>(initialData);
   const [editItem, setEditItem] = useState<SkincareItem | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const loaded = useRef(false);
 
   useEffect(() => {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }, [data]);
+    getContent<SkincareItem>(CONTENT_KEYS.skincare, initialData).then((result) => {
+      setData(result);
+      setConnected(true);
+    }).catch(() => {}).finally(() => { loaded.current = true; });
+  }, []);
+
+  const persistData = async (items: SkincareItem[]) => {
+    setSaving(true);
+    const ok = await saveContent(CONTENT_KEYS.skincare, items);
+    setConnected(ok);
+    setSaveMsg(ok ? "保存しました（全スタッフに反映されます）" : "ローカルに保存しました（Supabase接続エラー）");
+    setTimeout(() => setSaveMsg(null), 3000);
+    setSaving(false);
+  };
 
   const openNew = () => {
     setEditItem(emptyItem());
@@ -96,31 +105,33 @@ export default function AdminSkincarePage() {
 
   const handleSave = () => {
     if (!editItem) return;
-    setData((prev) => {
-      const idx = prev.findIndex((d) => d.id === editItem.id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = editItem;
-        return next;
-      }
-      return [...prev, editItem];
-    });
+    const idx = data.findIndex((d) => d.id === editItem.id);
+    let newData: SkincareItem[];
+    if (idx >= 0) {
+      newData = [...data];
+      newData[idx] = editItem;
+    } else {
+      newData = [...data, editItem];
+    }
+    setData(newData);
+    persistData(newData);
     setDialogOpen(false);
     setEditItem(null);
   };
 
   const handleDelete = () => {
     if (!deleteId) return;
-    setData((prev) => prev.filter((d) => d.id !== deleteId));
+    const newData = data.filter((d) => d.id !== deleteId);
+    setData(newData);
+    persistData(newData);
     setDeleteId(null);
   };
 
   const handleReset = () => {
-    sessionStorage.removeItem(STORAGE_KEY);
     setData(initialData);
+    persistData(initialData);
   };
 
-  // Helper to convert keyIngredients to/from text
   const ingredientsToText = (ingredients: { name: string; effect: string }[]) =>
     ingredients.map((i) => `${i.name}|${i.effect}`).join("\n");
 
@@ -135,7 +146,13 @@ export default function AdminSkincarePage() {
 
   return (
     <div className="max-w-5xl space-y-4">
-      <AdminBanner connected={false} />
+      <AdminBanner connected={connected} />
+      {saveMsg && (
+        <div className={`rounded-md px-4 py-2 text-sm ${saveMsg.startsWith("保存しました") ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
+          {saveMsg}
+        </div>
+      )}
+      {saving && <div className="text-sm text-muted-foreground animate-pulse">保存中...</div>}
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-bold text-slate-800">スキンケア管理（{data.length}件）</h1>
         <div className="flex gap-2">
@@ -275,7 +292,7 @@ export default function AdminSkincarePage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>キャンセル</Button>
-            <Button onClick={handleSave}>保存</Button>
+            <Button onClick={handleSave} disabled={saving}>保存</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

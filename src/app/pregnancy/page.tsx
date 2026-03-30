@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { pregnancyDrugs, type SafetyLevel } from "@/data/pregnancy";
+import { useState, useEffect } from "react";
+import { pregnancyDrugs as initialData, type PregnancyDrug, type SafetyLevel } from "@/data/pregnancy";
+import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,11 +24,16 @@ const tabs = [
 ];
 
 export default function PregnancyPage() {
+  const [items, setItems] = useState<PregnancyDrug[]>(initialData);
   const [tab, setTab] = useState("allergy");
   const [search, setSearch] = useState("");
 
+  useEffect(() => {
+    getContent<PregnancyDrug>(CONTENT_KEYS.pregnancy, initialData).then(setItems).catch(() => {});
+  }, []);
+
   const currentTab = tabs.find((t) => t.key === tab)!;
-  const filtered = pregnancyDrugs.filter((d) => {
+  const filtered = items.filter((d) => {
     const matchesTab = currentTab.filter(d.category, d);
     if (!matchesTab) return false;
     if (!search) return true;
@@ -43,7 +49,7 @@ export default function PregnancyPage() {
         <PageHeader
           title="妊娠・授乳中の薬剤安全性"
           description="スタッフ研修用の参考情報です"
-          badge={`${pregnancyDrugs.length}品目`}
+          badge={`${items.length}品目`}
         />
         <a href="/print/pregnancy" target="_blank" className="shrink-0 rounded-md border px-3 py-1.5 text-xs hover:bg-accent transition-colors">印刷用</a>
       </div>

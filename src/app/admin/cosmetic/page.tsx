@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   cosmeticItems as initialData,
   cosmeticCategories,
   type CosmeticItem,
   type CosmeticCategory,
 } from "@/data/cosmetic";
+import { getContent, saveContent, CONTENT_KEYS } from "@/lib/content-store";
 import { AdminBanner } from "@/components/AdminBanner";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,8 +47,6 @@ import {
 } from "@/components/ui/table";
 import Link from "next/link";
 
-const STORAGE_KEY = "mk_cosmetic_items";
-
 const cosmeticTypes: CosmeticItem["type"][] = ["機器", "施術"];
 
 function emptyItem(): CosmeticItem {
@@ -69,15 +68,26 @@ export default function AdminCosmeticPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [connected, setConnected] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const loaded = useRef(false);
 
   useEffect(() => {
-    const saved = sessionStorage.getItem(STORAGE_KEY);
-    if (saved) setData(JSON.parse(saved));
+    getContent<CosmeticItem>(CONTENT_KEYS.cosmetic, initialData).then((result) => {
+      setData(result);
+      setConnected(true);
+    }).catch(() => {}).finally(() => { loaded.current = true; });
   }, []);
 
-  useEffect(() => {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }, [data]);
+  const persistData = async (items: CosmeticItem[]) => {
+    setSaving(true);
+    const ok = await saveContent(CONTENT_KEYS.cosmetic, items);
+    setConnected(ok);
+    setSaveMsg(ok ? "保存しました（全スタッフに反映されます）" : "ローカルに保存しました（Supabase接続エラー）");
+    setTimeout(() => setSaveMsg(null), 3000);
+    setSaving(false);
+  };
 
   const filtered = data.filter((d) => {
     if (!search) return true;
@@ -101,33 +111,42 @@ export default function AdminCosmeticPage() {
 
   const handleSave = () => {
     if (!editItem) return;
-    setData((prev) => {
-      const idx = prev.findIndex((d) => d.id === editItem.id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = editItem;
-        return next;
-      }
-      return [...prev, editItem];
-    });
+    const idx = data.findIndex((d) => d.id === editItem.id);
+    let newData: CosmeticItem[];
+    if (idx >= 0) {
+      newData = [...data];
+      newData[idx] = editItem;
+    } else {
+      newData = [...data, editItem];
+    }
+    setData(newData);
+    persistData(newData);
     setDialogOpen(false);
     setEditItem(null);
   };
 
   const handleDelete = () => {
     if (!deleteId) return;
-    setData((prev) => prev.filter((d) => d.id !== deleteId));
+    const newData = data.filter((d) => d.id !== deleteId);
+    setData(newData);
+    persistData(newData);
     setDeleteId(null);
   };
 
   const handleReset = () => {
-    sessionStorage.removeItem(STORAGE_KEY);
     setData(initialData);
+    persistData(initialData);
   };
 
   return (
     <div className="max-w-5xl space-y-4">
-      <AdminBanner connected={false} />
+      <AdminBanner connected={connected} />
+      {saveMsg && (
+        <div className={`rounded-md px-4 py-2 text-sm ${saveMsg.startsWith("保存しました") ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
+          {saveMsg}
+        </div>
+      )}
+      {saving && <div className="text-sm text-muted-foreground animate-pulse">保存中...</div>}
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-bold text-slate-800">
           美容施術管理（{data.length}件）
@@ -289,7 +308,7 @@ export default function AdminCosmeticPage() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               キャンセル
             </Button>
-            <Button onClick={handleSave}>保存</Button>
+            <Button onClick={handleSave} disabled={saving}>保存</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

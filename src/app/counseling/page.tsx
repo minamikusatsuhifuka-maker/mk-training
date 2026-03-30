@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { counselingGuides } from "@/data/counseling";
+import { useState, useEffect } from "react";
+import { counselingGuides as initialData, type CounselingGuide } from "@/data/counseling";
+import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,11 +16,21 @@ const categoryConfig: Record<string, { label: string; color: string }> = {
 };
 
 export default function CounselingPage() {
-  const [selectedId, setSelectedId] = useState(counselingGuides[0].id);
+  const [guides, setGuides] = useState<CounselingGuide[]>(initialData);
+  const [selectedId, setSelectedId] = useState(initialData[0].id);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [openFaq, setOpenFaq] = useState<string | null>(null);
 
-  const guide = counselingGuides.find((g) => g.id === selectedId)!;
+  useEffect(() => {
+    getContent<CounselingGuide>(CONTENT_KEYS.counseling, initialData).then((result) => {
+      setGuides(result);
+      if (result.length > 0) setSelectedId(result[0].id);
+    }).catch(() => {});
+  }, []);
+
+  const guide = guides.find((g) => g.id === selectedId) ?? guides[0];
+  if (!guide) return null;
+
   const allChecked = guide.clearChecks.filter((c) => c.required).every((c) => checked[c.id]);
   const checkedCount = guide.clearChecks.filter((c) => checked[c.id]).length;
 
@@ -35,12 +46,12 @@ export default function CounselingPage() {
       <PageHeader
         title="カウンセリングガイド"
         description="美容施術のトークスクリプトとクリアチェックリスト"
-        badge={`${counselingGuides.length}施術`}
+        badge={`${guides.length}施術`}
       />
 
       {/* Treatment Selection */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-        {counselingGuides.map((g) => (
+        {guides.map((g) => (
           <button
             key={g.id}
             type="button"

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { skincareItems, type SkincareItem } from "@/data/skincare";
+import { useState, useEffect } from "react";
+import { skincareItems as initialData, type SkincareItem } from "@/data/skincare";
+import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/PageHeader";
@@ -49,10 +50,15 @@ function pregnancyBadge(safety: SkincareItem["pregnancySafety"]) {
 }
 
 export default function SkincarePage() {
+  const [items, setItems] = useState<SkincareItem[]>(initialData);
   const [openId, setOpenId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterCategory>("すべて");
 
-  const filtered = skincareItems.filter((item) => {
+  useEffect(() => {
+    getContent<SkincareItem>(CONTENT_KEYS.skincare, initialData).then(setItems).catch(() => {});
+  }, []);
+
+  const filtered = items.filter((item) => {
     if (filter === "すべて") return true;
     return item.type === filter;
   });
@@ -66,7 +72,7 @@ export default function SkincarePage() {
       <PageHeader
         title="スキンケア・美容内服製品"
         description="当院で取り扱うスキンケア製品・美容内服の一覧です"
-        badge={`${skincareItems.length}製品`}
+        badge={`${items.length}製品`}
       />
 
       {/* Filter buttons */}

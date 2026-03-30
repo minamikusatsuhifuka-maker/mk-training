@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   receptionSections as initialReception,
@@ -9,6 +9,7 @@ import {
   type CheckSection,
   type CheckItem,
 } from "@/data/operations";
+import { getContent, saveContent, CONTENT_KEYS } from "@/lib/content-store";
 import { AdminBanner } from "@/components/AdminBanner";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,8 +33,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-
-const STORAGE_KEY = "mk_operations";
 
 type RoleKey = "reception" | "clerk" | "counselor";
 
@@ -71,14 +70,12 @@ function deepCloneData(data: OperationsData): OperationsData {
 }
 
 export default function AdminOperationsPage() {
-  const [data, setData] = useState<OperationsData>(() => {
-    if (typeof window !== "undefined") {
-      const saved = sessionStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
-    }
-    return deepCloneData(initialDataMap);
-  });
+  const [data, setData] = useState<OperationsData>(deepCloneData(initialDataMap));
   const [activeRole, setActiveRole] = useState<RoleKey>("reception");
+  const [connected, setConnected] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const loaded = useRef(false);
 
   // Edit section dialog
   const [editSectionIndex, setEditSectionIndex] = useState<number | null>(null);
@@ -89,8 +86,29 @@ export default function AdminOperationsPage() {
   const [deleteSectionIndex, setDeleteSectionIndex] = useState<number | null>(null);
 
   useEffect(() => {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }, [data]);
+    Promise.all([
+      getContent<CheckSection>(CONTENT_KEYS.operationsReception, initialReception),
+      getContent<CheckSection>(CONTENT_KEYS.operationsClerk, initialClerk),
+      getContent<CheckSection>(CONTENT_KEYS.operationsCounselor, initialCounselor),
+    ]).then(([reception, clerk, counselor]) => {
+      setData({ reception, clerk, counselor });
+      setConnected(true);
+    }).catch(() => {}).finally(() => { loaded.current = true; });
+  }, []);
+
+  const persistAll = async (newData: OperationsData) => {
+    setSaving(true);
+    const [ok1, ok2, ok3] = await Promise.all([
+      saveContent(CONTENT_KEYS.operationsReception, newData.reception),
+      saveContent(CONTENT_KEYS.operationsClerk, newData.clerk),
+      saveContent(CONTENT_KEYS.operationsCounselor, newData.counselor),
+    ]);
+    const ok = ok1 && ok2 && ok3;
+    setConnected(ok);
+    setSaveMsg(ok ? "保存しました（全スタッフに反映されます）" : "ローカルに保存しました（Supabase接続エラー）");
+    setTimeout(() => setSaveMsg(null), 3000);
+    setSaving(false);
+  };
 
   const sections = data[activeRole];
 
@@ -112,16 +130,15 @@ export default function AdminOperationsPage() {
 
   const handleSaveSection = () => {
     if (!editSection) return;
-    setData((prev) => {
-      const next = deepCloneData(prev);
-      const roleSections = next[activeRole];
-      if (editSectionIndex !== null && editSectionIndex < roleSections.length) {
-        roleSections[editSectionIndex] = editSection;
-      } else {
-        roleSections.push(editSection);
-      }
-      return next;
-    });
+    const next = deepCloneData(data);
+    const roleSections = next[activeRole];
+    if (editSectionIndex !== null && editSectionIndex < roleSections.length) {
+      roleSections[editSectionIndex] = editSection;
+    } else {
+      roleSections.push(editSection);
+    }
+    setData(next);
+    persistAll(next);
     setDialogOpen(false);
     setEditSection(null);
     setEditSectionIndex(null);
@@ -129,23 +146,21 @@ export default function AdminOperationsPage() {
 
   const handleDeleteSection = () => {
     if (deleteSectionIndex === null) return;
-    setData((prev) => {
-      const next = deepCloneData(prev);
-      next[activeRole].splice(deleteSectionIndex, 1);
-      return next;
-    });
+    const next = deepCloneData(data);
+    next[activeRole].splice(deleteSectionIndex, 1);
+    setData(next);
+    persistAll(next);
     setDeleteSectionIndex(null);
   };
 
   const moveSection = (index: number, direction: -1 | 1) => {
     const target = index + direction;
     if (target < 0 || target >= sections.length) return;
-    setData((prev) => {
-      const next = deepCloneData(prev);
-      const arr = next[activeRole];
-      [arr[index], arr[target]] = [arr[target], arr[index]];
-      return next;
-    });
+    const next = deepCloneData(data);
+    const arr = next[activeRole];
+    [arr[index], arr[target]] = [arr[target], arr[index]];
+    setData(next);
+    persistAll(next);
   };
 
   // --- Item helpers inside edit dialog ---
@@ -185,8 +200,9 @@ export default function AdminOperationsPage() {
   };
 
   const handleReset = () => {
-    sessionStorage.removeItem(STORAGE_KEY);
-    setData(deepCloneData(initialDataMap));
+    const fresh = deepCloneData(initialDataMap);
+    setData(fresh);
+    persistAll(fresh);
   };
 
   const totalItems = (role: RoleKey) =>
@@ -194,7 +210,13 @@ export default function AdminOperationsPage() {
 
   return (
     <div className="max-w-5xl space-y-4">
-      <AdminBanner connected={false} />
+      <AdminBanner connected={connected} />
+      {saveMsg && (
+        <div className={`rounded-md px-4 py-2 text-sm ${saveMsg.startsWith("保存しました") ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
+          {saveMsg}
+        </div>
+      )}
+      {saving && <div className="text-sm text-muted-foreground animate-pulse">保存中...</div>}
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-bold text-slate-800">業務チェック管理</h1>
         <div className="flex gap-2">
@@ -330,7 +352,7 @@ export default function AdminOperationsPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>キャンセル</Button>
-            <Button onClick={handleSaveSection}>保存</Button>
+            <Button onClick={handleSaveSection} disabled={saving}>保存</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

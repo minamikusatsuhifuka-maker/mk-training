@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { medicalFees, billingTips, type FeeCategory } from "@/data/medical_fees";
+import { useState, useEffect } from "react";
+import { medicalFees as initialData, billingTips, type MedicalFee, type FeeCategory } from "@/data/medical_fees";
+import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,10 +11,15 @@ import { PageHeader } from "@/components/PageHeader";
 const categories: (FeeCategory | "全て")[] = ["全て", "初診・再診", "医学管理", "検査", "皮膚科処置", "処置", "手術", "注射", "投薬"];
 
 export default function MedicalFeesPage() {
+  const [items, setItems] = useState<MedicalFee[]>(initialData);
   const [tab, setTab] = useState<string>("全て");
   const [search, setSearch] = useState("");
 
-  const filtered = medicalFees.filter((f) => {
+  useEffect(() => {
+    getContent<MedicalFee>(CONTENT_KEYS.medicalFees, initialData).then(setItems).catch(() => {});
+  }, []);
+
+  const filtered = items.filter((f) => {
     if (tab !== "全て" && f.category !== tab) return false;
     if (!search) return true;
     const q = search.toLowerCase();
@@ -26,7 +32,7 @@ export default function MedicalFeesPage() {
         <PageHeader
           title="保険診療算定項目・点数表"
           description="皮膚科外来でよく使用する診療報酬算定項目の点数一覧です"
-          badge={`${medicalFees.length}項目`}
+          badge={`${items.length}項目`}
         />
         <a href="/print/medical-fees" target="_blank" className="shrink-0 rounded-md border px-3 py-1.5 text-xs hover:bg-accent transition-colors">印刷用</a>
       </div>

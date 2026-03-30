@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { drugInteractions, interactionDrugList, type InteractionSeverity } from "@/data/interactions";
+import { useState, useEffect } from "react";
+import { drugInteractions as initialData, interactionDrugList as initialDrugList, type DrugInteraction, type InteractionSeverity } from "@/data/interactions";
+import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,11 +29,11 @@ const quickChecks = [
   { label: "ネオーラル + グレープフルーツ", d1: "ネオーラル（シクロスポリン）", d2: "" },
 ];
 
-function findInteractions(d1: string, d2: string) {
+function findInteractions(allData: DrugInteraction[], d1: string, d2: string) {
   if (!d1 && !d2) return [];
   const q1 = d1.toLowerCase();
   const q2 = d2.toLowerCase();
-  return drugInteractions.filter((i) => {
+  return allData.filter((i) => {
     const id1 = i.drug1.toLowerCase();
     const id2 = i.drug2.toLowerCase();
     if (d1 && d2) {
@@ -47,26 +48,33 @@ function findInteractions(d1: string, d2: string) {
   });
 }
 
-const grouped = {
-  contraindicated: drugInteractions.filter((i) => i.severity === "contraindicated"),
-  major: drugInteractions.filter((i) => i.severity === "major"),
-  moderate: drugInteractions.filter((i) => i.severity === "moderate"),
-};
-
 export default function InteractionsPage() {
+  const [items, setItems] = useState<DrugInteraction[]>(initialData);
   const [drug1, setDrug1] = useState("");
   const [drug2, setDrug2] = useState("");
-  const [results, setResults] = useState<typeof drugInteractions | null>(null);
+  const [results, setResults] = useState<DrugInteraction[] | null>(null);
   const [openSection, setOpenSection] = useState<string | null>(null);
 
+  useEffect(() => {
+    getContent<DrugInteraction>(CONTENT_KEYS.interactions, initialData).then(setItems).catch(() => {});
+  }, []);
+
+  // Derive drug list and grouped data from items
+  const drugList = Array.from(new Set(items.flatMap((i) => [i.drug1, i.drug2]))).sort();
+  const grouped = {
+    contraindicated: items.filter((i) => i.severity === "contraindicated"),
+    major: items.filter((i) => i.severity === "major"),
+    moderate: items.filter((i) => i.severity === "moderate"),
+  };
+
   const handleCheck = () => {
-    setResults(findInteractions(drug1, drug2));
+    setResults(findInteractions(items, drug1, drug2));
   };
 
   const handleQuick = (d1: string, d2: string) => {
     setDrug1(d1);
     setDrug2(d2);
-    setResults(findInteractions(d1, d2));
+    setResults(findInteractions(items, d1, d2));
   };
 
   return (
@@ -74,7 +82,7 @@ export default function InteractionsPage() {
       <PageHeader
         title="薬剤相互作用チェック"
         description="2つの薬剤を選択して相互作用を確認できます"
-        badge={`${drugInteractions.length}件登録`}
+        badge={`${items.length}件登録`}
       />
 
       <div className="rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
@@ -89,7 +97,7 @@ export default function InteractionsPage() {
             <Select value={drug1} onValueChange={(v) => setDrug1(v ?? "")}>
               <SelectTrigger><SelectValue placeholder="薬剤1を選択..." /></SelectTrigger>
               <SelectContent>
-                {interactionDrugList.map((d) => (
+                {drugList.map((d) => (
                   <SelectItem key={d} value={d}>{d}</SelectItem>
                 ))}
               </SelectContent>
@@ -100,7 +108,7 @@ export default function InteractionsPage() {
             <Select value={drug2} onValueChange={(v) => setDrug2(v ?? "")}>
               <SelectTrigger><SelectValue placeholder="薬剤2を選択..." /></SelectTrigger>
               <SelectContent>
-                {interactionDrugList.map((d) => (
+                {drugList.map((d) => (
                   <SelectItem key={d} value={d}>{d}</SelectItem>
                 ))}
               </SelectContent>
@@ -168,7 +176,7 @@ export default function InteractionsPage() {
       <div className="space-y-2">
         <h2 className="text-sm font-semibold">全相互作用一覧</h2>
         {(["contraindicated", "major", "moderate"] as const).map((sev) => {
-          const items = grouped[sev];
+          const sevItems = grouped[sev];
           const cfg = severityConfig[sev];
           const isOpen = openSection === sev;
           return (
@@ -180,13 +188,13 @@ export default function InteractionsPage() {
               >
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className={cfg.color}>{cfg.icon} {cfg.label}</Badge>
-                  <span className="text-sm">（{items.length}件）</span>
+                  <span className="text-sm">（{sevItems.length}件）</span>
                 </div>
                 <span className="text-muted-foreground">{isOpen ? "▲" : "▼"}</span>
               </button>
               {isOpen && (
                 <CardContent className="pt-0 space-y-2">
-                  {items.map((r) => (
+                  {sevItems.map((r) => (
                     <div key={r.id} className="border-b border-border/50 pb-2 last:border-0 last:pb-0">
                       <div className="text-sm font-medium">{r.drug1} × {r.drug2}</div>
                       <p className="text-xs text-muted-foreground mt-0.5">{r.effect}</p>

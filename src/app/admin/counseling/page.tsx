@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   counselingGuides as initialData,
@@ -8,6 +8,7 @@ import {
   type ClearCheckItem,
   type TalkScript,
 } from "@/data/counseling";
+import { getContent, saveContent, CONTENT_KEYS } from "@/lib/content-store";
 import { AdminBanner } from "@/components/AdminBanner";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,8 +47,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-
-const STORAGE_KEY = "mk_counseling_guides";
 
 const categoryOptions: ClearCheckItem["category"][] = [
   "contraindication",
@@ -91,21 +90,31 @@ function emptyQA(): { question: string; answer: string } {
 }
 
 export default function AdminCounselingPage() {
-  const [data, setData] = useState<CounselingGuide[]>(() => {
-    if (typeof window !== "undefined") {
-      const saved = sessionStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
-    }
-    return initialData;
-  });
+  const [data, setData] = useState<CounselingGuide[]>(initialData);
   const [editItem, setEditItem] = useState<CounselingGuide | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [dialogTab, setDialogTab] = useState("checks");
+  const [connected, setConnected] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const loaded = useRef(false);
 
   useEffect(() => {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }, [data]);
+    getContent<CounselingGuide>(CONTENT_KEYS.counseling, initialData).then((result) => {
+      setData(result);
+      setConnected(true);
+    }).catch(() => {}).finally(() => { loaded.current = true; });
+  }, []);
+
+  const persistData = async (items: CounselingGuide[]) => {
+    setSaving(true);
+    const ok = await saveContent(CONTENT_KEYS.counseling, items);
+    setConnected(ok);
+    setSaveMsg(ok ? "保存しました（全スタッフに反映されます）" : "ローカルに保存しました（Supabase接続エラー）");
+    setTimeout(() => setSaveMsg(null), 3000);
+    setSaving(false);
+  };
 
   const openNew = () => {
     setEditItem(emptyGuide());
@@ -126,28 +135,31 @@ export default function AdminCounselingPage() {
 
   const handleSave = () => {
     if (!editItem) return;
-    setData((prev) => {
-      const idx = prev.findIndex((d) => d.id === editItem.id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = editItem;
-        return next;
-      }
-      return [...prev, editItem];
-    });
+    const idx = data.findIndex((d) => d.id === editItem.id);
+    let newData: CounselingGuide[];
+    if (idx >= 0) {
+      newData = [...data];
+      newData[idx] = editItem;
+    } else {
+      newData = [...data, editItem];
+    }
+    setData(newData);
+    persistData(newData);
     setDialogOpen(false);
     setEditItem(null);
   };
 
   const handleDelete = () => {
     if (!deleteId) return;
-    setData((prev) => prev.filter((d) => d.id !== deleteId));
+    const newData = data.filter((d) => d.id !== deleteId);
+    setData(newData);
+    persistData(newData);
     setDeleteId(null);
   };
 
   const handleReset = () => {
-    sessionStorage.removeItem(STORAGE_KEY);
     setData(initialData);
+    persistData(initialData);
   };
 
   // --- Check items helpers ---
@@ -200,7 +212,13 @@ export default function AdminCounselingPage() {
 
   return (
     <div className="max-w-5xl space-y-4">
-      <AdminBanner connected={false} />
+      <AdminBanner connected={connected} />
+      {saveMsg && (
+        <div className={`rounded-md px-4 py-2 text-sm ${saveMsg.startsWith("保存しました") ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
+          {saveMsg}
+        </div>
+      )}
+      {saving && <div className="text-sm text-muted-foreground animate-pulse">保存中...</div>}
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-bold text-slate-800">カウンセリング管理（{data.length}件）</h1>
         <div className="flex gap-2">
@@ -378,7 +396,7 @@ export default function AdminCounselingPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>キャンセル</Button>
-            <Button onClick={handleSave}>保存</Button>
+            <Button onClick={handleSave} disabled={saving}>保存</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
