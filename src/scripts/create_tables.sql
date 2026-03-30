@@ -25,3 +25,11 @@ INSERT INTO content_store (id, content_type, data) VALUES
   ('operations_counselor', 'operations', '[]'::jsonb),
   ('counseling_guides', 'counseling', '[]'::jsonb)
 ON CONFLICT (id) DO NOTHING;
+
+-- 追加コンテンツ（疾患・薬剤・クイズ・禁忌）
+INSERT INTO content_store (id, content_type, data) VALUES
+  ('content_diseases', 'diseases', '[]'::jsonb),
+  ('content_drugs', 'drugs', '[]'::jsonb),
+  ('content_quiz', 'quiz', '[]'::jsonb),
+  ('content_contraindications', 'contraindications', '[]'::jsonb)
+ON CONFLICT (id) DO NOTHING;

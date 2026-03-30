@@ -1,25 +1,31 @@
 "use client";
 
-import { useState } from "react";
-import { drugs, drugCategories, type Drug, type DrugCategory } from "@/data/drugs";
+import { useState, useEffect } from "react";
+import { drugs as initialData, drugCategories, type Drug, type DrugCategory } from "@/data/drugs";
+import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/PageHeader";
 
-const groupedDrugs = drugCategories.reduce((acc, category) => {
-  const items = drugs.filter((d) => d.category === category);
-  if (items.length > 0) acc[category] = items;
-  return acc;
-}, {} as Partial<Record<DrugCategory, Drug[]>>);
-
-const categoryCount = (cat: DrugCategory) => drugs.filter((d) => d.category === cat).length;
-
 export default function DrugsPage() {
+  const [items, setItems] = useState<Drug[]>(initialData);
   const [searchText, setSearchText] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<DrugCategory | null>(null);
   const [view, setView] = useState<"table" | "accordion">("table");
 
-  const filtered = drugs.filter((d) => {
+  useEffect(() => {
+    getContent<Drug>(CONTENT_KEYS.drugs, initialData).then(setItems).catch(() => {});
+  }, []);
+
+  const groupedDrugs = drugCategories.reduce((acc, category) => {
+    const catItems = items.filter((d) => d.category === category);
+    if (catItems.length > 0) acc[category] = catItems;
+    return acc;
+  }, {} as Partial<Record<DrugCategory, Drug[]>>);
+
+  const categoryCount = (cat: DrugCategory) => items.filter((d) => d.category === cat).length;
+
+  const filtered = items.filter((d) => {
     const matchesCategory = !selectedCategory || d.category === selectedCategory;
     if (!matchesCategory) return false;
     if (!searchText) return true;
@@ -38,12 +44,11 @@ export default function DrugsPage() {
         <PageHeader
           title="薬剤規格リスト"
           description="当院で使用する主要薬剤の規格・適応を確認できます"
-          badge={`収録数: ${drugs.length}件`}
+          badge={`収録数: ${items.length}件`}
         />
         <a href="/print/drugs" target="_blank" className="shrink-0 rounded-md border px-3 py-1.5 text-xs hover:bg-accent transition-colors">印刷用</a>
       </div>
 
-      {/* Search */}
       <input
         type="text"
         placeholder="薬品名・成分名・適応で検索..."
@@ -52,65 +57,26 @@ export default function DrugsPage() {
         className="w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-teal/40 placeholder:text-muted-foreground"
       />
 
-      {/* View toggle + Category filter */}
       <div className="flex items-center gap-2 flex-wrap overflow-x-auto">
         <div className="flex gap-1 mr-2">
-          <button
-            type="button"
-            onClick={() => setView("table")}
-            className={`rounded-md px-2 py-1 text-xs ${view === "table" ? "bg-teal text-teal-foreground" : "bg-muted text-muted-foreground"}`}
-          >
-            一覧
-          </button>
-          <button
-            type="button"
-            onClick={() => setView("accordion")}
-            className={`rounded-md px-2 py-1 text-xs ${view === "accordion" ? "bg-teal text-teal-foreground" : "bg-muted text-muted-foreground"}`}
-          >
-            カテゴリ別
-          </button>
+          <button type="button" onClick={() => setView("table")} className={`rounded-md px-2 py-1 text-xs ${view === "table" ? "bg-teal text-teal-foreground" : "bg-muted text-muted-foreground"}`}>一覧</button>
+          <button type="button" onClick={() => setView("accordion")} className={`rounded-md px-2 py-1 text-xs ${view === "accordion" ? "bg-teal text-teal-foreground" : "bg-muted text-muted-foreground"}`}>カテゴリ別</button>
         </div>
         {view === "table" && (
           <>
-            <button
-              type="button"
-              onClick={() => setSelectedCategory(null)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                selectedCategory === null
-                  ? "bg-teal text-teal-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-accent"
-              }`}
-            >
-              すべて ({drugs.length})
-            </button>
+            <button type="button" onClick={() => setSelectedCategory(null)} className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${selectedCategory === null ? "bg-teal text-teal-foreground" : "bg-muted text-muted-foreground hover:bg-accent"}`}>すべて ({items.length})</button>
             {drugCategories.filter((cat) => categoryCount(cat) > 0).map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  selectedCategory === cat
-                    ? "bg-teal text-teal-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-accent"
-                }`}
-              >
-                {cat} ({categoryCount(cat)})
-              </button>
+              <button key={cat} type="button" onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)} className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${selectedCategory === cat ? "bg-teal text-teal-foreground" : "bg-muted text-muted-foreground hover:bg-accent"}`}>{cat} ({categoryCount(cat)})</button>
             ))}
           </>
         )}
       </div>
 
-      {/* Count */}
-      {view === "table" && (
-        <p className="text-sm text-muted-foreground">{filtered.length}件表示中</p>
-      )}
+      {view === "table" && <p className="text-sm text-muted-foreground">{filtered.length}件表示中</p>}
 
-      {/* Table view */}
       {view === "table" && (
         filtered.length > 0 ? (
           <>
-          {/* Mobile cards */}
           <div className="md:hidden space-y-2">
             {filtered.map((d) => (
               <div key={d.id} className="border rounded-lg p-3 bg-white space-y-1">
@@ -124,7 +90,6 @@ export default function DrugsPage() {
               </div>
             ))}
           </div>
-          {/* Desktop table */}
           <div className="hidden md:block border rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -141,16 +106,10 @@ export default function DrugsPage() {
                     <tr key={d.id} className="hover:bg-muted/50">
                       <td className="px-2 py-1.5 border-b align-top w-[240px]">
                         <div className="font-medium text-sm leading-snug">{d.name}</div>
-                        {d.genericName && (
-                          <div className="text-xs text-muted-foreground mt-0.5 leading-snug">{d.genericName}</div>
-                        )}
+                        {d.genericName && <div className="text-xs text-muted-foreground mt-0.5 leading-snug">{d.genericName}</div>}
                       </td>
-                      <td className="px-2 py-1.5 border-b align-top w-[120px]">
-                        <span className="text-xs">{d.spec}</span>
-                      </td>
-                      <td className="px-2 py-1.5 border-b align-top w-[130px]">
-                        <span className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{d.category}</span>
-                      </td>
+                      <td className="px-2 py-1.5 border-b align-top w-[120px]"><span className="text-xs">{d.spec}</span></td>
+                      <td className="px-2 py-1.5 border-b align-top w-[130px]"><span className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{d.category}</span></td>
                       <td className="px-2 py-1.5 border-b align-top text-xs text-muted-foreground">{d.indication}</td>
                     </tr>
                   ))}
@@ -164,17 +123,16 @@ export default function DrugsPage() {
         )
       )}
 
-      {/* Accordion view */}
       {view === "accordion" && (
         <div className="space-y-4">
-          {Object.entries(groupedDrugs).map(([category, items]) => {
-            if (!items) return null;
+          {Object.entries(groupedDrugs).map(([category, catItems]) => {
+            if (!catItems) return null;
             const filteredItems = searchText
-              ? items.filter((d) => {
+              ? catItems.filter((d) => {
                   const q = searchText.toLowerCase();
                   return d.name.toLowerCase().includes(q) || (d.genericName?.toLowerCase().includes(q) ?? false) || d.indication.toLowerCase().includes(q);
                 })
-              : items;
+              : catItems;
             if (filteredItems.length === 0) return null;
             return (
               <Card key={category}>
@@ -190,9 +148,7 @@ export default function DrugsPage() {
                   {filteredItems.map((d) => (
                     <div key={d.id} className="border-b border-border/50 pb-2 last:border-0 last:pb-0">
                       <div className="font-medium text-sm">{d.name}</div>
-                      {d.genericName && (
-                        <div className="text-xs text-muted-foreground">一般名: {d.genericName}</div>
-                      )}
+                      {d.genericName && <div className="text-xs text-muted-foreground">一般名: {d.genericName}</div>}
                       <div className="flex gap-2 mt-1">
                         <Badge variant="outline" className="bg-teal-light text-teal border-teal/20 text-[10px]">{d.spec}</Badge>
                       </div>

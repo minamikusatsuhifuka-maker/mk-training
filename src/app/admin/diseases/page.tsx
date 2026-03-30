@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { diseases as initialDiseases, type Disease } from "@/data/diseases";
+import { getContent, saveContent, CONTENT_KEYS } from "@/lib/content-store";
 import { AdminBanner } from "@/components/AdminBanner";
 import { AIGeneratePanel, type GeneratedResult } from "@/components/admin/AIGeneratePanel";
-import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -41,8 +41,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-const STORAGE_KEY = "admin_diseases";
-
 const badgeColors: Disease["badgeColor"][] = ["blue", "teal", "amber", "red", "purple"];
 
 function emptyDisease(): Disease {
@@ -68,34 +66,25 @@ export default function AdminDiseasesPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [connected, setConnected] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const loaded = useRef(false);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const { data: rows } = await supabase.from("content_diseases").select("id, data");
-        if (rows && rows.length > 0) {
-          setData(rows.map((r) => r.data as Disease));
-          setConnected(true);
-          return;
-        }
-      } catch {}
-      const saved = sessionStorage.getItem(STORAGE_KEY);
-      if (saved) setData(JSON.parse(saved));
-    }
-    load();
-  }, []);
-
-  const saveToSupabase = useCallback(async (items: Disease[]) => {
-    try {
-      const rows = items.map((d) => ({ id: d.id, data: d, updated_at: new Date().toISOString() }));
-      await supabase.from("content_diseases").upsert(rows);
+    getContent<Disease>(CONTENT_KEYS.diseases, initialDiseases).then((result) => {
+      setData(result);
       setConnected(true);
-    } catch {}
+    }).catch(() => {}).finally(() => { loaded.current = true; });
   }, []);
 
-  useEffect(() => {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }, [data]);
+  const persistData = async (items: Disease[]) => {
+    setSaving(true);
+    const ok = await saveContent(CONTENT_KEYS.diseases, items);
+    setConnected(ok);
+    setSaveMsg(ok ? "保存しました（全スタッフに反映されます）" : "ローカルに保存しました（Supabase接続エラー）");
+    setTimeout(() => setSaveMsg(null), 3000);
+    setSaving(false);
+  };
 
   const filtered = data.filter((d) => {
     if (!search) return true;
@@ -115,35 +104,37 @@ export default function AdminDiseasesPage() {
 
   const handleSave = () => {
     if (!editItem) return;
-    setData((prev) => {
-      const idx = prev.findIndex((d) => d.id === editItem.id);
-      let next: Disease[];
-      if (idx >= 0) {
-        next = [...prev];
-        next[idx] = editItem;
-      } else {
-        next = [...prev, editItem];
-      }
-      saveToSupabase(next);
-      return next;
-    });
+    const idx = data.findIndex((d) => d.id === editItem.id);
+    let newData: Disease[];
+    if (idx >= 0) {
+      newData = [...data];
+      newData[idx] = editItem;
+    } else {
+      newData = [...data, editItem];
+    }
+    setData(newData);
+    persistData(newData);
     setDialogOpen(false);
     setEditItem(null);
   };
 
   const handleDelete = () => {
     if (!deleteId) return;
-    supabase.from("content_diseases").delete().eq("id", deleteId).then(() => {});
-    setData((prev) => {
-      const next = prev.filter((d) => d.id !== deleteId);
-      return next;
-    });
+    const newData = data.filter((d) => d.id !== deleteId);
+    setData(newData);
+    persistData(newData);
     setDeleteId(null);
   };
 
   return (
     <div className="max-w-5xl space-y-4">
       <AdminBanner connected={connected} />
+      {saveMsg && (
+        <div className={`rounded-md px-4 py-2 text-sm ${saveMsg.startsWith("保存しました") ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
+          {saveMsg}
+        </div>
+      )}
+      {saving && <div className="text-sm text-muted-foreground animate-pulse">保存中...</div>}
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-bold text-slate-800">疾患管理（{data.length}件）</h1>
         <Button onClick={openNew}>新規追加</Button>
@@ -171,11 +162,9 @@ export default function AdminDiseasesPage() {
                 relatedTreatments: (d.relatedTreatments as string[]) ?? [],
               };
             });
-          setData((prev) => {
-            const next = [...prev, ...newItems];
-            saveToSupabase(next);
-            return next;
-          });
+          const newData = [...data, ...newItems];
+          setData(newData);
+          persistData(newData);
         }}
       />
 
@@ -286,7 +275,7 @@ export default function AdminDiseasesPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>キャンセル</Button>
-            <Button onClick={handleSave}>保存</Button>
+            <Button onClick={handleSave} disabled={saving}>保存</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

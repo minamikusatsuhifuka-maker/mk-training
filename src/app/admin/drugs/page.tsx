@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { drugs as initialDrugs, drugCategories, type Drug, type DrugCategory } from "@/data/drugs";
+import { getContent, saveContent, CONTENT_KEYS } from "@/lib/content-store";
 import { AdminBanner } from "@/components/AdminBanner";
 import { AIGeneratePanel, type GeneratedResult } from "@/components/admin/AIGeneratePanel";
-import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -32,8 +32,6 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-const STORAGE_KEY = "admin_drugs";
-
 function sortDrugsByCategory(items: Drug[]): Drug[] {
   return [...items].sort((a, b) => {
     const ai = drugCategories.indexOf(a.category);
@@ -53,34 +51,25 @@ export default function AdminDrugsPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [connected, setConnected] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const loaded = useRef(false);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const { data: rows } = await supabase.from("content_drugs").select("id, data");
-        if (rows && rows.length > 0) {
-          setData(sortDrugsByCategory(rows.map((r) => r.data as Drug)));
-          setConnected(true);
-          return;
-        }
-      } catch {}
-      const saved = sessionStorage.getItem(STORAGE_KEY);
-      if (saved) setData(sortDrugsByCategory(JSON.parse(saved)));
-    }
-    load();
-  }, []);
-
-  const saveToSupabase = useCallback(async (items: Drug[]) => {
-    try {
-      const rows = items.map((d) => ({ id: d.id, data: d, updated_at: new Date().toISOString() }));
-      await supabase.from("content_drugs").upsert(rows);
+    getContent<Drug>(CONTENT_KEYS.drugs, initialDrugs).then((result) => {
+      setData(sortDrugsByCategory(result));
       setConnected(true);
-    } catch {}
+    }).catch(() => {}).finally(() => { loaded.current = true; });
   }, []);
 
-  useEffect(() => {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }, [data]);
+  const persistData = async (items: Drug[]) => {
+    setSaving(true);
+    const ok = await saveContent(CONTENT_KEYS.drugs, items);
+    setConnected(ok);
+    setSaveMsg(ok ? "保存しました（全スタッフに反映されます）" : "ローカルに保存しました（Supabase接続エラー）");
+    setTimeout(() => setSaveMsg(null), 3000);
+    setSaving(false);
+  };
 
   const filtered = data.filter((d) => {
     if (!search) return true;
@@ -93,29 +82,38 @@ export default function AdminDrugsPage() {
 
   const handleSave = () => {
     if (!editItem) return;
-    setData((prev) => {
-      const idx = prev.findIndex((d) => d.id === editItem.id);
-      let next: Drug[];
-      if (idx >= 0) { next = [...prev]; next[idx] = editItem; }
-      else { next = [...prev, editItem]; }
-      next = sortDrugsByCategory(next);
-      saveToSupabase(next);
-      return next;
-    });
+    const idx = data.findIndex((d) => d.id === editItem.id);
+    let newData: Drug[];
+    if (idx >= 0) {
+      newData = [...data];
+      newData[idx] = editItem;
+    } else {
+      newData = [...data, editItem];
+    }
+    newData = sortDrugsByCategory(newData);
+    setData(newData);
+    persistData(newData);
     setDialogOpen(false);
     setEditItem(null);
   };
 
   const handleDelete = () => {
     if (!deleteId) return;
-    supabase.from("content_drugs").delete().eq("id", deleteId).then(() => {});
-    setData((prev) => prev.filter((d) => d.id !== deleteId));
+    const newData = data.filter((d) => d.id !== deleteId);
+    setData(newData);
+    persistData(newData);
     setDeleteId(null);
   };
 
   return (
     <div className="max-w-5xl space-y-4">
       <AdminBanner connected={connected} />
+      {saveMsg && (
+        <div className={`rounded-md px-4 py-2 text-sm ${saveMsg.startsWith("保存しました") ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
+          {saveMsg}
+        </div>
+      )}
+      {saving && <div className="text-sm text-muted-foreground animate-pulse">保存中...</div>}
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-bold text-slate-800">薬剤管理（{data.length}件）</h1>
         <Button onClick={openNew}>新規追加</Button>
@@ -134,11 +132,9 @@ export default function AdminDrugsPage() {
               category: ((r.data as Record<string, string>).category ?? "保湿剤") as DrugCategory,
               indication: (r.data as Record<string, string>).indication ?? "",
             }));
-          setData((prev) => {
-            const next = sortDrugsByCategory([...prev, ...newDrugs]);
-            saveToSupabase(next);
-            return next;
-          });
+          const newData = sortDrugsByCategory([...data, ...newDrugs]);
+          setData(newData);
+          persistData(newData);
         }}
       />
 
@@ -233,7 +229,7 @@ export default function AdminDrugsPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>キャンセル</Button>
-            <Button onClick={handleSave}>保存</Button>
+            <Button onClick={handleSave} disabled={saving}>保存</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

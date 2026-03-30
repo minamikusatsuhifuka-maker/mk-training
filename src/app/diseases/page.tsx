@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { diseases, type Disease } from "@/data/diseases";
+import { useState, useEffect } from "react";
+import { diseases as initialData, type Disease } from "@/data/diseases";
+import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -16,10 +17,15 @@ const badgeColorMap: Record<Disease["badgeColor"], string> = {
 };
 
 export default function DiseasesPage() {
+  const [items, setItems] = useState<Disease[]>(initialData);
   const [search, setSearch] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const filtered = diseases.filter((d) => {
+  useEffect(() => {
+    getContent<Disease>(CONTENT_KEYS.diseases, initialData).then(setItems).catch(() => {});
+  }, []);
+
+  const filtered = items.filter((d) => {
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -39,7 +45,7 @@ export default function DiseasesPage() {
         <PageHeader
           title="疾患一覧"
           description="当院で扱う主要な皮膚疾患の知識を確認できます"
-          badge={`疾患数: ${diseases.length}`}
+          badge={`疾患数: ${items.length}`}
         />
         <a href="/print/diseases" target="_blank" className="shrink-0 rounded-md border px-3 py-1.5 text-xs hover:bg-accent transition-colors">印刷用</a>
       </div>
@@ -98,67 +104,38 @@ export default function DiseasesPage() {
               {isOpen && (
                 <div className="px-6 pb-5 space-y-4">
                   <Separator />
-
                   <section>
                     <h3 className="text-sm font-semibold mb-1">疾患概要</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {d.description}
-                    </p>
+                    <p className="text-sm text-muted-foreground">{d.description}</p>
                   </section>
-
                   <section>
                     <h3 className="text-sm font-semibold mb-1">原因・誘因</h3>
                     <p className="text-sm text-muted-foreground">{d.cause}</p>
                   </section>
-
                   <section>
                     <h3 className="text-sm font-semibold mb-1">主な治療法</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {d.treatment}
-                    </p>
+                    <p className="text-sm text-muted-foreground">{d.treatment}</p>
                   </section>
-
                   <section className="rounded-md bg-teal-light p-4">
-                    <h3 className="text-sm font-semibold text-teal mb-1">
-                      患者さんへの説明例
-                    </h3>
-                    <p className="text-sm text-teal/80">
-                      {d.patientExplanation}
-                    </p>
+                    <h3 className="text-sm font-semibold text-teal mb-1">患者さんへの説明例</h3>
+                    <p className="text-sm text-teal/80">{d.patientExplanation}</p>
                   </section>
-
                   {d.keyPoints.length > 0 && (
                     <section>
-                      <h3 className="text-sm font-semibold mb-2">
-                        スタッフが覚えるべきポイント
-                      </h3>
+                      <h3 className="text-sm font-semibold mb-2">スタッフが覚えるべきポイント</h3>
                       <ul className="space-y-1">
                         {d.keyPoints.map((kp, i) => (
-                          <li
-                            key={i}
-                            className="text-sm text-muted-foreground"
-                          >
-                            ・{kp}
-                          </li>
+                          <li key={i} className="text-sm text-muted-foreground">・{kp}</li>
                         ))}
                       </ul>
                     </section>
                   )}
-
                   {d.relatedTreatments.length > 0 && (
                     <section>
-                      <h3 className="text-sm font-semibold mb-2">
-                        当院での関連施術・検査
-                      </h3>
+                      <h3 className="text-sm font-semibold mb-2">当院での関連施術・検査</h3>
                       <div className="flex flex-wrap gap-2">
                         {d.relatedTreatments.map((rt, i) => (
-                          <Badge
-                            key={i}
-                            variant="outline"
-                            className="bg-teal-light text-teal border-teal/20"
-                          >
-                            {rt}
-                          </Badge>
+                          <Badge key={i} variant="outline" className="bg-teal-light text-teal border-teal/20">{rt}</Badge>
                         ))}
                       </div>
                     </section>
@@ -171,9 +148,7 @@ export default function DiseasesPage() {
       </div>
 
       {filtered.length === 0 && (
-        <p className="text-center text-muted-foreground py-12">
-          該当する疾患が見つかりません
-        </p>
+        <p className="text-center text-muted-foreground py-12">該当する疾患が見つかりません</p>
       )}
     </div>
   );

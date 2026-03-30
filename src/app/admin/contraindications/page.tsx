@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { contraindications as initialData, type Contraindication, type Severity } from "@/data/contraindications";
+import { getContent, saveContent, CONTENT_KEYS } from "@/lib/content-store";
 import { AdminBanner } from "@/components/AdminBanner";
 import { AIGeneratePanel, type GeneratedResult } from "@/components/admin/AIGeneratePanel";
 import { Button } from "@/components/ui/button";
@@ -34,8 +35,6 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-const STORAGE_KEY = "admin_contraindications";
-
 const severityOptions: { value: Severity; label: string; color: string }[] = [
   { value: "critical", label: "禁忌（critical）", color: "bg-red-100 text-red-700 border-red-200" },
   { value: "caution", label: "注意（caution）", color: "bg-amber-100 text-amber-700 border-amber-200" },
@@ -53,44 +52,67 @@ function emptyItem(): Contraindication {
 }
 
 export default function AdminContraindicationsPage() {
-  const [data, setData] = useState<Contraindication[]>(() => {
-    if (typeof window !== "undefined") {
-      const saved = sessionStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
-    }
-    return initialData;
-  });
+  const [data, setData] = useState<Contraindication[]>(initialData);
   const [editItem, setEditItem] = useState<Contraindication | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const loaded = useRef(false);
 
   useEffect(() => {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }, [data]);
+    getContent<Contraindication>(CONTENT_KEYS.contraindications, initialData).then((result) => {
+      setData(result);
+      setConnected(true);
+    }).catch(() => {}).finally(() => { loaded.current = true; });
+  }, []);
+
+  const persistData = async (items: Contraindication[]) => {
+    setSaving(true);
+    const ok = await saveContent(CONTENT_KEYS.contraindications, items);
+    setConnected(ok);
+    setSaveMsg(ok ? "保存しました（全スタッフに反映されます）" : "ローカルに保存しました（Supabase接続エラー）");
+    setTimeout(() => setSaveMsg(null), 3000);
+    setSaving(false);
+  };
 
   const openNew = () => { setEditItem(emptyItem()); setDialogOpen(true); };
   const openEdit = (c: Contraindication) => { setEditItem({ ...c }); setDialogOpen(true); };
 
   const handleSave = () => {
     if (!editItem) return;
-    setData((prev) => {
-      const idx = prev.findIndex((c) => c.id === editItem.id);
-      if (idx >= 0) { const next = [...prev]; next[idx] = editItem; return next; }
-      return [...prev, editItem];
-    });
+    const idx = data.findIndex((c) => c.id === editItem.id);
+    let newData: Contraindication[];
+    if (idx >= 0) {
+      newData = [...data];
+      newData[idx] = editItem;
+    } else {
+      newData = [...data, editItem];
+    }
+    setData(newData);
+    persistData(newData);
     setDialogOpen(false);
     setEditItem(null);
   };
 
   const handleDelete = () => {
     if (!deleteId) return;
-    setData((prev) => prev.filter((c) => c.id !== deleteId));
+    const newData = data.filter((c) => c.id !== deleteId);
+    setData(newData);
+    persistData(newData);
     setDeleteId(null);
   };
 
   return (
     <div className="max-w-4xl space-y-4">
-      <AdminBanner />
+      <AdminBanner connected={connected} />
+      {saveMsg && (
+        <div className={`rounded-md px-4 py-2 text-sm ${saveMsg.startsWith("保存しました") ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
+          {saveMsg}
+        </div>
+      )}
+      {saving && <div className="text-sm text-muted-foreground animate-pulse">保存中...</div>}
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-bold text-slate-800">禁忌管理（{data.length}件）</h1>
         <Button onClick={openNew}>新規追加</Button>
@@ -112,7 +134,9 @@ export default function AdminContraindicationsPage() {
                 severity: (d.severity ?? "caution") as Severity,
               };
             });
-          setData((prev) => [...prev, ...newItems]);
+          const newData = [...data, ...newItems];
+          setData(newData);
+          persistData(newData);
         }}
       />
 
@@ -173,7 +197,7 @@ export default function AdminContraindicationsPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>キャンセル</Button>
-            <Button onClick={handleSave}>保存</Button>
+            <Button onClick={handleSave} disabled={saving}>保存</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

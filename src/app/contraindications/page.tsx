@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { contraindications, type Severity } from "@/data/contraindications";
+import { useState, useEffect } from "react";
+import { contraindications as initialData, type Contraindication, type Severity } from "@/data/contraindications";
+import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/PageHeader";
@@ -28,9 +29,14 @@ const severityConfig: Record<
 };
 
 export default function ContraindicationsPage() {
+  const [items, setItems] = useState<Contraindication[]>(initialData);
   const [search, setSearch] = useState("");
 
-  const filtered = contraindications.filter((c) => {
+  useEffect(() => {
+    getContent<Contraindication>(CONTENT_KEYS.contraindications, initialData).then(setItems).catch(() => {});
+  }, []);
+
+  const filtered = items.filter((c) => {
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -47,7 +53,6 @@ export default function ContraindicationsPage() {
         description="薬剤・施術の禁忌・注意事項を確認できます（絶対禁忌 / 要注意 / 参考 の3段階）"
       />
 
-      {/* Search */}
       <input
         type="text"
         placeholder="薬品名・疾患・詳細で検索..."
@@ -56,31 +61,18 @@ export default function ContraindicationsPage() {
         className="w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-teal/40 placeholder:text-muted-foreground"
       />
 
-      {/* Count */}
-      <p className="text-sm text-muted-foreground">
-        {filtered.length}件表示中
-      </p>
+      <p className="text-sm text-muted-foreground">{filtered.length}件表示中</p>
 
-      {/* Cards */}
       <div className="space-y-3">
         {filtered.map((c) => {
           const cfg = severityConfig[c.severity];
           return (
-            <Card
-              key={c.id}
-              className={`border-l-4 ${cfg.border} p-5`}
-            >
+            <Card key={c.id} className={`border-l-4 ${cfg.border} p-5`}>
               <div className="flex items-start gap-3 flex-wrap mb-2">
-                <h3 className="font-bold text-sm flex-1 min-w-0">
-                  {c.drug}
-                </h3>
-                <Badge variant="outline" className={cfg.badge}>
-                  {cfg.label}
-                </Badge>
+                <h3 className="font-bold text-sm flex-1 min-w-0">{c.drug}</h3>
+                <Badge variant="outline" className={cfg.badge}>{cfg.label}</Badge>
               </div>
-              <p className="text-sm text-muted-foreground mb-2">
-                対象: {c.disease}
-              </p>
+              <p className="text-sm text-muted-foreground mb-2">対象: {c.disease}</p>
               <p className="text-sm text-foreground/80">{c.detail}</p>
             </Card>
           );
@@ -88,9 +80,7 @@ export default function ContraindicationsPage() {
       </div>
 
       {filtered.length === 0 && (
-        <p className="text-center text-muted-foreground py-12">
-          該当する禁忌事項が見つかりません
-        </p>
+        <p className="text-center text-muted-foreground py-12">該当する禁忌事項が見つかりません</p>
       )}
     </div>
   );

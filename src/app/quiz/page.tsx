@@ -1,12 +1,33 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { quizQuestions, type QuizCategory } from "@/data/quiz";
+import { useState, useEffect, useCallback } from "react";
+import { quizQuestions as initialQuestions, type QuizQuestion, type QuizCategory } from "@/data/quiz";
+import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/PageHeader";
+
+type QuizResult = {
+  id: string;
+  date: string;
+  category: string;
+  score: number;
+  total: number;
+  percentage: number;
+};
+
+const RESULTS_KEY = "mk_quiz_results";
+
+function saveQuizResult(result: QuizResult) {
+  try {
+    const saved = localStorage.getItem(RESULTS_KEY);
+    const results: QuizResult[] = saved ? JSON.parse(saved) : [];
+    results.unshift(result);
+    localStorage.setItem(RESULTS_KEY, JSON.stringify(results.slice(0, 50)));
+  } catch {}
+}
 
 const categoryLabels: Record<string, { label: string; filter: QuizCategory | null }> = {
   all: { label: "すべて", filter: null },
@@ -14,13 +35,6 @@ const categoryLabels: Record<string, { label: string; filter: QuizCategory | nul
   drug: { label: "薬剤", filter: "drug" },
   cosmetic: { label: "当院の美容", filter: "cosmetic" },
   ops: { label: "業務", filter: "ops" },
-};
-
-const categoryCounts = {
-  disease: quizQuestions.filter((q) => q.category === "disease").length,
-  drug: quizQuestions.filter((q) => q.category === "drug").length,
-  cosmetic: quizQuestions.filter((q) => q.category === "cosmetic").length,
-  ops: quizQuestions.filter((q) => q.category === "ops").length,
 };
 
 function shuffle<T>(arr: T[]): T[] {
@@ -35,24 +49,39 @@ function shuffle<T>(arr: T[]): T[] {
 const OPTION_LABELS = ["A", "B", "C", "D"];
 
 export default function QuizPage() {
+  const [allQuestions, setAllQuestions] = useState<QuizQuestion[]>(initialQuestions);
   const [tab, setTab] = useState("all");
-  const [questions, setQuestions] = useState(() => shuffle(quizQuestions).slice(0, 10));
+  const [questions, setQuestions] = useState(() => shuffle(initialQuestions).slice(0, 10));
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
 
+  useEffect(() => {
+    getContent<QuizQuestion>(CONTENT_KEYS.quiz, initialQuestions).then((result) => {
+      setAllQuestions(result);
+      setQuestions(shuffle(result).slice(0, 10));
+    }).catch(() => {});
+  }, []);
+
+  const categoryCounts = {
+    disease: allQuestions.filter((q) => q.category === "disease").length,
+    drug: allQuestions.filter((q) => q.category === "drug").length,
+    cosmetic: allQuestions.filter((q) => q.category === "cosmetic").length,
+    ops: allQuestions.filter((q) => q.category === "ops").length,
+  };
+
   const startQuiz = useCallback((catKey: string) => {
     const cat = categoryLabels[catKey].filter;
-    const pool = cat ? quizQuestions.filter((q) => q.category === cat) : quizQuestions;
+    const pool = cat ? allQuestions.filter((q) => q.category === cat) : allQuestions;
     setQuestions(shuffle(pool).slice(0, 10));
     setCurrentIndex(0);
     setScore(0);
     setSelectedAnswer(null);
     setShowExplanation(false);
     setIsFinished(false);
-  }, []);
+  }, [allQuestions]);
 
   const handleTabChange = (value: string) => {
     setTab(value);
@@ -71,6 +100,16 @@ export default function QuizPage() {
   const handleNext = () => {
     if (currentIndex + 1 >= questions.length) {
       setIsFinished(true);
+      const finalScore = score;
+      const total = questions.length;
+      saveQuizResult({
+        id: `result_${Date.now()}`,
+        date: new Date().toISOString(),
+        category: tab,
+        score: finalScore,
+        total,
+        percentage: Math.round((finalScore / total) * 100),
+      });
     } else {
       setCurrentIndex((i) => i + 1);
       setSelectedAnswer(null);
@@ -91,7 +130,7 @@ export default function QuizPage() {
       <PageHeader
         title="確認テスト"
         description="学んだ知識をクイズで確認しましょう"
-        badge={`全${quizQuestions.length}問`}
+        badge={`全${allQuestions.length}問`}
       />
 
       {/* Stats */}

@@ -1,9 +1,13 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { drugs } from "@/data/drugs";
 import { diseases } from "@/data/diseases";
+import { drugs } from "@/data/drugs";
 import { quizQuestions } from "@/data/quiz";
+import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 
 const modules = [
   { title: "疾患", description: "皮膚科の主要疾患を学ぶ", href: "/diseases", emoji: "🩺" },
@@ -20,14 +24,29 @@ const modules = [
   { title: "算定・点数表", description: "保険診療の算定項目と点数", href: "/medical-fees", emoji: "💴" },
 ];
 
-const stats = [
-  { label: "疾患数", value: String(diseases.length) },
-  { label: "薬剤数", value: String(drugs.length) },
-  { label: "美容施術", value: "16" },
-  { label: "クイズ問題", value: String(quizQuestions.length) },
-];
-
 export default function Home() {
+  const [stats, setStats] = useState({
+    diseases: diseases.length,
+    drugs: drugs.length,
+    quiz: quizQuestions.length,
+    cosmetic: 16,
+  });
+
+  useEffect(() => {
+    Promise.all([
+      getContent(CONTENT_KEYS.diseases, diseases),
+      getContent(CONTENT_KEYS.drugs, drugs),
+      getContent(CONTENT_KEYS.quiz, quizQuestions),
+    ]).then(([d, dr, q]) => {
+      setStats((prev) => ({
+        ...prev,
+        diseases: d.length || diseases.length,
+        drugs: dr.length || drugs.length,
+        quiz: q.length || quizQuestions.length,
+      }));
+    }).catch(() => {});
+  }, []);
+
   return (
     <div className="max-w-5xl mx-auto space-y-6 md:space-y-8">
       {/* Welcome Header */}
@@ -40,7 +59,12 @@ export default function Home() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {stats.map((s) => (
+        {([
+          { label: "疾患数", value: String(stats.diseases) },
+          { label: "薬剤数", value: String(stats.drugs) },
+          { label: "美容施術", value: String(stats.cosmetic) },
+          { label: "クイズ問題", value: String(stats.quiz) },
+        ]).map((s) => (
           <Card key={s.label} className="text-center">
             <CardHeader className="pb-2 pt-4 px-4">
               <p className="text-3xl font-bold text-teal">{s.value}</p>

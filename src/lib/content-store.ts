@@ -10,6 +10,10 @@ export const CONTENT_KEYS = {
   operationsClerk: 'operations_clerk',
   operationsCounselor: 'operations_counselor',
   counseling: 'counseling_guides',
+  diseases: 'content_diseases',
+  drugs: 'content_drugs',
+  quiz: 'content_quiz',
+  contraindications: 'content_contraindications',
 } as const
 
 // データを取得（Supabase優先、失敗時はlocalStorageにフォールバック）

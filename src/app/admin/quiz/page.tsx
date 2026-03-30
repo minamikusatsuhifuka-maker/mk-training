@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { quizQuestions as initialQuiz, type QuizQuestion, type QuizCategory } from "@/data/quiz";
+import { getContent, saveContent, CONTENT_KEYS } from "@/lib/content-store";
 import { AdminBanner } from "@/components/AdminBanner";
 import { AIGeneratePanel, type GeneratedResult } from "@/components/admin/AIGeneratePanel";
-import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -42,8 +42,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-const STORAGE_KEY = "admin_quiz";
-
 const categories: { key: QuizCategory | "all"; label: string }[] = [
   { key: "all", label: "すべて" },
   { key: "disease", label: "疾患" },
@@ -73,34 +71,25 @@ export default function AdminQuizPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const loaded = useRef(false);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const { data: rows } = await supabase.from("content_quiz").select("id, data");
-        if (rows && rows.length > 0) {
-          setData(rows.map((r) => r.data as QuizQuestion));
-          setConnected(true);
-          return;
-        }
-      } catch {}
-      const saved = sessionStorage.getItem(STORAGE_KEY);
-      if (saved) setData(JSON.parse(saved));
-    }
-    load();
-  }, []);
-
-  const saveToSupabase = useCallback(async (items: QuizQuestion[]) => {
-    try {
-      const rows = items.map((q) => ({ id: q.id, data: q, updated_at: new Date().toISOString() }));
-      await supabase.from("content_quiz").upsert(rows);
+    getContent<QuizQuestion>(CONTENT_KEYS.quiz, initialQuiz).then((result) => {
+      setData(result);
       setConnected(true);
-    } catch {}
+    }).catch(() => {}).finally(() => { loaded.current = true; });
   }, []);
 
-  useEffect(() => {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }, [data]);
+  const persistData = async (items: QuizQuestion[]) => {
+    setSaving(true);
+    const ok = await saveContent(CONTENT_KEYS.quiz, items);
+    setConnected(ok);
+    setSaveMsg(ok ? "保存しました（全スタッフに反映されます）" : "ローカルに保存しました（Supabase接続エラー）");
+    setTimeout(() => setSaveMsg(null), 3000);
+    setSaving(false);
+  };
 
   const countByCategory = (cat: QuizCategory) => data.filter((q) => q.category === cat).length;
 
@@ -111,22 +100,25 @@ export default function AdminQuizPage() {
 
   const handleSave = () => {
     if (!editItem) return;
-    setData((prev) => {
-      const idx = prev.findIndex((q) => q.id === editItem.id);
-      let next: QuizQuestion[];
-      if (idx >= 0) { next = [...prev]; next[idx] = editItem; }
-      else { next = [...prev, editItem]; }
-      saveToSupabase(next);
-      return next;
-    });
+    const idx = data.findIndex((q) => q.id === editItem.id);
+    let newData: QuizQuestion[];
+    if (idx >= 0) {
+      newData = [...data];
+      newData[idx] = editItem;
+    } else {
+      newData = [...data, editItem];
+    }
+    setData(newData);
+    persistData(newData);
     setDialogOpen(false);
     setEditItem(null);
   };
 
   const handleDelete = () => {
     if (!deleteId) return;
-    supabase.from("content_quiz").delete().eq("id", deleteId).then(() => {});
-    setData((prev) => prev.filter((q) => q.id !== deleteId));
+    const newData = data.filter((q) => q.id !== deleteId);
+    setData(newData);
+    persistData(newData);
     setDeleteId(null);
   };
 
@@ -140,6 +132,12 @@ export default function AdminQuizPage() {
   return (
     <div className="max-w-5xl space-y-4">
       <AdminBanner connected={connected} />
+      {saveMsg && (
+        <div className={`rounded-md px-4 py-2 text-sm ${saveMsg.startsWith("保存しました") ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
+          {saveMsg}
+        </div>
+      )}
+      {saving && <div className="text-sm text-muted-foreground animate-pulse">保存中...</div>}
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-bold text-slate-800">クイズ管理（{data.length}問）</h1>
         <Button onClick={openNew}>新規追加</Button>
@@ -162,11 +160,9 @@ export default function AdminQuizPage() {
                 explanation: (d.explanation as string) ?? "",
               };
             });
-          setData((prev) => {
-            const next = [...prev, ...newItems];
-            saveToSupabase(next);
-            return next;
-          });
+          const newData = [...data, ...newItems];
+          setData(newData);
+          persistData(newData);
         }}
       />
 
@@ -257,7 +253,7 @@ export default function AdminQuizPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>キャンセル</Button>
-            <Button onClick={handleSave}>保存</Button>
+            <Button onClick={handleSave} disabled={saving}>保存</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
