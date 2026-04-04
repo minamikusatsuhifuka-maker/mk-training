@@ -83,6 +83,7 @@ export default function AdminBiologicsPage() {
   const [geminiDialogOpen, setGeminiDialogOpen] = useState(false);
   const [geminiError, setGeminiError] = useState<string | null>(null);
   const [selectedChanges, setSelectedChanges] = useState<Set<string>>(new Set());
+  const [verifyProgress, setVerifyProgress] = useState({ current: 0, total: 0, drugName: "" });
 
   /* 個別製剤確認 */
   const [singleLoading, setSingleLoading] = useState<string | null>(null);
@@ -164,33 +165,80 @@ export default function AdminBiologicsPage() {
     setDeleteId(null);
   };
 
-  /* ===== Gemini 全製剤確認 ===== */
+  /* ===== Gemini 全製剤確認（1製剤ずつループ） ===== */
   const handleGeminiVerifyAll = async () => {
     setGeminiLoading(true);
     setGeminiError(null);
     setGeminiResult(null);
-    try {
-      const res = await fetch("/api/gemini-biologics", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "verify_all", currentData: data }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        setGeminiError(err.error || "APIエラー");
-      } else {
-        const result: GeminiVerifyResult = await res.json();
-        setGeminiResult(result);
-        // 変更ありの製剤を初期選択
-        const ids = new Set(result.results.filter((r) => r.hasChanges).map((r) => r.id));
-        setSelectedChanges(ids);
+    setVerifyProgress({ current: 0, total: data.length, drugName: "" });
+
+    const results: GeminiDrugResult[] = [];
+    let errorCount = 0;
+
+    for (let i = 0; i < data.length; i++) {
+      const drug = data[i];
+      setVerifyProgress({ current: i, total: data.length, drugName: drug.name });
+
+      try {
+        const res = await fetch("/api/gemini-biologics", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "verify_single", drugName: drug.name, currentData: drug }),
+        });
+
+        if (res.ok) {
+          const raw = await res.json();
+          const changes: GeminiChange[] = [];
+          const schedule = raw.schedule as Record<string, unknown> | undefined;
+
+          if (schedule) {
+            if (schedule.induction && schedule.induction !== drug.schedule.induction)
+              changes.push({ field: "導入投与", old: drug.schedule.induction, new: schedule.induction as string, reason: "添付文書に基づく確認" });
+            if (schedule.maintenance && schedule.maintenance !== drug.schedule.maintenance)
+              changes.push({ field: "維持投与", old: drug.schedule.maintenance, new: schedule.maintenance as string, reason: "添付文書に基づく確認" });
+            if (typeof schedule.selfInjection === "boolean" && schedule.selfInjection !== drug.schedule.selfInjection)
+              changes.push({ field: "自己注射", old: drug.schedule.selfInjection ? "可" : "不可", new: schedule.selfInjection ? "可" : "不可", reason: "添付文書に基づく確認" });
+          }
+
+          if (Array.isArray(raw.changes)) {
+            for (const c of raw.changes as string[]) {
+              changes.push({ field: "情報更新", old: "-", new: c, reason: "Gemini確認" });
+            }
+          }
+
+          results.push({
+            id: drug.id,
+            name: drug.name,
+            hasChanges: changes.length > 0,
+            changes,
+            verifiedSchedule: schedule ? {
+              induction: (schedule.induction as string) || drug.schedule.induction,
+              maintenance: (schedule.maintenance as string) || drug.schedule.maintenance,
+              selfInjection: (schedule.selfInjection as boolean) ?? drug.schedule.selfInjection,
+              note: (schedule.note as string) || drug.schedule.note,
+            } : undefined,
+            lastConfirmed: (raw.lastConfirmed as string) || today(),
+          });
+        } else {
+          errorCount++;
+          results.push({ id: drug.id, name: drug.name, hasChanges: false, changes: [], lastConfirmed: today() });
+        }
+      } catch {
+        errorCount++;
+        results.push({ id: drug.id, name: drug.name, hasChanges: false, changes: [], lastConfirmed: today() });
       }
-    } catch {
-      setGeminiError("ネットワークエラーが発生しました。");
-    } finally {
-      setGeminiLoading(false);
-      setGeminiDialogOpen(true);
+
+      setVerifyProgress({ current: i + 1, total: data.length, drugName: drug.name });
     }
+
+    const changedCount = results.filter((r) => r.hasChanges).length;
+    const summary = `${data.length}製剤を確認完了。変更提案: ${changedCount}件${errorCount > 0 ? `、エラー: ${errorCount}件` : ""}`;
+
+    setGeminiResult({ results, summary, updatedAt: today() });
+    const ids = new Set(results.filter((r) => r.hasChanges).map((r) => r.id));
+    setSelectedChanges(ids);
+    setGeminiLoading(false);
+    setGeminiDialogOpen(true);
   };
 
   /* Gemini結果を適用 */
@@ -280,6 +328,35 @@ export default function AdminBiologicsPage() {
       )}
       {saving && <div className="text-sm text-muted-foreground animate-pulse">保存中...</div>}
 
+      {/* Gemini確認中オーバーレイ */}
+      {geminiLoading && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-8 shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-4 border-teal-600 border-t-transparent" />
+              <div>
+                <p className="font-bold text-lg">Gemini 2.5 Proが確認中</p>
+                <p className="text-sm text-muted-foreground">
+                  {verifyProgress.drugName ? `${verifyProgress.drugName}を確認中...` : "準備中..."} ({verifyProgress.current}/{verifyProgress.total})
+                </p>
+              </div>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-3">
+              <div
+                className="bg-teal-600 h-3 rounded-full transition-all duration-500"
+                style={{ width: `${verifyProgress.total > 0 ? (verifyProgress.current / verifyProgress.total) * 100 : 0}%` }}
+              />
+            </div>
+            <p className="text-xs text-center text-muted-foreground mt-2">
+              {verifyProgress.current}/{verifyProgress.total}製剤完了
+            </p>
+            <p className="text-xs text-center text-muted-foreground mt-1">
+              ※ 1製剤あたり約10〜20秒かかります
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ヘッダー */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <h1 className="text-xl font-bold text-slate-800">生物学的製剤管理（{data.length}件）</h1>
@@ -289,7 +366,9 @@ export default function AdminBiologicsPage() {
             onClick={handleGeminiVerifyAll}
             disabled={geminiLoading}
           >
-            {geminiLoading ? "Gemini 2.5 Proが確認中..." : "🔍 Gemini 2.5 Proで全製剤を確認"}
+            {geminiLoading
+              ? (verifyProgress.total > 0 ? `確認中... (${verifyProgress.current}/${verifyProgress.total})` : "Gemini 2.5 Proが確認中...")
+              : "🔍 Gemini 2.5 Proで全製剤を確認"}
           </Button>
           <Button onClick={openNew}>新規追加</Button>
         </div>
