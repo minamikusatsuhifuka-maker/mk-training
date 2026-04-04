@@ -44,6 +44,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { GeminiVerifyButton } from "@/components/admin/GeminiVerifyButton";
 import Link from "next/link";
 
 const safetyLevels: SafetyLevel[] = ["safe", "caution", "avoid", "contraindicated"];
@@ -228,6 +229,7 @@ export default function AdminPregnancyPage() {
                   <Button variant="outline" size="sm" onClick={() => openEdit(d)}>
                     編集
                   </Button>
+                  <GeminiVerifyButton contentType="pregnancy" itemName={d.name} currentData={d} />
                   <Button variant="destructive" size="sm" onClick={() => setDeleteId(d.id)}>
                     削除
                   </Button>

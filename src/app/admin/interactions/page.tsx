@@ -44,6 +44,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { GeminiVerifyButton } from "@/components/admin/GeminiVerifyButton";
 import Link from "next/link";
 
 const severities: InteractionSeverity[] = ["contraindicated", "major", "moderate", "minor"];
@@ -210,6 +211,7 @@ export default function AdminInteractionsPage() {
                   <Button variant="outline" size="sm" onClick={() => openEdit(d)}>
                     編集
                   </Button>
+                  <GeminiVerifyButton contentType="interaction" itemName={`${d.drug1}×${d.drug2}`} currentData={d} />
                   <Button variant="destructive" size="sm" onClick={() => setDeleteId(d.id)}>
                     削除
                   </Button>

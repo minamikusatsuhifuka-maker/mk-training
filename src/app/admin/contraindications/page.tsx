@@ -34,6 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { GeminiVerifyButton } from "@/components/admin/GeminiVerifyButton";
 
 const severityOptions: { value: Severity; label: string; color: string }[] = [
   { value: "critical", label: "禁忌（critical）", color: "bg-red-100 text-red-700 border-red-200" },
@@ -156,6 +157,7 @@ export default function AdminContraindicationsPage() {
               </div>
               <div className="flex gap-1 shrink-0">
                 <Button variant="outline" size="sm" onClick={() => openEdit(c)}>編集</Button>
+                <GeminiVerifyButton contentType="contraindication" itemName={c.drug} currentData={c} />
                 <Button variant="destructive" size="sm" onClick={() => setDeleteId(c.id)}>削除</Button>
               </div>
             </div>

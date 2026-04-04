@@ -40,6 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { GeminiVerifyButton } from "@/components/admin/GeminiVerifyButton";
 import Link from "next/link";
 
 const feeCategories: FeeCategory[] = [
@@ -202,6 +203,7 @@ export default function AdminMedicalFeesPage() {
                   <Button variant="outline" size="sm" onClick={() => openEdit(d)}>
                     編集
                   </Button>
+                  <GeminiVerifyButton contentType="medical_fee" itemName={d.name} currentData={d} />
                   <Button variant="destructive" size="sm" onClick={() => setDeleteId(d.id)}>
                     削除
                   </Button>

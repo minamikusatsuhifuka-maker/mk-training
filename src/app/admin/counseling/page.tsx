@@ -47,6 +47,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { GeminiVerifyButton } from "@/components/admin/GeminiVerifyButton";
 
 const categoryOptions: ClearCheckItem["category"][] = [
   "contraindication",
@@ -250,6 +251,7 @@ export default function AdminCounselingPage() {
               <TableCell>
                 <div className="flex gap-1">
                   <Button variant="outline" size="sm" onClick={() => openEdit(guide)}>編集</Button>
+                  <GeminiVerifyButton contentType="counseling" itemName={guide.treatment} currentData={guide} size="md" />
                   <Button variant="destructive" size="sm" onClick={() => setDeleteId(guide.id)}>削除</Button>
                 </div>
               </TableCell>

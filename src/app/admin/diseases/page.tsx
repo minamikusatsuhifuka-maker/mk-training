@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { GeminiVerifyButton } from "@/components/admin/GeminiVerifyButton";
 import {
   Table,
   TableBody,
@@ -196,6 +197,7 @@ export default function AdminDiseasesPage() {
               <TableCell>
                 <div className="flex gap-1">
                   <Button variant="outline" size="sm" onClick={() => openEdit(d)}>編集</Button>
+                  <GeminiVerifyButton contentType="disease" itemName={d.name} currentData={d} />
                   <Button variant="destructive" size="sm" onClick={() => setDeleteId(d.id)}>削除</Button>
                 </div>
               </TableCell>

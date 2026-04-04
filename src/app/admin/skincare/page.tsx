@@ -41,6 +41,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { GeminiVerifyButton } from "@/components/admin/GeminiVerifyButton";
 
 const pregnancyBadge: Record<
   SkincareItem["pregnancySafety"],
@@ -188,6 +189,7 @@ export default function AdminSkincarePage() {
               <TableCell>
                 <div className="flex gap-1">
                   <Button variant="outline" size="sm" onClick={() => openEdit(item)}>編集</Button>
+                  <GeminiVerifyButton contentType="skincare" itemName={item.name} currentData={item} />
                   <Button variant="destructive" size="sm" onClick={() => setDeleteId(item.id)}>削除</Button>
                 </div>
               </TableCell>

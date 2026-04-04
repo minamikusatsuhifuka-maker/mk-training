@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { GeminiVerifyButton } from "@/components/admin/GeminiVerifyButton";
 
 function sortDrugsByCategory(items: Drug[]): Drug[] {
   return [...items].sort((a, b) => {
@@ -174,9 +175,10 @@ export default function AdminDrugsPage() {
                     <span className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{d.category}</span>
                   </td>
                   <td className="px-2 py-1.5 border-b align-top text-xs text-muted-foreground hidden md:table-cell">{d.indication}</td>
-                  <td className="px-2 py-1.5 border-b align-top w-[100px]">
+                  <td className="px-2 py-1.5 border-b align-top w-[130px]">
                     <div className="flex gap-1">
                       <Button variant="outline" size="sm" onClick={() => openEdit(d)}>編集</Button>
+                      <GeminiVerifyButton contentType="drug" itemName={d.name} currentData={d} />
                       <Button variant="destructive" size="sm" onClick={() => setDeleteId(d.id)}>削除</Button>
                     </div>
                   </td>

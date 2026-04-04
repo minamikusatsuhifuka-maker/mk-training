@@ -33,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { GeminiVerifyButton } from "@/components/admin/GeminiVerifyButton";
 import {
   Table,
   TableBody,
@@ -198,6 +199,7 @@ export default function AdminQuizPage() {
               <TableCell>
                 <div className="flex gap-1">
                   <Button variant="outline" size="sm" onClick={() => openEdit(q)}>編集</Button>
+                  <GeminiVerifyButton contentType="quiz" itemName={q.question?.slice(0, 20) || "クイズ"} currentData={q} />
                   <Button variant="destructive" size="sm" onClick={() => setDeleteId(q.id)}>削除</Button>
                 </div>
               </TableCell>
