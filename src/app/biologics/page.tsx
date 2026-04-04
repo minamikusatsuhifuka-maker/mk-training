@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import {
   biologicDrugs as initialData,
   biologicsDiseaseCategories,
-  biologicsLastUpdated,
-  biologicsNextUpdate,
+  biologicsLastUpdated as defaultLastUpdated,
+  biologicsNextUpdate as defaultNextUpdate,
   type BiologicDrug,
   type BiologicsDiseaseCategory,
 } from "@/data/biologics";
@@ -55,10 +55,21 @@ export default function BiologicsPage() {
   const [category, setCategory] = useState<BiologicsDiseaseCategory>("すべて");
   const [openId, setOpenId] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState(defaultLastUpdated);
+  const [nextUpdate, setNextUpdate] = useState(defaultNextUpdate);
 
   useEffect(() => {
     getContent<BiologicDrug>(CONTENT_KEYS.biologics, initialData)
       .then(setItems)
+      .catch(() => {});
+    // メタ情報を動的に取得
+    getContent<Record<string, string>>("biologics_meta" as string, [])
+      .then((r) => {
+        if (r.length > 0 && typeof r[0] === "object" && "lastUpdated" in r[0]) {
+          setLastUpdated(r[0].lastUpdated || defaultLastUpdated);
+          setNextUpdate(r[0].nextUpdate || defaultNextUpdate);
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -80,7 +91,7 @@ export default function BiologicsPage() {
       <PageHeader
         title="生物学的製剤 投与スケジュール"
         description="投与スケジュール・レセプト摘要欄記載事項"
-        badge={`最終更新: ${biologicsLastUpdated}`}
+        badge={`最終更新: ${lastUpdated}`}
       />
 
       {/* 注意バナー */}
@@ -326,8 +337,8 @@ export default function BiologicsPage() {
 
       {/* フッター情報 */}
       <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 pb-4">
-        <span>最終更新日: {biologicsLastUpdated}</span>
-        <span>次回更新予定: {biologicsNextUpdate}</span>
+        <span>最終更新日: {lastUpdated}</span>
+        <span>次回更新予定: {nextUpdate}</span>
       </div>
     </div>
   );
