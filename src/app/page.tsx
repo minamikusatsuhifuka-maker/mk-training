@@ -22,6 +22,7 @@ const modules = [
   { title: "相互作用チェック", description: "薬剤間の相互作用を確認", href: "/interactions", emoji: "⚡" },
   { title: "カウンセリングガイド", description: "トークスクリプト・クリアチェック", href: "/counseling", emoji: "💬" },
   { title: "算定・点数表", description: "保険診療の算定項目と点数", href: "/medical-fees", emoji: "💴" },
+  { title: "生物学的製剤", description: "投与スケジュール・レセプト記載事項", href: "/biologics", emoji: "💉" },
 ];
 
 export default function Home() {

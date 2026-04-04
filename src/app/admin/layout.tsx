@@ -17,6 +17,7 @@ const adminNav = [
   { label: "⚡ 相互作用管理", href: "/admin/interactions" },
   { label: "💴 算定点数管理", href: "/admin/medical-fees" },
   { label: "📋 業務チェック管理", href: "/admin/operations" },
+  { label: "💉 生物学的製剤管理", href: "/admin/biologics" },
   { label: "📝 更新履歴", href: "/admin/changelog" },
 ];
 

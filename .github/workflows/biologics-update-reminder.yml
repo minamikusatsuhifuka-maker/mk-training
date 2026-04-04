@@ -1,0 +1,17 @@
+name: 生物学的製剤情報更新リマインダー
+on:
+  schedule:
+    - cron: '0 9 1 */2 *'  # 2ヶ月ごとの1日午前9時（UTC）
+  workflow_dispatch:
+
+jobs:
+  reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 更新リマインダー
+        run: |
+          echo "生物学的製剤情報の定期更新時期です"
+          echo "以下のURLで最新情報を確認してください:"
+          echo "- PMDA: https://www.pmda.go.jp/"
+          echo "- 日本皮膚科学会: https://www.dermatol.or.jp/"
+          echo "管理画面 /admin/biologics からAI更新ボタンを押して内容を確認してください"

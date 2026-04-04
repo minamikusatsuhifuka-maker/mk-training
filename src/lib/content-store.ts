@@ -14,6 +14,7 @@ export const CONTENT_KEYS = {
   drugs: 'content_drugs',
   quiz: 'content_quiz',
   contraindications: 'content_contraindications',
+  biologics: 'biologics_data',
 } as const
 
 // データを取得（Supabase優先、失敗時はlocalStorageにフォールバック）
