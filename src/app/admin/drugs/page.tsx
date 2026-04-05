@@ -79,6 +79,15 @@ export default function AdminDrugsPage() {
     setSaving(false);
   };
 
+  const handleApplyGeminiChanges = async (changes: Record<string, Record<string, string>>) => {
+    const updated = data.map((d) => {
+      if (changes[d.id]) return { ...d, ...changes[d.id] };
+      return d;
+    });
+    setData(sortDrugsByCategory(updated));
+    await persistData(sortDrugsByCategory(updated));
+  };
+
   const filtered = data.filter((d) => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -257,7 +266,7 @@ export default function AdminDrugsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <GeminiBatchVerify contentType="drug" selectedItems={data.filter((d) => selectedIds.has(d.id)).map((d) => ({ id: d.id, name: d.name, data: d }))} onClear={clearSelection} />
+      <GeminiBatchVerify contentType="drug" selectedItems={data.filter((d) => selectedIds.has(d.id)).map((d) => ({ id: d.id, name: d.name, data: d as unknown as Record<string, unknown> }))} onClear={clearSelection} onApplyChanges={handleApplyGeminiChanges} />
     </div>
   );
 }

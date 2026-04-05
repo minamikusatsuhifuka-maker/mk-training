@@ -100,6 +100,15 @@ export default function AdminSkincarePage() {
     setSaving(false);
   };
 
+  const handleApplyGeminiChanges = async (changes: Record<string, Record<string, string>>) => {
+    const updated = data.map((d) => {
+      if (changes[d.id]) return { ...d, ...changes[d.id] };
+      return d;
+    });
+    setData(updated);
+    await persistData(updated);
+  };
+
   const openNew = () => {
     setEditItem(emptyItem());
     setDialogOpen(true);
@@ -319,7 +328,7 @@ export default function AdminSkincarePage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <GeminiBatchVerify contentType="skincare" selectedItems={data.filter((d) => selectedIds.has(d.id)).map((d) => ({ id: d.id, name: d.name, data: d }))} onClear={clearSelection} />
+      <GeminiBatchVerify contentType="skincare" selectedItems={data.filter((d) => selectedIds.has(d.id)).map((d) => ({ id: d.id, name: d.name, data: d as unknown as Record<string, unknown> }))} onClear={clearSelection} onApplyChanges={handleApplyGeminiChanges} />
     </div>
   );
 }

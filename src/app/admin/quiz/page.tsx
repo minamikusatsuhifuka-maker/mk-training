@@ -99,6 +99,15 @@ export default function AdminQuizPage() {
     setSaving(false);
   };
 
+  const handleApplyGeminiChanges = async (changes: Record<string, Record<string, string>>) => {
+    const updated = data.map((q) => {
+      if (changes[q.id]) return { ...q, ...changes[q.id] };
+      return q;
+    });
+    setData(updated);
+    await persistData(updated);
+  };
+
   const countByCategory = (cat: QuizCategory) => data.filter((q) => q.category === cat).length;
 
   const filtered = tab === "all" ? data : data.filter((q) => q.category === tab);
@@ -285,7 +294,7 @@ export default function AdminQuizPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <GeminiBatchVerify contentType="quiz" selectedItems={data.filter((q) => selectedIds.has(q.id)).map((q) => ({ id: q.id, name: q.question?.slice(0, 30) || "クイズ", data: q }))} onClear={clearSelection} />
+      <GeminiBatchVerify contentType="quiz" selectedItems={data.filter((q) => selectedIds.has(q.id)).map((q) => ({ id: q.id, name: q.question?.slice(0, 30) || "クイズ", data: q as unknown as Record<string, unknown> }))} onClear={clearSelection} onApplyChanges={handleApplyGeminiChanges} />
     </div>
   );
 }

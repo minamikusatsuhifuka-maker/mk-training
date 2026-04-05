@@ -85,6 +85,15 @@ export default function AdminContraindicationsPage() {
     setSaving(false);
   };
 
+  const handleApplyGeminiChanges = async (changes: Record<string, Record<string, string>>) => {
+    const updated = data.map((c) => {
+      if (changes[c.id]) return { ...c, ...changes[c.id] };
+      return c;
+    });
+    setData(updated);
+    await persistData(updated);
+  };
+
   const openNew = () => { setEditItem(emptyItem()); setDialogOpen(true); };
   const openEdit = (c: Contraindication) => { setEditItem({ ...c }); setDialogOpen(true); };
 
@@ -230,7 +239,7 @@ export default function AdminContraindicationsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <GeminiBatchVerify contentType="contraindication" selectedItems={data.filter((c) => selectedIds.has(c.id)).map((c) => ({ id: c.id, name: c.drug, data: c }))} onClear={clearSelection} />
+      <GeminiBatchVerify contentType="contraindication" selectedItems={data.filter((c) => selectedIds.has(c.id)).map((c) => ({ id: c.id, name: c.drug, data: c as unknown as Record<string, unknown> }))} onClear={clearSelection} onApplyChanges={handleApplyGeminiChanges} />
     </div>
   );
 }

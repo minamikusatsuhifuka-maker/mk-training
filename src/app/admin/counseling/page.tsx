@@ -122,6 +122,15 @@ export default function AdminCounselingPage() {
     setSaving(false);
   };
 
+  const handleApplyGeminiChanges = async (changes: Record<string, Record<string, string>>) => {
+    const updated = data.map((d) => {
+      if (changes[d.id]) return { ...d, ...changes[d.id] };
+      return d;
+    });
+    setData(updated);
+    await persistData(updated);
+  };
+
   const openNew = () => {
     setEditItem(emptyGuide());
     setDialogTab("checks");
@@ -423,7 +432,7 @@ export default function AdminCounselingPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <GeminiBatchVerify contentType="counseling" selectedItems={data.filter((d) => selectedIds.has(d.id)).map((d) => ({ id: d.id, name: d.treatment, data: d }))} onClear={clearSelection} />
+      <GeminiBatchVerify contentType="counseling" selectedItems={data.filter((d) => selectedIds.has(d.id)).map((d) => ({ id: d.id, name: d.treatment, data: d as unknown as Record<string, unknown> }))} onClear={clearSelection} onApplyChanges={handleApplyGeminiChanges} />
     </div>
   );
 }

@@ -108,6 +108,28 @@ export default function AdminDiseasesPage() {
   const selectAll = () => setSelectedIds(new Set(data.map((d) => d.id)));
   const clearSelection = () => setSelectedIds(new Set());
 
+  // 一括優先度変更
+  const handleBulkPriorityChange = async (priority: number) => {
+    const count = selectedIds.size;
+    if (!confirm(`選択した${count}件の優先度を「${priorityLabels[priority]}」に変更しますか？`)) return;
+    const updated = data.map((d) =>
+      selectedIds.has(d.id) ? { ...d, priority } : d
+    );
+    setData(updated);
+    await persistData(updated);
+    clearSelection();
+  };
+
+  // Gemini修正案の一括適用
+  const handleApplyGeminiChanges = async (changes: Record<string, Record<string, string>>) => {
+    const updated = data.map((d) => {
+      if (changes[d.id]) return { ...d, ...changes[d.id] };
+      return d;
+    });
+    setData(updated);
+    await persistData(updated);
+  };
+
   const filtered = data.filter((d) => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -344,8 +366,30 @@ export default function AdminDiseasesPage() {
 
       <GeminiBatchVerify
         contentType="disease"
-        selectedItems={data.filter((d) => selectedIds.has(d.id)).map((d) => ({ id: d.id, name: d.name, data: d }))}
+        selectedItems={data.filter((d) => selectedIds.has(d.id)).map((d) => ({ id: d.id, name: d.name, data: d as unknown as Record<string, unknown> }))}
         onClear={clearSelection}
+        onApplyChanges={handleApplyGeminiChanges}
+        extraActions={
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-white/70">優先度を一括変更:</label>
+            <select
+              className="text-sm px-2 py-1.5 rounded bg-white/10 border border-white/20 text-white"
+              defaultValue=""
+              onChange={(e) => {
+                const p = Number(e.target.value);
+                if (!p) return;
+                handleBulkPriorityChange(p);
+                e.target.value = "";
+              }}
+            >
+              <option value="">選択...</option>
+              <option value="1">1 - 必須（毎日遭遇）</option>
+              <option value="2">2 - 重要（頻繁に遭遇）</option>
+              <option value="3">3 - 標準（時々遭遇）</option>
+              <option value="4">4 - 参考（知識として）</option>
+            </select>
+          </div>
+        }
       />
     </div>
   );
