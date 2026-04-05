@@ -16,6 +16,7 @@ type VerifyResult = {
   issues: string[];
   corrections: Record<string, string>;
   contraindications?: ContraindicationInfo;
+  evidenceSource?: string;
   confidence: string;
   model: string;
   checkedAt: string;
@@ -176,6 +177,13 @@ export function GeminiVerifyButton({
                     <div><span className="font-medium text-gray-600">高齢者:</span> <span className="text-gray-800">{result.contraindications.elderly}</span></div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {result.evidenceSource && (
+              <div className="text-xs text-gray-500 flex items-start gap-1 mb-3">
+                <span>📚</span>
+                <span>参照: {result.evidenceSource}</span>
               </div>
             )}
 

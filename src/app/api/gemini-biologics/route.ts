@@ -1,5 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+const SYSTEM_INSTRUCTION = `【重要な指示】
+あなたは日本の医療情報を厳密に評価する専門AIです。
+以下のルールを必ず守ってください:
+
+1. 参照する情報源の優先順位（必ずこの順序で確認すること）:
+   ① PMDA（医薬品医療機器総合機構）電子添付文書 https://www.pmda.go.jp/
+   ② 製薬メーカー公式サイト・医療関係者向けページ
+   ③ 日本皮膚科学会ガイドライン・使用ガイダンス https://www.dermatol.or.jp/
+   ④ 厚生労働省・最適使用推進ガイドライン
+
+2. 絶対に守ること:
+   - 添付文書に記載のない内容を「可能」と言わない
+   - 自己注射の可否は添付文書の「自己投与」項目のみで判断する
+   - 投与量・投与間隔は添付文書の用法用量のみで判断する
+   - 不確かな場合は hasChanges: true として変更を提案する
+
+3. エビデンスレベルの明示:
+   - 各回答に evidenceSource（参照した情報源）を記載する`
+
 export async function POST(req: NextRequest) {
   const { action, drugName, currentData } = await req.json()
 
@@ -11,28 +30,29 @@ export async function POST(req: NextRequest) {
   const today = new Date().toISOString().slice(0, 10)
 
   const prompt = action === 'verify_all'
-    ? `あなたは日本の皮膚科専門医です。以下の皮膚科で使用される生物学的製剤について、
-日本の最新の添付文書（2025年以降）に基づいて投与スケジュールとレセプト摘要欄記載事項を確認し、
-誤りや古い情報があれば修正してください。
+    ? `${SYSTEM_INSTRUCTION}
+
+あなたは日本の皮膚科専門医・生物学的製剤専門家です。
+以下の生物学的製剤情報をPMDA添付文書・メーカー公式情報・日本皮膚科学会使用ガイダンスに基づいて
+厳密に評価・修正してください。
 
 確認する製剤:
 ${JSON.stringify(currentData, null, 2)}
 
-【確認項目】
-1. 薬剤名・一般名の正確性
-2. 投与スケジュール（導入・維持）の正確性
-3. 適応疾患・効能効果
-4. レセプト摘要欄の最新記載要件
-5. 自己注射の可否
-6. 保険適用条件
-7. 高額療養費制度の適用
-8. 【重要】禁忌・使用上の注意:
-   - 絶対禁忌（活動性感染症・結核・悪性腫瘍・妊娠など）
-   - 投与前スクリーニング必須事項（QFT・HBV・HCVなど）
-   - 生ワクチン接種の制限
-   - 他の免疫抑制薬との併用注意
-   - 妊婦・授乳婦への投与
-9. レセプト摘要欄の最新記載要件
+【最重要確認事項】
+1. 自己注射の可否:
+   - 必ずPMDA添付文書の「自己投与」記載を確認すること
+   - 記載がなければ「不可」と判定する
+   - 「医師が判断する場合〜」という曖昧な表現は「不可」と判定する
+   - 現在自己注射が可能な皮膚科生物学的製剤（2025年時点）:
+     デュピクセント✅ ミチーガ60mg✅ アドトラーザ✅
+     ヒュミラ✅ コセンティクス✅ トレムフィア✅
+     ビンゼレックス✅ イルミア✅ ゾレア❌ スキリージ❌ イブグリース❌
+
+2. 投与スケジュール（添付文書の用法用量と完全一致させること）
+3. レセプト摘要欄（最適使用推進ガイドライン・留意事項通知より）
+4. 投与前スクリーニング必須事項
+5. 禁忌・重要な警告・注意事項
 
 以下のJSON形式のみで返答してください（マークダウン不可）:
 {
@@ -53,16 +73,20 @@ ${JSON.stringify(currentData, null, 2)}
         "induction": "正確な導入投与スケジュール",
         "maintenance": "正確な維持投与スケジュール",
         "selfInjection": true/false,
+        "selfInjectionBasis": "添付文書の自己投与記載の有無",
         "note": "補足"
       },
+      "evidenceSource": "PMDA添付文書（改訂年月）・メーカー公式情報",
       "lastConfirmed": "${today}"
     }
   ],
   "summary": "全体的な確認結果の要約",
   "updatedAt": "${today}"
 }`
-    : `あなたは日本の皮膚科専門医です。「${drugName}」について、
-日本の最新の添付文書に基づいて以下を正確に教えてください:
+    : `${SYSTEM_INSTRUCTION}
+
+あなたは日本の皮膚科専門医・生物学的製剤専門家です。
+「${drugName}」についてPMDA添付文書・メーカー公式情報に基づいて正確に評価してください。
 
 現在のデータ:
 ${JSON.stringify(currentData, null, 2)}
@@ -76,6 +100,7 @@ ${JSON.stringify(currentData, null, 2)}
     "induction": "導入投与（本数・量・間隔を具体的に）",
     "maintenance": "維持投与（本数・量・間隔を具体的に）",
     "selfInjection": true/false,
+    "selfInjectionBasis": "添付文書の自己投与記載の根拠",
     "note": "特記事項"
   },
   "receiptNotes": [
@@ -86,6 +111,7 @@ ${JSON.stringify(currentData, null, 2)}
     }
   ],
   "changes": ["変更点の説明"],
+  "evidenceSource": "PMDA添付文書（改訂年月）",
   "lastConfirmed": "${today}"
 }`
 

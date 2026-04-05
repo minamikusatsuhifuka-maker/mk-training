@@ -20,6 +20,7 @@ type BatchResultItem = {
   newKnowledge: string[];
   corrections: Record<string, string>;
   contraindications?: ContraindicationInfo;
+  evidenceSource?: string;
   confidence: string;
 };
 
@@ -392,6 +393,12 @@ export function GeminiBatchVerify({
                     </div>
                   )}
 
+                  {item.evidenceSource && (
+                    <div className="mt-2 text-xs text-gray-500 flex items-start gap-1">
+                      <span>📚</span>
+                      <span>参照: {item.evidenceSource}</span>
+                    </div>
+                  )}
                   <p className="text-xs text-gray-400 mt-1">確信度: {item.confidence}</p>
                 </div>
               ))}
