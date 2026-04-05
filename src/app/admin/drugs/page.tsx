@@ -324,10 +324,17 @@ export default function AdminDrugsPage() {
                 {/* カテゴリ内テーブル */}
                 {isOpen && (
                   <div className="border border-t-0 rounded-b-lg overflow-hidden">
-                    <table className="w-full text-sm">
+                    <table className="w-full text-sm table-fixed">
+                      <colgroup>
+                        <col style={{width: '2rem'}} />
+                        <col style={{width: '35%'}} />
+                        <col style={{width: '15%'}} />
+                        <col style={{width: '35%'}} />
+                        <col style={{width: '8rem'}} />
+                      </colgroup>
                       <thead className="bg-white border-b">
                         <tr>
-                          <th className="w-8 px-2 py-2">
+                          <th className="px-2 py-2">
                             <input
                               type="checkbox"
                               checked={items.every((i) => selectedIds.has(i.id)) && items.length > 0}
@@ -339,9 +346,9 @@ export default function AdminDrugsPage() {
                             />
                           </th>
                           <th className="text-left px-2 py-2 text-xs font-medium text-gray-500">薬品名</th>
-                          <th className="text-left px-2 py-2 text-xs font-medium text-gray-500 hidden sm:table-cell">規格</th>
-                          <th className="text-left px-2 py-2 text-xs font-medium text-gray-500 hidden md:table-cell">適応</th>
-                          <th className="px-2 py-2 w-28"></th>
+                          <th className="text-left px-2 py-2 text-xs font-medium text-gray-500">規格</th>
+                          <th className="text-left px-2 py-2 text-xs font-medium text-gray-500">適応</th>
+                          <th className="px-2 py-2"></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -351,11 +358,11 @@ export default function AdminDrugsPage() {
                               <input type="checkbox" checked={selectedIds.has(drug.id)} onChange={() => toggleSelect(drug.id)} className="rounded" />
                             </td>
                             <td className="px-2 py-1.5">
-                              <p className="font-medium text-sm">{drug.name}</p>
-                              {drug.genericName && <p className="text-xs text-gray-500">{drug.genericName}</p>}
+                              <p className="font-medium text-sm truncate">{drug.name}</p>
+                              {drug.genericName && <p className="text-xs text-gray-500 truncate">{drug.genericName}</p>}
                             </td>
-                            <td className="px-2 py-1.5 text-xs text-gray-600 hidden sm:table-cell">{drug.spec}</td>
-                            <td className="px-2 py-1.5 text-xs text-gray-600 hidden md:table-cell max-w-xs truncate">{drug.indication}</td>
+                            <td className="px-2 py-1.5 text-xs text-gray-600 truncate">{drug.spec}</td>
+                            <td className="px-2 py-1.5 text-xs text-gray-600 truncate">{drug.indication}</td>
                             <td className="px-2 py-1.5">
                               <div className="flex gap-1">
                                 <Button variant="outline" size="sm" onClick={() => openEdit(drug)}>編集</Button>

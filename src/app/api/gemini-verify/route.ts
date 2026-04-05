@@ -417,10 +417,25 @@ ${JSON.stringify(currentData, null, 2).slice(0, 3000)}
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
     if (!jsonMatch) return NextResponse.json({ error: 'Invalid response', raw: text.slice(0, 300) }, { status: 500 })
 
-    const result = JSON.parse(jsonMatch[0])
-    result.model = 'gemini-2.5-pro'
-    result.checkedAt = new Date().toISOString()
-    return NextResponse.json(result)
+    try {
+      const result = JSON.parse(jsonMatch[0])
+      result.model = 'gemini-2.5-pro'
+      result.checkedAt = new Date().toISOString()
+      return NextResponse.json(result)
+    } catch (parseErr) {
+      console.error('JSON parse error:', parseErr, 'Raw:', text.slice(0, 200))
+      return NextResponse.json({
+        isCorrect: false,
+        severity: 'low',
+        issues: ['AI応答のパースに失敗しました。再試行してください。'],
+        corrections: {},
+        evidenceSource: '解析エラー',
+        confidence: 'low',
+        model: 'gemini-2.5-pro',
+        checkedAt: new Date().toISOString(),
+        raw: text.slice(0, 200)
+      })
+    }
 
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
