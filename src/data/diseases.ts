@@ -10,6 +10,7 @@ export type Disease = {
   patientExplanation: string;
   keyPoints: string[];
   relatedTreatments: string[];
+  priority?: number;
 };
 
 export const diseases: Disease[] = [
@@ -39,6 +40,7 @@ export const diseases: Disease[] = [
       "デュピクセント注射",
       "オルミエント内服",
     ],
+    priority: 1,
   },
   {
     id: "acne",
@@ -68,6 +70,7 @@ export const diseases: Disease[] = [
       "マッサージピール",
       "サリチル酸ピーリング",
     ],
+    priority: 1,
   },
   {
     id: "rosacea",
@@ -94,6 +97,7 @@ export const diseases: Disease[] = [
       "アグネス（毛細血管拡張）",
       "ポテンツァ（肌質改善）",
     ],
+    priority: 2,
   },
   {
     id: "contact",
@@ -116,6 +120,7 @@ export const diseases: Disease[] = [
       "金属アレルギーは掌蹠膿疱症との関連も",
     ],
     relatedTreatments: ["View39（アレルゲン検索）", "ドロップスクリーン"],
+    priority: 1,
   },
   {
     id: "urticaria",
@@ -141,6 +146,7 @@ export const diseases: Disease[] = [
       "ドロップスクリーン（アレルゲン検索）",
       "ゾレア注射（慢性難治例）",
     ],
+    priority: 1,
   },
   {
     id: "zoster",
@@ -163,6 +169,7 @@ export const diseases: Disease[] = [
       "患者への感染注意：水痘未罹患者・免疫不全者へのVZV接触を避ける",
     ],
     relatedTreatments: ["シングリックスワクチン（予防接種）"],
+    priority: 1,
   },
   {
     id: "tinea",
@@ -184,6 +191,7 @@ export const diseases: Disease[] = [
       "蜂窩織炎の入口として足白癬の治療が重要",
     ],
     relatedTreatments: [],
+    priority: 2,
   },
   {
     id: "psoriasis",
@@ -209,6 +217,7 @@ export const diseases: Disease[] = [
       "ナローバンドUVB光線療法",
       "スキリージ注射（生物学的製剤）",
     ],
+    priority: 1,
   },
   {
     id: "ppp",
@@ -231,6 +240,7 @@ export const diseases: Disease[] = [
       "SAPHO症候群（胸肋鎖骨関節炎）合併に注意",
     ],
     relatedTreatments: [],
+    priority: 3,
   },
   {
     id: "vitiligo",
@@ -253,6 +263,7 @@ export const diseases: Disease[] = [
       "患者の精神的サポートも重要",
     ],
     relatedTreatments: ["ナローバンドUVB光線療法"],
+    priority: 3,
   },
   {
     id: "alopecia",
@@ -275,6 +286,7 @@ export const diseases: Disease[] = [
       "全頭型・汎発型は難治で生物学的製剤も検討",
     ],
     relatedTreatments: ["オルミエント内服（重症例）"],
+    priority: 2,
   },
   {
     id: "seborrheic",
@@ -297,6 +309,7 @@ export const diseases: Disease[] = [
       "繰り返す慢性疾患で長期管理が必要",
     ],
     relatedTreatments: [],
+    priority: 2,
   },
   {
     id: "cellulitis",
@@ -319,6 +332,7 @@ export const diseases: Disease[] = [
       "再発予防に足白癬の根治治療が不可欠",
     ],
     relatedTreatments: [],
+    priority: 3,
   },
   {
     id: "eczema",
@@ -341,6 +355,7 @@ export const diseases: Disease[] = [
       "全身性疾患（腎不全・甲状腺疾患）に伴うかゆみの除外が必要",
     ],
     relatedTreatments: [],
+    priority: 2,
   },
   {
     id: "drug_eruption",
@@ -363,6 +378,7 @@ export const diseases: Disease[] = [
       "患者の薬剤アレルギー情報は必ずカルテに記載",
     ],
     relatedTreatments: [],
+    priority: 3,
   },
   {
     id: "wart",
@@ -385,6 +401,7 @@ export const diseases: Disease[] = [
       "アトピー性皮膚炎の患者は水いぼが多発しやすい",
     ],
     relatedTreatments: ["液体窒素凍結療法", "プラズマペン（難治例）"],
+    priority: 3,
   },
   {
     id: "cyst",
@@ -407,6 +424,7 @@ export const diseases: Disease[] = [
       "炎症を繰り返す粉瘤は早めの手術が推奨",
     ],
     relatedTreatments: ["日帰り外科手術（粉瘤摘出）"],
+    priority: 2,
   },
   {
     id: "tumor",
@@ -434,6 +452,7 @@ export const diseases: Disease[] = [
       "プラズマペン（良性腫瘍）",
       "日帰り外科手術（切除）",
     ],
+    priority: 3,
   },
   {
     id: "herpes",
@@ -456,6 +475,7 @@ export const diseases: Disease[] = [
       "性感染症として届出義務はないが患者教育が重要",
     ],
     relatedTreatments: [],
+    priority: 2,
   },
   {
     id: "ak",
@@ -482,6 +502,7 @@ export const diseases: Disease[] = [
       "皮膚生検（悪性疑い時）",
       "日帰り外科手術（切除）",
     ],
+    priority: 3,
   },
   // === 新規10件 ===
   {
@@ -505,6 +526,7 @@ export const diseases: Disease[] = [
       "パッチテストでアレルゲンを特定することが重要",
     ],
     relatedTreatments: ["View39（アレルゲン検索）", "パッチテスト"],
+    priority: 3,
   },
   {
     id: "sebum_eczema",
@@ -527,6 +549,7 @@ export const diseases: Disease[] = [
       "室内の加湿（湿度50〜60%）も重要",
     ],
     relatedTreatments: [],
+    priority: 3,
   },
   {
     id: "impetigo",
@@ -549,6 +572,7 @@ export const diseases: Disease[] = [
       "アトピー性皮膚炎患者に合併しやすい",
     ],
     relatedTreatments: ["培養検査（MRSA確認）"],
+    priority: 3,
   },
   {
     id: "insect_bite",
@@ -571,6 +595,7 @@ export const diseases: Disease[] = [
       "虫刺され後の患部を掻くことでとびひに移行しやすい",
     ],
     relatedTreatments: [],
+    priority: 3,
   },
   {
     id: "ingrown_nail",
@@ -593,6 +618,7 @@ export const diseases: Disease[] = [
       "感染（化膿）している場合は先に炎症を抑える",
     ],
     relatedTreatments: ["爪矯正治療（VHOワイヤー）"],
+    priority: 3,
   },
   {
     id: "corn_callus",
@@ -615,6 +641,7 @@ export const diseases: Disease[] = [
       "定期的なフットケアが糖尿病患者に重要",
     ],
     relatedTreatments: ["液体窒素凍結療法（疣贅との鑑別後）"],
+    priority: 3,
   },
   {
     id: "urticaria_pigmentosa",
@@ -641,6 +668,7 @@ export const diseases: Disease[] = [
       "プラズマペン（除去）",
       "皮膚生検（悪性疑い時）",
     ],
+    priority: 3,
   },
   {
     id: "folliculitis",
@@ -666,6 +694,7 @@ export const diseases: Disease[] = [
       "培養検査",
       "医療脱毛（施術後の毛嚢炎予防指導）",
     ],
+    priority: 3,
   },
   {
     id: "photoaging",
@@ -694,6 +723,7 @@ export const diseases: Disease[] = [
       "ゼオスキンヘルス（セラピューティック）",
       "メソナJ（成長因子導入）",
     ],
+    priority: 3,
   },
   {
     id: "melasma",
@@ -721,6 +751,7 @@ export const diseases: Disease[] = [
       "コジブライト（コウジ酸外用）",
       "スキンマリア（美白内服）",
     ],
+    priority: 3,
   },
   {
     id: "sebaceous_hyperplasia",
@@ -745,6 +776,7 @@ export const diseases: Disease[] = [
       "プラズマペン（除去）",
       "ダーモスコピー診断",
     ],
+    priority: 4,
   },
   {
     id: "lichen_planus",
@@ -768,6 +800,7 @@ export const diseases: Disease[] = [
     relatedTreatments: [
       "デルモベート軟膏（Strongest）",
     ],
+    priority: 4,
   },
   {
     id: "pemphigus_vulgaris",
@@ -789,6 +822,7 @@ export const diseases: Disease[] = [
       "ステロイド大量療法の副作用管理が重要",
     ],
     relatedTreatments: [],
+    priority: 4,
   },
   {
     id: "bullous_pemphigoid",
@@ -810,6 +844,7 @@ export const diseases: Disease[] = [
       "ニコルスキー現象は陰性（天疱瘡との鑑別）",
     ],
     relatedTreatments: [],
+    priority: 4,
   },
   {
     id: "morphea",
@@ -833,6 +868,7 @@ export const diseases: Disease[] = [
     relatedTreatments: [
       "ナローバンドUVB・UVA光線療法",
     ],
+    priority: 4,
   },
   {
     id: "granuloma_annulare",
@@ -856,6 +892,7 @@ export const diseases: Disease[] = [
     relatedTreatments: [
       "液体窒素凍結療法（局所型）",
     ],
+    priority: 4,
   },
   {
     id: "prurigo_nodularis",
@@ -880,6 +917,7 @@ export const diseases: Disease[] = [
       "ミチーガ30mgバイアル（ネモリズマブ）",
       "ナローバンドUVB光線療法",
     ],
+    priority: 3,
   },
   {
     id: "pityriasis_rosea",
@@ -901,6 +939,7 @@ export const diseases: Disease[] = [
       "再発はまれ",
     ],
     relatedTreatments: [],
+    priority: 4,
   },
   {
     id: "lichen_simplex",
@@ -922,6 +961,7 @@ export const diseases: Disease[] = [
       "外陰部・肛門周囲に生じる場合は性感染症・真菌感染の除外が必要",
     ],
     relatedTreatments: [],
+    priority: 3,
   },
   {
     id: "ichthyosis_vulgaris",
@@ -943,6 +983,7 @@ export const diseases: Disease[] = [
       "アトピー性皮膚炎を合併することが多い",
     ],
     relatedTreatments: [],
+    priority: 4,
   },
   {
     id: "tinea_versicolor",
@@ -964,6 +1005,7 @@ export const diseases: Disease[] = [
       "色素脱失は治療後も数ヶ月残ることを説明",
     ],
     relatedTreatments: [],
+    priority: 4,
   },
   {
     id: "hyperhidrosis",
@@ -989,6 +1031,7 @@ export const diseases: Disease[] = [
       "ラピフォートワイプ処方",
       "アポハイドローション処方",
     ],
+    priority: 2,
   },
   {
     id: "keloid",
@@ -1012,6 +1055,7 @@ export const diseases: Disease[] = [
     relatedTreatments: [
       "ケナコルトA局注",
     ],
+    priority: 2,
   },
   {
     id: "epidermal_cyst_inflamed",
@@ -1037,6 +1081,7 @@ export const diseases: Disease[] = [
       "日帰り外科手術（全摘出）",
       "ケナコルトA局注（炎症鎮静）",
     ],
+    priority: 4,
   },
   {
     id: "actinic_cheilitis",
@@ -1062,6 +1107,7 @@ export const diseases: Disease[] = [
       "液体窒素凍結療法",
       "皮膚生検",
     ],
+    priority: 4,
   },
   {
     id: "drug_acne",
@@ -1086,6 +1132,7 @@ export const diseases: Disease[] = [
       "ブルーレーザー（ニキビ治療）",
       "アグネス（繰り返すニキビ）",
     ],
+    priority: 4,
   },
   {
     id: "nummular_eczema",
@@ -1110,6 +1157,7 @@ export const diseases: Disease[] = [
       "View39（アレルゲン検索）",
       "パッチテスト",
     ],
+    priority: 3,
   },
   {
     id: "pompholyx",
@@ -1134,6 +1182,7 @@ export const diseases: Disease[] = [
       "パッチテスト",
       "View39（アレルゲン検索）",
     ],
+    priority: 3,
   },
   {
     id: "perioral_dermatitis",
@@ -1155,6 +1204,7 @@ export const diseases: Disease[] = [
       "フッ化物含有歯磨き粉の変更も考慮",
     ],
     relatedTreatments: [],
+    priority: 4,
   },
   {
     id: "erythema_nodosum",
@@ -1176,5 +1226,6 @@ export const diseases: Disease[] = [
       "多くは数週間で自然消退",
     ],
     relatedTreatments: [],
+    priority: 4,
   },
 ];
