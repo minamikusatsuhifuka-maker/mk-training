@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { GeminiVerifyButton } from "@/components/admin/GeminiVerifyButton";
+import { GeminiBatchVerify } from "@/components/admin/GeminiBatchVerify";
 import {
   Table,
   TableBody,
@@ -43,6 +44,14 @@ import {
 } from "@/components/ui/table";
 
 const badgeColors: Disease["badgeColor"][] = ["blue", "teal", "amber", "red", "purple"];
+
+const priorityColors: Record<number, string> = {
+  1: "bg-red-100 text-red-700 border-red-200",
+  2: "bg-orange-100 text-orange-700 border-orange-200",
+  3: "bg-blue-100 text-blue-700 border-blue-200",
+  4: "bg-gray-100 text-gray-600 border-gray-200",
+};
+const priorityLabels: Record<number, string> = { 1: "必須", 2: "重要", 3: "標準", 4: "参考" };
 
 function emptyDisease(): Disease {
   return {
@@ -57,6 +66,7 @@ function emptyDisease(): Disease {
     patientExplanation: "",
     keyPoints: [],
     relatedTreatments: [],
+    priority: 3,
   };
 }
 
@@ -66,6 +76,7 @@ export default function AdminDiseasesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [connected, setConnected] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
@@ -86,6 +97,16 @@ export default function AdminDiseasesPage() {
     setTimeout(() => setSaveMsg(null), 3000);
     setSaving(false);
   };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const selectAll = () => setSelectedIds(new Set(data.map((d) => d.id)));
+  const clearSelection = () => setSelectedIds(new Set());
 
   const filtered = data.filter((d) => {
     if (!search) return true;
@@ -161,6 +182,7 @@ export default function AdminDiseasesPage() {
                 patientExplanation: (d.patientExplanation as string) ?? "",
                 keyPoints: (d.keyPoints as string[]) ?? [],
                 relatedTreatments: (d.relatedTreatments as string[]) ?? [],
+                priority: (d.priority as number) ?? 3,
               };
             });
           const newData = [...data, ...newItems];
@@ -180,7 +202,10 @@ export default function AdminDiseasesPage() {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[80px]">ID</TableHead>
+            <TableHead className="w-8 px-2">
+              <input type="checkbox" checked={selectedIds.size === data.length && data.length > 0} onChange={(e) => e.target.checked ? selectAll() : clearSelection()} className="rounded" />
+            </TableHead>
+            <TableHead className="w-[60px]">優先度</TableHead>
             <TableHead>名前</TableHead>
             <TableHead className="hidden sm:table-cell">英語名</TableHead>
             <TableHead className="w-[100px]">バッジ</TableHead>
@@ -190,7 +215,14 @@ export default function AdminDiseasesPage() {
         <TableBody>
           {filtered.map((d) => (
             <TableRow key={d.id}>
-              <TableCell className="font-mono text-xs">{d.id}</TableCell>
+              <TableCell className="px-2">
+                <input type="checkbox" checked={selectedIds.has(d.id)} onChange={() => toggleSelect(d.id)} onClick={(e) => e.stopPropagation()} className="rounded" />
+              </TableCell>
+              <TableCell>
+                <span className={`text-xs px-1.5 py-0.5 rounded font-medium border ${priorityColors[d.priority ?? 3]}`}>
+                  {priorityLabels[d.priority ?? 3]}
+                </span>
+              </TableCell>
               <TableCell className="font-medium">{d.name}</TableCell>
               <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">{d.nameEn}</TableCell>
               <TableCell className="text-xs">{d.badge}</TableCell>
@@ -240,6 +272,20 @@ export default function AdminDiseasesPage() {
                     </SelectContent>
                   </Select>
                 </label>
+              </div>
+              <div>
+                <span className="text-xs font-medium block mb-1">優先度</span>
+                <select
+                  className="w-full rounded-md border px-3 py-1.5 text-sm"
+                  value={editItem.priority ?? 3}
+                  onChange={(e) => setEditItem({ ...editItem, priority: Number(e.target.value) })}
+                >
+                  <option value={1}>1 - 必須（毎日遭遇・最重要）</option>
+                  <option value={2}>2 - 重要（頻繁に遭遇）</option>
+                  <option value={3}>3 - 標準（時々遭遇）</option>
+                  <option value={4}>4 - 参考（知識として重要）</option>
+                </select>
+                <p className="text-xs text-muted-foreground mt-1">スタッフページでの表示順位・優先度バッジに反映されます</p>
               </div>
               <label className="space-y-1 block">
                 <span className="text-xs font-medium">疾患概要</span>
@@ -295,6 +341,12 @@ export default function AdminDiseasesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <GeminiBatchVerify
+        contentType="disease"
+        selectedItems={data.filter((d) => selectedIds.has(d.id)).map((d) => ({ id: d.id, name: d.name, data: d }))}
+        onClear={clearSelection}
+      />
     </div>
   );
 }

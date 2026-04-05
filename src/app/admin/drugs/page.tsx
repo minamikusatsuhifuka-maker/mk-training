@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { GeminiVerifyButton } from "@/components/admin/GeminiVerifyButton";
+import { GeminiBatchVerify } from "@/components/admin/GeminiBatchVerify";
 
 function sortDrugsByCategory(items: Drug[]): Drug[] {
   return [...items].sort((a, b) => {
@@ -55,6 +56,12 @@ export default function AdminDrugsPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const loaded = useRef(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  };
+  const selectAll = () => setSelectedIds(new Set(data.map((d) => d.id)));
+  const clearSelection = () => setSelectedIds(new Set());
 
   useEffect(() => {
     getContent<Drug>(CONTENT_KEYS.drugs, initialDrugs).then((result) => {
@@ -152,6 +159,7 @@ export default function AdminDrugsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr>
+                <th className="w-8 px-2"><input type="checkbox" checked={selectedIds.size === data.length && data.length > 0} onChange={(e) => e.target.checked ? selectAll() : clearSelection()} className="rounded" /></th>
                 <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2 border-b w-[240px]">薬品名</th>
                 <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2 border-b w-[120px]">規格</th>
                 <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2 border-b w-[130px] hidden sm:table-cell">カテゴリ</th>
@@ -162,6 +170,7 @@ export default function AdminDrugsPage() {
             <tbody>
               {filtered.map((d) => (
                 <tr key={d.id} className="hover:bg-muted/50">
+                  <td className="px-2"><input type="checkbox" checked={selectedIds.has(d.id)} onChange={() => toggleSelect(d.id)} onClick={(e) => e.stopPropagation()} className="rounded" /></td>
                   <td className="px-2 py-1.5 border-b align-top w-[240px]">
                     <div className="font-medium text-sm leading-snug">{d.name}</div>
                     {d.genericName && (
@@ -248,6 +257,7 @@ export default function AdminDrugsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <GeminiBatchVerify contentType="drug" selectedItems={data.filter((d) => selectedIds.has(d.id)).map((d) => ({ id: d.id, name: d.name, data: d }))} onClear={clearSelection} />
     </div>
   );
 }

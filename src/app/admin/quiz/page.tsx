@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { GeminiVerifyButton } from "@/components/admin/GeminiVerifyButton";
+import { GeminiBatchVerify } from "@/components/admin/GeminiBatchVerify";
 import {
   Table,
   TableBody,
@@ -75,6 +76,12 @@ export default function AdminQuizPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const loaded = useRef(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  };
+  const selectAll = () => setSelectedIds(new Set(data.map((q) => q.id)));
+  const clearSelection = () => setSelectedIds(new Set());
 
   useEffect(() => {
     getContent<QuizQuestion>(CONTENT_KEYS.quiz, initialQuiz).then((result) => {
@@ -182,6 +189,9 @@ export default function AdminQuizPage() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-8 px-2">
+              <input type="checkbox" checked={selectedIds.size === data.length && data.length > 0} onChange={(e) => e.target.checked ? selectAll() : clearSelection()} className="rounded" />
+            </TableHead>
             <TableHead className="w-[80px]">ID</TableHead>
             <TableHead className="w-[70px]">区分</TableHead>
             <TableHead>問題文</TableHead>
@@ -192,6 +202,9 @@ export default function AdminQuizPage() {
         <TableBody>
           {filtered.map((q) => (
             <TableRow key={q.id}>
+              <TableCell className="px-2">
+                <input type="checkbox" checked={selectedIds.has(q.id)} onChange={() => toggleSelect(q.id)} onClick={(e) => e.stopPropagation()} className="rounded" />
+              </TableCell>
               <TableCell className="font-mono text-xs">{q.id}</TableCell>
               <TableCell className="text-xs">{q.category}</TableCell>
               <TableCell className="text-sm truncate max-w-[300px]">{q.question.slice(0, 30)}…</TableCell>
@@ -272,6 +285,7 @@ export default function AdminQuizPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <GeminiBatchVerify contentType="quiz" selectedItems={data.filter((q) => selectedIds.has(q.id)).map((q) => ({ id: q.id, name: q.question?.slice(0, 30) || "クイズ", data: q }))} onClear={clearSelection} />
     </div>
   );
 }

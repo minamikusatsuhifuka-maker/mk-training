@@ -48,6 +48,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { GeminiVerifyButton } from "@/components/admin/GeminiVerifyButton";
+import { GeminiBatchVerify } from "@/components/admin/GeminiBatchVerify";
 
 const categoryOptions: ClearCheckItem["category"][] = [
   "contraindication",
@@ -100,6 +101,10 @@ export default function AdminCounselingPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const loaded = useRef(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const toggleSelect = (id: string) => { setSelectedIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; }); };
+  const selectAll = () => setSelectedIds(new Set(data.map((d) => d.id)));
+  const clearSelection = () => setSelectedIds(new Set());
 
   useEffect(() => {
     getContent<CounselingGuide>(CONTENT_KEYS.counseling, initialData).then((result) => {
@@ -234,6 +239,7 @@ export default function AdminCounselingPage() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-8 px-2"><input type="checkbox" checked={selectedIds.size === data.length && data.length > 0} onChange={(e) => e.target.checked ? selectAll() : clearSelection()} className="rounded" /></TableHead>
             <TableHead>施術名</TableHead>
             <TableHead className="w-[120px]">チェック項目数</TableHead>
             <TableHead className="w-[120px]">スクリプト数</TableHead>
@@ -244,6 +250,7 @@ export default function AdminCounselingPage() {
         <TableBody>
           {data.map((guide) => (
             <TableRow key={guide.id}>
+              <TableCell className="px-2"><input type="checkbox" checked={selectedIds.has(guide.id)} onChange={() => toggleSelect(guide.id)} onClick={(e) => e.stopPropagation()} className="rounded" /></TableCell>
               <TableCell className="font-medium">{guide.treatment}</TableCell>
               <TableCell className="text-sm text-muted-foreground">{guide.clearChecks.length}</TableCell>
               <TableCell className="text-sm text-muted-foreground">{guide.talkScripts.length}</TableCell>
@@ -416,6 +423,7 @@ export default function AdminCounselingPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <GeminiBatchVerify contentType="counseling" selectedItems={data.filter((d) => selectedIds.has(d.id)).map((d) => ({ id: d.id, name: d.treatment, data: d }))} onClear={clearSelection} />
     </div>
   );
 }

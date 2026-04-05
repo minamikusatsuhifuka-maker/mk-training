@@ -4,9 +4,78 @@ export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
   try {
-    const { contentType, itemName, currentData } = await req.json()
+    const body = await req.json()
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 })
+
+    // 一括評価の場合
+    if (body.items && Array.isArray(body.items)) {
+      const { contentType, items } = body
+      const itemsSummary = items.map((item: { id: string; name: string; data: unknown }) => ({
+        id: item.id,
+        name: item.name,
+        data: item.data,
+      }))
+
+      const batchPrompt = `あなたは日本の皮膚科専門医・薬剤師・医療専門家です。
+以下の${contentType}データについて、最新の医学的知見・添付文書・ガイドライン（2025〜2026年）に基づいて
+各項目の正確性を評価してください。
+
+評価対象データ:
+${JSON.stringify(itemsSummary, null, 2).slice(0, 6000)}
+
+以下の点を確認してください:
+1. 医学的な誤り・古い情報・不正確な記載
+2. 2024〜2026年の新しい知見・承認薬・ガイドライン改訂による変更点
+3. 日本の添付文書・保険適用との相違
+
+必ずJSON形式のみで回答（マークダウン不可）:
+{
+  "summary": "全体的な評価サマリー（2〜3文）",
+  "totalItems": ${items.length},
+  "issuesFound": 問題あり件数,
+  "results": [
+    {
+      "id": "アイテムID",
+      "name": "アイテム名",
+      "isCorrect": true,
+      "severity": "none|low|medium|high",
+      "issues": ["問題点1", "問題点2"],
+      "newKnowledge": ["新しい知見・変更点"],
+      "corrections": {"フィールド名": "修正内容"},
+      "confidence": "high|medium|low"
+    }
+  ]
+}`
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: batchPrompt }] }],
+            generationConfig: { temperature: 0.1, maxOutputTokens: 8192 },
+          }),
+        }
+      )
+
+      if (!response.ok) {
+        const err = await response.text()
+        return NextResponse.json({ error: err }, { status: 500 })
+      }
+
+      const data = await response.json()
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) return NextResponse.json({ error: 'Invalid response', raw: text.slice(0, 500) }, { status: 500 })
+
+      return NextResponse.json({ ...JSON.parse(jsonMatch[0]), model: 'gemini-2.5-pro' })
+    }
+
+    // 既存の単一アイテム評価処理
+    const { contentType, itemName, currentData } = body
 
     const prompts: Record<string, string> = {
       drug: `あなたは日本の薬剤師・皮膚科専門医です。

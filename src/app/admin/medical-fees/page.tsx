@@ -41,6 +41,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { GeminiVerifyButton } from "@/components/admin/GeminiVerifyButton";
+import { GeminiBatchVerify } from "@/components/admin/GeminiBatchVerify";
 import Link from "next/link";
 
 const feeCategories: FeeCategory[] = [
@@ -77,6 +78,10 @@ export default function AdminMedicalFeesPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const loaded = useRef(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const toggleSelect = (id: string) => { setSelectedIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; }); };
+  const selectAll = () => setSelectedIds(new Set(data.map((d) => d.id)));
+  const clearSelection = () => setSelectedIds(new Set());
 
   useEffect(() => {
     getContent<MedicalFee>(CONTENT_KEYS.medicalFees, initialData).then((result) => {
@@ -180,6 +185,7 @@ export default function AdminMedicalFeesPage() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-8 px-2"><input type="checkbox" checked={selectedIds.size === data.length && data.length > 0} onChange={(e) => e.target.checked ? selectAll() : clearSelection()} className="rounded" /></TableHead>
             <TableHead className="w-[100px]">コード</TableHead>
             <TableHead>名称</TableHead>
             <TableHead className="w-[80px]">点数</TableHead>
@@ -190,6 +196,7 @@ export default function AdminMedicalFeesPage() {
         <TableBody>
           {filtered.map((d) => (
             <TableRow key={d.id}>
+              <TableCell className="px-2"><input type="checkbox" checked={selectedIds.has(d.id)} onChange={() => toggleSelect(d.id)} onClick={(e) => e.stopPropagation()} className="rounded" /></TableCell>
               <TableCell className="font-mono text-xs">{d.code}</TableCell>
               <TableCell className="font-medium">{d.name}</TableCell>
               <TableCell className="text-sm">{d.points}</TableCell>
@@ -321,6 +328,7 @@ export default function AdminMedicalFeesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <GeminiBatchVerify contentType="medical_fee" selectedItems={data.filter((d) => selectedIds.has(d.id)).map((d) => ({ id: d.id, name: d.name, data: d }))} onClear={clearSelection} />
     </div>
   );
 }

@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { GeminiVerifyButton } from "@/components/admin/GeminiVerifyButton";
+import { GeminiBatchVerify } from "@/components/admin/GeminiBatchVerify";
 
 const severityOptions: { value: Severity; label: string; color: string }[] = [
   { value: "critical", label: "禁忌（critical）", color: "bg-red-100 text-red-700 border-red-200" },
@@ -61,6 +62,12 @@ export default function AdminContraindicationsPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const loaded = useRef(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  };
+  const selectAll = () => setSelectedIds(new Set(data.map((c) => c.id)));
+  const clearSelection = () => setSelectedIds(new Set());
 
   useEffect(() => {
     getContent<Contraindication>(CONTENT_KEYS.contraindications, initialData).then((result) => {
@@ -141,24 +148,31 @@ export default function AdminContraindicationsPage() {
         }}
       />
 
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <input type="checkbox" checked={selectedIds.size === data.length && data.length > 0} onChange={(e) => e.target.checked ? selectAll() : clearSelection()} className="rounded" />
+        <span>全選択</span>
+      </div>
       <div className="space-y-3">
         {data.map((c) => (
           <Card key={c.id} className="p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0 space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="outline" className={severityColor[c.severity]}>
-                    {c.severity}
-                  </Badge>
-                  <span className="font-medium text-sm">{c.drug}</span>
+            <div className="flex items-start gap-3">
+              <input type="checkbox" checked={selectedIds.has(c.id)} onChange={() => toggleSelect(c.id)} onClick={(e) => e.stopPropagation()} className="rounded mt-1" />
+              <div className="flex items-start justify-between gap-3 flex-1">
+                <div className="flex-1 min-w-0 space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant="outline" className={severityColor[c.severity]}>
+                      {c.severity}
+                    </Badge>
+                    <span className="font-medium text-sm">{c.drug}</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">対象: {c.disease}</p>
+                  <p className="text-xs text-muted-foreground">{c.detail}</p>
                 </div>
-                <p className="text-sm text-muted-foreground">対象: {c.disease}</p>
-                <p className="text-xs text-muted-foreground">{c.detail}</p>
-              </div>
-              <div className="flex gap-1 shrink-0">
-                <Button variant="outline" size="sm" onClick={() => openEdit(c)}>編集</Button>
-                <GeminiVerifyButton contentType="contraindication" itemName={c.drug} currentData={c} />
-                <Button variant="destructive" size="sm" onClick={() => setDeleteId(c.id)}>削除</Button>
+                <div className="flex gap-1 shrink-0">
+                  <Button variant="outline" size="sm" onClick={() => openEdit(c)}>編集</Button>
+                  <GeminiVerifyButton contentType="contraindication" itemName={c.drug} currentData={c} />
+                  <Button variant="destructive" size="sm" onClick={() => setDeleteId(c.id)}>削除</Button>
+                </div>
               </div>
             </div>
           </Card>
@@ -216,6 +230,7 @@ export default function AdminContraindicationsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <GeminiBatchVerify contentType="contraindication" selectedItems={data.filter((c) => selectedIds.has(c.id)).map((c) => ({ id: c.id, name: c.drug, data: c }))} onClear={clearSelection} />
     </div>
   );
 }

@@ -45,6 +45,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { GeminiVerifyButton } from "@/components/admin/GeminiVerifyButton";
+import { GeminiBatchVerify } from "@/components/admin/GeminiBatchVerify";
 import Link from "next/link";
 
 const severities: InteractionSeverity[] = ["contraindicated", "major", "moderate", "minor"];
@@ -85,6 +86,10 @@ export default function AdminInteractionsPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const loaded = useRef(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const toggleSelect = (id: string) => { setSelectedIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; }); };
+  const selectAll = () => setSelectedIds(new Set(data.map((d) => d.id)));
+  const clearSelection = () => setSelectedIds(new Set());
 
   useEffect(() => {
     getContent<DrugInteraction>(CONTENT_KEYS.interactions, initialData).then((result) => {
@@ -188,6 +193,7 @@ export default function AdminInteractionsPage() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-8 px-2"><input type="checkbox" checked={selectedIds.size === data.length && data.length > 0} onChange={(e) => e.target.checked ? selectAll() : clearSelection()} className="rounded" /></TableHead>
             <TableHead>薬剤1</TableHead>
             <TableHead>薬剤2</TableHead>
             <TableHead className="w-[100px]">重大度</TableHead>
@@ -197,6 +203,7 @@ export default function AdminInteractionsPage() {
         <TableBody>
           {filtered.map((d) => (
             <TableRow key={d.id}>
+              <TableCell className="px-2"><input type="checkbox" checked={selectedIds.has(d.id)} onChange={() => toggleSelect(d.id)} onClick={(e) => e.stopPropagation()} className="rounded" /></TableCell>
               <TableCell className="font-medium text-sm">{d.drug1}</TableCell>
               <TableCell className="text-sm">{d.drug2}</TableCell>
               <TableCell>
@@ -316,6 +323,7 @@ export default function AdminInteractionsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <GeminiBatchVerify contentType="interaction" selectedItems={data.filter((d) => selectedIds.has(d.id)).map((d) => ({ id: d.id, name: d.drug1 + "\u00d7" + d.drug2, data: d }))} onClear={clearSelection} />
     </div>
   );
 }
