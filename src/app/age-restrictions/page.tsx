@@ -43,7 +43,7 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     ],
     clinicalNote: "【疑義照会頻出】16歳未満への0.1%処方は禁忌。必ず0.03%小児用を処方。2歳未満への処方はいかなる濃度も禁忌。",
     source: "PMDA添付文書（プロトピック軟膏0.1%）Section 2.4・9.7",
-    packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuDetail/ResultDataSetPDF/780034_2699709M1029_3_04",
+    packageInsertUrl: "https://www.info.pmda.go.jp/go/pack/2699709M1029_3_04/",
     manufacturerUrl: "https://www.leo-pharma.jp/",
   },
   {
@@ -67,7 +67,7 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     ],
     clinicalNote: "2歳未満への処方で薬局から疑義照会。「小児用」とあるが16歳以上の成人にも処方可能。1日2回の場合は12時間間隔を守ること。",
     source: "PMDA添付文書（プロトピック軟膏0.03%小児用）Section 2.4・9.7・7.1",
-    packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuDetail/ResultDataSetPDF/780034_2699709M2024_3_03",
+    packageInsertUrl: "https://www.info.pmda.go.jp/go/pack/2699709M2024_3_03/",
     manufacturerUrl: "https://www.leo-pharma.jp/",
   },
   {
@@ -91,7 +91,7 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     ],
     clinicalNote: "2023年1月の適応拡大で生後6ヶ月〜に使用可能になった（以前は2歳以上）。古い情報による疑義照会に注意。",
     source: "PMDA添付文書（コレクチム軟膏0.25%）2023年1月改訂・Section 9.7",
-    packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuDetail/ResultDataSetPDF/340018_2699714M2025_2_02",
+    packageInsertUrl: "https://www.info.pmda.go.jp/go/pack/2699714M2025_2_02/",
     manufacturerUrl: "https://www.torii.co.jp/pharma/products/corectim/",
   },
   {
@@ -109,7 +109,7 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     ],
     clinicalNote: "0.5%は成人（16歳以上）が主対象だが小児への使用も可能（禁忌ではない）。小児には原則0.25%から開始。4週間で改善なければ中止。",
     source: "PMDA添付文書（コレクチム軟膏0.5%）用法及び用量・2025年12月改訂版",
-    packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuDetail/ResultDataSetPDF/340018_2699714M1029_2_01",
+    packageInsertUrl: "https://www.info.pmda.go.jp/go/pack/2699714M1029_2_01/",
     manufacturerUrl: "https://www.torii.co.jp/pharma/products/corectim/",
   },
   {
@@ -133,7 +133,7 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     ],
     clinicalNote: "2023年12月改訂で生後3ヶ月〜に適応拡大。古い情報（「2歳から」）による疑義照会に注意。塗布量制限なしが特徴（他の非ステロイド外用と異なる）。",
     source: "PMDA添付文書（モイゼルト軟膏0.3%）2023年12月改訂版",
-    packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuDetail/ResultDataSetPDF/400174_2699718M1024_1_07",
+    packageInsertUrl: "https://www.info.pmda.go.jp/go/pack/2699718M1024_1_07/",
     manufacturerUrl: "https://www.otsuka.co.jp/medical/product/moizelto/",
   },
   {
@@ -151,7 +151,7 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     ],
     clinicalNote: "小児への1%使用は医師判断で可能。原則は0.3%から開始して状態改善後に0.3%継続またはへ変更。",
     source: "PMDA添付文書（モイゼルト軟膏1%）",
-    packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuDetail/ResultDataSetPDF/400174_2699718M2020_1_07",
+    packageInsertUrl: "https://www.info.pmda.go.jp/go/pack/2699718M2020_1_07/",
     manufacturerUrl: "https://www.otsuka.co.jp/medical/product/moizelto/",
   },
   {
@@ -175,7 +175,7 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     ],
     clinicalNote: "2024年10月発売の最新薬。12歳未満への処方は適応外でレセプト査定の対象になりうる。使用初期の頭痛に注意（患者説明要）。",
     source: "PMDA添付文書（ブイタマークリーム1%）2024年10月承認",
-    packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuDetail/ResultDataSetPDF/790003_2699717N1028_1_02",
+    packageInsertUrl: "https://www.info.pmda.go.jp/go/pack/2699717N1028_1_02/",
     manufacturerUrl: "https://www.torii.co.jp/pharma/products/vtama/",
   },
 
@@ -239,7 +239,7 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     ],
     clinicalNote: "【重要】疾患によって適応年齢が全く異なる。AD→生後6ヶ月〜。結節性痒疹→成人のみ。CSU→12歳以上かつ体重30kg以上。小児ADは体重別用量の確認必須。レセプト摘要欄にIGA・EASIスコア等の記載必要。",
     source: "PMDA添付文書（デュピクセント皮下注）2023年9月改訂版・Section 9.7",
-    packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuDetail/ResultDataSetPDF/400092_4490405G1024_4_07",
+    packageInsertUrl: "https://www.info.pmda.go.jp/go/pack/4490405G1024_4_07/",
     manufacturerUrl: "https://www.e-mr.sanofi.co.jp/products/dupixent/product_info",
   },
   {
@@ -281,7 +281,7 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     ],
     clinicalNote: "年齢（12歳以上）と体重（40kg以上）の両方を確認すること。どちらか一方でも満たさない場合は適応外。レセプト審査で返戻リスクあり。",
     source: "PMDA添付文書（イブグリース皮下注250mg）2024年1月承認・医薬品リスク管理計画書",
-    packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuDetail/ResultDataSetPDF/530471_4490410G1025_1_04",
+    packageInsertUrl: "https://www.info.pmda.go.jp/go/pack/4490410G1025_1_04/",
     manufacturerUrl: "https://medical.lilly.com/jp/ebglyss",
   },
   {
