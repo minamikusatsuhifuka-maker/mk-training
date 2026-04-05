@@ -2,10 +2,20 @@
 
 import { useState } from "react";
 
+type ContraindicationInfo = {
+  absolute?: string[];
+  caution?: string[];
+  pregnancy?: string;
+  lactation?: string;
+  pediatric?: string;
+  elderly?: string;
+};
+
 type VerifyResult = {
   isCorrect: boolean;
   issues: string[];
   corrections: Record<string, string>;
+  contraindications?: ContraindicationInfo;
   confidence: string;
   model: string;
   checkedAt: string;
@@ -123,6 +133,49 @@ export function GeminiVerifyButton({
                       )}
                     </div>
                   )}
+              </div>
+            )}
+
+            {result.contraindications && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <p className="text-sm font-bold text-red-700 mb-2">🚫 禁忌・使用上の注意:</p>
+
+                {result.contraindications.absolute && result.contraindications.absolute.length > 0 && (
+                  <div className="mb-2">
+                    <p className="text-xs font-medium text-red-600">絶対禁忌:</p>
+                    <ul className="text-xs text-red-800 space-y-0.5 list-none">
+                      {result.contraindications.absolute.map((c, i) => (
+                        <li key={i} className="flex gap-1"><span>•</span><span>{c}</span></li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {result.contraindications.caution && result.contraindications.caution.length > 0 && (
+                  <div className="mb-2">
+                    <p className="text-xs font-medium text-orange-600">慎重投与:</p>
+                    <ul className="text-xs text-orange-800 space-y-0.5 list-none">
+                      {result.contraindications.caution.map((c, i) => (
+                        <li key={i} className="flex gap-1"><span>•</span><span>{c}</span></li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-1 text-xs mt-1">
+                  {result.contraindications.pregnancy && (
+                    <div><span className="font-medium text-gray-600">妊娠中:</span> <span className="text-gray-800">{result.contraindications.pregnancy}</span></div>
+                  )}
+                  {result.contraindications.lactation && (
+                    <div><span className="font-medium text-gray-600">授乳中:</span> <span className="text-gray-800">{result.contraindications.lactation}</span></div>
+                  )}
+                  {result.contraindications.pediatric && (
+                    <div><span className="font-medium text-gray-600">小児:</span> <span className="text-gray-800">{result.contraindications.pediatric}</span></div>
+                  )}
+                  {result.contraindications.elderly && (
+                    <div><span className="font-medium text-gray-600">高齢者:</span> <span className="text-gray-800">{result.contraindications.elderly}</span></div>
+                  )}
+                </div>
               </div>
             )}
 
