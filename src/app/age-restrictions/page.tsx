@@ -43,8 +43,8 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     ],
     clinicalNote: "【疑義照会頻出】16歳未満への0.1%処方は禁忌。必ず0.03%小児用を処方。2歳未満への処方はいかなる濃度も禁忌。",
     source: "PMDA添付文書（プロトピック軟膏0.1%）Section 2.4・9.7",
-    packageInsertUrl: "https://www.info.pmda.go.jp/go/pack/2699709M1029_3_04/",
-    manufacturerUrl: "https://www.leo-pharma.jp/",
+    packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/",
+    manufacturerUrl: "https://www.kegg.jp/medicus-bin/japic_med?japic_code=00045821",
   },
   {
     id: "protopic-003",
@@ -67,8 +67,8 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     ],
     clinicalNote: "2歳未満への処方で薬局から疑義照会。「小児用」とあるが16歳以上の成人にも処方可能。1日2回の場合は12時間間隔を守ること。",
     source: "PMDA添付文書（プロトピック軟膏0.03%小児用）Section 2.4・9.7・7.1",
-    packageInsertUrl: "https://www.info.pmda.go.jp/go/pack/2699709M2024_3_03/",
-    manufacturerUrl: "https://www.leo-pharma.jp/",
+    packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/",
+    manufacturerUrl: "https://www.kegg.jp/medicus-bin/japic_med?japic_code=00049740",
   },
   {
     id: "corectim-025",
@@ -91,8 +91,8 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     ],
     clinicalNote: "2023年1月の適応拡大で生後6ヶ月〜に使用可能になった（以前は2歳以上）。古い情報による疑義照会に注意。",
     source: "PMDA添付文書（コレクチム軟膏0.25%）2023年1月改訂・Section 9.7",
-    packageInsertUrl: "https://www.info.pmda.go.jp/go/pack/2699714M2025_2_02/",
-    manufacturerUrl: "https://www.torii.co.jp/pharma/products/corectim/",
+    packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/",
+    manufacturerUrl: "https://www.kegg.jp/medicus-bin/japic_med?japic_code=00070547",
   },
   {
     id: "corectim-05",
@@ -109,8 +109,8 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     ],
     clinicalNote: "0.5%は成人（16歳以上）が主対象だが小児への使用も可能（禁忌ではない）。小児には原則0.25%から開始。4週間で改善なければ中止。",
     source: "PMDA添付文書（コレクチム軟膏0.5%）用法及び用量・2025年12月改訂版",
-    packageInsertUrl: "https://www.info.pmda.go.jp/go/pack/2699714M1029_2_01/",
-    manufacturerUrl: "https://www.torii.co.jp/pharma/products/corectim/",
+    packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/",
+    manufacturerUrl: "https://www.kegg.jp/medicus-bin/japic_med?japic_code=00069357",
   },
   {
     id: "moizelto-03",
@@ -133,8 +133,8 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     ],
     clinicalNote: "2023年12月改訂で生後3ヶ月〜に適応拡大。古い情報（「2歳から」）による疑義照会に注意。塗布量制限なしが特徴（他の非ステロイド外用と異なる）。",
     source: "PMDA添付文書（モイゼルト軟膏0.3%）2023年12月改訂版",
-    packageInsertUrl: "https://www.info.pmda.go.jp/go/pack/2699718M1024_1_07/",
-    manufacturerUrl: "https://www.otsuka.co.jp/medical/product/moizelto/",
+    packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/",
+    manufacturerUrl: "https://www.kegg.jp/medicus-bin/japic_med?japic_code=00071200",
   },
   {
     id: "moizelto-1",
@@ -151,8 +151,8 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     ],
     clinicalNote: "小児への1%使用は医師判断で可能。原則は0.3%から開始して状態改善後に0.3%継続またはへ変更。",
     source: "PMDA添付文書（モイゼルト軟膏1%）",
-    packageInsertUrl: "https://www.info.pmda.go.jp/go/pack/2699718M2020_1_07/",
-    manufacturerUrl: "https://www.otsuka.co.jp/medical/product/moizelto/",
+    packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/",
+    manufacturerUrl: "https://www.kegg.jp/medicus-bin/japic_med?japic_code=00071201",
   },
   {
     id: "vtama",
@@ -175,8 +175,8 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     ],
     clinicalNote: "2024年10月発売の最新薬。12歳未満への処方は適応外でレセプト査定の対象になりうる。使用初期の頭痛に注意（患者説明要）。",
     source: "PMDA添付文書（ブイタマークリーム1%）2024年10月承認",
-    packageInsertUrl: "https://www.info.pmda.go.jp/go/pack/2699717N1028_1_02/",
-    manufacturerUrl: "https://www.torii.co.jp/pharma/products/vtama/",
+    packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/",
+    manufacturerUrl: "https://clinicalsup.jp/jpoc/drugdetails.aspx?code=71779",
   },
 
   // ===テトラサイクリン系抗菌薬===
@@ -197,6 +197,7 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     clinicalNote: "【レセプト審査頻出】ニキビで処方されることが多いが8歳未満は原則禁忌。8歳未満への処方はレセプト審査で返戻・査定される可能性が高い。永久歯の黄染リスクのため。",
     source: "PMDA添付文書（ミノマイシン錠/顆粒）Section 9.7",
     packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/",
+    manufacturerUrl: "https://www.kegg.jp/medicus-bin/japic_med?japic_code=00004254",
   },
   {
     id: "doxycycline",
@@ -214,6 +215,7 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     clinicalNote: "添付文書上は8歳未満原則禁忌。科学的にはドキシサイクリンの短期使用では歯への影響が少ないとの報告もあるが、保険診療上は添付文書に従う必要あり。",
     source: "PMDA添付文書（ビブラマイシン錠）Section 9.7",
     packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/",
+    manufacturerUrl: "https://www.kegg.jp/medicus-bin/japic_med?japic_code=00006756",
   },
 
   // ===生物学的製剤===
@@ -239,8 +241,8 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     ],
     clinicalNote: "【重要】疾患によって適応年齢が全く異なる。AD→生後6ヶ月〜。結節性痒疹→成人のみ。CSU→12歳以上かつ体重30kg以上。小児ADは体重別用量の確認必須。レセプト摘要欄にIGA・EASIスコア等の記載必要。",
     source: "PMDA添付文書（デュピクセント皮下注）2023年9月改訂版・Section 9.7",
-    packageInsertUrl: "https://www.info.pmda.go.jp/go/pack/4490405G1024_4_07/",
-    manufacturerUrl: "https://www.e-mr.sanofi.co.jp/products/dupixent/product_info",
+    packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/",
+    manufacturerUrl: "https://www.kegg.jp/medicus-bin/japic_med?japic_code=00071752",
   },
   {
     id: "mitiga60",
@@ -258,7 +260,7 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     clinicalNote: "30mgバイアル（結節性痒疹）は13歳以上のみ。60mgシリンジ（AD）の小児適応詳細は添付文書最新版で確認。院内投与のみ（自己注射はシリンジのみ可）。",
     source: "PMDA添付文書（ミチーガ皮下注60mgシリンジ・30mgバイアル）",
     packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/",
-    manufacturerUrl: "https://www.maruho.co.jp/",
+    manufacturerUrl: "https://clinicalsup.jp/jpoc/drugdetails.aspx?code=70617",
   },
   {
     id: "ebglyss",
@@ -281,8 +283,8 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     ],
     clinicalNote: "年齢（12歳以上）と体重（40kg以上）の両方を確認すること。どちらか一方でも満たさない場合は適応外。レセプト審査で返戻リスクあり。",
     source: "PMDA添付文書（イブグリース皮下注250mg）2024年1月承認・医薬品リスク管理計画書",
-    packageInsertUrl: "https://www.info.pmda.go.jp/go/pack/4490410G1025_1_04/",
-    manufacturerUrl: "https://medical.lilly.com/jp/ebglyss",
+    packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/",
+    manufacturerUrl: "https://www.kegg.jp/medicus-bin/japic_med?japic_code=00071220",
   },
   {
     id: "cosentyx",
@@ -300,7 +302,7 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     clinicalNote: "6歳以上の小児乾癬に使用可能。小児には体重別用量の確認が必須。レセプト摘要欄に体重・用量根拠の記載推奨。",
     source: "PMDA添付文書（コセンティクス皮下注）2021年9月改訂版",
     packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/",
-    manufacturerUrl: "https://www.novartis.com/jp-ja/sites/novartis_jp/files/cosentyx_pi.pdf",
+    manufacturerUrl: "https://www.kegg.jp/medicus-bin/japic_med?japic_code=00070095",
   },
   {
     id: "xolair",
@@ -318,7 +320,7 @@ const ageRestrictionDrugs: AgeRestrictionDrug[] = [
     clinicalNote: "蕁麻疹での使用は15歳以上のみ。15歳未満への蕁麻疹目的の処方は適応外でレセプト返戻の対象。処方時は体重とIgE値から用量設定表で確認。",
     source: "PMDA添付文書（ゾレア皮下注）慢性特発性蕁麻疹の適応Section",
     packageInsertUrl: "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/",
-    manufacturerUrl: "https://www.novartis.com/jp-ja/",
+    manufacturerUrl: "https://clinicalsup.jp/jpoc/drugdetails.aspx?code=49022",
   },
 ];
 
@@ -626,7 +628,7 @@ export default function AgeRestrictionsPage() {
                     rel="noopener noreferrer"
                     className="text-xs px-2 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 flex items-center gap-1"
                   >
-                    📄 PMDA添付文書
+                    🔍 PMDA添付文書を検索
                   </a>
                   {drug.manufacturerUrl && (
                     <a
@@ -635,7 +637,7 @@ export default function AgeRestrictionsPage() {
                       rel="noopener noreferrer"
                       className="text-xs px-2 py-1 bg-gray-50 text-gray-600 border border-gray-200 rounded hover:bg-gray-100 flex items-center gap-1"
                     >
-                      🏢 メーカー情報
+                      📋 添付文書情報（KEGG）
                     </a>
                   )}
                 </div>
