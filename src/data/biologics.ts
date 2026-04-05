@@ -189,8 +189,8 @@ export const biologicDrugs: BiologicDrug[] = [
     schedule: {
       induction: "0週・4週・16週に75mg皮下注（計3本）",
       maintenance: "以降12週ごとに75mg皮下注（年4回）",
-      selfInjection: true,
-      note: "掌蹠膿疱症は2023年承認。維持投与の12週ごとは3ヶ月ごとと同義。"
+      selfInjection: false,
+      note: "院内投与のみ。自己注射は不可。掌蹠膿疱症は2023年承認。維持投与の12週ごとは3ヶ月ごとと同義。"
     },
     receiptNotes: [
       {
