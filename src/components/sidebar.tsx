@@ -15,6 +15,7 @@ const navSections = [
       { label: "🤰 妊娠・授乳と薬剤", href: "/pregnancy" },
       { label: "⚡ 相互作用チェック", href: "/interactions" },
       { label: "💉 生物学的製剤", href: "/biologics" },
+      { label: "👶 年齢注意薬剤", href: "/age-restrictions" },
     ],
   },
   {
