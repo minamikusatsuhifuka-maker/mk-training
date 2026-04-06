@@ -1,0 +1,102 @@
+import { NextRequest, NextResponse } from "next/server";
+
+export const maxDuration = 60;
+
+export async function POST(req: NextRequest) {
+  const { action, difficulty, category, userAnswer, caseContent } =
+    await req.json();
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey)
+    return NextResponse.json({ error: "No API key" }, { status: 500 });
+
+  let prompt = "";
+
+  if (action === "generate") {
+    const difficultyMap: Record<string, string> = {
+      easy: "新人スタッフ向け・基本的な知識を問う",
+      medium: "中堅スタッフ向け・応用的な判断を問う",
+      hard: "ベテランスタッフ向け・複合的な知識を問う",
+    };
+    const categoryMap: Record<string, string> = {
+      biologics:
+        "生物学的製剤（デュピクセント・スキリージ等）の投与・レセプト・適応確認",
+      age: "年齢注意薬剤（プロトピック・コレクチム等）の処方確認・疑義照会対応",
+      receipt: "保険診療の算定・レセプト摘要欄記載事項",
+      safety: "薬の安全性（妊婦・授乳婦・相互作用・禁忌）",
+      cosmetic: "美容施術のカウンセリング・適応確認",
+    };
+    prompt = `あなたは皮膚科クリニックの研修担当医師です。
+以下の条件で症例問題を1問作成してください。
+
+難易度: ${difficultyMap[difficulty] || difficultyMap.easy}
+カテゴリ: ${categoryMap[category] || categoryMap.biologics}
+
+【症例の形式】
+患者情報（年齢・性別・主訴・現病歴・現在の治療）を具体的に記載し、
+スタッフが考えるべき質問を1〜2問提示してください。
+
+必ずJSON形式のみで回答（マークダウン不可）:
+{
+  "title": "症例タイトル",
+  "patient": "患者情報（年齢・性別・主訴など）",
+  "situation": "状況説明（何を確認・対応すべき場面か）",
+  "question": "スタッフへの質問（何を答えるべきか）",
+  "hint": "ヒント（正解に近づくためのヒント）",
+  "difficulty": "${difficulty}",
+  "category": "${category}"
+}`;
+  } else if (action === "evaluate") {
+    prompt = `あなたは皮膚科クリニックの研修担当医師です。
+以下の症例に対するスタッフの回答を採点・解説してください。
+
+【症例】
+${caseContent}
+
+【スタッフの回答】
+${userAnswer}
+
+必ずJSON形式のみで回答（マークダウン不可）:
+{
+  "score": 85,
+  "grade": "B",
+  "goodPoints": ["良かった点1", "良かった点2"],
+  "missingPoints": ["不足していた点1", "不足していた点2"],
+  "explanation": "正しい知識の解説（添付文書・ガイドライン根拠を含む）",
+  "keyLearning": "この症例の最重要ポイント（1文で）",
+  "relatedInfo": "関連して覚えておくべき情報"
+}`;
+  }
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-5",
+      max_tokens: 1500,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!response.ok)
+    return NextResponse.json(
+      { error: await response.text() },
+      { status: 500 }
+    );
+  const data = await response.json();
+  const text: string = data.content?.[0]?.text || "";
+  const cleaned = text
+    .replace(/```json\s*/g, "")
+    .replace(/```\s*/g, "")
+    .trim();
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!jsonMatch)
+    return NextResponse.json(
+      { error: "Invalid response", raw: text },
+      { status: 500 }
+    );
+  return NextResponse.json(JSON.parse(jsonMatch[0]));
+}

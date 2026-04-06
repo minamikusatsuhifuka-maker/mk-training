@@ -29,6 +29,9 @@ const mobileNavSections = [
   { title: "確認テスト", items: [
     { label: "クイズ", href: "/quiz" },
     { label: "📊 学習進捗", href: "/progress" },
+    { label: "🤖 AIアシスタント", href: "/ai-chat" },
+    { label: "🏥 症例学習", href: "/case-study" },
+    { label: "🎭 ロールプレイ", href: "/roleplay" },
   ]},
 ];
 

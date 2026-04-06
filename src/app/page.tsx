@@ -94,6 +94,40 @@ export default function Home() {
         </div>
       </div>
 
+      {/* AI機能 */}
+      <div>
+        <h2 className="text-lg font-semibold mb-4">AI機能</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Link href="/ai-chat">
+            <Card className="h-full hover:shadow-md transition-shadow cursor-pointer hover:border-teal/40">
+              <CardHeader>
+                <div className="text-2xl mb-1">🤖</div>
+                <CardTitle className="text-base">AIアシスタント</CardTitle>
+                <CardDescription className="text-xs">薬・レセプト・施術について何でも質問</CardDescription>
+              </CardHeader>
+            </Card>
+          </Link>
+          <Link href="/case-study">
+            <Card className="h-full hover:shadow-md transition-shadow cursor-pointer hover:border-teal/40">
+              <CardHeader>
+                <div className="text-2xl mb-1">🏥</div>
+                <CardTitle className="text-base">症例ベース学習</CardTitle>
+                <CardDescription className="text-xs">AIが症例を提示 → 回答 → 採点</CardDescription>
+              </CardHeader>
+            </Card>
+          </Link>
+          <Link href="/roleplay">
+            <Card className="h-full hover:shadow-md transition-shadow cursor-pointer hover:border-teal/40">
+              <CardHeader>
+                <div className="text-2xl mb-1">🎭</div>
+                <CardTitle className="text-base">ロールプレイ</CardTitle>
+                <CardDescription className="text-xs">AIが患者役 → カウンセリング練習</CardDescription>
+              </CardHeader>
+            </Card>
+          </Link>
+        </div>
+      </div>
+
       {/* Quiz CTA */}
       <Link href="/quiz">
         <Card className="mt-2 border-teal/30 bg-teal-light hover:shadow-md transition-shadow cursor-pointer">
