@@ -24,6 +24,7 @@ const modules = [
   { title: "算定・点数表", description: "保険診療の算定項目と点数", href: "/medical-fees", emoji: "💴" },
   { title: "生物学的製剤", description: "投与スケジュール・レセプト記載事項", href: "/biologics", emoji: "💉" },
   { title: "年齢注意薬剤", description: "疑義照会・レセプト審査で問題になる年齢制限薬一覧", href: "/age-restrictions", emoji: "👶" },
+  { title: "エキスパートの働き方", description: "ロール別の要件・スキル・マインドセット", href: "/expert", emoji: "⭐" },
 ];
 
 export default function Home() {

@@ -37,6 +37,7 @@ const navSections = [
     items: [
       { label: "📋 業務チェックリスト", href: "/operations" },
       { label: "💴 算定・点数表", href: "/medical-fees" },
+      { label: "⭐ エキスパートの働き方", href: "/expert" },
     ],
   },
   {

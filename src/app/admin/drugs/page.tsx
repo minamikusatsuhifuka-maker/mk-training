@@ -4,7 +4,8 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { drugs as initialDrugs, drugCategories, type Drug, type DrugCategory } from "@/data/drugs";
 import { getContent, saveContent, CONTENT_KEYS } from "@/lib/content-store";
 import { AdminBanner } from "@/components/AdminBanner";
-import { AIGeneratePanel, type GeneratedResult } from "@/components/admin/AIGeneratePanel";
+import { type GeneratedResult } from "@/components/admin/AIGeneratePanel";
+import { DrugCandidatePanel } from "@/components/admin/DrugCandidatePanel";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -218,9 +219,14 @@ export default function AdminDrugsPage() {
         </div>
       </div>
 
-      <AIGeneratePanel
-        type="drug"
-        placeholderExamples={["ネイリン", "デュピクセント", "ラミシール", "オルミエント", "タリクスタ"]}
+      <DrugCandidatePanel
+        placeholderExamples={[
+          "アレルギー性結膜炎の点眼薬",
+          "ニキビ治療の外用抗菌薬",
+          "アトピーの生物学的製剤",
+          "爪白癬の外用液",
+          "帯状疱疹の内服薬",
+        ]}
         onGenerated={(results: GeneratedResult[]) => {
           const newDrugs: Drug[] = results
             .filter((r) => r.data)
