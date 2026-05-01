@@ -205,6 +205,57 @@ const sevenHabits = [
   "刃を研ぐ：身体・精神・知性・社会を磨き続ける",
 ];
 
+const successPrinciples = [
+  {
+    number: "一",
+    title: "明確なビジョン（願望）と目標設定",
+    detail: "具体性があり、肯定的である",
+    icon: "🎯",
+  },
+  {
+    number: "二",
+    title: "コミットメント（本気）",
+    detail: "必要なことは何でもする",
+    icon: "🔥",
+  },
+  {
+    number: "三",
+    title: "冒険",
+    detail: "安全圏から行動を起こす。観念から自由になる",
+    icon: "🚀",
+  },
+  {
+    number: "四",
+    title: "パートナーシップ",
+    detail: "人に援助、貢献から関わる（パワーパートナーの原則）",
+    icon: "🤝",
+  },
+  {
+    number: "五",
+    title: "正直",
+    detail: "素直に見、伝える。自分に、そして他の人に誠実に向き合う",
+    icon: "💎",
+  },
+  {
+    number: "六",
+    title: "シェアする",
+    detail: "分かち合う、共有する、表現する",
+    icon: "🌸",
+  },
+  {
+    number: "七",
+    title: "責任（自分が源）",
+    detail: "「自分が創り出している」という意識で行動する",
+    icon: "⚡",
+  },
+  {
+    number: "八",
+    title: "凡事徹底",
+    detail: "当たり前のことを、特別熱心に、しかも徹底的に行なう",
+    icon: "🏆",
+  },
+];
+
 export default function PhilosophyPage() {
   return (
     <div className="max-w-5xl mx-auto space-y-8 md:space-y-10 pb-12">
@@ -520,6 +571,48 @@ export default function PhilosophyPage() {
             ))}
           </ol>
         </Card>
+      </section>
+
+      {/* 9-2. 成功の八原則（アチーブメント） */}
+      <section>
+        <div className="bg-gradient-to-br from-teal-50/50 to-white border border-teal-100 rounded-2xl p-6 md:p-8">
+          <div className="mb-6">
+            <h2 className="text-xl font-medium text-gray-900">成功の八原則</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              © Achievement Corp. — スタッフ全員が体現すべき原則
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+            {successPrinciples.map((p) => (
+              <div
+                key={p.number}
+                className="bg-white border border-gray-100 rounded-xl p-4 flex gap-4 items-start"
+              >
+                <div className="shrink-0 w-10 h-10 rounded-full bg-teal-50 border border-teal-100 flex items-center justify-center">
+                  <span className="text-sm font-medium text-teal-700">
+                    {p.number}
+                  </span>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{p.icon}</span>
+                    <p className="font-medium text-gray-900 text-sm">
+                      {p.title}
+                    </p>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                    {p.detail}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-xs text-gray-400 mt-4 text-right">
+            © Copyright 2013 Achievement Corp., All rights reserved.
+          </p>
+        </div>
       </section>
 
       {/* 10. フッター */}
