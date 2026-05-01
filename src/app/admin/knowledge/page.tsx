@@ -296,6 +296,35 @@ export default function AdminKnowledgePage() {
     [docs],
   );
 
+  // 登録済みdocs内の重複グループを検知
+  const findDuplicates = useCallback((targetDocs: KnowledgeDoc[]) => {
+    const duplicateGroups: KnowledgeDoc[][] = [];
+    const checked = new Set<string>();
+
+    targetDocs.forEach((doc, i) => {
+      if (checked.has(doc.id)) return;
+
+      const matches = targetDocs.filter((other, j) => {
+        if (i === j) return false;
+        // タイトル一致 または ファイル名一致（両方が存在するとき）
+        const titleMatch = doc.title.trim() === other.title.trim();
+        const fileMatch =
+          !!doc.fileName &&
+          !!other.fileName &&
+          doc.fileName === other.fileName;
+        return titleMatch || fileMatch;
+      });
+
+      if (matches.length > 0) {
+        const group = [doc, ...matches];
+        group.forEach((d) => checked.add(d.id));
+        duplicateGroups.push(group);
+      }
+    });
+
+    return duplicateGroups;
+  }, []);
+
   // 一括保存
   const handleBatchSave = async () => {
     const readyFiles = batchFiles.filter((f) => f.status === "ready");
@@ -496,6 +525,46 @@ export default function AdminKnowledgePage() {
     () => activeDocs.reduce((sum, d) => sum + (d.charCount ?? d.content.length), 0),
     [activeDocs],
   );
+
+  // 登録済みdocs内の重複グループ
+  const duplicateGroups = useMemo(
+    () => findDuplicates(docs),
+    [docs, findDuplicates],
+  );
+
+  // 各グループの最新1件を残し、それ以外（古い方）を一括削除
+  const handleDeleteAllDuplicates = async () => {
+    const count = duplicateGroups.reduce((sum, g) => sum + g.length - 1, 0);
+    if (count === 0) return;
+    if (
+      !confirm(
+        `重複している${count}件を削除しますか？（各グループの最新1件を残します）`,
+      )
+    ) {
+      return;
+    }
+
+    const idsToDelete = new Set<string>();
+    duplicateGroups.forEach((group) => {
+      // createdAt が新しい順に並べ替えて、先頭（最新）を残す
+      const sorted = [...group].sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+      sorted.slice(1).forEach((d) => idsToDelete.add(d.id));
+    });
+
+    const newDocs = docs.filter((d) => !idsToDelete.has(d.id));
+    try {
+      await saveDocs(newDocs);
+      setSuccess(`✅ ${idsToDelete.size}件の重複を削除しました`);
+    } catch (e) {
+      setError(
+        "重複削除に失敗しました: " +
+          (e instanceof Error ? e.message : "不明なエラー"),
+      );
+    }
+  };
 
   return (
     <div className="max-w-4xl mx-auto p-4 space-y-6">
@@ -865,6 +934,88 @@ export default function AdminKnowledgePage() {
       {/* 登録済み一覧 */}
       <div className="space-y-3">
         <h2 className="font-semibold text-gray-800">登録済み資料 ({docs.length}件)</h2>
+
+        {/* 重複検知バナー */}
+        {duplicateGroups.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-amber-700 font-medium text-sm">
+                  ⚠️ 重複が {duplicateGroups.length}グループ 見つかりました
+                </span>
+                <span className="text-xs text-amber-600">
+                  ({duplicateGroups.reduce((sum, g) => sum + g.length - 1, 0)}件が重複)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleDeleteAllDuplicates}
+                className="text-xs px-3 py-1.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+              >
+                🗑️ 重複を一括削除（古い方を削除）
+              </button>
+            </div>
+
+            {/* 重複グループ一覧 */}
+            <div className="space-y-2">
+              {duplicateGroups.map((group, gi) => {
+                // createdAt が新しい順に並べ替え（最新を残す）
+                const sortedGroup = [...group].sort(
+                  (a, b) =>
+                    new Date(b.createdAt).getTime() -
+                    new Date(a.createdAt).getTime(),
+                );
+                return (
+                  <div
+                    key={gi}
+                    className="bg-white border border-amber-100 rounded-lg p-3"
+                  >
+                    <p className="text-xs font-medium text-amber-800 mb-2">
+                      グループ {gi + 1}: 「{sortedGroup[0].title}」(
+                      {sortedGroup.length}件)
+                    </p>
+                    <div className="space-y-1">
+                      {sortedGroup.map((doc, di) => (
+                        <div
+                          key={doc.id}
+                          className="flex items-center justify-between text-xs gap-2 flex-wrap"
+                        >
+                          <div className="flex items-center gap-2 flex-wrap min-w-0">
+                            {di === 0 ? (
+                              <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs shrink-0">
+                                残す
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-xs shrink-0">
+                                削除対象
+                              </span>
+                            )}
+                            <span className="text-gray-600 truncate">
+                              {doc.title}
+                            </span>
+                            <span className="text-gray-400 shrink-0">
+                              {(doc.charCount ?? doc.content.length).toLocaleString()}文字
+                            </span>
+                            <span className="text-gray-400 shrink-0">
+                              {doc.createdAt.slice(0, 10)}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(doc.id)}
+                            className="text-red-500 hover:text-red-700 px-2 py-0.5 border border-red-200 rounded hover:bg-red-50 shrink-0"
+                          >
+                            削除
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* 理念（常時有効） */}
         <details className="bg-amber-50 border border-amber-200 rounded-xl p-4 group">
