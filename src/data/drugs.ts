@@ -41,6 +41,8 @@ export type Drug = {
   category: DrugCategory
   indication: string
   usage?: string
+  caution?: string
+  contraindications?: string
 }
 
 export const drugCategories: DrugCategory[] = [

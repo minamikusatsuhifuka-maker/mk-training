@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { diseases as initialData, type Disease } from "@/data/diseases";
-import { getContent, CONTENT_KEYS } from "@/lib/content-store";
+import { getContent, saveContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -36,9 +36,18 @@ type SortOption = "priority" | "category" | "name";
 type ViewMode = "list" | "card";
 
 // 疾患の詳細展開コンポーネント
-function DiseaseDetail({ d }: { d: Disease }) {
+function DiseaseDetail({ d, onEdit }: { d: Disease; onEdit: () => void }) {
   return (
     <div className="space-y-4">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="text-xs px-2 py-1 border rounded hover:bg-gray-50 text-gray-500"
+        >
+          ✏️ 編集
+        </button>
+      </div>
       <section>
         <h3 className="text-sm font-semibold mb-1">疾患概要</h3>
         <p className="text-sm text-muted-foreground">{d.description}</p>
@@ -86,6 +95,9 @@ export default function DiseasesPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [sortOption, setSortOption] = useState<SortOption>("priority");
   const [categoryFilter, setCategoryFilter] = useState<Category>("すべて");
+  const [editForm, setEditForm] = useState<Disease | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
   useEffect(() => {
     getContent<Disease>(CONTENT_KEYS.diseases, initialData).then(setItems).catch(() => {});
@@ -100,12 +112,30 @@ export default function DiseasesPage() {
     });
   };
 
+  const startEdit = (d: Disease) => {
+    setEditForm({ ...d, keyPoints: [...d.keyPoints], relatedTreatments: [...d.relatedTreatments] });
+  };
+
+  const cancelEdit = () => {
+    setEditForm(null);
+  };
+
+  const handleSave = async () => {
+    if (!editForm) return;
+    setSaving(true);
+    const newItems = items.map((it) => (it.id === editForm.id ? editForm : it));
+    setItems(newItems);
+    const ok = await saveContent(CONTENT_KEYS.diseases, newItems);
+    setSaveMsg(ok ? "保存しました（全スタッフに反映されます）" : "ローカルに保存しました（Supabase接続エラー）");
+    setTimeout(() => setSaveMsg(null), 3000);
+    setSaving(false);
+    setEditForm(null);
+  };
+
   // フィルター・検索
   const filtered = useMemo(() => {
     return items.filter((d) => {
-      // カテゴリフィルター
       if (categoryFilter !== "すべて" && d.badge !== categoryFilter) return false;
-      // 検索
       if (!search) return true;
       const q = search.toLowerCase();
       return (
@@ -147,7 +177,7 @@ export default function DiseasesPage() {
     return counts;
   }, [items]);
 
-  // グループ化（優先度順 or カテゴリ順の場合）
+  // グループ化
   const groups = useMemo(() => {
     if (sortOption === "priority") {
       const map = new Map<number, Disease[]>();
@@ -174,7 +204,6 @@ export default function DiseasesPage() {
         diseases,
       }));
     }
-    // 五十音順はグループ化なし
     return [{ key: "all", label: "", diseases: sorted }];
   }, [sorted, sortOption]);
 
@@ -189,6 +218,12 @@ export default function DiseasesPage() {
         />
         <a href="/print/diseases" target="_blank" className="shrink-0 rounded-md border px-3 py-1.5 text-xs hover:bg-accent transition-colors">印刷用</a>
       </div>
+
+      {saveMsg && (
+        <div className={`rounded-md px-4 py-2 text-sm ${saveMsg.startsWith("保存しました") ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
+          {saveMsg}
+        </div>
+      )}
 
       {/* サマリー統計 */}
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground border rounded-md px-3 py-2 bg-muted/30">
@@ -205,7 +240,6 @@ export default function DiseasesPage() {
 
       {/* コントロールバー */}
       <div className="flex flex-col sm:flex-row gap-3">
-        {/* 検索 */}
         <input
           type="text"
           placeholder="疾患名・英語名・症状・原因で検索..."
@@ -213,7 +247,6 @@ export default function DiseasesPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="flex-1 rounded-md border border-border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-teal/40 placeholder:text-muted-foreground"
         />
-        {/* 並び替え */}
         <select
           value={sortOption}
           onChange={(e) => setSortOption(e.target.value as SortOption)}
@@ -223,7 +256,6 @@ export default function DiseasesPage() {
           <option value="category">カテゴリ順</option>
           <option value="name">五十音順</option>
         </select>
-        {/* 表示モード切替 */}
         <div className="flex rounded-md border border-border overflow-hidden shrink-0">
           <button
             type="button"
@@ -260,19 +292,17 @@ export default function DiseasesPage() {
         ))}
       </div>
 
-      {/* 検索結果カウント */}
       {search && (
         <p className="text-sm text-muted-foreground">
           {filtered.length} 件の疾患が見つかりました
         </p>
       )}
 
-      {/* ===== リスト表示 ===== */}
+      {/* リスト表示 */}
       {viewMode === "list" && (
         <div className="space-y-4">
           {groups.map((group) => (
             <div key={group.key}>
-              {/* グループヘッダー */}
               {group.label && (
                 <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-3 py-2 mb-1">
                   <h2 className="text-sm font-bold text-foreground">{group.label}</h2>
@@ -301,6 +331,7 @@ export default function DiseasesPage() {
                           isExpanded={isExpanded}
                           pConfig={pConfig}
                           onToggle={() => toggleExpand(d.id)}
+                          onEdit={() => startEdit(d)}
                         />
                       );
                     })}
@@ -312,7 +343,7 @@ export default function DiseasesPage() {
         </div>
       )}
 
-      {/* ===== カード表示 ===== */}
+      {/* カード表示 */}
       {viewMode === "card" && (
         <div className="space-y-4">
           {groups.map((group) => (
@@ -363,7 +394,7 @@ export default function DiseasesPage() {
                       {isOpen && (
                         <div className="px-6 pb-5 space-y-4">
                           <Separator />
-                          <DiseaseDetail d={d} />
+                          <DiseaseDetail d={d} onEdit={() => startEdit(d)} />
                         </div>
                       )}
                     </Card>
@@ -378,6 +409,130 @@ export default function DiseasesPage() {
       {filtered.length === 0 && (
         <p className="text-center text-muted-foreground py-12">該当する疾患が見つかりません</p>
       )}
+
+      {/* 編集モーダル */}
+      {editForm && (
+        <div
+          className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+          onClick={cancelEdit}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto border-2 border-teal-400"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 bg-teal-50 border-b border-teal-200 sticky top-0">
+              <h2 className="text-base font-bold text-teal-800">疾患を編集</h2>
+            </div>
+            <div className="p-5 grid gap-3">
+              <div>
+                <label className="text-xs font-medium text-gray-600">疾患名</label>
+                <input
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  className="w-full border rounded px-2 py-1 text-sm mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">英語名</label>
+                <input
+                  value={editForm.nameEn}
+                  onChange={(e) => setEditForm({ ...editForm, nameEn: e.target.value })}
+                  className="w-full border rounded px-2 py-1 text-sm mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">カテゴリ</label>
+                <input
+                  value={editForm.badge}
+                  onChange={(e) => setEditForm({ ...editForm, badge: e.target.value })}
+                  className="w-full border rounded px-2 py-1 text-sm mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">疾患概要</label>
+                <textarea
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  rows={3}
+                  className="w-full border rounded px-2 py-1 text-sm mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">原因・誘因</label>
+                <textarea
+                  value={editForm.cause}
+                  onChange={(e) => setEditForm({ ...editForm, cause: e.target.value })}
+                  rows={3}
+                  className="w-full border rounded px-2 py-1 text-sm mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">主な治療法</label>
+                <textarea
+                  value={editForm.treatment}
+                  onChange={(e) => setEditForm({ ...editForm, treatment: e.target.value })}
+                  rows={3}
+                  className="w-full border rounded px-2 py-1 text-sm mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">患者さんへの説明例</label>
+                <textarea
+                  value={editForm.patientExplanation}
+                  onChange={(e) => setEditForm({ ...editForm, patientExplanation: e.target.value })}
+                  rows={3}
+                  className="w-full border rounded px-2 py-1 text-sm mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">スタッフが覚えるべきポイント（1行に1項目）</label>
+                <textarea
+                  value={editForm.keyPoints.join("\n")}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      keyPoints: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean),
+                    })
+                  }
+                  rows={5}
+                  className="w-full border rounded px-2 py-1 text-sm mt-1 font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">当院での関連施術・検査（1行に1項目）</label>
+                <textarea
+                  value={editForm.relatedTreatments.join("\n")}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      relatedTreatments: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean),
+                    })
+                  }
+                  rows={4}
+                  className="w-full border rounded px-2 py-1 text-sm mt-1 font-mono"
+                />
+              </div>
+            </div>
+            <div className="p-4 border-t flex gap-2 justify-end bg-gray-50 sticky bottom-0">
+              <button
+                type="button"
+                onClick={cancelEdit}
+                className="px-3 py-1.5 border text-sm rounded hover:bg-gray-100"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="px-3 py-1.5 bg-teal-600 text-white text-sm rounded hover:bg-teal-700 disabled:opacity-50"
+              >
+                💾 保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -388,11 +543,13 @@ function ListRow({
   isExpanded,
   pConfig,
   onToggle,
+  onEdit,
 }: {
   d: Disease;
   isExpanded: boolean;
   pConfig: { label: string; color: string };
   onToggle: () => void;
+  onEdit: () => void;
 }) {
   return (
     <>
@@ -426,7 +583,7 @@ function ListRow({
       {isExpanded && (
         <tr>
           <td colSpan={6} className="px-4 py-4 bg-muted/30 border-b last:border-b-0">
-            <DiseaseDetail d={d} />
+            <DiseaseDetail d={d} onEdit={onEdit} />
           </td>
         </tr>
       )}
