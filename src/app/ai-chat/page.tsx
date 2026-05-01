@@ -11,8 +11,10 @@ interface Message {
 }
 
 const quickQuestions = [
-  "当院の理念を教えてください",
-  "楠葉院長の想いについて教えてください",
+  "当院のミッションと四方よしを教えてください",
+  "リードマネジメントとはどういう考え方ですか？",
+  "7つの実について教えてください",
+  "ティール組織とはどんな組織ですか？",
   "プロトピックを2歳の子に使えますか？",
   "デュピクセントのレセプト摘要欄は何を書く？",
   "妊婦にステロイド外用は使える？",
@@ -138,8 +140,8 @@ export default function AiChatPage() {
         {/* 入力欄 */}
         <div className="border-t p-3 space-y-2">
           <div className="text-xs text-teal flex items-center gap-1">
-            <span>🏛️</span>
-            <span>クリニックの理念・教えを参照中</span>
+            <span>🌱</span>
+            <span>クリニックの理念・哲学（LUMINA）を参照中</span>
           </div>
           <div className="flex gap-2">
           <Textarea

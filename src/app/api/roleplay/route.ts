@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildFullKnowledgeContext } from "@/lib/knowledge-server";
+import { AI_JUDGMENT_AXES } from "@/lib/clinic-philosophy";
 
 export const maxDuration = 60;
 
@@ -139,6 +140,10 @@ ${staffResponses.map((r: string, i: number) => `${i + 1}. ${r}`).join("\n")}
 - 凡事徹底（あいさつ・感謝・丁寧な言葉遣い）
 - 倫理観をもった誠実な対応ができていたか
 - クリニックの理念・行動指針に沿った対応であったか
+
+フィードバックは外的コントロール（批判・命令）ではなくリードマネジメント（承認・問いかけ・共感）で行ってください。
+スタッフの可能性・成長を引き出す言葉を使ってください。
+${AI_JUDGMENT_AXES}
 
 必ずJSON形式のみで回答:
 {

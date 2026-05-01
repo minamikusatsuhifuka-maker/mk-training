@@ -119,7 +119,7 @@ export default function AdminKnowledgePage() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Supabaseから読み込み
+  // Supabaseから読み込み（初回は LUMINA 哲学を初期データとして投入）
   const loadDocs = useCallback(async () => {
     setLoading(true);
     try {
@@ -129,7 +129,43 @@ export default function AdminKnowledgePage() {
         .eq("id", KNOWLEDGE_DOCS_KEY)
         .single();
       const raw = (data?.data as { docs?: KnowledgeDoc[] } | undefined) || {};
-      setDocs(raw.docs || []);
+      const loaded = raw.docs || [];
+
+      // 初回のみ LUMINA 哲学ドキュメントを初期データとしてSupabaseに保存
+      if (loaded.length === 0) {
+        const initialDoc: KnowledgeDoc = {
+          id: "lumina-philosophy-001",
+          title: "LUMINA クリニック理念・哲学・判断軸",
+          category: "philosophy",
+          content: CLINIC_PHILOSOPHY,
+          fileType: "markdown",
+          fileName: "LUMINA_背景情報_移植用.md",
+          charCount: CLINIC_PHILOSOPHY.length,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        try {
+          const { error: upsertErr } = await supabase
+            .from("content_store")
+            .upsert({
+              id: KNOWLEDGE_DOCS_KEY,
+              content_type: "knowledge_docs",
+              data: { docs: [initialDoc] } as unknown as Record<
+                string,
+                unknown
+              >,
+              updated_at: new Date().toISOString(),
+            });
+          if (!upsertErr) {
+            setDocs([initialDoc]);
+            return;
+          }
+        } catch {
+          // 保存失敗時は空のまま継続
+        }
+      }
+      setDocs(loaded);
     } catch {
       setDocs([]);
     } finally {

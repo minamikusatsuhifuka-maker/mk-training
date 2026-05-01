@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildFullKnowledgeContext } from "@/lib/knowledge-server";
+import { AI_JUDGMENT_AXES } from "@/lib/clinic-philosophy";
 
 export const maxDuration = 60;
 
@@ -64,6 +65,12 @@ ${userAnswer}
 - 患者への寄り添い・共感の姿勢（南草津皮フ科の理念に基づく）
 - スタッフ行動指針（素直・傾聴・共感、誠実な対応）に沿っているか
 - 添付文書・ガイドラインに準拠しているか
+
+評価の際は以下の観点も含めてください:
+- リードマネジメントの精神（外的コントロールではなく内発的動機）
+- 患者への寄り添い・四方よしの精神
+- 7つの実（特に誠実・充実・実行）
+${AI_JUDGMENT_AXES}
 
 必ずJSON形式のみで回答（マークダウン不可）:
 {
