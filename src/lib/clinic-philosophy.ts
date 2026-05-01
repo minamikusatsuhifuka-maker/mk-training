@@ -67,13 +67,17 @@ ${CLINIC_PHILOSOPHY}
 }
 
 // 追加ドキュメントの型定義
+// 新旧カテゴリを共存（既存データの互換性維持）
 export type KnowledgeDocCategory =
+  | "philosophy"
+  | "manual"
   | "rule"
   | "drug_detail"
   | "receipt"
+  | "counseling"
   | "counseling_detail"
+  | "education"
   | "faq"
-  | "philosophy"
   | "other";
 
 export type KnowledgeDoc = {
@@ -83,26 +87,37 @@ export type KnowledgeDoc = {
   content: string;
   isActive: boolean;
   createdAt: string;
+  // 追加メタデータ（ファイルアップロード対応）
+  updatedAt?: string;
+  fileName?: string;
+  fileType?: string;
+  charCount?: number;
 };
 
 export const KNOWLEDGE_CATEGORY_LABELS: Record<KnowledgeDocCategory, string> = {
+  philosophy: "🏛️ 理念・教え",
+  manual: "📋 院内マニュアル",
   rule: "📋 院内ルール・マニュアル",
-  drug_detail: "💊 薬剤詳細情報",
-  receipt: "💴 レセプト・算定ルール",
+  drug_detail: "💊 薬剤・治療情報",
+  receipt: "💴 レセプト・算定",
+  counseling: "💬 カウンセリング",
   counseling_detail: "💬 カウンセリング詳細",
+  education: "📚 あり方教育",
   faq: "❓ よくある質問",
-  philosophy: "🏛️ 理念・教え（追加）",
   other: "📄 その他",
 };
 
 export const KNOWLEDGE_CATEGORY_COLORS: Record<KnowledgeDocCategory, string> = {
+  philosophy: "bg-amber-50 text-amber-800 border-amber-200",
+  manual: "bg-blue-50 text-blue-800 border-blue-200",
   rule: "bg-blue-100 text-blue-800 border-blue-300",
-  drug_detail: "bg-pink-100 text-pink-800 border-pink-300",
-  receipt: "bg-amber-100 text-amber-800 border-amber-300",
+  drug_detail: "bg-teal-50 text-teal-800 border-teal-200",
+  receipt: "bg-purple-50 text-purple-800 border-purple-200",
+  counseling: "bg-orange-50 text-orange-800 border-orange-200",
   counseling_detail: "bg-violet-100 text-violet-800 border-violet-300",
-  faq: "bg-slate-100 text-slate-800 border-slate-300",
-  philosophy: "bg-emerald-100 text-emerald-800 border-emerald-300",
-  other: "bg-gray-100 text-gray-800 border-gray-300",
+  education: "bg-rose-50 text-rose-800 border-rose-200",
+  faq: "bg-green-50 text-green-800 border-green-200",
+  other: "bg-gray-50 text-gray-700 border-gray-200",
 };
 
 // Supabase content_store 上のキー

@@ -117,7 +117,7 @@ export default function Home() {
       {/* AI機能 */}
       <div>
         <h2 className="text-lg font-semibold mb-4">AI機能</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           <Link href="/ai-chat">
             <Card className="h-full hover:shadow-md transition-shadow cursor-pointer hover:border-teal/40">
               <CardHeader>
@@ -142,6 +142,15 @@ export default function Home() {
                 <div className="text-2xl mb-1">🎭</div>
                 <CardTitle className="text-base">ロールプレイ</CardTitle>
                 <CardDescription className="text-xs">AIが患者役 → カウンセリング練習</CardDescription>
+              </CardHeader>
+            </Card>
+          </Link>
+          <Link href="/quiz-generator">
+            <Card className="h-full hover:shadow-md transition-shadow cursor-pointer hover:border-teal/40">
+              <CardHeader>
+                <div className="text-2xl mb-1">📝</div>
+                <CardTitle className="text-base">クイズ自動生成</CardTitle>
+                <CardDescription className="text-xs">資料からAIが4択問題を自動作成</CardDescription>
               </CardHeader>
             </Card>
           </Link>
