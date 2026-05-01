@@ -23,6 +23,22 @@ const PRIMARY_CATEGORIES: KnowledgeDocCategory[] = [
   "other",
 ];
 
+// 一括アップロード用のファイル単位の状態
+type BatchFileItem = {
+  id: string;
+  fileName: string;
+  title: string;
+  category: KnowledgeDocCategory;
+  content: string;
+  fileType: string;
+  charCount: number;
+  status: "ready" | "saving" | "done" | "error";
+  error?: string;
+};
+
+// 1度にアップロードできる最大ファイル数
+const MAX_BATCH_FILES = 20;
+
 // ファイルからテキストを抽出
 async function extractTextFromFile(file: File): Promise<string> {
   const ext = file.name.split(".").pop()?.toLowerCase() || "";
@@ -119,6 +135,11 @@ export default function AdminKnowledgePage() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 一括アップロード状態
+  const [batchFiles, setBatchFiles] = useState<BatchFileItem[]>([]);
+  const [batchProgress, setBatchProgress] = useState("");
+  const [batchSaving, setBatchSaving] = useState(false);
+
   // Supabaseから読み込み（初回は LUMINA 哲学を初期データとして投入）
   const loadDocs = useCallback(async () => {
     setLoading(true);
@@ -196,40 +217,154 @@ export default function AdminKnowledgePage() {
     setDocs(newDocs);
   };
 
-  // ファイル処理
-  const handleFile = useCallback(
-    async (file: File) => {
-      setExtracting(true);
-      setError("");
-      setSuccess("");
+  // ファイル処理（複数ファイルを一括でテキスト抽出してバッチに積む）
+  const handleFiles = useCallback(async (files: File[]) => {
+    if (files.length === 0) return;
+    if (files.length > MAX_BATCH_FILES) {
+      setError(`一度にアップロードできるのは${MAX_BATCH_FILES}ファイルまでです`);
+      return;
+    }
+
+    setExtracting(true);
+    setError("");
+    setSuccess("");
+    setBatchFiles([]);
+
+    const results: BatchFileItem[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setBatchProgress(`${i + 1}/${files.length} 処理中: ${file.name}`);
+
+      const ext = file.name.split(".").pop()?.toLowerCase() || "text";
       try {
         const text = await extractTextFromFile(file);
-        setContent(text);
-        setFileName(file.name);
-        const ext = file.name.split(".").pop()?.toLowerCase() || "text";
-        setFileType(ext);
-        if (!title) setTitle(file.name.replace(/\.[^.]+$/, ""));
-        setSuccess(
-          `✅ ${file.name} からテキストを抽出しました（${text.length.toLocaleString()}文字）`,
-        );
+        results.push({
+          id: `batch-${Date.now()}-${i}`,
+          fileName: file.name,
+          title: file.name.replace(/\.[^.]+$/, ""),
+          category: "other",
+          content: text,
+          fileType: ext,
+          charCount: text.length,
+          status: "ready",
+        });
       } catch (e) {
-        setError(e instanceof Error ? e.message : "不明なエラー");
-      } finally {
-        setExtracting(false);
+        results.push({
+          id: `batch-${Date.now()}-${i}`,
+          fileName: file.name,
+          title: file.name.replace(/\.[^.]+$/, ""),
+          category: "other",
+          content: "",
+          fileType: ext,
+          charCount: 0,
+          status: "error",
+          error: e instanceof Error ? e.message : "不明なエラー",
+        });
       }
-    },
-    [title],
-  );
+    }
+
+    setBatchFiles(results);
+    setExtracting(false);
+    setBatchProgress("");
+    const okCount = results.filter((r) => r.status === "ready").length;
+    if (okCount > 0) {
+      setSuccess(
+        `✅ ${okCount}件のファイルを読み込みました。タイトル・カテゴリを確認して一括保存してください`,
+      );
+    }
+  }, []);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragging(false);
-      const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length > 0) handleFiles(files);
     },
-    [handleFile],
+    [handleFiles],
   );
+
+  // 一括保存
+  const handleBatchSave = async () => {
+    const readyFiles = batchFiles.filter((f) => f.status === "ready");
+    if (readyFiles.length === 0) return;
+
+    setBatchSaving(true);
+    setError("");
+    setSuccess("");
+
+    // 既存docsに追加していく
+    const newDocs: KnowledgeDoc[] = [...docs];
+    let savedCount = 0;
+
+    for (let i = 0; i < readyFiles.length; i++) {
+      const file = readyFiles[i];
+
+      setBatchFiles((prev) =>
+        prev.map((f) => (f.id === file.id ? { ...f, status: "saving" } : f)),
+      );
+
+      try {
+        const newDoc: KnowledgeDoc = {
+          id:
+            Date.now().toString(36) +
+            "-" +
+            Math.random().toString(36).slice(2, 8) +
+            "-" +
+            i,
+          title: file.title.trim() || file.fileName,
+          category: file.category,
+          content: file.content,
+          fileType: file.fileType || undefined,
+          fileName: file.fileName,
+          charCount: file.charCount,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        newDocs.push(newDoc);
+        savedCount++;
+
+        setBatchFiles((prev) =>
+          prev.map((f) => (f.id === file.id ? { ...f, status: "done" } : f)),
+        );
+      } catch (e) {
+        setBatchFiles((prev) =>
+          prev.map((f) =>
+            f.id === file.id
+              ? {
+                  ...f,
+                  status: "error",
+                  error: e instanceof Error ? e.message : "不明なエラー",
+                }
+              : f,
+          ),
+        );
+      }
+    }
+
+    // まとめてSupabaseに保存
+    try {
+      await saveDocs(newDocs);
+      setSuccess(`✅ ${savedCount}件の資料を一括保存しました`);
+    } catch (e) {
+      setError(
+        "一括保存に失敗しました: " +
+          (e instanceof Error ? e.message : "不明なエラー"),
+      );
+      // 失敗時はステータスをerrorに戻す
+      setBatchFiles((prev) =>
+        prev.map((f) =>
+          f.status === "done"
+            ? { ...f, status: "error", error: "Supabase保存に失敗" }
+            : f,
+        ),
+      );
+    } finally {
+      setBatchSaving(false);
+    }
+  };
 
   // 保存
   const handleSave = async () => {
@@ -437,10 +572,13 @@ export default function AdminKnowledgePage() {
               ref={fileInputRef}
               type="file"
               accept=".txt,.md,.csv,.docx,.pdf,.jpg,.jpeg,.png,.webp,.gif"
+              multiple
               className="hidden"
               onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleFile(f);
+                const files = Array.from(e.target.files || []);
+                if (files.length > 0) handleFiles(files);
+                // 同じファイル群を再選択できるように value をリセット
+                e.target.value = "";
               }}
             />
             {extracting ? (
@@ -451,13 +589,190 @@ export default function AdminKnowledgePage() {
             ) : (
               <div className="text-gray-500">
                 <p className="text-3xl mb-2">📂</p>
-                <p className="font-medium">ファイルをドラッグ&ドロップ</p>
-                <p className="text-sm mt-1">または クリックして選択</p>
+                <p className="font-medium">
+                  ファイルをドラッグ&ドロップ（最大{MAX_BATCH_FILES}件）
+                </p>
+                <p className="text-sm mt-1">または クリックして選択（複数選択可）</p>
                 <p className="text-xs mt-3 text-gray-400">
-                  対応形式: PDF・Word(.docx)・テキスト(.txt/.md/.csv)・画像(.jpg/.png/.webp/.gif)
+                  対応形式: PDF・Word(.docx)・テキスト(.txt/.md)・画像(.jpg/.png/.webp)
                 </p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* 進行状況表示 */}
+        {batchProgress && (
+          <div className="mt-2 text-sm text-teal-600 flex items-center gap-2">
+            <span className="animate-spin">⏳</span>
+            <span>{batchProgress}</span>
+          </div>
+        )}
+
+        {/* バッチファイルリスト */}
+        {inputMode === "file" && batchFiles.length > 0 && (
+          <div className="space-y-3 mt-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h3 className="text-sm font-medium text-gray-700">
+                📂 {batchFiles.length}件のファイルを読み込みました
+              </h3>
+              <div className="flex gap-2 flex-wrap">
+                {/* 全カテゴリ一括設定 */}
+                <select
+                  onChange={(e) => {
+                    const cat = e.target.value as KnowledgeDocCategory | "";
+                    if (cat) {
+                      setBatchFiles((prev) =>
+                        prev.map((f) => ({ ...f, category: cat })),
+                      );
+                    }
+                    e.target.value = "";
+                  }}
+                  className="text-xs border rounded px-2 py-1 bg-white"
+                  defaultValue=""
+                  disabled={batchSaving}
+                >
+                  <option value="">カテゴリを一括設定...</option>
+                  {PRIMARY_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {KNOWLEDGE_CATEGORY_LABELS[c]}
+                    </option>
+                  ))}
+                </select>
+                {/* 一括クリア */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBatchFiles([]);
+                    setError("");
+                  }}
+                  disabled={batchSaving}
+                  className="text-xs px-3 py-1.5 border rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                >
+                  クリア
+                </button>
+                {/* 一括保存ボタン */}
+                <button
+                  type="button"
+                  onClick={handleBatchSave}
+                  disabled={
+                    batchSaving ||
+                    batchFiles.filter((f) => f.status === "ready").length === 0
+                  }
+                  className="text-xs px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50"
+                >
+                  {batchSaving
+                    ? "保存中..."
+                    : `💾 ${batchFiles.filter((f) => f.status === "ready").length}件を一括保存`}
+                </button>
+              </div>
+            </div>
+
+            {/* ファイル一覧 */}
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {batchFiles.map((file, index) => (
+                <div
+                  key={file.id}
+                  className={`border rounded-lg p-3 ${
+                    file.status === "done"
+                      ? "bg-green-50 border-green-200"
+                      : file.status === "error"
+                        ? "bg-red-50 border-red-200"
+                        : "bg-white border-gray-200"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    {/* ステータスアイコン */}
+                    <span className="text-lg shrink-0">
+                      {file.status === "done"
+                        ? "✅"
+                        : file.status === "error"
+                          ? "❌"
+                          : file.status === "saving"
+                            ? "⏳"
+                            : "📄"}
+                    </span>
+
+                    {/* タイトル編集 */}
+                    <input
+                      value={file.title}
+                      onChange={(e) =>
+                        setBatchFiles((prev) =>
+                          prev.map((f, i) =>
+                            i === index ? { ...f, title: e.target.value } : f,
+                          ),
+                        )
+                      }
+                      className="flex-1 min-w-0 text-sm border-0 border-b border-gray-200 focus:border-teal-400 outline-none bg-transparent"
+                      placeholder="タイトル"
+                      disabled={
+                        batchSaving ||
+                        file.status === "done" ||
+                        file.status === "error"
+                      }
+                    />
+
+                    {/* カテゴリ選択 */}
+                    <select
+                      value={file.category}
+                      onChange={(e) =>
+                        setBatchFiles((prev) =>
+                          prev.map((f, i) =>
+                            i === index
+                              ? {
+                                  ...f,
+                                  category: e.target.value as KnowledgeDocCategory,
+                                }
+                              : f,
+                          ),
+                        )
+                      }
+                      className="text-xs border rounded px-1.5 py-1 shrink-0 bg-white"
+                      disabled={
+                        batchSaving ||
+                        file.status === "done" ||
+                        file.status === "error"
+                      }
+                    >
+                      {PRIMARY_CATEGORIES.map((c) => (
+                        <option key={c} value={c}>
+                          {KNOWLEDGE_CATEGORY_LABELS[c]}
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* 文字数 */}
+                    <span className="text-xs text-gray-400 shrink-0">
+                      {file.charCount.toLocaleString()}文字
+                    </span>
+
+                    {/* 削除 */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setBatchFiles((prev) =>
+                          prev.filter((_, i) => i !== index),
+                        )
+                      }
+                      disabled={batchSaving}
+                      className="text-xs text-red-400 hover:text-red-600 shrink-0 disabled:opacity-50"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* エラー表示 */}
+                  {file.status === "error" && file.error && (
+                    <p className="text-xs text-red-600 mt-1 ml-8">{file.error}</p>
+                  )}
+
+                  {/* 完了表示 */}
+                  {file.status === "done" && (
+                    <p className="text-xs text-green-600 mt-1 ml-8">保存完了</p>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
