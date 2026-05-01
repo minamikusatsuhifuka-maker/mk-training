@@ -285,6 +285,17 @@ export default function AdminKnowledgePage() {
     [handleFiles],
   );
 
+  // 重複判定（既存docsとの照合：ファイル名またはタイトルが一致）
+  const isDuplicateFile = useCallback(
+    (file: BatchFileItem) =>
+      docs.some(
+        (d) =>
+          (file.fileName && d.fileName === file.fileName) ||
+          d.title === file.title,
+      ),
+    [docs],
+  );
+
   // 一括保存
   const handleBatchSave = async () => {
     const readyFiles = batchFiles.filter((f) => f.status === "ready");
@@ -300,6 +311,29 @@ export default function AdminKnowledgePage() {
 
     for (let i = 0; i < readyFiles.length; i++) {
       const file = readyFiles[i];
+
+      // 重複チェック（ファイル名またはタイトルが一致）
+      const isDuplicate = newDocs.some(
+        (existing) =>
+          (file.fileName && existing.fileName === file.fileName) ||
+          existing.title === file.title,
+      );
+
+      if (isDuplicate) {
+        setBatchFiles((prev) =>
+          prev.map((f) =>
+            f.id === file.id
+              ? {
+                  ...f,
+                  status: "error",
+                  error:
+                    "同じタイトルまたはファイル名が既に登録されています（スキップ）",
+                }
+              : f,
+          ),
+        );
+        continue;
+      }
 
       setBatchFiles((prev) =>
         prev.map((f) => (f.id === file.id ? { ...f, status: "saving" } : f)),
@@ -651,20 +685,24 @@ export default function AdminKnowledgePage() {
                 >
                   クリア
                 </button>
-                {/* 一括保存ボタン */}
-                <button
-                  type="button"
-                  onClick={handleBatchSave}
-                  disabled={
-                    batchSaving ||
-                    batchFiles.filter((f) => f.status === "ready").length === 0
-                  }
-                  className="text-xs px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50"
-                >
-                  {batchSaving
-                    ? "保存中..."
-                    : `💾 ${batchFiles.filter((f) => f.status === "ready").length}件を一括保存`}
-                </button>
+                {/* 一括保存ボタン（重複ファイルを除いた件数） */}
+                {(() => {
+                  const saveableCount = batchFiles.filter(
+                    (f) => f.status === "ready" && !isDuplicateFile(f),
+                  ).length;
+                  return (
+                    <button
+                      type="button"
+                      onClick={handleBatchSave}
+                      disabled={batchSaving || saveableCount === 0}
+                      className="text-xs px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50"
+                    >
+                      {batchSaving
+                        ? "保存中..."
+                        : `💾 ${saveableCount}件を一括保存`}
+                    </button>
+                  );
+                })()}
               </div>
             </div>
 
@@ -711,6 +749,13 @@ export default function AdminKnowledgePage() {
                         file.status === "error"
                       }
                     />
+
+                    {/* 重複バッジ */}
+                    {isDuplicateFile(file) && file.status === "ready" && (
+                      <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full shrink-0">
+                        ⚠️ 重複
+                      </span>
+                    )}
 
                     {/* カテゴリ選択 */}
                     <select
