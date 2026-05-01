@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { buildFullKnowledgeContext } from "@/lib/knowledge-server";
 
 export const maxDuration = 60;
 
@@ -69,6 +70,9 @@ export async function POST(req: NextRequest) {
   if (!apiKey)
     return NextResponse.json({ error: "No API key" }, { status: 500 });
 
+  // 理念 + 追加ドキュメントを取得（全アクションで共通）
+  const knowledgeContext = await buildFullKnowledgeContext();
+
   if (action === "start") {
     const systemPrompt = scenarioPrompts[scenario] || scenarioPrompts.biologics;
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -83,7 +87,8 @@ export async function POST(req: NextRequest) {
         max_tokens: 300,
         system:
           systemPrompt +
-          "\n\n最初の一言から始めてください。短めに（1〜2文）。",
+          "\n\n最初の一言から始めてください。短めに（1〜2文）。" +
+          knowledgeContext,
         messages: [
           {
             role: "user",
@@ -110,7 +115,8 @@ export async function POST(req: NextRequest) {
         max_tokens: 200,
         system:
           systemPrompt +
-          "\n\nスタッフの説明に対して自然に反応し、次の質問や不安を述べてください。短めに（1〜3文）。",
+          "\n\nスタッフの説明に対して自然に反応し、次の質問や不安を述べてください。短めに（1〜3文）。" +
+          knowledgeContext,
         messages: messages,
       }),
     });
@@ -127,6 +133,13 @@ export async function POST(req: NextRequest) {
 スタッフの返答履歴:
 ${staffResponses.map((r: string, i: number) => `${i + 1}. ${r}`).join("\n")}
 
+【評価軸】
+- 医学的・施術内容説明の正確さ
+- 患者への寄り添い・共感（南草津皮フ科の「素直・傾聴・共感」の行動指針）
+- 凡事徹底（あいさつ・感謝・丁寧な言葉遣い）
+- 倫理観をもった誠実な対応ができていたか
+- クリニックの理念・行動指針に沿った対応であったか
+
 必ずJSON形式のみで回答:
 {
   "score": 4,
@@ -135,7 +148,8 @@ ${staffResponses.map((r: string, i: number) => `${i + 1}. ${r}`).join("\n")}
   "improvements": ["改善点1", "改善点2"],
   "nextQuestions": ["患者が次に聞きそうな質問1", "患者が次に聞きそうな質問2"],
   "overallComment": "総評コメント（2〜3文）"
-}`;
+}
+${knowledgeContext}`;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",

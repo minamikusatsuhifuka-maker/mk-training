@@ -6,6 +6,9 @@ import Link from "next/link";
 import { Sidebar } from "@/components/sidebar";
 
 const mobileNavSections = [
+  { title: "理念・想い", items: [
+    { label: "🏛️ 理念・院長の想い", href: "/philosophy" },
+  ]},
   { title: "医療知識", items: [
     { label: "疾患", href: "/diseases" },
     { label: "薬剤", href: "/drugs" },

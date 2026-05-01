@@ -59,6 +59,26 @@ export default function Home() {
         </p>
       </div>
 
+      {/* 理念カード（最上部・目立たせる） */}
+      <Link href="/philosophy">
+        <Card className="border-2 border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50 hover:shadow-lg transition-shadow cursor-pointer">
+          <CardHeader className="flex-row items-center gap-4 py-5">
+            <div className="text-4xl">🏛️</div>
+            <div className="flex-1">
+              <CardTitle className="text-base md:text-lg text-amber-900">
+                理念・院長の想い
+              </CardTitle>
+              <CardDescription className="text-xs md:text-sm text-amber-800 mt-1">
+                南草津皮フ科の理念・楠葉院長の想い・スタッフの行動指針を学びます
+              </CardDescription>
+            </div>
+            <Badge className="bg-amber-600 text-white shrink-0 hidden sm:inline-flex">
+              全AI機能に組込済
+            </Badge>
+          </CardHeader>
+        </Card>
+      </Link>
+
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {([

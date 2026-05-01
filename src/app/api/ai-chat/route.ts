@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { buildFullKnowledgeContext } from "@/lib/knowledge-server";
 
 export const maxDuration = 60;
 
@@ -8,7 +9,7 @@ export async function POST(req: NextRequest) {
   if (!apiKey)
     return NextResponse.json({ error: "API key not set" }, { status: 500 });
 
-  const systemPrompt = `あなたは南草津皮フ科クリニックのスタッフ研修用AIアシスタントです。
+  const baseSystemPrompt = `あなたは南草津皮フ科クリニックのスタッフ研修用AIアシスタントです。
 以下の専門知識を持ち、スタッフの質問に正確・丁寧に答えてください。
 
 【あなたの専門領域】
@@ -54,6 +55,10 @@ export async function POST(req: NextRequest) {
 - 研修・学習目的であることを常に意識
 - 回答の末尾に必要に応じて「⚠️ 実際の処方は医師の判断に従ってください」を追加
 - マークダウンを使って見やすく整形（見出し・箇条書き等）`;
+
+  // 理念 + 追加ドキュメント（Supabase）を結合してフルプロンプトを構築
+  const knowledgeContext = await buildFullKnowledgeContext();
+  const systemPrompt = baseSystemPrompt + knowledgeContext;
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",

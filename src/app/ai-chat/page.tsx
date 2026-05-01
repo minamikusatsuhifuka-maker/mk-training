@@ -11,6 +11,8 @@ interface Message {
 }
 
 const quickQuestions = [
+  "当院の理念を教えてください",
+  "楠葉院長の想いについて教えてください",
   "プロトピックを2歳の子に使えますか？",
   "デュピクセントのレセプト摘要欄は何を書く？",
   "妊婦にステロイド外用は使える？",
@@ -134,7 +136,12 @@ export default function AiChatPage() {
         </div>
 
         {/* 入力欄 */}
-        <div className="border-t p-3 flex gap-2">
+        <div className="border-t p-3 space-y-2">
+          <div className="text-xs text-teal flex items-center gap-1">
+            <span>🏛️</span>
+            <span>クリニックの理念・教えを参照中</span>
+          </div>
+          <div className="flex gap-2">
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -151,6 +158,7 @@ export default function AiChatPage() {
           >
             送信
           </Button>
+          </div>
         </div>
       </Card>
 

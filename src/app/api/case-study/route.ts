@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { buildFullKnowledgeContext } from "@/lib/knowledge-server";
 
 export const maxDuration = 60;
 
@@ -9,6 +10,8 @@ export async function POST(req: NextRequest) {
   if (!apiKey)
     return NextResponse.json({ error: "No API key" }, { status: 500 });
 
+  // 理念 + 追加ドキュメント（生成・採点プロンプト末尾に付与）
+  const knowledgeContext = await buildFullKnowledgeContext();
   let prompt = "";
 
   if (action === "generate") {
@@ -44,7 +47,8 @@ export async function POST(req: NextRequest) {
   "hint": "ヒント（正解に近づくためのヒント）",
   "difficulty": "${difficulty}",
   "category": "${category}"
-}`;
+}
+${knowledgeContext}`;
   } else if (action === "evaluate") {
     prompt = `あなたは皮膚科クリニックの研修担当医師です。
 以下の症例に対するスタッフの回答を採点・解説してください。
@@ -55,6 +59,12 @@ ${caseContent}
 【スタッフの回答】
 ${userAnswer}
 
+【採点基準】
+- 医学的な正確性・知識の深さ
+- 患者への寄り添い・共感の姿勢（南草津皮フ科の理念に基づく）
+- スタッフ行動指針（素直・傾聴・共感、誠実な対応）に沿っているか
+- 添付文書・ガイドラインに準拠しているか
+
 必ずJSON形式のみで回答（マークダウン不可）:
 {
   "score": 85,
@@ -64,7 +74,8 @@ ${userAnswer}
   "explanation": "正しい知識の解説（添付文書・ガイドライン根拠を含む）",
   "keyLearning": "この症例の最重要ポイント（1文で）",
   "relatedInfo": "関連して覚えておくべき情報"
-}`;
+}
+${knowledgeContext}`;
   }
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
