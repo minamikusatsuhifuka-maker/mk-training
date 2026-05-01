@@ -231,7 +231,7 @@ export default function AdminQuizPage() {
       </Table>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editItem && data.some((q) => q.id === editItem.id) ? "クイズを編集" : "新規クイズを追加"}</DialogTitle>
           </DialogHeader>

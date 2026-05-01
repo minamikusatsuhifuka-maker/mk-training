@@ -479,7 +479,7 @@ export default function AdminBiologicsPage() {
 
       {/* 編集ダイアログ */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editItem && data.some((d) => d.id === editItem.id) ? "生物学的製剤を編集" : "新規追加"}</DialogTitle>
           </DialogHeader>
@@ -572,7 +572,7 @@ export default function AdminBiologicsPage() {
 
       {/* ===== Gemini全体確認ダイアログ ===== */}
       <Dialog open={geminiDialogOpen} onOpenChange={setGeminiDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>🔍 Gemini 2.5 Pro 確認結果</DialogTitle>
           </DialogHeader>

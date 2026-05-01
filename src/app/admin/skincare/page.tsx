@@ -216,7 +216,7 @@ export default function AdminSkincarePage() {
 
       {/* Edit / New Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editItem && data.some((d) => d.id === editItem.id) ? "スキンケア製品を編集" : "新規スキンケア製品を追加"}

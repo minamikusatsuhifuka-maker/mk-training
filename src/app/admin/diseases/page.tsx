@@ -262,7 +262,7 @@ export default function AdminDiseasesPage() {
 
       {/* Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editItem && data.some((d) => d.id === editItem.id) ? "疾患を編集" : "新規疾患を追加"}</DialogTitle>
           </DialogHeader>

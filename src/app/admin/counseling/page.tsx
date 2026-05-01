@@ -278,7 +278,7 @@ export default function AdminCounselingPage() {
 
       {/* Edit / New Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editItem && data.some((d) => d.id === editItem.id) ? "カウンセリングガイドを編集" : "新規カウンセリングガイドを追加"}

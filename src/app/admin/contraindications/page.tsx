@@ -189,7 +189,7 @@ export default function AdminContraindicationsPage() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editItem && data.some((c) => c.id === editItem.id) ? "禁忌を編集" : "新規禁忌を追加"}</DialogTitle>
           </DialogHeader>
