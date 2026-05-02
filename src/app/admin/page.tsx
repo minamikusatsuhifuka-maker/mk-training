@@ -6,6 +6,7 @@ import { diseases } from "@/data/diseases";
 import { drugs } from "@/data/drugs";
 import { quizQuestions } from "@/data/quiz";
 import { contraindications } from "@/data/contraindications";
+import { EXPERT_ROLES } from "@/data/expertRoles";
 
 const stats = [
   { label: "疾患", count: diseases.length, unit: "件", href: "/admin/diseases" },
@@ -43,12 +44,24 @@ export default function AdminDashboard() {
               <CardHeader>
                 <CardTitle className="text-base">{s.label}管理</CardTitle>
                 <CardDescription className="text-xs">
-                  {s.label}データの追加・編集・削除（{s.count}{s.unit}）
+                  {s.label}データの追加・編集・削除({s.count}{s.unit})
                 </CardDescription>
               </CardHeader>
             </Card>
           </Link>
         ))}
+
+        {/* エキスパート要件管理 */}
+        <Link href="/admin/expert">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-teal-400 border-l-4 border-l-teal-500">
+            <CardHeader>
+              <CardTitle className="text-base">⭐ エキスパート要件管理</CardTitle>
+              <CardDescription className="text-xs">
+                各ロールのエキスパート要件をAIの力を借りて改善・追加できます({EXPERT_ROLES.length}ロール)
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
       </div>
     </div>
   );

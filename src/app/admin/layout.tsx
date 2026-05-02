@@ -19,6 +19,7 @@ const adminNav = [
   { label: "💴 算定点数管理", href: "/admin/medical-fees" },
   { label: "📋 業務チェック管理", href: "/admin/operations" },
   { label: "💉 生物学的製剤管理", href: "/admin/biologics" },
+  { label: "⭐ エキスパート要件管理", href: "/admin/expert" },
   { label: "📝 更新履歴", href: "/admin/changelog" },
 ];
 
