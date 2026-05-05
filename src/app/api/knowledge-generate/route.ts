@@ -39,6 +39,11 @@ function buildManualPrompt(
 - 失敗しやすいポイント・注意事項を明記
 - 患者への配慮・四方よしの視点を含める
 
+【件数の上限（厳守）】
+- steps は最大5ステップまで
+- cautions は最大4件まで
+- faq は最大3件まで
+
 必ずJSON形式のみで回答（他のテキスト不要）:
 {
   "title": "マニュアルタイトル",
@@ -57,7 +62,9 @@ function buildManualPrompt(
   "faq": [
     { "q": "よくある質問1", "a": "回答1（具体的に）" }
   ]
-}`;
+}
+
+重要: JSONは必ず完結させてください。途中で切れないよう、各配列の要素数を上限内に収めてください。`;
 }
 
 function buildSkillMapPrompt(
@@ -79,6 +86,11 @@ function buildSkillMapPrompt(
 - 具体的で測定可能な習得基準
 - 理念（四方よし・成功の八原則・7つの実）と接続
 - クリニックの実際の業務に即した内容
+
+【件数の上限（厳守）】
+- 各レベルの skills は最大4件まで
+- 各レベルの knowledge は最大4件まで
+- 各レベルの mindset は最大4件まで
 
 必ずJSON形式のみで回答（他のテキスト不要）:
 {
@@ -119,7 +131,9 @@ function buildSkillMapPrompt(
       "milestone": "..."
     }
   ]
-}`;
+}
+
+重要: JSONは必ず完結させてください。途中で切れないよう、各配列の要素数を上限内に収めてください。`;
 }
 
 function buildKnowledgePrompt(
@@ -153,7 +167,9 @@ function buildKnowledgePrompt(
   "impact": "組織への影響・価値（四方よしの観点から）",
   "actionItems": ["具体的なアクション1", "具体的なアクション2", "具体的なアクション3"],
   "tags": ["タグ1", "タグ2", "タグ3"]
-}`;
+}
+
+重要: JSONは必ず完結させてください。actionItemsは3件、tagsは3件以内に収めてください。`;
 }
 
 export async function POST(req: NextRequest) {
@@ -210,7 +226,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 6000,
+        max_tokens: 8000,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -227,26 +243,89 @@ export async function POST(req: NextRequest) {
       content?: Array<{ text?: string }>;
     };
     const text = data.content?.[0]?.text ?? "";
-    const cleaned = text
-      .replace(/```json\s*/g, "")
-      .replace(/```\s*/g, "")
-      .trim();
-    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
+
+    // デバッグ用ログ（Vercelのログで確認）
+    console.log("Raw response length:", text.length);
+    console.log("Raw response preview:", text.slice(0, 500));
+
+    let result: unknown = null;
+
+    // パターン1: ```json ... ``` ブロック
+    const jsonBlockMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
+    if (jsonBlockMatch) {
+      try {
+        result = JSON.parse(jsonBlockMatch[1].trim());
+        console.log("Parsed via json block");
+      } catch (e) {
+        console.log("json block parse failed:", e);
+      }
+    }
+
+    // パターン2: 最初の { から最後の } まで（必要なら不完全なJSONを修復）
+    if (!result) {
+      const firstBrace = text.indexOf("{");
+      const lastBrace = text.lastIndexOf("}");
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        const jsonStr = text.slice(firstBrace, lastBrace + 1);
+        try {
+          result = JSON.parse(jsonStr);
+          console.log("Parsed via brace matching");
+        } catch (e) {
+          console.log("brace match parse failed, trying to fix...", e);
+          try {
+            // 開いている配列・オブジェクトを閉じて修復を試みる
+            let fixedJson = jsonStr;
+            const openBrackets = (fixedJson.match(/\[/g) || []).length;
+            const closeBrackets = (fixedJson.match(/\]/g) || []).length;
+            const openBraces = (fixedJson.match(/\{/g) || []).length;
+            const closeBraces = (fixedJson.match(/\}/g) || []).length;
+            for (let i = 0; i < openBrackets - closeBrackets; i++)
+              fixedJson += "]";
+            for (let i = 0; i < openBraces - closeBraces; i++) fixedJson += "}";
+            result = JSON.parse(fixedJson);
+            console.log("Parsed via fixed json");
+          } catch (e2) {
+            console.log("Fix failed:", e2);
+          }
+        }
+      }
+    }
+
+    // パターン3: 末尾切れの不完全JSONを正面突破（最初の { から）
+    if (!result) {
+      const firstBrace = text.indexOf("{");
+      if (firstBrace !== -1) {
+        let jsonStr = text.slice(firstBrace);
+        // 末尾のカンマを除去
+        jsonStr = jsonStr.replace(/,\s*$/, "");
+        const openBrackets = (jsonStr.match(/\[/g) || []).length;
+        const closeBrackets = (jsonStr.match(/\]/g) || []).length;
+        const openBraces = (jsonStr.match(/\{/g) || []).length;
+        const closeBraces = (jsonStr.match(/\}/g) || []).length;
+        for (let i = 0; i < openBrackets - closeBrackets; i++) jsonStr += "]";
+        for (let i = 0; i < openBraces - closeBraces; i++) jsonStr += "}";
+        try {
+          result = JSON.parse(jsonStr);
+          console.log("Parsed via aggressive fix");
+        } catch (e3) {
+          console.log("Aggressive fix failed:", e3);
+        }
+      }
+    }
+
+    if (!result) {
+      console.error("All parse attempts failed. Full text:", text);
       return NextResponse.json(
-        { error: "Parse error", raw: text.slice(0, 200) },
+        {
+          error: "JSON parse failed",
+          raw: text.slice(0, 1000),
+          hint: "Check Vercel logs for full response",
+        },
         { status: 500 }
       );
     }
 
-    try {
-      return NextResponse.json(JSON.parse(jsonMatch[0]));
-    } catch {
-      return NextResponse.json(
-        { error: "JSON parse failed", raw: text.slice(0, 200) },
-        { status: 500 }
-      );
-    }
+    return NextResponse.json(result);
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Unknown error" },

@@ -140,9 +140,12 @@ export default function AdminKnowledgeSystemPage() {
           notes: aiGenForm.notes,
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) {
-        alert(data.error ?? "生成に失敗しました");
+        const msg = data.raw
+          ? `生成に失敗しました。\n\nAIの応答:\n${String(data.raw).slice(0, 300)}`
+          : data.error || "生成に失敗しました。再度お試しください。";
+        alert(msg);
         return;
       }
 
@@ -381,9 +384,12 @@ export default function AdminKnowledgeSystemPage() {
           instruction: improveInstruction,
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) {
-        alert(data.error ?? "改善に失敗しました");
+        const msg = data.raw
+          ? `改善に失敗しました。\n\nAIの応答:\n${String(data.raw).slice(0, 300)}`
+          : data.error || "改善に失敗しました。再度お試しください。";
+        alert(msg);
         return;
       }
 
