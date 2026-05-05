@@ -50,6 +50,18 @@ export default function AdminDashboard() {
           </Card>
         </Link>
 
+        {/* 組織知識ベース管理 */}
+        <Link href="/admin/knowledge-system">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-purple-400 border-l-4 border-l-purple-500 sm:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">🏛️ 組織知識ベース管理</CardTitle>
+              <CardDescription className="text-xs">
+                マニュアル・スキルマップ・組織ナレッジをAIと共に構築・管理（生成・改善・公開・承認）
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
         {stats.map((s) => (
           <Link key={s.href} href={s.href}>
             <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-slate-400">

@@ -116,6 +116,12 @@ type QuickLink = {
 
 const quickLinks: QuickLink[] = [
   {
+    icon: "🏛️",
+    name: "組織知識ベース",
+    sub: "マニュアル・スキルマップ",
+    href: "/knowledge",
+  },
+  {
     icon: "📚",
     name: "医療知識",
     sub: "疾患・薬剤・生物学的製剤",

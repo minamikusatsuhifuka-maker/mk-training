@@ -13,6 +13,7 @@ const mobileNavSections = [
     { label: "🏛️ 理念・院長の想い", href: "/philosophy" },
   ]},
   { title: "医療知識", items: [
+    { label: "🏛️ 組織知識ベース", href: "/knowledge" },
     { label: "疾患", href: "/diseases" },
     { label: "薬剤", href: "/drugs" },
     { label: "禁忌・注意", href: "/contraindications" },
