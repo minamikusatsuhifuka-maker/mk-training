@@ -99,8 +99,8 @@ export default function BiologicsPage() {
         本情報は添付文書に基づくスタッフ研修用資料です。実際の投与量・間隔は必ず添付文書と医師の指示に従ってください。
       </div>
 
-      {/* 疾患タブ */}
-      <div className="flex gap-2 flex-wrap">
+      {/* 疾患タブ（モバイル横スクロール） */}
+      <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap scrollbar-hide">
         {biologicsDiseaseCategories.map((cat) => {
           const count = items.filter((d) => matchesCategory(d, cat)).length;
           return (
@@ -108,7 +108,7 @@ export default function BiologicsPage() {
               key={cat}
               type="button"
               onClick={() => setCategory(cat)}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`whitespace-nowrap flex-shrink-0 rounded-full px-3.5 py-2 text-sm font-medium transition-colors min-h-[36px] ${
                 category === cat
                   ? "bg-teal text-teal-foreground"
                   : "bg-muted text-muted-foreground hover:bg-accent"

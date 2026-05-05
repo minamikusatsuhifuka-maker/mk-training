@@ -353,15 +353,17 @@ export default function PortalHome() {
             <div
               key={item.id}
               onClick={() => setSelectedNews(item)}
-              className="flex items-start gap-3 p-3 bg-white border border-gray-100 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors"
+              className="flex items-start gap-3 p-4 bg-white border border-gray-100 rounded-xl cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors min-h-[60px]"
             >
               <div
-                className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${dotColor(
+                className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${dotColor(
                   item.category
                 )}`}
               />
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-900 leading-snug">{item.title}</p>
+                <p className="text-base text-gray-900 leading-snug">
+                  {item.title}
+                </p>
                 <p className="text-xs text-gray-400 mt-1">
                   {formatDate(item.createdAt)} · {item.author}
                 </p>
@@ -388,16 +390,16 @@ export default function PortalHome() {
         <h2 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
           クイックアクセス
         </h2>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {quickLinks.map((link) => {
             const cardClass = link.highlight
-              ? "p-3 bg-teal-50 border border-teal-200 rounded-xl cursor-pointer hover:bg-teal-100 transition-colors text-center"
-              : "p-3 bg-white border border-gray-100 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors text-center";
+              ? "p-4 bg-teal-50 border border-teal-200 rounded-xl cursor-pointer hover:bg-teal-100 transition-colors text-center min-h-[100px] flex flex-col justify-center"
+              : "p-4 bg-white border border-gray-100 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors text-center min-h-[100px] flex flex-col justify-center";
             const inner = (
               <div className={cardClass}>
-                <p className="text-xl mb-1">{link.icon}</p>
-                <p className="text-xs font-medium text-gray-800">{link.name}</p>
-                <p className="text-xs text-gray-400 mt-0.5 leading-tight hidden sm:block">
+                <p className="text-2xl mb-1.5">{link.icon}</p>
+                <p className="text-sm font-medium text-gray-800">{link.name}</p>
+                <p className="text-xs text-gray-400 mt-1 leading-tight">
                   {link.sub}
                 </p>
               </div>
@@ -429,7 +431,7 @@ export default function PortalHome() {
           <button
             type="button"
             onClick={() => setShowHiyariForm(true)}
-            className="text-xs px-3 py-1.5 bg-teal-600 text-white rounded-full hover:bg-teal-700"
+            className="text-sm px-4 py-2 bg-teal-600 text-white rounded-full hover:bg-teal-700 min-h-[40px]"
           >
             + 投稿する
           </button>
@@ -516,7 +518,7 @@ export default function PortalHome() {
               <textarea
                 value={hiyariText}
                 onChange={(e) => setHiyariText(e.target.value)}
-                rows={4}
+                rows={5}
                 placeholder={
                   hiyariType === "hiyari"
                     ? "気づいたヒヤリハットを共有してください..."
@@ -549,7 +551,7 @@ export default function PortalHome() {
                 type="button"
                 onClick={handleHiyariSubmit}
                 disabled={!hiyariText.trim() || submitting}
-                className="w-full py-2.5 bg-teal-600 text-white rounded-xl text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
+                className="w-full py-3 bg-teal-600 text-white rounded-xl text-base font-medium hover:bg-teal-700 disabled:opacity-50"
               >
                 {submitting ? "投稿中..." : "投稿する"}
               </button>
@@ -567,7 +569,7 @@ export default function PortalHome() {
           <button
             type="button"
             onClick={() => setShowThankyouForm(true)}
-            className="text-xs px-3 py-1.5 bg-pink-500 text-white rounded-full hover:bg-pink-600"
+            className="text-sm px-4 py-2 bg-pink-500 text-white rounded-full hover:bg-pink-600 min-h-[40px]"
           >
             + 送る
           </button>
@@ -659,7 +661,7 @@ export default function PortalHome() {
                 type="button"
                 onClick={handleThankyouSubmit}
                 disabled={!tyTo.trim() || !tyMessage.trim() || submitting}
-                className="w-full py-2.5 bg-pink-500 text-white rounded-xl text-sm font-medium hover:bg-pink-600 disabled:opacity-50"
+                className="w-full py-3 bg-pink-500 text-white rounded-xl text-base font-medium hover:bg-pink-600 disabled:opacity-50"
               >
                 ♥ 送る
               </button>

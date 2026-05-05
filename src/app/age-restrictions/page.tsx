@@ -554,8 +554,8 @@ export default function AgeRestrictionsPage() {
         </div>
       </div>
 
-      {/* カテゴリフィルター */}
-      <div className="flex flex-wrap gap-2">
+      {/* カテゴリフィルター（モバイル横スクロール） */}
+      <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap scrollbar-hide">
         {FILTER_GROUPS.map((f) => {
           const count =
             f.value === "all"
@@ -566,7 +566,7 @@ export default function AgeRestrictionsPage() {
               key={f.value}
               type="button"
               onClick={() => setFilter(f.value)}
-              className={`text-sm px-4 py-1.5 rounded-full border transition-colors ${
+              className={`whitespace-nowrap flex-shrink-0 text-sm px-4 py-2 rounded-full border transition-colors min-h-[36px] ${
                 filter === f.value
                   ? "bg-teal text-white border-teal"
                   : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"

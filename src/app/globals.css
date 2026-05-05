@@ -114,3 +114,25 @@
   .print-header { display: block !important; }
 }
 .print-header { display: none; }
+
+/* スクロールバー非表示（横スクロール用） */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* 横スクロール防止 */
+html, body {
+  overflow-x: hidden;
+}
+
+/* iOS自動ズーム防止：input/textareaの最小フォントサイズ */
+@media (max-width: 768px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+

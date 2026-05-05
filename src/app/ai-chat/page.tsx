@@ -99,8 +99,8 @@ export default function AiChatPage() {
         本AIは研修・学習目的です。実際の処方・診療判断は必ず医師・薬剤師の指示に従ってください。
       </div>
 
-      {/* チャットエリア */}
-      <Card className="flex flex-col" style={{ height: "60vh" }}>
+      {/* チャットエリア（モバイル：画面いっぱい / PC：60vh） */}
+      <Card className="flex flex-col h-[calc(100vh-280px)] md:h-[60vh] min-h-[400px]">
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
           {messages.length === 0 && !loading && (
             <div className="text-center text-muted-foreground text-sm py-12">
@@ -141,7 +141,7 @@ export default function AiChatPage() {
         <div className="border-t p-3 space-y-2">
           <div className="text-xs text-teal flex items-center gap-1">
             <span>🌱</span>
-            <span>クリニックの理念・哲学（LUMINA）を参照中</span>
+            <span>クリニックの理念・哲学を参照中</span>
           </div>
           <div className="flex gap-2">
           <Textarea
@@ -149,14 +149,14 @@ export default function AiChatPage() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="質問を入力（Shift+Enterで改行）"
-            className="resize-none min-h-[44px] max-h-[100px]"
+            className="resize-none min-h-[48px] max-h-[120px] text-base"
             rows={1}
             disabled={loading}
           />
           <Button
             onClick={() => sendMessage(input)}
             disabled={!input.trim() || loading}
-            className="bg-teal hover:bg-teal/90 text-white shrink-0"
+            className="bg-teal hover:bg-teal/90 text-white shrink-0 min-h-[48px] px-5"
           >
             送信
           </Button>
@@ -164,18 +164,18 @@ export default function AiChatPage() {
         </div>
       </Card>
 
-      {/* クイック質問 */}
+      {/* クイック質問（モバイル横スクロール） */}
       <div className="space-y-2">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           よくある質問
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap scrollbar-hide">
           {quickQuestions.map((q) => (
             <button
               key={q}
               onClick={() => sendMessage(q)}
               disabled={loading}
-              className="text-xs border border-teal/30 text-teal rounded-full px-3 py-1.5 hover:bg-teal-light transition-colors disabled:opacity-50"
+              className="whitespace-nowrap flex-shrink-0 text-sm border border-teal/30 text-teal rounded-full px-3.5 py-2 hover:bg-teal-light transition-colors disabled:opacity-50 min-h-[36px]"
             >
               {q}
             </button>

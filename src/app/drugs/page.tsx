@@ -57,18 +57,18 @@ export default function DrugsPage() {
         className="w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-teal/40 placeholder:text-muted-foreground"
       />
 
-      <div className="flex items-center gap-2 flex-wrap overflow-x-auto">
-        <div className="flex gap-1 mr-2">
-          <button type="button" onClick={() => setView("table")} className={`rounded-md px-2 py-1 text-xs ${view === "table" ? "bg-teal text-teal-foreground" : "bg-muted text-muted-foreground"}`}>一覧</button>
-          <button type="button" onClick={() => setView("accordion")} className={`rounded-md px-2 py-1 text-xs ${view === "accordion" ? "bg-teal text-teal-foreground" : "bg-muted text-muted-foreground"}`}>カテゴリ別</button>
+      <div className="space-y-2">
+        <div className="flex gap-1">
+          <button type="button" onClick={() => setView("table")} className={`rounded-md px-3 py-2 text-sm min-h-[36px] ${view === "table" ? "bg-teal text-teal-foreground" : "bg-muted text-muted-foreground"}`}>一覧</button>
+          <button type="button" onClick={() => setView("accordion")} className={`rounded-md px-3 py-2 text-sm min-h-[36px] ${view === "accordion" ? "bg-teal text-teal-foreground" : "bg-muted text-muted-foreground"}`}>カテゴリ別</button>
         </div>
         {view === "table" && (
-          <>
-            <button type="button" onClick={() => setSelectedCategory(null)} className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${selectedCategory === null ? "bg-teal text-teal-foreground" : "bg-muted text-muted-foreground hover:bg-accent"}`}>すべて ({items.length})</button>
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap scrollbar-hide">
+            <button type="button" onClick={() => setSelectedCategory(null)} className={`whitespace-nowrap flex-shrink-0 rounded-full px-3.5 py-2 text-sm font-medium transition-colors min-h-[36px] ${selectedCategory === null ? "bg-teal text-teal-foreground" : "bg-muted text-muted-foreground hover:bg-accent"}`}>すべて ({items.length})</button>
             {drugCategories.filter((cat) => categoryCount(cat) > 0).map((cat) => (
-              <button key={cat} type="button" onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)} className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${selectedCategory === cat ? "bg-teal text-teal-foreground" : "bg-muted text-muted-foreground hover:bg-accent"}`}>{cat} ({categoryCount(cat)})</button>
+              <button key={cat} type="button" onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)} className={`whitespace-nowrap flex-shrink-0 rounded-full px-3.5 py-2 text-sm font-medium transition-colors min-h-[36px] ${selectedCategory === cat ? "bg-teal text-teal-foreground" : "bg-muted text-muted-foreground hover:bg-accent"}`}>{cat} ({categoryCount(cat)})</button>
             ))}
-          </>
+          </div>
         )}
       </div>
 

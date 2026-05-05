@@ -194,8 +194,8 @@ export default function GradeSystemPage() {
         </p>
       </div>
 
-      {/* グレードタブ */}
-      <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+      {/* グレードタブ（モバイル横スクロール） */}
+      <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide">
         {grades.map((g) => {
           const isActive = g.grade === activeGrade;
           const tabStyle = COLOR_STYLE[g.color];
@@ -204,7 +204,7 @@ export default function GradeSystemPage() {
               key={g.grade}
               type="button"
               onClick={() => setActiveGrade(g.grade)}
-              className={`shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full border text-sm transition-colors ${
+              className={`whitespace-nowrap shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-full border text-sm transition-colors min-h-[40px] ${
                 isActive
                   ? tabStyle.tabActive
                   : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"

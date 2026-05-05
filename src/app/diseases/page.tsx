@@ -236,14 +236,14 @@ export default function DiseasesPage() {
         </div>
       </div>
 
-      {/* カテゴリフィルター */}
-      <div className="flex flex-wrap gap-1.5">
+      {/* カテゴリフィルター（モバイル横スクロール） */}
+      <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap scrollbar-hide">
         {categories.map((cat) => (
           <button
             key={cat}
             type="button"
             onClick={() => setCategoryFilter(cat)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors border ${
+            className={`whitespace-nowrap flex-shrink-0 rounded-full px-3.5 py-2 text-sm font-medium transition-colors border min-h-[36px] ${
               categoryFilter === cat
                 ? "bg-teal text-teal-foreground border-teal"
                 : "bg-background text-muted-foreground border-border hover:bg-accent"

@@ -181,9 +181,9 @@ export default function QuizPage() {
           </Card>
 
           {/* Options */}
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {q.options.map((opt, idx) => {
-              let btnClass = "w-full text-left rounded-md border px-4 py-3 text-sm transition-colors ";
+              let btnClass = "w-full text-left rounded-lg border px-4 py-4 text-base leading-relaxed transition-colors min-h-[56px] ";
               if (selectedAnswer !== null) {
                 if (idx === q.answerIndex) {
                   btnClass += "bg-teal-light border-teal text-teal font-medium";
@@ -213,14 +213,14 @@ export default function QuizPage() {
           {/* Explanation */}
           {showExplanation && (
             <Card className="bg-muted/50 p-5 space-y-2">
-              <p className="font-semibold text-sm">
+              <p className="font-semibold text-base">
                 {selectedAnswer === q.answerIndex ? (
                   <span className="text-teal">正解！</span>
                 ) : (
                   <span className="text-red-600">不正解。</span>
                 )}
               </p>
-              <p className="text-sm text-muted-foreground">{q.explanation}</p>
+              <p className="text-base text-muted-foreground leading-relaxed">{q.explanation}</p>
             </Card>
           )}
 
@@ -229,7 +229,7 @@ export default function QuizPage() {
             <button
               type="button"
               onClick={handleNext}
-              className="rounded-md bg-teal px-6 py-2.5 text-sm font-medium text-teal-foreground hover:opacity-90 transition-opacity"
+              className="w-full sm:w-auto rounded-lg bg-teal px-6 py-3 text-base font-medium text-teal-foreground hover:opacity-90 transition-opacity min-h-[48px]"
             >
               {currentIndex + 1 >= total ? "結果を見る" : "次の問題 →"}
             </button>
@@ -246,7 +246,7 @@ export default function QuizPage() {
           <button
             type="button"
             onClick={() => startQuiz(tab)}
-            className="mt-4 rounded-md bg-teal px-6 py-2.5 text-sm font-medium text-teal-foreground hover:opacity-90 transition-opacity"
+            className="mt-4 w-full sm:w-auto rounded-lg bg-teal px-6 py-3 text-base font-medium text-teal-foreground hover:opacity-90 transition-opacity min-h-[48px]"
           >
             もう一度挑戦する
           </button>

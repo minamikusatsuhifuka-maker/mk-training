@@ -108,8 +108,8 @@ export default function ExpertPage() {
         </p>
       </div>
 
-      {/* ロールタブ（3ロール） */}
-      <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+      {/* ロールタブ（3ロール・モバイル横スクロール） */}
+      <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide">
         {roles.map((role) => {
           const isActive = role.id === activeRoleId;
           const activeClass =
@@ -122,7 +122,7 @@ export default function ExpertPage() {
                 setActiveRoleId(role.id);
                 setOpenSections(new Set());
               }}
-              className={`shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full border text-sm transition-colors ${
+              className={`whitespace-nowrap shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-full border text-sm transition-colors min-h-[40px] ${
                 isActive
                   ? activeClass
                   : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
@@ -161,8 +161,8 @@ export default function ExpertPage() {
                 activeRole.id === "multi-office" &&
                 MULTI_SECTION_STYLE[section.id];
               const headerClass = isMultiSection
-                ? `flex items-center gap-2 px-4 py-3 rounded-t-lg cursor-pointer ${MULTI_SECTION_STYLE[section.id]}`
-                : "flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-slate-50";
+                ? `flex items-center gap-2 px-4 py-4 rounded-t-lg cursor-pointer min-h-[56px] ${MULTI_SECTION_STYLE[section.id]}`
+                : "flex items-center justify-between px-4 py-4 cursor-pointer hover:bg-slate-50 min-h-[56px]";
               return (
                 <div
                   key={section.id}
