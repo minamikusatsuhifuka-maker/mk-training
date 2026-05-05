@@ -105,7 +105,16 @@ function formatDate(iso: string): string {
 }
 
 // ─── クイックアクセス ───
-const quickLinks = [
+type QuickLink = {
+  icon: string;
+  name: string;
+  sub: string;
+  href: string;
+  external?: boolean;
+  highlight?: boolean;
+};
+
+const quickLinks: QuickLink[] = [
   {
     icon: "📚",
     name: "医療知識",
@@ -153,6 +162,14 @@ const quickLinks = [
     name: "学習",
     sub: "クイズ・症例学習",
     href: "/quiz",
+  },
+  {
+    icon: "👨‍⚕️",
+    name: "AI院長",
+    sub: "判断基準・理念を確認",
+    href: "https://ai-incho-git-main-minamikusatsuhifuka-makers-projects.vercel.app/",
+    external: true,
+    highlight: true,
   },
 ];
 
@@ -372,17 +389,34 @@ export default function PortalHome() {
           クイックアクセス
         </h2>
         <div className="grid grid-cols-4 gap-2">
-          {quickLinks.map((link) => (
-            <Link key={`${link.name}-${link.href}`} href={link.href}>
-              <div className="p-3 bg-white border border-gray-100 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors text-center">
+          {quickLinks.map((link) => {
+            const cardClass = link.highlight
+              ? "p-3 bg-teal-50 border border-teal-200 rounded-xl cursor-pointer hover:bg-teal-100 transition-colors text-center"
+              : "p-3 bg-white border border-gray-100 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors text-center";
+            const inner = (
+              <div className={cardClass}>
                 <p className="text-xl mb-1">{link.icon}</p>
                 <p className="text-xs font-medium text-gray-800">{link.name}</p>
                 <p className="text-xs text-gray-400 mt-0.5 leading-tight hidden sm:block">
                   {link.sub}
                 </p>
               </div>
-            </Link>
-          ))}
+            );
+            return link.external ? (
+              <a
+                key={`${link.name}-${link.href}`}
+                href={link.href}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {inner}
+              </a>
+            ) : (
+              <Link key={`${link.name}-${link.href}`} href={link.href}>
+                {inner}
+              </Link>
+            );
+          })}
         </div>
       </section>
 
