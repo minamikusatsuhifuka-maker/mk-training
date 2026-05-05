@@ -43,6 +43,12 @@ function buildManualPrompt(
 - steps は最大5ステップまで
 - cautions は最大4件まで
 - faq は最大3件まで
+- todoItems は5〜8件
+
+【todoItemsについて】
+このマニュアルに関連するTodoリスト（日次・週次・月次・都度・初回のみ）を5〜8件生成してください。
+- timing: 'daily'（毎日）/ 'weekly'（毎週）/ 'monthly'（毎月）/ 'asneeded'（都度）/ 'initial'（初回のみ）
+- priority: 'high'（必須）/ 'normal'（推奨）/ 'optional'（任意）
 
 必ずJSON形式のみで回答（他のテキスト不要）:
 {
@@ -56,6 +62,13 @@ function buildManualPrompt(
       "description": "詳細な手順の説明（具体的に）",
       "checkpoints": ["確認ポイント1", "確認ポイント2"],
       "tips": "このステップのコツ・ポイント（任意）"
+    }
+  ],
+  "todoItems": [
+    {
+      "text": "Todoの内容（具体的なアクション）",
+      "timing": "daily",
+      "priority": "high"
     }
   ],
   "cautions": ["注意事項1（失敗しやすいポイント）", "注意事項2"],

@@ -8,12 +8,13 @@ import {
   ROLE_LABEL,
   KNOWLEDGE_TYPE_LABEL,
   KNOWLEDGE_TYPE_STYLE,
+  TODO_TIMING_LABEL,
+  TODO_TIMING_STYLE,
   type Manual,
   type SkillMap,
   type SkillItem,
   type OrgKnowledge,
   type OrgKnowledgeType,
-  type KnowledgeRole,
 } from "@/types/knowledge";
 
 type StaffTab = "manuals" | "skillmaps" | "knowledges";
@@ -325,6 +326,40 @@ export default function KnowledgePage() {
                         {m.purpose}
                       </p>
                     </div>
+
+                    {(m.todoItems ?? []).length > 0 && (
+                      <div className="p-3 bg-blue-50 rounded-xl">
+                        <p className="text-xs font-medium text-blue-700 mb-2">
+                          ✅ Todoリスト
+                        </p>
+                        <div className="space-y-1.5">
+                          {(m.todoItems ?? []).map((todo) => (
+                            <label
+                              key={todo.id}
+                              className="flex items-center gap-2 cursor-pointer group"
+                            >
+                              <input
+                                type="checkbox"
+                                className="rounded text-blue-600 flex-shrink-0"
+                              />
+                              <span className="text-sm text-blue-900 flex-1 leading-snug">
+                                {todo.text}
+                              </span>
+                              <span
+                                className={`text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 ${TODO_TIMING_STYLE[todo.timing]}`}
+                              >
+                                {TODO_TIMING_LABEL[todo.timing]}
+                              </span>
+                              {todo.priority === "high" && (
+                                <span className="text-xs px-1.5 py-0.5 bg-red-50 text-red-600 rounded-full flex-shrink-0">
+                                  必須
+                                </span>
+                              )}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="space-y-3">
                       {m.steps.map((step) => (

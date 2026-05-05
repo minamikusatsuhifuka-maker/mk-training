@@ -17,6 +17,9 @@ import {
   type OrgKnowledge,
   type OrgKnowledgeType,
   type KnowledgeRole,
+  type TodoItem,
+  type TodoTiming,
+  type TodoPriority,
 } from "@/types/knowledge";
 
 type TopTab = "manuals" | "skillmaps" | "knowledges";
@@ -167,6 +170,14 @@ export default function AdminKnowledgeSystemPage() {
               description: s.description ?? "",
               checkpoints: s.checkpoints ?? [],
               tips: s.tips,
+            })
+          ),
+          todoItems: (data.todoItems ?? []).map(
+            (t: Partial<TodoItem>): TodoItem => ({
+              id: genId("todo"),
+              text: t.text ?? "",
+              timing: (t.timing as TodoTiming) ?? "daily",
+              priority: (t.priority as TodoPriority) ?? "normal",
             })
           ),
           cautions: data.cautions ?? [],
@@ -408,6 +419,14 @@ export default function AdminKnowledgeSystemPage() {
               description: s.description ?? "",
               checkpoints: s.checkpoints ?? [],
               tips: s.tips,
+            })
+          ),
+          todoItems: (data.todoItems ?? original.todoItems ?? []).map(
+            (t: Partial<TodoItem>, i: number): TodoItem => ({
+              id: original.todoItems?.[i]?.id ?? genId("todo"),
+              text: t.text ?? "",
+              timing: (t.timing as TodoTiming) ?? "daily",
+              priority: (t.priority as TodoPriority) ?? "normal",
             })
           ),
           updatedAt: new Date().toISOString(),
@@ -1101,7 +1120,7 @@ export default function AdminKnowledgeSystemPage() {
   );
 }
 
-// ─── マニュアル編集モーダル ───
+// ─── マニュアル編集モーダル（3セクション構成） ───
 function ManualEditModal({
   manual,
   onSave,
@@ -1111,12 +1130,24 @@ function ManualEditModal({
   onSave: (m: Manual) => void;
   onClose: () => void;
 }) {
-  const [draft, setDraft] = useState<Manual>(manual);
+  const [draft, setDraft] = useState<Manual>({
+    ...manual,
+    todoItems: manual.todoItems ?? [],
+    cautions: manual.cautions ?? [],
+    faq: manual.faq ?? [],
+  });
+  const [saving] = useState(false);
 
-  const updateStep = (id: string, patch: Partial<ManualStep>) => {
+  const updateStep = (
+    index: number,
+    field: keyof ManualStep,
+    value: ManualStep[keyof ManualStep]
+  ) => {
     setDraft({
       ...draft,
-      steps: draft.steps.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+      steps: draft.steps.map((s, i) =>
+        i === index ? ({ ...s, [field]: value } as ManualStep) : s
+      ),
     });
   };
 
@@ -1136,49 +1167,109 @@ function ManualEditModal({
     });
   };
 
-  const removeStep = (id: string) => {
+  const deleteStep = (index: number) => {
     setDraft({
       ...draft,
       steps: draft.steps
-        .filter((s) => s.id !== id)
+        .filter((_, i) => i !== index)
         .map((s, i) => ({ ...s, order: i + 1 })),
+    });
+  };
+
+  const moveStep = (index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= draft.steps.length) return;
+    const next = [...draft.steps];
+    [next[index], next[target]] = [next[target], next[index]];
+    setDraft({ ...draft, steps: next.map((s, i) => ({ ...s, order: i + 1 })) });
+  };
+
+  const addTodoItem = () => {
+    setDraft({
+      ...draft,
+      todoItems: [
+        ...(draft.todoItems ?? []),
+        {
+          id: genId("todo"),
+          text: "",
+          timing: "daily",
+          priority: "normal",
+        },
+      ],
+    });
+  };
+
+  const updateTodoItem = (
+    index: number,
+    field: keyof TodoItem,
+    value: TodoItem[keyof TodoItem]
+  ) => {
+    const items = [...(draft.todoItems ?? [])];
+    items[index] = { ...items[index], [field]: value } as TodoItem;
+    setDraft({ ...draft, todoItems: items });
+  };
+
+  const deleteTodoItem = (index: number) => {
+    setDraft({
+      ...draft,
+      todoItems: (draft.todoItems ?? []).filter((_, i) => i !== index),
     });
   };
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl w-full max-w-4xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-medium">📖 マニュアル編集</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 text-xl"
-          >
-            ✕
-          </button>
+        {/* ヘッダー */}
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h2 className="text-lg font-medium text-gray-900">📖 マニュアル編集</h2>
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={draft.isPublished}
+                onChange={(e) =>
+                  setDraft({ ...draft, isPublished: e.target.checked })
+                }
+                className="rounded"
+              />
+              公開中（スタッフに表示）
+            </label>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 text-xl"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* 左カラム：基本情報 */}
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">
-                タイトル
-              </label>
-              <input
-                value={draft.title}
-                onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2 text-base"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
+        {/* コンテンツ（スクロール可能） */}
+        <div className="flex-1 overflow-y-auto">
+          {/* Section 1: 基本情報 */}
+          <div className="bg-gray-50 px-6 py-4 border-b">
+            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">
+              基本情報
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-3">
+                <label className="text-xs text-gray-500 mb-1 block">
+                  タイトル
+                </label>
+                <input
+                  value={draft.title}
+                  onChange={(e) =>
+                    setDraft({ ...draft, title: e.target.value })
+                  }
+                  className="w-full border rounded-xl px-3 py-2 text-sm font-medium"
+                />
+              </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">
                   ロール
@@ -1191,7 +1282,7 @@ function ManualEditModal({
                       role: e.target.value as KnowledgeRole,
                     })
                   }
-                  className="w-full border rounded-lg px-3 py-2 text-base bg-white"
+                  className="w-full border rounded-xl px-3 py-2 text-sm bg-white"
                 >
                   <option value="multi-office">マルチタスク医療事務</option>
                   <option value="nurse">看護師</option>
@@ -1208,28 +1299,232 @@ function ManualEditModal({
                   onChange={(e) =>
                     setDraft({ ...draft, category: e.target.value })
                   }
-                  className="w-full border rounded-lg px-3 py-2 text-base bg-white"
+                  className="w-full border rounded-xl px-3 py-2 text-sm bg-white"
                 >
                   {MANUAL_CATEGORIES.map((c) => (
                     <option key={c}>{c}</option>
                   ))}
                 </select>
               </div>
+              {draft.role === "custom" && (
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">
+                    カスタムロール名
+                  </label>
+                  <input
+                    value={draft.customRole ?? ""}
+                    onChange={(e) =>
+                      setDraft({ ...draft, customRole: e.target.value })
+                    }
+                    className="w-full border rounded-xl px-3 py-2 text-sm"
+                  />
+                </div>
+              )}
+              <div className="md:col-span-3">
+                <label className="text-xs text-gray-500 mb-1 block">
+                  🎯 目的（なぜこのマニュアルが必要か）
+                </label>
+                <textarea
+                  value={draft.purpose}
+                  onChange={(e) =>
+                    setDraft({ ...draft, purpose: e.target.value })
+                  }
+                  rows={3}
+                  className="w-full border rounded-xl px-3 py-2 text-sm resize-none"
+                />
+              </div>
             </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">目的</label>
-              <textarea
-                value={draft.purpose}
-                onChange={(e) =>
-                  setDraft({ ...draft, purpose: e.target.value })
-                }
-                rows={3}
-                className="w-full border rounded-lg px-3 py-2 text-base resize-y"
-              />
+          </div>
+
+          {/* Section 2: ステップ */}
+          <div className="px-6 py-4 border-b">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                手順ステップ ({draft.steps.length}件)
+              </h3>
+              <button
+                type="button"
+                onClick={addStep}
+                className="text-xs px-3 py-1.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-lg hover:bg-teal-100"
+              >
+                + ステップを追加
+              </button>
             </div>
+            <div className="space-y-3">
+              {draft.steps.map((step, i) => (
+                <div
+                  key={step.id}
+                  className="border border-gray-200 rounded-xl overflow-hidden"
+                >
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-teal-50 border-b border-teal-100">
+                    <span className="w-6 h-6 rounded-full bg-teal-600 text-white text-xs flex items-center justify-center font-medium flex-shrink-0">
+                      {i + 1}
+                    </span>
+                    <input
+                      value={step.title}
+                      onChange={(e) => updateStep(i, "title", e.target.value)}
+                      placeholder="ステップのタイトル"
+                      className="flex-1 bg-transparent border-0 text-sm font-medium text-teal-900 outline-none placeholder:text-teal-400"
+                    />
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => moveStep(i, -1)}
+                        disabled={i === 0}
+                        className="text-xs px-1.5 py-1 text-teal-600 hover:bg-teal-100 rounded disabled:opacity-30"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveStep(i, 1)}
+                        disabled={i === draft.steps.length - 1}
+                        className="text-xs px-1.5 py-1 text-teal-600 hover:bg-teal-100 rounded disabled:opacity-30"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteStep(i)}
+                        className="text-xs px-2 py-1 text-red-500 hover:bg-red-50 rounded"
+                      >
+                        削除
+                      </button>
+                    </div>
+                  </div>
+                  <div className="px-4 py-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-400 mb-1 block">
+                        詳細説明
+                      </label>
+                      <textarea
+                        value={step.description}
+                        onChange={(e) =>
+                          updateStep(i, "description", e.target.value)
+                        }
+                        rows={4}
+                        placeholder="具体的な手順を記載..."
+                        className="w-full border border-gray-100 rounded-lg px-3 py-2 text-sm resize-none"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-xs text-gray-400 mb-1 block">
+                          ✅ 確認ポイント（1行1件）
+                        </label>
+                        <textarea
+                          value={step.checkpoints.join("\n")}
+                          onChange={(e) =>
+                            updateStep(
+                              i,
+                              "checkpoints",
+                              e.target.value.split("\n").filter(Boolean)
+                            )
+                          }
+                          rows={3}
+                          placeholder="確認すべきポイントを記載..."
+                          className="w-full border border-gray-100 rounded-lg px-3 py-2 text-sm resize-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400 mb-1 block">
+                          💡 コツ・ポイント（任意）
+                        </label>
+                        <input
+                          value={step.tips ?? ""}
+                          onChange={(e) =>
+                            updateStep(i, "tips", e.target.value)
+                          }
+                          placeholder="このステップのコツ..."
+                          className="w-full border border-gray-100 rounded-lg px-3 py-2 text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Section 3: Todoリスト */}
+          <div className="px-6 py-4 border-b">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                ✅ Todoリスト ({(draft.todoItems ?? []).length}件)
+              </h3>
+              <button
+                type="button"
+                onClick={addTodoItem}
+                className="text-xs px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100"
+              >
+                + 追加
+              </button>
+            </div>
+            <div className="space-y-2">
+              {(draft.todoItems ?? []).map((todo, i) => (
+                <div
+                  key={todo.id}
+                  className="flex flex-wrap items-center gap-3 p-2.5 bg-blue-50 border border-blue-100 rounded-xl"
+                >
+                  <span className="text-blue-400 flex-shrink-0">☐</span>
+                  <input
+                    value={todo.text}
+                    onChange={(e) =>
+                      updateTodoItem(i, "text", e.target.value)
+                    }
+                    placeholder="Todoの内容"
+                    className="flex-1 min-w-[200px] bg-transparent border-0 text-sm text-blue-900 outline-none"
+                  />
+                  <select
+                    value={todo.timing}
+                    onChange={(e) =>
+                      updateTodoItem(i, "timing", e.target.value as TodoTiming)
+                    }
+                    className="text-xs border border-blue-200 rounded-lg px-2 py-1 bg-white text-blue-700"
+                  >
+                    <option value="daily">毎日</option>
+                    <option value="weekly">毎週</option>
+                    <option value="monthly">毎月</option>
+                    <option value="asneeded">都度</option>
+                    <option value="initial">初回のみ</option>
+                  </select>
+                  <select
+                    value={todo.priority}
+                    onChange={(e) =>
+                      updateTodoItem(
+                        i,
+                        "priority",
+                        e.target.value as TodoPriority
+                      )
+                    }
+                    className="text-xs border border-blue-200 rounded-lg px-2 py-1 bg-white text-blue-700"
+                  >
+                    <option value="high">必須</option>
+                    <option value="normal">推奨</option>
+                    <option value="optional">任意</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => deleteTodoItem(i)}
+                    className="text-red-400 hover:text-red-600 text-sm"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              {(draft.todoItems ?? []).length === 0 && (
+                <p className="text-xs text-gray-400 text-center py-3">
+                  Todoリストがありません。「+ 追加」から追加するか、AI生成で自動作成してください。
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Section 4: 注意事項・FAQ */}
+          <div className="px-6 py-4 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">
-                注意事項（1行1件）
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">
+                ⚠️ 注意事項（1行1件）
               </label>
               <textarea
                 value={draft.cautions.join("\n")}
@@ -1239,138 +1534,58 @@ function ManualEditModal({
                     cautions: e.target.value.split("\n").filter((s) => s.trim()),
                   })
                 }
-                rows={3}
-                className="w-full border rounded-lg px-3 py-2 text-base resize-y"
+                rows={5}
+                placeholder="注意事項を1行ずつ記載..."
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none"
               />
             </div>
-            <label className="flex items-center gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={draft.isPublished}
-                onChange={(e) =>
-                  setDraft({ ...draft, isPublished: e.target.checked })
-                }
+            <div>
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">
+                ❓ FAQ（Q:〜 A:〜 の形式で、空行区切り）
+              </label>
+              <textarea
+                value={draft.faq
+                  .map((f) => `Q: ${f.q}\nA: ${f.a}`)
+                  .join("\n\n")}
+                onChange={(e) => {
+                  const blocks = e.target.value.split("\n\n").filter(Boolean);
+                  const faq = blocks
+                    .map((block) => {
+                      const lines = block.split("\n");
+                      const q = lines[0]?.replace(/^Q[:：]\s*/, "") ?? "";
+                      const a = lines.slice(1).join("\n").replace(
+                        /^A[:：]\s*/,
+                        ""
+                      );
+                      return q ? { q, a } : null;
+                    })
+                    .filter((x): x is { q: string; a: string } => Boolean(x));
+                  setDraft({ ...draft, faq });
+                }}
+                rows={5}
+                placeholder={"Q: 質問\nA: 回答\n\nQ: 質問2\nA: 回答2"}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none font-mono"
               />
-              公開中（スタッフに表示）
-            </label>
-          </div>
-
-          {/* 右カラム：ステップ */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-gray-700">
-                ステップ（{draft.steps.length}）
-              </p>
-              <button
-                type="button"
-                onClick={addStep}
-                className="text-xs px-3 py-1.5 border rounded-lg hover:bg-gray-50"
-              >
-                + 追加
-              </button>
-            </div>
-            <div className="space-y-2 max-h-[400px] overflow-y-auto">
-              {draft.steps.map((s, i) => (
-                <div
-                  key={s.id}
-                  className="border rounded-lg p-2 space-y-1 bg-gray-50/50"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-gray-500">
-                      Step {i + 1}
-                    </span>
-                    <input
-                      value={s.title}
-                      onChange={(e) =>
-                        updateStep(s.id, { title: e.target.value })
-                      }
-                      placeholder="タイトル"
-                      className="flex-1 border rounded px-2 py-1 text-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeStep(s.id)}
-                      className="text-xs text-red-500"
-                    >
-                      削除
-                    </button>
-                  </div>
-                  <textarea
-                    value={s.description}
-                    onChange={(e) =>
-                      updateStep(s.id, { description: e.target.value })
-                    }
-                    rows={2}
-                    placeholder="手順の説明"
-                    className="w-full border rounded px-2 py-1 text-sm resize-y"
-                  />
-                  <textarea
-                    value={s.checkpoints.join("\n")}
-                    onChange={(e) =>
-                      updateStep(s.id, {
-                        checkpoints: e.target.value
-                          .split("\n")
-                          .filter((x) => x.trim()),
-                      })
-                    }
-                    rows={2}
-                    placeholder="確認ポイント（1行1件）"
-                    className="w-full border rounded px-2 py-1 text-sm resize-y"
-                  />
-                  <input
-                    value={s.tips ?? ""}
-                    onChange={(e) =>
-                      updateStep(s.id, { tips: e.target.value })
-                    }
-                    placeholder="コツ・ポイント（任意）"
-                    className="w-full border rounded px-2 py-1 text-sm"
-                  />
-                </div>
-              ))}
             </div>
           </div>
         </div>
 
-        {/* FAQ */}
-        <div>
-          <label className="text-xs text-gray-500 mb-1 block">
-            FAQ（Q\nA を空行区切り）
-          </label>
-          <textarea
-            value={draft.faq.map((f) => `Q: ${f.q}\nA: ${f.a}`).join("\n\n")}
-            onChange={(e) => {
-              const blocks = e.target.value.split("\n\n");
-              const faq = blocks
-                .map((b) => {
-                  const qMatch = b.match(/Q[:：]\s*(.+)/);
-                  const aMatch = b.match(/A[:：]\s*([\s\S]+)/);
-                  return qMatch && aMatch
-                    ? { q: qMatch[1].trim(), a: aMatch[1].trim() }
-                    : null;
-                })
-                .filter((x): x is { q: string; a: string } => Boolean(x));
-              setDraft({ ...draft, faq });
-            }}
-            rows={4}
-            className="w-full border rounded-lg px-3 py-2 text-sm resize-y font-mono"
-            placeholder={"Q: 質問\nA: 回答\n\nQ: 質問2\nA: 回答2"}
-          />
-        </div>
-
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => onSave(draft)}
-            className="flex-1 py-3 bg-teal-600 text-white rounded-xl text-base font-medium"
-          >
-            💾 保存
-          </button>
+        {/* フッター */}
+        <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-3 border rounded-xl text-base"
+            className="px-4 py-2 border rounded-xl text-sm hover:bg-gray-100"
           >
             キャンセル
+          </button>
+          <button
+            type="button"
+            onClick={() => onSave(draft)}
+            disabled={saving}
+            className="px-4 py-2 bg-teal-600 text-white rounded-xl text-sm hover:bg-teal-700 disabled:opacity-50"
+          >
+            {saving ? "保存中..." : "💾 保存"}
           </button>
         </div>
       </div>

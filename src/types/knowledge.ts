@@ -13,6 +13,44 @@ export type ManualStep = {
   tips?: string;
 };
 
+export type TodoTiming =
+  | "daily"
+  | "weekly"
+  | "monthly"
+  | "asneeded"
+  | "initial";
+
+export type TodoPriority = "high" | "normal" | "optional";
+
+export type TodoItem = {
+  id: string;
+  text: string;
+  timing: TodoTiming;
+  priority: TodoPriority;
+};
+
+export const TODO_TIMING_LABEL: Record<TodoTiming, string> = {
+  daily: "毎日",
+  weekly: "毎週",
+  monthly: "毎月",
+  asneeded: "都度",
+  initial: "初回",
+};
+
+export const TODO_TIMING_STYLE: Record<TodoTiming, string> = {
+  daily: "bg-blue-100 text-blue-700",
+  weekly: "bg-purple-100 text-purple-700",
+  monthly: "bg-teal-100 text-teal-700",
+  asneeded: "bg-gray-100 text-gray-600",
+  initial: "bg-amber-100 text-amber-700",
+};
+
+export const TODO_PRIORITY_LABEL: Record<TodoPriority, string> = {
+  high: "必須",
+  normal: "推奨",
+  optional: "任意",
+};
+
 export type Manual = {
   id: string;
   title: string;
@@ -21,6 +59,7 @@ export type Manual = {
   category: string;
   purpose: string;
   steps: ManualStep[];
+  todoItems: TodoItem[];
   cautions: string[];
   faq: { q: string; a: string }[];
   relatedManuals: string[];
