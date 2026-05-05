@@ -1,5 +1,5 @@
 // エキスパートに求められる働き方の初期データ
-// 5ロール × 専門知識/スキル・行動/マインドセットの3セクション
+// 3ロール構成（マルチタスク医療事務 / 看護師 / 全スタッフ共通）
 
 export type ExpertLevel = "basic" | "intermediate" | "advanced";
 export type ExpertCategory = "knowledge" | "skill" | "mindset" | "action";
@@ -29,16 +29,16 @@ export type ExpertRole = {
 
 export const EXPERT_ROLES: ExpertRole[] = [
   {
-    id: "medical-office",
-    title: "医療事務",
-    icon: "💼",
-    color: "blue",
+    id: "multi-office",
+    title: "マルチタスク医療事務",
+    icon: "🏥",
+    color: "teal",
     description:
-      "保険診療の要として、正確・迅速・丁寧な事務処理でクリニックを支える",
+      "医療事務・クラーク・カウンセラーの3役を担うLUMINAの中核スタッフ。保険診療から美容診療まで幅広く患者に寄り添う。",
     sections: [
       {
-        id: "knowledge",
-        title: "専門知識",
+        id: "as-office",
+        title: "💼 医療事務として",
         items: [
           {
             id: "mo-k1",
@@ -52,7 +52,7 @@ export const EXPERT_ROLES: ExpertRole[] = [
             id: "mo-k2",
             title: "レセプト審査対策の知識",
             detail:
-              "返戻・査定の原因パターンを把握し、事前に防げる。生物学的製剤の摘要欄記載事項を完璧に理解している。",
+              "返戻・査定の原因パターンを把握し、事前に防げる。生物学的製剤の摘要欄記載事項（IGA・EASIスコア等）を完璧に理解している。",
             level: "advanced",
             category: "knowledge",
           },
@@ -72,12 +72,6 @@ export const EXPERT_ROLES: ExpertRole[] = [
             level: "intermediate",
             category: "knowledge",
           },
-        ],
-      },
-      {
-        id: "skill",
-        title: "スキル・行動",
-        items: [
           {
             id: "mo-s1",
             title: "電子カルテ・レセコンの高速・正確な操作",
@@ -102,51 +96,11 @@ export const EXPERT_ROLES: ExpertRole[] = [
             level: "intermediate",
             category: "skill",
           },
-          {
-            id: "mo-s4",
-            title: "後輩・新人への指導",
-            detail:
-              "算定ルール・電子カルテ操作・患者対応を新人に分かりやすく教えられる。マニュアルの整備・更新も担える。",
-            level: "advanced",
-            category: "skill",
-          },
         ],
       },
       {
-        id: "mindset",
-        title: "マインドセット",
-        items: [
-          {
-            id: "mo-m1",
-            title: "正確性へのこだわり",
-            detail:
-              "算定ミス・入力ミスは患者・クリニック双方に損害を与えるという意識を持ち、確認を怠らない。",
-            level: "basic",
-            category: "mindset",
-          },
-          {
-            id: "mo-m2",
-            title: "医療チームの一員としての自覚",
-            detail:
-              "事務だけでなく医療チーム全体の動きを理解し、医師・看護師・カウンセラーと連携できる。",
-            level: "intermediate",
-            category: "mindset",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "clerk",
-    title: "医療クラーク",
-    icon: "📋",
-    color: "teal",
-    description:
-      "医師の右腕として診療を補助し、保険・美容両面でクリニックの診療品質を高める",
-    sections: [
-      {
-        id: "knowledge",
-        title: "専門知識",
+        id: "as-clerk",
+        title: "📋 クラークとして",
         items: [
           {
             id: "cl-k1",
@@ -173,20 +127,6 @@ export const EXPERT_ROLES: ExpertRole[] = [
             category: "knowledge",
           },
           {
-            id: "cl-k4",
-            title: "美容施術の知識",
-            detail:
-              "院内の全美容施術（IPL・レーザー・ポテンツァ等）の適応・禁忌・ダウンタイムを理解している。",
-            level: "intermediate",
-            category: "knowledge",
-          },
-        ],
-      },
-      {
-        id: "skill",
-        title: "スキル・行動",
-        items: [
-          {
             id: "cl-s1",
             title: "カルテ代行入力の速度と正確性",
             detail:
@@ -203,20 +143,6 @@ export const EXPERT_ROLES: ExpertRole[] = [
             category: "skill",
           },
           {
-            id: "cl-s3",
-            title: "美容カウンセリングの実施",
-            detail:
-              "施術前のカウンセリングを独立して行える。禁忌確認・施術説明・同意取得・料金説明まで一貫して対応できる。",
-            level: "advanced",
-            category: "skill",
-          },
-        ],
-      },
-      {
-        id: "mindset",
-        title: "マインドセット",
-        items: [
-          {
             id: "cl-m1",
             title: "医師のパートナーとしての自覚",
             detail:
@@ -224,29 +150,11 @@ export const EXPERT_ROLES: ExpertRole[] = [
             level: "basic",
             category: "mindset",
           },
-          {
-            id: "cl-m2",
-            title: "保険×美容のハイブリッド対応力",
-            detail:
-              "同一患者が保険診療と美容診療を受ける場合の対応を理解し、シームレスに案内できる。",
-            level: "advanced",
-            category: "mindset",
-          },
         ],
       },
-    ],
-  },
-  {
-    id: "counselor",
-    title: "カウンセラー",
-    icon: "💬",
-    color: "orange",
-    description:
-      "患者の心に寄り添い、最適な施術提案と信頼関係構築で美容診療の価値を最大化する",
-    sections: [
       {
-        id: "knowledge",
-        title: "専門知識",
+        id: "as-counselor",
+        title: "💬 カウンセラーとして",
         items: [
           {
             id: "co-k1",
@@ -272,12 +180,6 @@ export const EXPERT_ROLES: ExpertRole[] = [
             level: "intermediate",
             category: "knowledge",
           },
-        ],
-      },
-      {
-        id: "skill",
-        title: "スキル・行動",
-        items: [
           {
             id: "co-s1",
             title: "ヒアリング・共感力",
@@ -303,20 +205,6 @@ export const EXPERT_ROLES: ExpertRole[] = [
             category: "skill",
           },
           {
-            id: "co-s4",
-            title: "トラブル・クレーム対応",
-            detail:
-              "施術結果への不満・副作用等のクレームを冷静に受け止め、医師と連携して適切に解決できる。",
-            level: "intermediate",
-            category: "skill",
-          },
-        ],
-      },
-      {
-        id: "mindset",
-        title: "マインドセット",
-        items: [
-          {
             id: "co-m1",
             title: "患者の人生を豊かにするという意識",
             detail:
@@ -326,10 +214,10 @@ export const EXPERT_ROLES: ExpertRole[] = [
           },
           {
             id: "co-m2",
-            title: "自分自身が美しくあること",
+            title: "保険×美容のハイブリッド対応力",
             detail:
-              "美容を提案するプロとして、自身のスキンケア・身だしなみ・表情に気を配る。説得力のある提案者であること。",
-            level: "basic",
+              "同一患者が保険診療と美容診療を受ける場合の対応を理解し、シームレスに案内できる。医療事務・クラーク・カウンセラーとして一気通貫で対応できる。",
+            level: "advanced",
             category: "mindset",
           },
         ],
@@ -345,8 +233,8 @@ export const EXPERT_ROLES: ExpertRole[] = [
       "高度な医療知識と技術で安全な診療を支え、患者の不安を和らげる医療のプロ",
     sections: [
       {
-        id: "knowledge",
-        title: "専門知識",
+        id: "nurse-knowledge",
+        title: "🩺 医療知識・処置",
         items: [
           {
             id: "nu-k1",
@@ -380,12 +268,6 @@ export const EXPERT_ROLES: ExpertRole[] = [
             level: "intermediate",
             category: "knowledge",
           },
-        ],
-      },
-      {
-        id: "skill",
-        title: "スキル・行動",
-        items: [
           {
             id: "nu-s1",
             title: "確実・安全な医療処置",
@@ -402,30 +284,30 @@ export const EXPERT_ROLES: ExpertRole[] = [
             level: "advanced",
             category: "skill",
           },
-          {
-            id: "nu-s3",
-            title: "患者観察・異常の早期発見",
-            detail:
-              "投与後の観察・バイタル測定を確実に行い、異常の早期発見・医師への迅速な報告ができる。",
-            level: "advanced",
-            category: "skill",
-          },
-          {
-            id: "nu-s4",
-            title: "スキンケア・服薬指導",
-            detail:
-              "FTU(フィンガーチップユニット)を用いたステロイド外用指導・保湿剤の正しい塗り方指導を実践できる。",
-            level: "intermediate",
-            category: "skill",
-          },
         ],
       },
       {
-        id: "mindset",
-        title: "マインドセット",
+        id: "nurse-patient",
+        title: "🤝 患者管理・教育",
         items: [
           {
-            id: "nu-m1",
+            id: "nu-p1",
+            title: "バイタル測定・全身状態の確認",
+            detail:
+              "来院患者の血圧・体温等のバイタル測定。生物学的製剤投与患者や高齢者は特に注意深く観察し、異常があれば医師に即報告。",
+            level: "basic",
+            category: "skill",
+          },
+          {
+            id: "nu-p2",
+            title: "スキンケア・服薬指導",
+            detail:
+              "FTU（フィンガーチップユニット）を用いたステロイド外用指導・保湿剤の正しい塗り方指導を実践できる。",
+            level: "intermediate",
+            category: "skill",
+          },
+          {
+            id: "nu-p3",
             title: "患者安全を最優先にする意識",
             detail:
               "医療事故・インシデントを防ぐため、指差し確認・ダブルチェック・報告・連絡・相談を徹底する。",
@@ -433,7 +315,7 @@ export const EXPERT_ROLES: ExpertRole[] = [
             category: "mindset",
           },
           {
-            id: "nu-m2",
+            id: "nu-p4",
             title: "継続的な学習",
             detail:
               "生物学的製剤・美容医療は進化が速い。自主的に最新情報を収集し、チームに還元する姿勢を持つ。",
@@ -448,13 +330,13 @@ export const EXPERT_ROLES: ExpertRole[] = [
     id: "all",
     title: "全スタッフ共通",
     icon: "🌱",
-    color: "teal",
+    color: "green",
     description:
-      "ロールを超えて南草津皮フ科のスタッフ全員に求められる姿勢・行動・マインドセット",
+      "ロールを超えてLUMINAのスタッフ全員に求められる姿勢・行動・マインドセット",
     sections: [
       {
         id: "philosophy",
-        title: "クリニック理念の体現",
+        title: "🏛️ クリニック理念の体現",
         items: [
           {
             id: "al-p1",
@@ -484,7 +366,7 @@ export const EXPERT_ROLES: ExpertRole[] = [
       },
       {
         id: "behavior",
-        title: "凡事徹底",
+        title: "✅ 凡事徹底",
         items: [
           {
             id: "al-b1",
@@ -514,7 +396,7 @@ export const EXPERT_ROLES: ExpertRole[] = [
       },
       {
         id: "growth",
-        title: "自己成長",
+        title: "📈 自己成長",
         items: [
           {
             id: "al-g1",

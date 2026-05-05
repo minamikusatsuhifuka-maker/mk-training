@@ -31,6 +31,25 @@ const LEVEL_BADGE_CLASS: Record<ExpertLevel, string> = {
   advanced: "bg-amber-100 text-amber-800 border-amber-300",
 };
 
+// ロール毎のタブ色（active状態）
+const ROLE_TAB_ACTIVE: Record<string, string> = {
+  teal: "bg-teal-600 text-white border-teal-600",
+  pink: "bg-pink-500 text-white border-pink-500",
+  green: "bg-green-600 text-white border-green-600",
+  blue: "bg-blue-600 text-white border-blue-600",
+  orange: "bg-orange-500 text-white border-orange-500",
+};
+
+// マルチタスク医療事務のサブ役割セクションのスタイル
+const MULTI_SECTION_STYLE: Record<string, string> = {
+  "as-office":
+    "bg-teal-50 border-l-4 border-teal-400 text-teal-800",
+  "as-clerk":
+    "bg-blue-50 border-l-4 border-blue-400 text-blue-800",
+  "as-counselor":
+    "bg-orange-50 border-l-4 border-orange-400 text-orange-800",
+};
+
 type ImproveSuggestion = {
   improvedTitle?: string;
   improvedDetail?: string;
@@ -65,11 +84,28 @@ export default function AdminExpertPage() {
   // 初期ロード（Supabaseから取得）
   useEffect(() => {
     getContent<ExpertRole>(CONTENT_KEYS.expertRoles, EXPERT_ROLES)
-      .then((result) => {
-        if (result && result.length > 0) {
-          setRoles(result);
-          setConnected(true);
+      .then(async (result) => {
+        if (!result || result.length === 0) {
+          setRoles(EXPERT_ROLES);
+          return;
         }
+        // 旧形式（5ロール構成）の場合は新3ロール構成で上書き
+        const isOldFormat =
+          result.some(
+            (r) =>
+              r.id === "medical-office" ||
+              r.id === "clerk" ||
+              r.id === "counselor"
+          ) || result.length !== 3;
+        if (isOldFormat) {
+          await saveContent(CONTENT_KEYS.expertRoles, EXPERT_ROLES);
+          setRoles(EXPERT_ROLES);
+          setActiveRoleId(EXPERT_ROLES[0].id);
+          setConnected(true);
+          return;
+        }
+        setRoles(result);
+        setConnected(true);
       })
       .catch(() => setConnected(false))
       .finally(() => setLoading(false));
@@ -370,6 +406,8 @@ export default function AdminExpertPage() {
       <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
         {roles.map((role) => {
           const isActive = role.id === activeRoleId;
+          const activeClass =
+            ROLE_TAB_ACTIVE[role.color] ?? ROLE_TAB_ACTIVE.teal;
           return (
             <button
               key={role.id}
@@ -380,7 +418,7 @@ export default function AdminExpertPage() {
               }}
               className={`shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full border text-sm transition-colors ${
                 isActive
-                  ? "bg-teal-600 text-white border-teal-600"
+                  ? activeClass
                   : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
               }`}
             >
@@ -412,19 +450,35 @@ export default function AdminExpertPage() {
             const selected = selectedProposed[sectionKey] ?? new Set<number>();
             const isAddLoading = addLoading.has(sectionKey);
 
+            const isMultiSection =
+              activeRole.id === "multi-office" &&
+              Boolean(MULTI_SECTION_STYLE[section.id]);
+            const headerClass = isMultiSection
+              ? `flex items-center gap-2 px-4 py-3 cursor-pointer ${MULTI_SECTION_STYLE[section.id]}`
+              : "flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-slate-50";
+
             return (
               <div key={section.id} className="border rounded-lg overflow-hidden bg-white">
-                <div
-                  className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-slate-50"
-                  onClick={() => toggleSection(sectionKey)}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-slate-800">{section.title}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                      {section.items.length}件
-                    </span>
-                  </div>
-                  <span className="text-sm text-slate-400">{isOpen ? "▲" : "▼"}</span>
+                <div className={headerClass} onClick={() => toggleSection(sectionKey)}>
+                  {isMultiSection ? (
+                    <>
+                      <span className="font-semibold flex-1">{section.title}</span>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-white/80 text-slate-700">
+                        {section.items.length}件
+                      </span>
+                      <span className="text-sm">{isOpen ? "▲" : "▼"}</span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-800">{section.title}</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                          {section.items.length}件
+                        </span>
+                      </div>
+                      <span className="text-sm text-slate-400">{isOpen ? "▲" : "▼"}</span>
+                    </>
+                  )}
                 </div>
 
                 {isOpen && (
