@@ -251,7 +251,7 @@ const successPrinciples = [
   {
     number: "八",
     title: "凡事徹底",
-    detail: "当たり前のことを、特別熱心に、しかも徹底的に行なう",
+    detail: "当たり前のことを、特別熱心に、しかも徹底的に行う",
     icon: "🏆",
   },
 ];

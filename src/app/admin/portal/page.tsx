@@ -806,7 +806,7 @@ export default function AdminPortalPage() {
                 setTodayWord({ ...todayWord, text: e.target.value })
               }
               rows={3}
-              placeholder="例：「当たり前のことを、特別熱心に、しかも徹底的に行なう。」"
+              placeholder="例：「当たり前のことを、特別熱心に、しかも徹底的に行う。」"
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-y"
             />
           </div>

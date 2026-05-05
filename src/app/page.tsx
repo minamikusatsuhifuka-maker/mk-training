@@ -22,7 +22,7 @@ import {
 const DEFAULT_NEWS: NewsItem[] = [
   {
     id: "1",
-    title: "LUMINAポータルサイトへようこそ",
+    title: "スタッフポータルへようこそ",
     category: "notice",
     author: "管理者",
     content:
@@ -33,8 +33,8 @@ const DEFAULT_NEWS: NewsItem[] = [
 ];
 
 const DEFAULT_TODAY_WORD: TodayWord = {
-  text: "「当たり前のことを、特別熱心に、しかも徹底的に行なう。」",
-  author: "成功の八原則 第八、凡事徹底",
+  text: "「当たり前のことを、特別熱心に、しかも徹底的に行う。」",
+  author: "アチーブメント 成功の八原則 第八原則",
   updatedAt: new Date().toISOString(),
 };
 
@@ -139,7 +139,7 @@ const quickLinks = [
   {
     icon: "🌱",
     name: "理念・想い",
-    sub: "LUMINA哲学・8原則",
+    sub: "理念・8原則",
     href: "/philosophy",
   },
   {
@@ -291,8 +291,8 @@ export default function PortalHome() {
       {/* ① ヘッダーバー */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-gray-100 sticky top-0 bg-white z-10">
         <div>
-          <p className="text-base font-medium text-gray-900">LUMINA</p>
-          <p className="text-xs text-gray-400">南草津皮フ科 スタッフポータル</p>
+          <p className="text-base font-medium text-gray-900">南草津皮フ科</p>
+          <p className="text-xs text-gray-400">スタッフポータル</p>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-gray-500">{todayStr}</span>
