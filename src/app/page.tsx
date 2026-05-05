@@ -158,6 +158,12 @@ const quickLinks: QuickLink[] = [
     href: "/grade-system",
   },
   {
+    icon: "🚀",
+    name: "成長ロードマップ",
+    sub: "AIでスキル・知識を一括生成",
+    href: "/growth-builder",
+  },
+  {
     icon: "📖",
     name: "学習",
     sub: "クイズ・症例学習",
