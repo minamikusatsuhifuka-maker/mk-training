@@ -155,7 +155,7 @@ const quickLinks: QuickLink[] = [
     icon: "📊",
     name: "等級制度",
     sub: "G1〜G5・評価項目",
-    href: "/expert",
+    href: "/grade-system",
   },
   {
     icon: "📖",
