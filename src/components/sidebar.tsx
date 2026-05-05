@@ -7,6 +7,12 @@ import { Separator } from "@/components/ui/separator";
 
 const navSections = [
   {
+    title: "ホーム",
+    items: [
+      { label: "🏠 ホーム", href: "/" },
+    ],
+  },
+  {
     title: "理念・想い",
     items: [
       { label: "🏛️ 理念・院長の想い", href: "/philosophy" },

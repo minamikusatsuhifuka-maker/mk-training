@@ -38,6 +38,18 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* ポータル管理（最上部に配置） */}
+        <Link href="/admin/portal">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-pink-400 border-l-4 border-l-pink-500 sm:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">🏠 ポータル管理</CardTitle>
+              <CardDescription className="text-xs">
+                LUMINAポータルトップ（新着情報・気づきシェア・ありがとうカード・経営方針・今日の一言）の管理
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
         {stats.map((s) => (
           <Link key={s.href} href={s.href}>
             <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-slate-400">
