@@ -7,7 +7,6 @@ import {
   MANUAL_CATEGORIES,
   ROLE_LABEL,
   KNOWLEDGE_TYPE_LABEL,
-  KNOWLEDGE_TYPE_STYLE,
   type Manual,
   type ManualStep,
   type SkillMap,
@@ -53,6 +52,72 @@ function formatDate(iso: string): string {
 
 function genId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+// タイプ別アイコン
+const typeIcon = (type: OrgKnowledgeType): string =>
+  ({
+    improvement: "💡",
+    success: "✅",
+    learning: "📚",
+    bestpractice: "⭐",
+  }[type] ?? "📄");
+
+// タイプ別ヘッダー背景
+const typeHeaderStyle = (type: OrgKnowledgeType): string =>
+  ({
+    improvement: "bg-amber-50 border-amber-100",
+    success: "bg-green-50 border-green-100",
+    learning: "bg-blue-50 border-blue-100",
+    bestpractice: "bg-purple-50 border-purple-100",
+  }[type] ?? "bg-gray-50 border-gray-100");
+
+// タイプ別テキストカラー
+const typeTextColor = (type: OrgKnowledgeType): string =>
+  ({
+    improvement: "text-amber-800",
+    success: "text-green-800",
+    learning: "text-blue-800",
+    bestpractice: "text-purple-800",
+  }[type] ?? "text-gray-700");
+
+// KNOWLEDGE_TYPE_LABEL からアイコン部分を除いたクリーンなラベル
+const cleanTypeLabel = (type: OrgKnowledgeType): string =>
+  KNOWLEDGE_TYPE_LABEL[type].replace(/^\S+\s/, "");
+
+// 価値・影響を四方よしバッジで表示
+function renderImpactWithBadges(impact: string) {
+  const parts = impact.split(/(【[^】]+】)/g).filter((p) => p.length > 0);
+  const colorMap: Record<string, string> = {
+    患者よし: "bg-teal-100 text-teal-800",
+    スタッフよし: "bg-blue-100 text-blue-800",
+    クリニックよし: "bg-purple-100 text-purple-800",
+    社会よし: "bg-green-100 text-green-800",
+  };
+  return (
+    <p className="leading-relaxed">
+      {parts.map((part, i) => {
+        const badgeMatch = part.match(/^【(.+)】$/);
+        if (badgeMatch) {
+          const label = badgeMatch[1];
+          const color = colorMap[label] ?? "bg-gray-100 text-gray-700";
+          return (
+            <span
+              key={i}
+              className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium mr-1 ${color}`}
+            >
+              {part}
+            </span>
+          );
+        }
+        return (
+          <span key={i} className="text-sm text-gray-700">
+            {part}
+          </span>
+        );
+      })}
+    </p>
+  );
 }
 
 export default function AdminKnowledgeSystemPage() {
@@ -799,91 +864,162 @@ export default function AdminKnowledgeSystemPage() {
             {filteredKnowledges.map((k) => (
               <div
                 key={k.id}
-                className="bg-white border border-gray-100 rounded-2xl p-4"
+                className="bg-white border border-gray-100 rounded-2xl overflow-hidden"
               >
-                <div className="flex items-start justify-between mb-2 gap-3 flex-wrap">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                {/* カードヘッダー */}
+                <div
+                  className={`px-5 py-3 border-b ${typeHeaderStyle(k.type)}`}
+                >
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-lg">{typeIcon(k.type)}</span>
                       <span
-                        className={`text-xs px-2 py-0.5 rounded-full ${
-                          KNOWLEDGE_TYPE_STYLE[k.type]
-                        }`}
+                        className={`text-sm font-medium ${typeTextColor(k.type)}`}
                       >
-                        {KNOWLEDGE_TYPE_LABEL[k.type]}
+                        {cleanTypeLabel(k.type)}
                       </span>
                       {!k.isApproved && (
-                        <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full">
+                        <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full border border-amber-200">
                           承認待ち
                         </span>
                       )}
                     </div>
-                    <h3 className="font-medium text-gray-900 text-sm">
-                      {k.title}
-                    </h3>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {k.author} · {formatDate(k.createdAt)}
-                    </p>
-                  </div>
-                  <div className="flex gap-2 flex-wrap">
-                    {!k.isApproved && (
+                    <div className="flex gap-2 flex-wrap">
+                      {!k.isApproved && (
+                        <button
+                          type="button"
+                          onClick={() => approveKnowledge(k.id)}
+                          className="text-xs px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700"
+                        >
+                          承認・公開
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={() => approveKnowledge(k.id)}
-                        className="text-xs px-3 py-2 bg-teal-600 text-white rounded-lg min-h-[36px]"
+                        onClick={() =>
+                          setImproveTarget({ type: "knowledges", item: k })
+                        }
+                        className="text-xs px-3 py-1.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-100"
                       >
-                        承認・公開
+                        ✨ AI改善
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setImproveTarget({ type: "knowledges", item: k })
-                      }
-                      className="text-xs px-3 py-2 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg min-h-[36px]"
-                    >
-                      ✨ AI改善
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteKnowledge(k.id)}
-                      className="text-xs px-3 py-2 border border-red-200 text-red-600 rounded-lg min-h-[36px]"
-                    >
-                      削除
-                    </button>
-                  </div>
-                </div>
-                <div className="text-xs text-gray-600 mb-1">
-                  <span className="font-medium">📍 場面:</span> {k.situation}
-                </div>
-                <p className="text-sm text-gray-700 leading-relaxed">
-                  {k.content}
-                </p>
-                {k.impact && (
-                  <p className="text-xs text-purple-700 mt-2">
-                    <span className="font-medium">💎 価値:</span> {k.impact}
-                  </p>
-                )}
-                {k.actionItems.length > 0 && (
-                  <ul className="mt-2 space-y-0.5">
-                    {k.actionItems.map((a, i) => (
-                      <li key={i} className="text-xs text-gray-600">
-                        ・{a}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {k.tags.length > 0 && (
-                  <div className="flex gap-1 mt-2 flex-wrap">
-                    {k.tags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full"
+                      <button
+                        type="button"
+                        onClick={() => deleteKnowledge(k.id)}
+                        className="text-xs px-3 py-1.5 border border-red-200 text-red-500 rounded-lg hover:bg-red-50"
                       >
-                        #{tag}
-                      </span>
-                    ))}
+                        削除
+                      </button>
+                    </div>
                   </div>
-                )}
+                </div>
+
+                {/* タイトル */}
+                <div className="px-5 pt-4 pb-2">
+                  <h3 className="text-base font-semibold text-gray-900 leading-snug">
+                    {k.title}
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {k.author} · {formatDate(k.createdAt)}
+                  </p>
+                </div>
+
+                {/* 本文コンテンツ */}
+                <div className="px-5 pb-4 space-y-3">
+                  {/* 場面・状況 */}
+                  {k.situation && (
+                    <div className="flex gap-2">
+                      <span className="text-sm flex-shrink-0">📍</span>
+                      <div className="flex-1">
+                        <p className="text-xs font-medium text-gray-500 mb-0.5">
+                          場面・状況
+                        </p>
+                        <p className="text-sm text-gray-700 leading-relaxed">
+                          {k.situation}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 内容（改行・句点で箇条書き） */}
+                  {k.content && (
+                    <div className="flex gap-2">
+                      <span className="text-sm flex-shrink-0">💡</span>
+                      <div className="flex-1">
+                        <p className="text-xs font-medium text-gray-500 mb-1">
+                          内容・気づき
+                        </p>
+                        <div className="text-sm text-gray-800 leading-relaxed space-y-1">
+                          {k.content
+                            .split(/[。\n]/)
+                            .filter((s) => s.trim())
+                            .map((sentence, i) => (
+                              <p key={i} className="flex gap-1.5">
+                                <span className="text-gray-300 flex-shrink-0 mt-0.5">
+                                  ・
+                                </span>
+                                <span>{sentence.trim()}。</span>
+                              </p>
+                            ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 価値・影響（四方よし色分け） */}
+                  {k.impact && (
+                    <div className="flex gap-2">
+                      <span className="text-sm flex-shrink-0">💎</span>
+                      <div className="flex-1">
+                        <p className="text-xs font-medium text-gray-500 mb-1">
+                          価値・組織への影響
+                        </p>
+                        <div className="text-sm leading-relaxed">
+                          {renderImpactWithBadges(k.impact)}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* アクションアイテム */}
+                  {k.actionItems && k.actionItems.length > 0 && (
+                    <div className="flex gap-2">
+                      <span className="text-sm flex-shrink-0">✅</span>
+                      <div className="flex-1">
+                        <p className="text-xs font-medium text-gray-500 mb-1">
+                          具体的なアクション
+                        </p>
+                        <ul className="space-y-1">
+                          {k.actionItems.map((action, i) => (
+                            <li
+                              key={i}
+                              className="flex items-start gap-2 text-sm text-gray-700"
+                            >
+                              <span className="w-4 h-4 rounded-full bg-teal-100 text-teal-700 text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-medium">
+                                {i + 1}
+                              </span>
+                              <span>{action}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* タグ */}
+                  {k.tags && k.tags.length > 0 && (
+                    <div className="flex gap-1.5 flex-wrap pt-1">
+                      {k.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="text-xs px-2.5 py-1 bg-gray-100 text-gray-600 rounded-full"
+                        >
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
             {filteredKnowledges.length === 0 && (
