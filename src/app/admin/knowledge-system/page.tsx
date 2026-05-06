@@ -1120,6 +1120,52 @@ export default function AdminKnowledgeSystemPage() {
   );
 }
 
+// ─── プレビュー表示用：シンプルな整形ロジック ───
+function renderPreview(text: string) {
+  if (!text || !text.trim()) {
+    return <span className="text-gray-400 text-xs">（内容なし）</span>;
+  }
+  const lines = text.split("\n");
+  return (
+    <div className="text-sm text-gray-800 leading-relaxed space-y-1">
+      {lines.map((line, i) => {
+        if (!line.trim()) return <div key={i} className="h-2" />;
+        const trimmed = line.trim();
+        // 番号付きリスト
+        const numMatch = trimmed.match(/^([①②③④⑤⑥⑦⑧⑨⑩]|\d+[.．、])\s*/);
+        if (numMatch) {
+          return (
+            <div key={i} className="flex gap-2">
+              <span className="text-teal-600 font-medium flex-shrink-0">
+                {numMatch[0]}
+              </span>
+              <span>{trimmed.slice(numMatch[0].length)}</span>
+            </div>
+          );
+        }
+        // 箇条書き
+        if (/^[・\-•]/.test(trimmed)) {
+          return (
+            <div key={i} className="flex gap-2">
+              <span className="text-gray-400 flex-shrink-0">•</span>
+              <span>{trimmed.replace(/^[・\-•]\s*/, "")}</span>
+            </div>
+          );
+        }
+        // 見出し【】
+        if (/^【.*】/.test(trimmed)) {
+          return (
+            <div key={i} className="font-medium text-gray-900">
+              {line}
+            </div>
+          );
+        }
+        return <div key={i}>{line}</div>;
+      })}
+    </div>
+  );
+}
+
 // ─── マニュアル編集モーダル（3セクション構成） ───
 function ManualEditModal({
   manual,
@@ -1137,6 +1183,113 @@ function ManualEditModal({
     faq: manual.faq ?? [],
   });
   const [saving] = useState(false);
+  const [editorSize, setEditorSize] = useState<"compact" | "normal" | "large">(
+    "normal"
+  );
+  const [formatting, setFormatting] = useState<string | null>(null);
+  const [previewFields, setPreviewFields] = useState<Set<string>>(new Set());
+
+  const getRows = (base: number) => {
+    if (editorSize === "compact") return base;
+    if (editorSize === "normal") return base + 2;
+    return base + 5;
+  };
+
+  const togglePreview = (key: string) => {
+    setPreviewFields((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const callFormatApi = async (
+    text: string,
+    fieldType: string
+  ): Promise<string | null> => {
+    try {
+      const res = await fetch("/api/format-text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, fieldType }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        formatted?: string;
+      };
+      return data.formatted ?? null;
+    } catch (e) {
+      console.error(e);
+      return null;
+    }
+  };
+
+  const handleFormatPurpose = async () => {
+    const text = draft.purpose;
+    if (!text.trim()) return;
+    setFormatting("purpose");
+    const formatted = await callFormatApi(text, "purpose");
+    if (formatted) setDraft((prev) => ({ ...prev, purpose: formatted }));
+    setFormatting(null);
+  };
+
+  const handleFormatStepDescription = async (i: number) => {
+    const text = draft.steps[i].description;
+    if (!text.trim()) return;
+    setFormatting(`step-description-${i}`);
+    const formatted = await callFormatApi(text, "description");
+    if (formatted) updateStep(i, "description", formatted);
+    setFormatting(null);
+  };
+
+  const handleFormatStepCheckpoints = async (i: number) => {
+    const text = draft.steps[i].checkpoints.join("\n");
+    if (!text.trim()) return;
+    setFormatting(`step-checkpoints-${i}`);
+    const formatted = await callFormatApi(text, "checkpoints");
+    if (formatted) {
+      updateStep(
+        i,
+        "checkpoints",
+        formatted.split("\n").filter((s) => s.trim())
+      );
+    }
+    setFormatting(null);
+  };
+
+  const handleFormatCautions = async () => {
+    const text = draft.cautions.join("\n");
+    if (!text.trim()) return;
+    setFormatting("cautions");
+    const formatted = await callFormatApi(text, "cautions");
+    if (formatted) {
+      setDraft((prev) => ({
+        ...prev,
+        cautions: formatted.split("\n").filter((s) => s.trim()),
+      }));
+    }
+    setFormatting(null);
+  };
+
+  const handleFormatFAQ = async () => {
+    const text = draft.faq.map((f) => `Q: ${f.q}\nA: ${f.a}`).join("\n\n");
+    if (!text.trim()) return;
+    setFormatting("faq");
+    const formatted = await callFormatApi(text, "faq");
+    if (formatted) {
+      const blocks = formatted.split("\n\n").filter(Boolean);
+      const faq = blocks
+        .map((block) => {
+          const lines = block.split("\n");
+          const q = lines[0]?.replace(/^Q[:：]\s*/, "") ?? "";
+          const a = lines.slice(1).join("\n").replace(/^A[:：]\s*/, "");
+          return q ? { q, a } : null;
+        })
+        .filter((x): x is { q: string; a: string } => Boolean(x));
+      setDraft((prev) => ({ ...prev, faq }));
+    }
+    setFormatting(null);
+  };
 
   const updateStep = (
     index: number,
@@ -1222,13 +1375,55 @@ function ManualEditModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-hidden flex flex-col"
+        className={`bg-white rounded-2xl shadow-2xl w-full ${
+          editorSize === "large"
+            ? "max-w-6xl max-h-[96vh]"
+            : "max-w-5xl max-h-[92vh]"
+        } overflow-hidden flex flex-col`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* ヘッダー */}
-        <div className="flex items-center justify-between px-6 py-4 border-b">
+        <div className="flex items-center justify-between px-6 py-4 border-b gap-3 flex-wrap">
           <h2 className="text-lg font-medium text-gray-900">📖 マニュアル編集</h2>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1 border border-gray-200 rounded-lg overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setEditorSize("compact")}
+                className={`text-xs px-2 py-1.5 ${
+                  editorSize === "compact"
+                    ? "bg-teal-600 text-white"
+                    : "hover:bg-gray-50 text-gray-600"
+                }`}
+                title="コンパクト表示"
+              >
+                小
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditorSize("normal")}
+                className={`text-xs px-2 py-1.5 ${
+                  editorSize === "normal"
+                    ? "bg-teal-600 text-white"
+                    : "hover:bg-gray-50 text-gray-600"
+                }`}
+                title="標準表示"
+              >
+                中
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditorSize("large")}
+                className={`text-xs px-2 py-1.5 ${
+                  editorSize === "large"
+                    ? "bg-teal-600 text-white"
+                    : "hover:bg-gray-50 text-gray-600"
+                }`}
+                title="大きく表示"
+              >
+                大
+              </button>
+            </div>
             <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
               <input
                 type="checkbox"
@@ -1321,17 +1516,42 @@ function ManualEditModal({
                 </div>
               )}
               <div className="md:col-span-3">
-                <label className="text-xs text-gray-500 mb-1 block">
-                  🎯 目的（なぜこのマニュアルが必要か）
-                </label>
-                <textarea
-                  value={draft.purpose}
-                  onChange={(e) =>
-                    setDraft({ ...draft, purpose: e.target.value })
-                  }
-                  rows={3}
-                  className="w-full border rounded-xl px-3 py-2 text-sm resize-none"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs text-gray-500">
+                    🎯 目的（なぜこのマニュアルが必要か）
+                  </label>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={handleFormatPurpose}
+                      disabled={formatting === "purpose"}
+                      className="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded hover:bg-purple-100 disabled:opacity-50"
+                    >
+                      {formatting === "purpose" ? "..." : "✨ 整形"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => togglePreview("purpose")}
+                      className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                    >
+                      {previewFields.has("purpose") ? "✏️ 編集" : "👁️ プレビュー"}
+                    </button>
+                  </div>
+                </div>
+                {previewFields.has("purpose") ? (
+                  <div className="border rounded-xl px-3 py-2 min-h-[80px] bg-gray-50">
+                    {renderPreview(draft.purpose)}
+                  </div>
+                ) : (
+                  <textarea
+                    value={draft.purpose}
+                    onChange={(e) =>
+                      setDraft({ ...draft, purpose: e.target.value })
+                    }
+                    rows={getRows(3)}
+                    className="w-full border rounded-xl px-3 py-2 text-sm resize-none"
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -1394,37 +1614,95 @@ function ManualEditModal({
                   </div>
                   <div className="px-4 py-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs text-gray-400 mb-1 block">
-                        詳細説明
-                      </label>
-                      <textarea
-                        value={step.description}
-                        onChange={(e) =>
-                          updateStep(i, "description", e.target.value)
-                        }
-                        rows={4}
-                        placeholder="具体的な手順を記載..."
-                        className="w-full border border-gray-100 rounded-lg px-3 py-2 text-sm resize-none"
-                      />
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-gray-400">詳細説明</label>
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleFormatStepDescription(i)}
+                            disabled={formatting === `step-description-${i}`}
+                            className="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded hover:bg-purple-100 disabled:opacity-50"
+                          >
+                            {formatting === `step-description-${i}` ? "..." : "✨ 整形"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => togglePreview(`step-desc-${i}`)}
+                            className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                          >
+                            {previewFields.has(`step-desc-${i}`)
+                              ? "✏️ 編集"
+                              : "👁️ プレビュー"}
+                          </button>
+                        </div>
+                      </div>
+                      {previewFields.has(`step-desc-${i}`) ? (
+                        <div className="border border-gray-100 rounded-lg px-3 py-2 min-h-[100px] bg-gray-50">
+                          {renderPreview(step.description)}
+                        </div>
+                      ) : (
+                        <textarea
+                          value={step.description}
+                          onChange={(e) =>
+                            updateStep(i, "description", e.target.value)
+                          }
+                          rows={getRows(4)}
+                          placeholder="具体的な手順を記載..."
+                          className="w-full border border-gray-100 rounded-lg px-3 py-2 text-sm resize-none"
+                        />
+                      )}
                     </div>
                     <div className="space-y-2">
                       <div>
-                        <label className="text-xs text-gray-400 mb-1 block">
-                          ✅ 確認ポイント（1行1件）
-                        </label>
-                        <textarea
-                          value={step.checkpoints.join("\n")}
-                          onChange={(e) =>
-                            updateStep(
-                              i,
-                              "checkpoints",
-                              e.target.value.split("\n").filter(Boolean)
-                            )
-                          }
-                          rows={3}
-                          placeholder="確認すべきポイントを記載..."
-                          className="w-full border border-gray-100 rounded-lg px-3 py-2 text-sm resize-none"
-                        />
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs text-gray-400">
+                            ✅ 確認ポイント（1行1件）
+                          </label>
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleFormatStepCheckpoints(i)}
+                              disabled={formatting === `step-checkpoints-${i}`}
+                              className="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded hover:bg-purple-100 disabled:opacity-50"
+                            >
+                              {formatting === `step-checkpoints-${i}`
+                                ? "..."
+                                : "✨ 整形"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => togglePreview(`step-cp-${i}`)}
+                              className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                            >
+                              {previewFields.has(`step-cp-${i}`)
+                                ? "✏️ 編集"
+                                : "👁️ プレビュー"}
+                            </button>
+                          </div>
+                        </div>
+                        {previewFields.has(`step-cp-${i}`) ? (
+                          <div className="border border-gray-100 rounded-lg px-3 py-2 min-h-[80px] bg-gray-50">
+                            {renderPreview(
+                              step.checkpoints
+                                .map((c) => `・${c}`)
+                                .join("\n")
+                            )}
+                          </div>
+                        ) : (
+                          <textarea
+                            value={step.checkpoints.join("\n")}
+                            onChange={(e) =>
+                              updateStep(
+                                i,
+                                "checkpoints",
+                                e.target.value.split("\n").filter(Boolean)
+                              )
+                            }
+                            rows={getRows(3)}
+                            placeholder="確認すべきポイントを記載..."
+                            className="w-full border border-gray-100 rounded-lg px-3 py-2 text-sm resize-none"
+                          />
+                        )}
                       </div>
                       <div>
                         <label className="text-xs text-gray-400 mb-1 block">
@@ -1523,49 +1801,116 @@ function ManualEditModal({
           {/* Section 4: 注意事項・FAQ */}
           <div className="px-6 py-4 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">
-                ⚠️ 注意事項（1行1件）
-              </label>
-              <textarea
-                value={draft.cautions.join("\n")}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    cautions: e.target.value.split("\n").filter((s) => s.trim()),
-                  })
-                }
-                rows={5}
-                placeholder="注意事項を1行ずつ記載..."
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none"
-              />
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  ⚠️ 注意事項（1行1件）
+                </label>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={handleFormatCautions}
+                    disabled={formatting === "cautions"}
+                    className="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded hover:bg-purple-100 disabled:opacity-50"
+                  >
+                    {formatting === "cautions" ? "..." : "✨ 整形"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => togglePreview("cautions")}
+                    className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                  >
+                    {previewFields.has("cautions") ? "✏️ 編集" : "👁️ プレビュー"}
+                  </button>
+                </div>
+              </div>
+              {previewFields.has("cautions") ? (
+                <div className="border border-gray-200 rounded-xl px-3 py-2 min-h-[120px] bg-gray-50">
+                  {renderPreview(
+                    draft.cautions.map((c) => `・${c}`).join("\n")
+                  )}
+                </div>
+              ) : (
+                <textarea
+                  value={draft.cautions.join("\n")}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      cautions: e.target.value
+                        .split("\n")
+                        .filter((s) => s.trim()),
+                    })
+                  }
+                  rows={getRows(5)}
+                  placeholder="注意事項を1行ずつ記載..."
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none"
+                />
+              )}
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">
-                ❓ FAQ（Q:〜 A:〜 の形式で、空行区切り）
-              </label>
-              <textarea
-                value={draft.faq
-                  .map((f) => `Q: ${f.q}\nA: ${f.a}`)
-                  .join("\n\n")}
-                onChange={(e) => {
-                  const blocks = e.target.value.split("\n\n").filter(Boolean);
-                  const faq = blocks
-                    .map((block) => {
-                      const lines = block.split("\n");
-                      const q = lines[0]?.replace(/^Q[:：]\s*/, "") ?? "";
-                      const a = lines.slice(1).join("\n").replace(
-                        /^A[:：]\s*/,
-                        ""
-                      );
-                      return q ? { q, a } : null;
-                    })
-                    .filter((x): x is { q: string; a: string } => Boolean(x));
-                  setDraft({ ...draft, faq });
-                }}
-                rows={5}
-                placeholder={"Q: 質問\nA: 回答\n\nQ: 質問2\nA: 回答2"}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none font-mono"
-              />
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  ❓ FAQ（Q:〜 A:〜 の形式で、空行区切り）
+                </label>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={handleFormatFAQ}
+                    disabled={formatting === "faq"}
+                    className="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded hover:bg-purple-100 disabled:opacity-50"
+                  >
+                    {formatting === "faq" ? "..." : "✨ 整形"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => togglePreview("faq")}
+                    className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                  >
+                    {previewFields.has("faq") ? "✏️ 編集" : "👁️ プレビュー"}
+                  </button>
+                </div>
+              </div>
+              {previewFields.has("faq") ? (
+                <div className="border border-gray-200 rounded-xl px-3 py-2 min-h-[120px] bg-gray-50 space-y-2">
+                  {draft.faq.length === 0 ? (
+                    <span className="text-gray-400 text-xs">（FAQなし）</span>
+                  ) : (
+                    draft.faq.map((f, idx) => (
+                      <div key={idx} className="text-sm">
+                        <div className="font-medium text-teal-700">
+                          Q. {f.q}
+                        </div>
+                        <div className="text-gray-700 mt-0.5 whitespace-pre-wrap">
+                          A. {f.a}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              ) : (
+                <textarea
+                  value={draft.faq
+                    .map((f) => `Q: ${f.q}\nA: ${f.a}`)
+                    .join("\n\n")}
+                  onChange={(e) => {
+                    const blocks = e.target.value.split("\n\n").filter(Boolean);
+                    const faq = blocks
+                      .map((block) => {
+                        const lines = block.split("\n");
+                        const q = lines[0]?.replace(/^Q[:：]\s*/, "") ?? "";
+                        const a = lines
+                          .slice(1)
+                          .join("\n")
+                          .replace(/^A[:：]\s*/, "");
+                        return q ? { q, a } : null;
+                      })
+                      .filter((x): x is { q: string; a: string } => Boolean(x));
+                    setDraft({ ...draft, faq });
+                  }}
+                  rows={getRows(5)}
+                  placeholder={"Q: 質問\nA: 回答\n\nQ: 質問2\nA: 回答2"}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none font-mono"
+                />
+              )}
             </div>
           </div>
         </div>
