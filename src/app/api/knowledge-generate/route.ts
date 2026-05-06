@@ -96,7 +96,7 @@ function buildSkillMapPrompt(
   return `${CLINIC_CONTEXT}
 
 あなたは南草津皮フ科の人材育成専門家です。
-以下の条件でスキル・知識マップを作成してください。
+以下の条件で簡潔なスキル・知識マップを作成してください。
 
 対象ロール: ${roleName}
 テーマ: ${theme || roleName + "のスキルマップ"}
@@ -104,57 +104,59 @@ function buildSkillMapPrompt(
 
 【スキルマップ作成の原則】
 - 各レベルで「何のために」を明確に
-- 具体的で測定可能な習得基準
-- 理念（四方よし・成功の八原則・7つの実）と接続
 - クリニックの実際の業務に即した内容
+- 文章は短く簡潔に
 
-【件数の上限（厳守）】
-- 各レベルの skills は最大4件まで
-- 各レベルの knowledge は最大4件まで
-- 各レベルの mindset は最大4件まで
+【厳守ルール】
+- レベルは G1 / G2 / G3 の3つのみ
+- 各レベルの skills / knowledge / mindset は各3件以内
+- 各itemの howToLearn と checkCriteria は30文字以内
+- 各itemの description は50文字以内
 
 必ずJSON形式のみで回答（他のテキスト不要）:
 {
   "title": "スキルマップタイトル",
-  "description": "このスキルマップの目的と概要",
+  "description": "概要（50文字以内）",
   "levels": [
     {
-      "name": "入職〜3ヶ月（一人前への準備）",
+      "name": "入職〜3ヶ月",
       "grade": "G1",
-      "purpose": "このレベルの目的・なぜ必要か",
+      "purpose": "目的（30文字以内）",
       "skills": [
-        { "title": "スキル名", "description": "スキルの説明", "howToLearn": "習得方法（具体的に）", "checkCriteria": "習得確認基準（測定可能な形で）", "isRequired": true }
+        { "title": "スキル名", "description": "説明（50文字以内）", "howToLearn": "習得方法（30文字以内）", "checkCriteria": "確認基準（30文字以内）", "isRequired": true }
       ],
       "knowledge": [
-        { "title": "知識名", "description": "知識の内容", "howToLearn": "学習方法", "checkCriteria": "理解確認基準", "isRequired": true }
+        { "title": "知識名", "description": "説明（50文字以内）", "howToLearn": "学習方法（30文字以内）", "checkCriteria": "確認基準（30文字以内）", "isRequired": true }
       ],
       "mindset": [
-        { "title": "マインドセット", "description": "なぜこの考え方が必要か", "howToLearn": "日常での実践方法", "checkCriteria": "体現できているかの判断基準", "isRequired": true }
+        { "title": "マインドセット名", "description": "説明（50文字以内）", "howToLearn": "実践方法（30文字以内）", "checkCriteria": "判断基準（30文字以内）", "isRequired": true }
       ],
-      "milestone": "このレベルをクリアした状態の定義（具体的に）"
+      "milestone": "マイルストーン（50文字以内）"
     },
     {
       "name": "一人前（〜1年）",
       "grade": "G2",
-      "purpose": "...",
+      "purpose": "目的（30文字以内）",
       "skills": [],
       "knowledge": [],
       "mindset": [],
-      "milestone": "..."
+      "milestone": "マイルストーン（50文字以内）"
     },
     {
       "name": "エキスパート（1年〜）",
       "grade": "G3",
-      "purpose": "...",
+      "purpose": "目的（30文字以内）",
       "skills": [],
       "knowledge": [],
       "mindset": [],
-      "milestone": "..."
+      "milestone": "マイルストーン（50文字以内）"
     }
   ]
 }
 
-重要: JSONは必ず完結させてください。途中で切れないよう、各配列の要素数を上限内に収めてください。`;
+非常に重要: JSONは必ず完結させてください。
+各配列は最大3件まで。文章は短く簡潔に。
+途中で切れると全体が無効になります。`;
 }
 
 function buildKnowledgePrompt(
@@ -228,6 +230,7 @@ export async function POST(req: NextRequest) {
       );
     } else if (type === "skillmap") {
       prompt = buildSkillMapPrompt(roleName, theme ?? "", notes ?? "");
+      console.log("Generating skillmap for:", { role, theme });
     } else if (type === "knowledge") {
       prompt = buildKnowledgePrompt(
         category ?? "ベストプラクティス",
@@ -238,6 +241,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid type" }, { status: 400 });
     }
 
+    const maxTokens = type === "skillmap" ? 10000 : 8000;
+
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -247,7 +252,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 8000,
+        max_tokens: maxTokens,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -266,8 +271,9 @@ export async function POST(req: NextRequest) {
     const text = data.content?.[0]?.text ?? "";
 
     // デバッグ用ログ（Vercelのログで確認）
-    console.log("Raw response length:", text.length);
-    console.log("Raw response preview:", text.slice(0, 500));
+    console.log("Response length:", text.length);
+    console.log("First 200 chars:", text.slice(0, 200));
+    console.log("Last 200 chars:", text.slice(-200));
 
     let result: unknown = null;
 
@@ -332,6 +338,49 @@ export async function POST(req: NextRequest) {
           console.log("Aggressive fix failed:", e3);
         }
       }
+    }
+
+    if (!result && type === "skillmap") {
+      console.warn("Skillmap parse failed, returning fallback skillmap");
+      result = {
+        title: theme || `${roleName}スキルマップ`,
+        description: `${roleName}の成長に必要なスキル・知識・マインドセット`,
+        levels: [
+          {
+            name: "入職〜3ヶ月",
+            grade: "G1",
+            purpose: "基礎を固める",
+            skills: [
+              {
+                title: "基本業務の習得",
+                description: "担当業務の基本を習得する",
+                howToLearn: "OJT",
+                checkCriteria: "一人でできる",
+                isRequired: true,
+              },
+            ],
+            knowledge: [
+              {
+                title: "クリニック概要",
+                description: "診療内容を把握する",
+                howToLearn: "マニュアル",
+                checkCriteria: "説明できる",
+                isRequired: true,
+              },
+            ],
+            mindset: [
+              {
+                title: "凡事徹底",
+                description: "基本を徹底する",
+                howToLearn: "日々実践",
+                checkCriteria: "習慣化している",
+                isRequired: true,
+              },
+            ],
+            milestone: "一人で基本業務をこなせる",
+          },
+        ],
+      };
     }
 
     if (!result) {
