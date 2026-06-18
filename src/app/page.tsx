@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   loadPortalItems,
   savePortalItems,
   loadTodayWord,
 } from "@/lib/portal-store";
+import CharacterNotification from "@/components/CharacterNotification";
 import {
   PORTAL_KEYS,
   type NewsItem,
@@ -213,6 +214,39 @@ export default function PortalHome() {
 
   const [submitting, setSubmitting] = useState(false);
 
+  // 新着情報セクションへのスクロール用ref
+  const newsSectionRef = useRef<HTMLElement>(null);
+
+  // 未読の新着情報があるか（クライアントのみ判定）
+  const [hasUnreadNews, setHasUnreadNews] = useState(false);
+
+  useEffect(() => {
+    if (news.length === 0) {
+      setHasUnreadNews(false);
+      return;
+    }
+    const latest = news[0]?.createdAt?.slice(0, 10);
+    if (!latest) {
+      setHasUnreadNews(false);
+      return;
+    }
+    const lastRead = localStorage.getItem("news_last_read");
+    setHasUnreadNews(lastRead !== latest);
+  }, [news]);
+
+  // キャラクタークリック／スクロール到達で新着情報セクションへ移動し既読化
+  const scrollToNews = () => {
+    newsSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    const latest = news[0]?.createdAt;
+    if (latest) {
+      localStorage.setItem("news_last_read", latest.slice(0, 10));
+    }
+    setHasUnreadNews(false);
+  };
+
   const todayStr = new Date().toLocaleDateString("ja-JP", {
     year: "numeric",
     month: "long",
@@ -317,6 +351,13 @@ export default function PortalHome() {
 
   return (
     <div className="max-w-2xl mx-auto -m-3 md:-m-6 bg-white min-h-screen">
+      {/* キャラクター通知（未読の新着情報がある時のみ表示） */}
+      <CharacterNotification
+        hasUnreadNews={hasUnreadNews}
+        latestNewsTitle={news[0]?.title}
+        onCharacterClick={scrollToNews}
+      />
+
       {/* ① ヘッダーバー */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-gray-100 sticky top-0 bg-white z-10">
         <div>
@@ -350,7 +391,10 @@ export default function PortalHome() {
       </section>
 
       {/* ③ 新着情報 */}
-      <section className="px-4 py-5 border-b border-gray-100">
+      <section
+        ref={newsSectionRef}
+        className="px-4 py-5 border-b border-gray-100 scroll-mt-16"
+      >
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xs font-medium text-gray-400 uppercase tracking-wider">
             新着情報

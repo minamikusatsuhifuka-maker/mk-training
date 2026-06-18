@@ -46,6 +46,30 @@ export type TodayWord = {
   updatedAt: string;
 };
 
+// ─── キャラクター通知設定 ───
+export type CharacterSvgType = "cat" | "dog" | "rabbit" | "bird";
+
+export type CharacterSettings = {
+  enabled: boolean;
+  characterStyle: "emoji" | "svg";
+  size: number; // px (30-120)
+  speed: number; // 横切る秒数 (5-30)
+  emoji: string; // 絵文字スタイルの場合
+  svgType: CharacterSvgType; // イラストスタイルの場合
+};
+
+export const DEFAULT_CHARACTER_SETTINGS: CharacterSettings = {
+  enabled: true,
+  characterStyle: "emoji",
+  size: 60,
+  speed: 12,
+  emoji: "🐈",
+  svgType: "cat",
+};
+
+// content_store の id（単一オブジェクトとして保存）
+export const CHARACTER_SETTINGS_KEY = "character_settings";
+
 export const PORTAL_KEYS = {
   news: "portal_news",
   hiyari: "portal_hiyari",

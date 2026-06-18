@@ -3,7 +3,11 @@
 // （単一オブジェクト型は { ...data } の直書き）
 
 import { supabase } from "./supabase";
-import type { TodayWord } from "@/types/portal";
+import type { CharacterSettings, TodayWord } from "@/types/portal";
+import {
+  CHARACTER_SETTINGS_KEY,
+  DEFAULT_CHARACTER_SETTINGS,
+} from "@/types/portal";
 
 // 配列型データ取得（items配列を返す。失敗時はdefault）
 export async function loadPortalItems<T>(
@@ -101,4 +105,20 @@ export async function loadTodayWord(defaultObj: TodayWord): Promise<TodayWord> {
 
 export async function saveTodayWord(obj: TodayWord): Promise<boolean> {
   return savePortalObject<TodayWord>("portal_today_word", obj);
+}
+
+// ─── キャラクター通知設定 ───
+// 既存データに新フィールドが無い場合に備えてデフォルトとマージする
+export async function loadCharacterSettings(): Promise<CharacterSettings> {
+  const obj = await loadPortalObject<Partial<CharacterSettings>>(
+    CHARACTER_SETTINGS_KEY,
+    {}
+  );
+  return { ...DEFAULT_CHARACTER_SETTINGS, ...obj };
+}
+
+export async function saveCharacterSettings(
+  settings: CharacterSettings
+): Promise<boolean> {
+  return savePortalObject<CharacterSettings>(CHARACTER_SETTINGS_KEY, settings);
 }

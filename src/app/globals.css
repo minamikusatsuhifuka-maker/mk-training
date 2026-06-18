@@ -136,3 +136,23 @@ html, body {
   }
 }
 
+
+/* ─── キャラクター通知アニメーション ─── */
+@keyframes walkAcross {
+  0% {
+    left: -120px;
+  }
+  100% {
+    left: calc(100% + 120px);
+  }
+}
+
+/* 管理画面プレビュー用：--char-walk-to で移動距離を指定 */
+@keyframes charPreviewWalk {
+  0% {
+    left: 0;
+  }
+  100% {
+    left: var(--char-walk-to, calc(100% - 60px));
+  }
+}

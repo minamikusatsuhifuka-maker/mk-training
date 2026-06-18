@@ -6,18 +6,24 @@ import {
   savePortalItems,
   loadTodayWord,
   saveTodayWord,
+  loadCharacterSettings,
+  saveCharacterSettings,
 } from "@/lib/portal-store";
 import {
   PORTAL_KEYS,
+  DEFAULT_CHARACTER_SETTINGS,
   type NewsItem,
   type NewsCategory,
   type HiyariItem,
   type ThankyouItem,
   type PolicyItem,
   type TodayWord,
+  type CharacterSettings,
+  type CharacterSvgType,
 } from "@/types/portal";
+import { CharacterSVG } from "@/components/CharacterNotification";
 
-type TabKey = "news" | "hiyari" | "thankyou" | "policy" | "word";
+type TabKey = "news" | "hiyari" | "thankyou" | "policy" | "word" | "character";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "news", label: "📢 新着情報" },
@@ -25,6 +31,33 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "thankyou", label: "♥ ありがとうカード" },
   { key: "policy", label: "🎯 経営方針" },
   { key: "word", label: "💬 今日の一言" },
+  { key: "character", label: "🐾 キャラクター" },
+];
+
+const CHARACTER_EMOJIS = [
+  "🐈",
+  "🐕",
+  "🐰",
+  "🐦",
+  "🐻",
+  "🐼",
+  "🦊",
+  "🐱",
+  "🐶",
+  "🐹",
+  "🐧",
+  "🦉",
+  "🐢",
+  "🦋",
+  "🐝",
+  "🐙",
+];
+
+const CHARACTER_SVGS: { type: CharacterSvgType; label: string }[] = [
+  { type: "cat", label: "ねこ" },
+  { type: "dog", label: "いぬ" },
+  { type: "rabbit", label: "うさぎ" },
+  { type: "bird", label: "とり" },
 ];
 
 const NEWS_CATEGORIES: { value: NewsCategory; label: string }[] = [
@@ -65,6 +98,10 @@ export default function AdminPortalPage() {
     author: "",
     updatedAt: new Date().toISOString(),
   });
+  const [charSettings, setCharSettings] = useState<CharacterSettings>(
+    DEFAULT_CHARACTER_SETTINGS
+  );
+  const [savingChar, setSavingChar] = useState(false);
 
   // 新着情報追加フォーム
   const [newsForm, setNewsForm] = useState<{
@@ -96,7 +133,7 @@ export default function AdminPortalPage() {
 
   useEffect(() => {
     const fetchAll = async () => {
-      const [n, h, t, p, w] = await Promise.all([
+      const [n, h, t, p, w, c] = await Promise.all([
         loadPortalItems<NewsItem>(PORTAL_KEYS.news, []),
         loadPortalItems<HiyariItem>(PORTAL_KEYS.hiyari, []),
         loadPortalItems<ThankyouItem>(PORTAL_KEYS.thankyou, []),
@@ -106,12 +143,14 @@ export default function AdminPortalPage() {
           author: "",
           updatedAt: new Date().toISOString(),
         }),
+        loadCharacterSettings(),
       ]);
       setNews(n);
       setHiyari(h);
       setThankyou(t);
       setPolicies(p);
       setTodayWord(w);
+      setCharSettings(c);
       setLoading(false);
     };
     fetchAll().catch(() => setLoading(false));
@@ -304,6 +343,20 @@ export default function AdminPortalPage() {
     if (ok) {
       setTodayWord(next);
       flash("💾 更新しました");
+    } else {
+      alert("保存に失敗しました");
+    }
+  };
+
+  // ─────────────────────────────────────
+  // キャラクター通知設定
+  // ─────────────────────────────────────
+  const handleSaveCharSettings = async () => {
+    setSavingChar(true);
+    const ok = await saveCharacterSettings(charSettings);
+    setSavingChar(false);
+    if (ok) {
+      flash("✅ キャラクター設定を保存しました");
     } else {
       alert("保存に失敗しました");
     }
@@ -833,6 +886,211 @@ export default function AdminPortalPage() {
             className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700 disabled:opacity-50"
           >
             {saving ? "更新中..." : "更新する"}
+          </button>
+        </div>
+      )}
+
+      {tab === "character" && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-5 max-w-2xl">
+          {/* 有効化 */}
+          <div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={charSettings.enabled}
+                onChange={(e) =>
+                  setCharSettings({
+                    ...charSettings,
+                    enabled: e.target.checked,
+                  })
+                }
+                className="rounded"
+              />
+              <span className="text-sm font-medium">
+                キャラクター通知を有効にする
+              </span>
+            </label>
+            <p className="text-xs text-gray-400 mt-1 ml-6">
+              未読の新着情報がある時、キャラクターが画面上方を横切ります
+            </p>
+          </div>
+
+          {/* スタイル選択 */}
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">
+              キャラクターのスタイル
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setCharSettings({ ...charSettings, characterStyle: "emoji" })
+                }
+                className={`flex-1 py-3 rounded-xl border text-sm ${
+                  charSettings.characterStyle === "emoji"
+                    ? "bg-teal-50 border-teal-300 text-teal-800"
+                    : "border-gray-200"
+                }`}
+              >
+                😺 絵文字
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setCharSettings({ ...charSettings, characterStyle: "svg" })
+                }
+                className={`flex-1 py-3 rounded-xl border text-sm ${
+                  charSettings.characterStyle === "svg"
+                    ? "bg-teal-50 border-teal-300 text-teal-800"
+                    : "border-gray-200"
+                }`}
+              >
+                🎨 イラスト
+              </button>
+            </div>
+          </div>
+
+          {/* 絵文字選択 */}
+          {charSettings.characterStyle === "emoji" && (
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-2 block">
+                絵文字を選択
+              </label>
+              <div className="grid grid-cols-8 gap-2">
+                {CHARACTER_EMOJIS.map((emoji) => (
+                  <button
+                    type="button"
+                    key={emoji}
+                    onClick={() => setCharSettings({ ...charSettings, emoji })}
+                    className={`text-2xl p-2 rounded-lg border ${
+                      charSettings.emoji === emoji
+                        ? "bg-teal-50 border-teal-300"
+                        : "border-gray-100 hover:bg-gray-50"
+                    }`}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* イラスト選択 */}
+          {charSettings.characterStyle === "svg" && (
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-2 block">
+                イラストを選択
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {CHARACTER_SVGS.map((item) => (
+                  <button
+                    type="button"
+                    key={item.type}
+                    onClick={() =>
+                      setCharSettings({ ...charSettings, svgType: item.type })
+                    }
+                    className={`flex flex-col items-center gap-1 p-3 rounded-xl border text-sm ${
+                      charSettings.svgType === item.type
+                        ? "bg-teal-50 border-teal-300 text-teal-800"
+                        : "border-gray-200"
+                    }`}
+                  >
+                    <CharacterSVG type={item.type} size={40} />
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* サイズ調整 */}
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">
+              大きさ: {charSettings.size}px
+            </label>
+            <input
+              type="range"
+              min="30"
+              max="120"
+              step="5"
+              value={charSettings.size}
+              onChange={(e) =>
+                setCharSettings({
+                  ...charSettings,
+                  size: Number(e.target.value),
+                })
+              }
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-gray-400 mt-1">
+              <span>小さい</span>
+              <span>大きい</span>
+            </div>
+          </div>
+
+          {/* 速度調整 */}
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">
+              横切る速度: {charSettings.speed}秒で1往復
+            </label>
+            <input
+              type="range"
+              min="5"
+              max="30"
+              step="1"
+              value={charSettings.speed}
+              onChange={(e) =>
+                setCharSettings({
+                  ...charSettings,
+                  speed: Number(e.target.value),
+                })
+              }
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-gray-400 mt-1">
+              <span>速い（5秒）</span>
+              <span>ゆっくり（30秒）</span>
+            </div>
+          </div>
+
+          {/* プレビュー */}
+          <div className="border border-gray-200 rounded-xl p-4 bg-gray-50 relative overflow-hidden">
+            <p className="text-xs text-gray-400 mb-2">プレビュー</p>
+            <div className="relative" style={{ height: charSettings.size + 10 }}>
+              <div
+                className="absolute top-0"
+                style={
+                  {
+                    animation: `charPreviewWalk ${charSettings.speed}s linear infinite`,
+                    "--char-walk-to": `calc(100% - ${charSettings.size}px)`,
+                  } as React.CSSProperties
+                }
+              >
+                {charSettings.characterStyle === "emoji" ? (
+                  <span
+                    className="select-none"
+                    style={{ fontSize: charSettings.size, lineHeight: 1 }}
+                  >
+                    {charSettings.emoji}
+                  </span>
+                ) : (
+                  <CharacterSVG
+                    type={charSettings.svgType}
+                    size={charSettings.size}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 保存ボタン */}
+          <button
+            type="button"
+            onClick={handleSaveCharSettings}
+            disabled={savingChar}
+            className="w-full py-3 bg-teal-600 text-white rounded-xl text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
+          >
+            {savingChar ? "保存中..." : "💾 設定を保存"}
           </button>
         </div>
       )}
