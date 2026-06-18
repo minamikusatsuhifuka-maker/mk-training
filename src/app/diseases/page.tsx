@@ -37,40 +37,48 @@ type ViewMode = "list" | "card";
 
 // 疾患の詳細展開コンポーネント（閲覧専用）
 function DiseaseDetail({ d }: { d: Disease }) {
+  // keyPoints/relatedTreatments は string[]。各要素に改行が含まれていても1項目ずつに展開する。
+  const keyPoints = d.keyPoints.flatMap((kp) => kp.split("\n")).map((p) => p.trim()).filter(Boolean);
+  const relatedTreatments = d.relatedTreatments.flatMap((rt) => rt.split("\n")).map((t) => t.trim()).filter(Boolean);
   return (
     <div className="space-y-4">
       <section>
         <h3 className="text-sm font-semibold mb-1">疾患概要</h3>
-        <p className="text-sm text-muted-foreground">{d.description}</p>
+        <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{d.description}</p>
       </section>
       <section>
         <h3 className="text-sm font-semibold mb-1">原因・誘因</h3>
-        <p className="text-sm text-muted-foreground">{d.cause}</p>
+        <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{d.cause}</p>
       </section>
       <section>
         <h3 className="text-sm font-semibold mb-1">主な治療法</h3>
-        <p className="text-sm text-muted-foreground">{d.treatment}</p>
+        <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{d.treatment}</p>
       </section>
       <section className="rounded-md bg-teal-light p-4">
         <h3 className="text-sm font-semibold text-teal mb-1">患者さんへの説明例</h3>
-        <p className="text-sm text-teal/80">{d.patientExplanation}</p>
+        <p className="text-sm text-teal/80 whitespace-pre-wrap leading-relaxed">{d.patientExplanation}</p>
       </section>
-      {d.keyPoints.length > 0 && (
+      {keyPoints.length > 0 && (
         <section>
           <h3 className="text-sm font-semibold mb-2">スタッフが覚えるべきポイント</h3>
-          <ul className="space-y-1">
-            {d.keyPoints.map((kp, i) => (
-              <li key={i} className="text-sm text-muted-foreground">・{kp}</li>
+          <div className="space-y-1.5">
+            {keyPoints.map((point, i) => (
+              <div key={i} className="flex gap-2 text-sm text-gray-700">
+                <span className="text-teal-500 flex-shrink-0 mt-0.5">✓</span>
+                <span className="leading-relaxed">{point}</span>
+              </div>
             ))}
-          </ul>
+          </div>
         </section>
       )}
-      {d.relatedTreatments.length > 0 && (
+      {relatedTreatments.length > 0 && (
         <section>
           <h3 className="text-sm font-semibold mb-2">当院での関連施術・検査</h3>
           <div className="flex flex-wrap gap-2">
-            {d.relatedTreatments.map((rt, i) => (
-              <Badge key={i} variant="outline" className="bg-teal-light text-teal border-teal/20">{rt}</Badge>
+            {relatedTreatments.map((t, i) => (
+              <span key={i} className="text-xs px-2.5 py-1 bg-teal-50 text-teal-700 rounded-full">
+                {t}
+              </span>
             ))}
           </div>
         </section>

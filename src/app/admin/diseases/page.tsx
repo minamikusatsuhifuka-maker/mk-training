@@ -82,6 +82,13 @@ export default function AdminDiseasesPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const loaded = useRef(false);
+  // 編集モーダルのテキストエリア高さ切替（標準・広め・最大）
+  const [editorSize, setEditorSize] = useState<"normal" | "wide" | "max">("normal");
+  const getRows = (base: number) =>
+    editorSize === "normal" ? base : editorSize === "wide" ? base + 3 : base + 6;
+  // 全textarea共通スタイル（ドラッグで縦リサイズ可・行間広め）
+  const taClass =
+    "w-full border border-gray-200 rounded-xl p-3 text-sm leading-relaxed resize-y min-h-[120px] focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-400";
   // 疾患リサーチモーダル（対象疾患の配列を保持。空なら閉）
   const [researchTargets, setResearchTargets] = useState<Disease[]>([]);
   const [researchOpen, setResearchOpen] = useState(false);
@@ -292,7 +299,28 @@ export default function AdminDiseasesPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editItem && data.some((d) => d.id === editItem.id) ? "疾患を編集" : "新規疾患を追加"}</DialogTitle>
+            <div className="flex items-center justify-between gap-3 flex-wrap pr-6">
+              <DialogTitle>{editItem && data.some((d) => d.id === editItem.id) ? "疾患を編集" : "新規疾患を追加"}</DialogTitle>
+              <div className="flex items-center gap-1 border border-gray-200 rounded-lg overflow-hidden">
+                {([
+                  { key: "normal", label: "標準", title: "標準表示（デフォルト）" },
+                  { key: "wide", label: "広め", title: "広めに表示" },
+                  { key: "max", label: "最大", title: "最大表示" },
+                ] as const).map((s) => (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => setEditorSize(s.key)}
+                    title={s.title}
+                    className={`text-xs px-2.5 py-1.5 ${
+                      editorSize === s.key ? "bg-teal-600 text-white" : "hover:bg-gray-50 text-gray-600"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </DialogHeader>
           {editItem && (
             <div className="space-y-3">
@@ -339,34 +367,38 @@ export default function AdminDiseasesPage() {
               </div>
               <label className="space-y-1 block">
                 <span className="text-xs font-medium">疾患概要</span>
-                <Textarea value={editItem.description} onChange={(e) => setEditItem({ ...editItem, description: e.target.value })} rows={2} />
+                <Textarea value={editItem.description} onChange={(e) => setEditItem({ ...editItem, description: e.target.value })} rows={getRows(6)} className={taClass} />
               </label>
               <label className="space-y-1 block">
                 <span className="text-xs font-medium">原因・誘因</span>
-                <Textarea value={editItem.cause} onChange={(e) => setEditItem({ ...editItem, cause: e.target.value })} rows={2} />
+                <Textarea value={editItem.cause} onChange={(e) => setEditItem({ ...editItem, cause: e.target.value })} rows={getRows(6)} className={taClass} />
               </label>
               <label className="space-y-1 block">
                 <span className="text-xs font-medium">主な治療法</span>
-                <Textarea value={editItem.treatment} onChange={(e) => setEditItem({ ...editItem, treatment: e.target.value })} rows={2} />
+                <Textarea value={editItem.treatment} onChange={(e) => setEditItem({ ...editItem, treatment: e.target.value })} rows={getRows(6)} className={taClass} />
               </label>
               <label className="space-y-1 block">
                 <span className="text-xs font-medium">患者説明例</span>
-                <Textarea value={editItem.patientExplanation} onChange={(e) => setEditItem({ ...editItem, patientExplanation: e.target.value })} rows={2} />
+                <Textarea value={editItem.patientExplanation} onChange={(e) => setEditItem({ ...editItem, patientExplanation: e.target.value })} rows={getRows(4)} className={taClass} />
               </label>
               <label className="space-y-1 block">
-                <span className="text-xs font-medium">重要ポイント（改行区切り）</span>
+                <span className="text-xs font-medium">重要ポイント（1行に1項目ずつ）</span>
                 <Textarea
                   value={editItem.keyPoints.join("\n")}
                   onChange={(e) => setEditItem({ ...editItem, keyPoints: e.target.value.split("\n").filter(Boolean) })}
-                  rows={4}
+                  rows={getRows(8)}
+                  className={taClass}
+                  placeholder={"例：\nプロトピックは2歳未満に禁忌\n保湿はステロイドより先に塗る\nデュピクセントは保険適用"}
                 />
               </label>
               <label className="space-y-1 block">
-                <span className="text-xs font-medium">関連施術（改行区切り）</span>
+                <span className="text-xs font-medium">関連施術・検査（1行に1項目ずつ）</span>
                 <Textarea
                   value={editItem.relatedTreatments.join("\n")}
                   onChange={(e) => setEditItem({ ...editItem, relatedTreatments: e.target.value.split("\n").filter(Boolean) })}
-                  rows={3}
+                  rows={getRows(4)}
+                  className={taClass}
+                  placeholder={"例：\nドロップスクリーン（アレルゲン検索）\nナローバンドUVB光線療法"}
                 />
               </label>
             </div>
