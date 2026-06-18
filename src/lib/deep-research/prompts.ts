@@ -1,14 +1,30 @@
 // ディープリサーチ用のプロンプト構築（ai-incho から移植）
 // ※ STEP 1 ではリサーチ実行用 buildResearchPrompt のみ。学習資料生成プロンプトは STEP 2 で追加する。
 
-import type { ResearchMode } from "./types";
+import type { ResearchMode, ResearchPerspective } from "./types";
+
+/** 視点別の追加指示（医療・研修現場で即使える調整） */
+const PERSPECTIVE_INSTRUCTIONS: Record<ResearchPerspective, string> = {
+  general: "",
+  medical:
+    "PMDA添付文書・日本皮膚科学会ガイドライン・査読論文を最優先の根拠とすること。エビデンスレベルを明記。憶測や不確実な情報は避け、根拠が不明な点は『要確認』と明示すること。2024〜2026年の最新情報を優先。",
+  training:
+    "南草津皮フ科のスタッフ（マルチタスク医療事務・看護師）が日々の業務で使える実践的な形にまとめること。具体的な手順・確認ポイント・注意事項を含める。専門用語には簡単な補足を付ける。",
+  patient:
+    "患者さんにそのまま説明できる平易な言葉で。専門用語は避けるか言い換える。不安を和らげる配慮ある表現を使う。",
+};
+
+/** 全視点共通でリサーチ末尾に添えるクリニック理念の視点（簡潔に） */
+const PHILOSOPHY_NOTE =
+  "※南草津皮フ科は『患者様の人生好転・四方よし』を理念とする保険×美容のハイブリッドクリニックです。この視点も踏まえてまとめてください。";
 
 export function buildResearchPrompt(params: {
   topic: string;
   mode: ResearchMode;
+  perspective?: ResearchPerspective;
   additionalContext?: string;
 }): string {
-  const { topic, mode, additionalContext } = params;
+  const { topic, mode, perspective = "general", additionalContext } = params;
 
   const modeInstructions: Record<ResearchMode, { length: string; detail: string }> = {
     quick: {
@@ -26,6 +42,7 @@ export function buildResearchPrompt(params: {
   };
 
   const config = modeInstructions[mode] ?? modeInstructions.standard;
+  const perspectiveNote = PERSPECTIVE_INSTRUCTIONS[perspective] || "";
 
   return `# ディープリサーチ依頼
 
@@ -55,7 +72,12 @@ ${config.detail}
 - エビデンスに基づいた記述を心がけてください
 - 推測や個人的見解は明示してください
 
+${perspectiveNote ? `## リサーチの視点（最優先で反映）\n${perspectiveNote}` : ""}
+
 ${additionalContext ? `## 追加要件\n${additionalContext}` : ""}
+
+## クリニックの視点
+${PHILOSOPHY_NOTE}
 
 ## 出力形式
 Markdown 形式で出力してください。見出し(##, ###)、箇条書き、強調(太字)を適切に使ってください。`;
@@ -330,4 +352,105 @@ ${researchText}
 - 強調したい語は「」で囲む（** は使わない）。数値・固有名詞は正確に書く。
 - 推測や脚色を加えない。資料に無い固有の数値・規程は書かない。
 - 出力は本文のみ（前置きの挨拶・コードフェンス禁止）。`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// STEP 2 拡張②③: 既存知識システムへの変換プロンプト（JSON/平易テキスト出力）
+// ─────────────────────────────────────────────────────────────
+
+/** リサーチ本文 → 組織ナレッジ（OrgKnowledge）への変換プロンプト（JSON出力） */
+export function getToOrgKnowledgePrompt(topic: string, researchText: string): string {
+  return `あなたはクリニックの組織ナレッジ整理の専門家です。
+以下のリサーチ結果を、組織の「学び」ナレッジとして1件にまとめ、必ず指定のJSON形式のみで出力してください。
+
+【テーマ】
+${topic}
+
+【リサーチ結果】
+${researchText}
+
+【出力JSON（このキー構成のみ・前置き/説明/コードフェンス禁止）】
+{
+  "title": "テーマを表す簡潔なタイトル",
+  "situation": "このナレッジが役立つ背景・状況（2〜3文）",
+  "content": "リサーチから抽出した要点（医療スタッフ向けに3〜5文）",
+  "impact": "【患者よし】… 【スタッフよし】… 【クリニックよし】… 【社会よし】…（四方よし形式で各1文）",
+  "actionItems": ["現場で実践できる具体アクション1", "アクション2", "アクション3"],
+  "tags": ["キーワード1", "キーワード2", "キーワード3"]
+}
+
+【厳守】断定/最大級表現は禁止。actionItems は3件、tags は3件。出力は上記JSONのみ。`;
+}
+
+/** リサーチ本文 → 院内マニュアル（Manual）への変換プロンプト（JSON出力。knowledge-generate の manual 形式に準拠） */
+export function getToManualPrompt(topic: string, researchText: string): string {
+  return `あなたはクリニックの院内マニュアル作成の専門家です。
+以下のリサーチ結果を、スタッフ向けの実践マニュアルに変換し、必ず指定のJSON形式のみで出力してください。
+
+【テーマ】
+${topic}
+
+【リサーチ結果】
+${researchText}
+
+【出力JSON（このキー構成のみ・前置き/説明/コードフェンス禁止）】
+{
+  "title": "マニュアルのタイトル",
+  "purpose": "このマニュアルの目的（1〜2文）",
+  "category": "受付・会計 / 生物学的製剤 / カウンセリング / レセプト・算定 / 緊急対応 / その他 のいずれか",
+  "steps": [
+    { "order": 1, "title": "手順名", "description": "具体的な説明", "checkpoints": ["確認点1", "確認点2"], "tips": "コツ（任意）" }
+  ],
+  "todoItems": [
+    { "text": "やること", "timing": "daily|weekly|monthly|asneeded|initial", "priority": "high|normal|optional" }
+  ],
+  "cautions": ["注意事項1", "注意事項2"],
+  "faq": [ { "q": "よくある質問", "a": "回答" } ]
+}
+
+【厳守】
+- steps は最大5、cautions は最大4、faq は最大3、todoItems は5〜8件。
+- 断定/最大級表現は禁止。専門用語には簡単な補足を付ける。
+- 出力は上記JSONのみ。`;
+}
+
+/** リサーチ本文 → 患者向け説明書への変換プロンプト（平易なMarkdown） */
+export function getPatientSheetPrompt(topic: string, researchText: string): string {
+  return `あなたは患者さんへの説明資料を作る専門家です。
+以下のリサーチ内容を、患者さんにそのまま渡せる「わかりやすい説明書」に変換してください。
+
+【テーマ】
+${topic}
+
+【リサーチ結果】
+${researchText}
+
+【作成方針】
+- 中学生でも理解できる平易な日本語。専門用語は避けるか、やさしく言い換える。
+- 不安を和らげる、思いやりのある表現を使う。
+- 印刷して患者さんに渡せる体裁（見出し・箇条書きで読みやすく）。
+
+【出力フォーマット — Markdown】
+# （テーマ）について
+
+## これはどんなもの？
+（やさしく2〜3文）
+
+## 大切なポイント
+- （ポイント1）
+- （ポイント2）
+- （ポイント3）
+
+## ご家庭で気をつけること
+- （注意1）
+- （注意2）
+
+## よくあるご質問
+**Q. （質問）**
+A. （回答）
+
+## 気になることがあれば
+（受診・相談を促す、安心できる一言）
+
+【厳守】断定/最大級表現は禁止。「個人差があります」を要所で。出力はMarkdown本文のみ（前置き・コードフェンス禁止）。`;
 }

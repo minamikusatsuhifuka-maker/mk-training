@@ -6,6 +6,8 @@
  * ※ 検索Grounding（リサーチ実行）も通常生成（学習資料）も、すべてこのファイル経由＝全経路 Gemini 3.5 Flash。
  */
 
+import { GEMINI_THINKING_CONFIG } from "@/lib/gemini-models";
+
 /** リサーチで使用するモデル名を解決する */
 export function getResearchModel(): string {
   return process.env.GEMINI_MODEL || "gemini-3.5-flash";
@@ -41,6 +43,8 @@ export async function generateText(
         topK: 40,
         topP: 0.95,
         maxOutputTokens: 12000,
+        // Gemini 3.x は思考が既定ON。枠固定のJSON抽出が途中で切れるため最小化する。
+        thinkingConfig: GEMINI_THINKING_CONFIG,
       },
     }),
   });
@@ -70,6 +74,68 @@ export function stripCodeFence(s: string): string {
     .replace(/^```(?:markdown|md|json|html)?\s*/i, "")
     .replace(/```\s*$/, "")
     .trim();
+}
+
+/**
+ * 生成テキストから JSON オブジェクトを堅牢に取り出す（3段階フォールバック）。
+ *   1) コードフェンス除去して素直に JSON.parse
+ *   2) brace matching（最初の { 〜 最後の } を抽出して parse）
+ *   3) 開き括弧カウントで不足分の } を補完して parse
+ * いずれも失敗したら null。
+ */
+export function parseJsonLoose<T = Record<string, unknown>>(raw: string): T | null {
+  const cleaned = stripCodeFence(raw);
+
+  // 1) そのまま
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch {
+    // フォールスルー
+  }
+
+  // 2) brace matching
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    const candidate = cleaned.slice(start, end + 1);
+    try {
+      return JSON.parse(candidate) as T;
+    } catch {
+      // フォールスルー
+    }
+  }
+
+  // 3) 開き括弧カウントで閉じ括弧を補完
+  if (start >= 0) {
+    const tail = cleaned.slice(start);
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (const ch of tail) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') inString = !inString;
+      if (inString) continue;
+      if (ch === "{") depth++;
+      else if (ch === "}") depth--;
+    }
+    if (depth > 0) {
+      const completed = tail + "}".repeat(depth);
+      try {
+        return JSON.parse(completed) as T;
+      } catch {
+        // フォールスルー
+      }
+    }
+  }
+
+  return null;
 }
 
 /** ストリーミングが返すイベント型 */

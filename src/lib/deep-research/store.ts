@@ -8,6 +8,17 @@
 // ※ Supabase は既存 lib/supabase.ts の anon クライアントを共有（service-role 不使用）。
 
 import { supabase } from "@/lib/supabase";
+import { loadPortalItems, savePortalItems } from "@/lib/portal-store";
+import {
+  KNOWLEDGE_DOCS_KEY,
+  type KnowledgeDoc,
+  type KnowledgeDocCategory,
+} from "@/lib/clinic-philosophy";
+import {
+  KNOWLEDGE_KEYS,
+  type Manual,
+  type OrgKnowledge,
+} from "@/types/knowledge";
 import type { ResearchResult, ResearchSource } from "./types";
 
 /** content_store.content_type（この機能の全レコード共通） */
@@ -119,4 +130,133 @@ export async function deleteResearch(id: string): Promise<void> {
     .delete()
     .eq("id", RESEARCH_PREFIX + id);
   if (error) throw new Error(`本体削除に失敗: ${error.message}`);
+}
+
+// ─────────────────────────────────────────────────────────────
+// STEP 2 拡張②: 既存知識システムへの保存連携
+//   ※ 既存の保存形式に完全準拠（knowledge_docs は { docs }、org_* は portal-store の { items }）。
+// ─────────────────────────────────────────────────────────────
+
+/** ランダムID（既存 knowledge-system の genId 流儀に準拠） */
+function genId(prefix: string): string {
+  return `${prefix}_${Date.now().toString(36)}_${crypto.randomUUID().slice(0, 8)}`;
+}
+
+/** AI参照資料（knowledge_docs）に1件追加 */
+export async function addKnowledgeDoc(input: {
+  title: string;
+  category: KnowledgeDocCategory;
+  content: string;
+  fileType?: string;
+}): Promise<KnowledgeDoc> {
+  // 既存形式は { docs: KnowledgeDoc[] }（portal の { items } とは別形式）
+  const { data } = await supabase
+    .from("content_store")
+    .select("data")
+    .eq("id", KNOWLEDGE_DOCS_KEY)
+    .single();
+  const raw = (data?.data as { docs?: KnowledgeDoc[] } | undefined) || {};
+  const docs = raw.docs || [];
+
+  const now = new Date().toISOString();
+  const doc: KnowledgeDoc = {
+    id: genId("kd"),
+    title: input.title,
+    category: input.category,
+    content: input.content,
+    isActive: true,
+    createdAt: now,
+    updatedAt: now,
+    fileType: input.fileType,
+    charCount: input.content.length,
+  };
+  docs.push(doc);
+
+  const { error } = await supabase.from("content_store").upsert({
+    id: KNOWLEDGE_DOCS_KEY,
+    content_type: "knowledge_docs",
+    data: { docs } as unknown as Record<string, unknown>,
+    updated_at: now,
+  });
+  if (error) throw new Error(`AI参照資料の保存に失敗: ${error.message}`);
+  return doc;
+}
+
+/** 組織ナレッジ（org_knowledges）に1件追加（承認待ち isApproved:false） */
+export async function addOrgKnowledge(input: {
+  title: string;
+  situation: string;
+  content: string;
+  impact: string;
+  actionItems: string[];
+  tags: string[];
+}): Promise<OrgKnowledge> {
+  const items = await loadPortalItems<OrgKnowledge>(KNOWLEDGE_KEYS.knowledges, []);
+  const knowledge: OrgKnowledge = {
+    id: genId("kg"),
+    type: "learning",
+    title: input.title,
+    situation: input.situation,
+    content: input.content,
+    impact: input.impact,
+    actionItems: input.actionItems,
+    tags: input.tags,
+    author: "AI生成（ディープリサーチ）",
+    isAnonymous: false,
+    isApproved: false,
+    createdAt: new Date().toISOString(),
+  };
+  const ok = await savePortalItems(KNOWLEDGE_KEYS.knowledges, [knowledge, ...items]);
+  if (!ok) throw new Error("組織ナレッジの保存に失敗しました");
+  return knowledge;
+}
+
+/** 院内マニュアル（org_manuals）に1件追加（下書き isPublished:false） */
+export async function addManual(input: {
+  title: string;
+  purpose: string;
+  category: string;
+  steps: { order?: number; title: string; description: string; checkpoints?: string[]; tips?: string }[];
+  todoItems: { text: string; timing?: string; priority?: string }[];
+  cautions: string[];
+  faq: { q: string; a: string }[];
+}): Promise<Manual> {
+  const items = await loadPortalItems<Manual>(KNOWLEDGE_KEYS.manuals, []);
+  const now = new Date().toISOString();
+
+  const manual: Manual = {
+    id: genId("manual"),
+    title: input.title,
+    role: "all",
+    category: input.category || "その他",
+    purpose: input.purpose,
+    steps: (input.steps || []).map((s, i) => ({
+      id: genId("step"),
+      order: s.order ?? i + 1,
+      title: s.title ?? "",
+      description: s.description ?? "",
+      checkpoints: s.checkpoints ?? [],
+      tips: s.tips,
+    })),
+    todoItems: (input.todoItems || []).map((t) => ({
+      id: genId("todo"),
+      text: t.text ?? "",
+      timing: (["daily", "weekly", "monthly", "asneeded", "initial"].includes(t.timing || "")
+        ? t.timing
+        : "daily") as Manual["todoItems"][number]["timing"],
+      priority: (["high", "normal", "optional"].includes(t.priority || "")
+        ? t.priority
+        : "normal") as Manual["todoItems"][number]["priority"],
+    })),
+    cautions: input.cautions || [],
+    faq: input.faq || [],
+    relatedManuals: [],
+    isPublished: false,
+    createdAt: now,
+    updatedAt: now,
+    version: 1,
+  };
+  const ok = await savePortalItems(KNOWLEDGE_KEYS.manuals, [manual, ...items]);
+  if (!ok) throw new Error("マニュアルの保存に失敗しました");
+  return manual;
 }

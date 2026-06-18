@@ -16,7 +16,7 @@ export const maxDuration = 300; // 5 分
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as ResearchRequest;
-    const { topic, mode, additionalContext } = body;
+    const { topic, mode, perspective, additionalContext } = body;
 
     if (!topic || topic.trim().length === 0) {
       return new Response(
@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
     const prompt = buildResearchPrompt({
       topic,
       mode: mode || "standard",
+      perspective: perspective || "general",
       additionalContext,
     });
     const encoder = new TextEncoder();

@@ -5,10 +5,16 @@
 // ※ 保存は content_store（案A: インデックス＋本体分離）。学習資料生成/公開/整理は STEP 2 以降。
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { RESEARCH_MODES, type ResearchMode } from "@/lib/deep-research/types";
+import {
+  RESEARCH_MODES,
+  RESEARCH_PERSPECTIVES,
+  type ResearchMode,
+  type ResearchPerspective,
+} from "@/lib/deep-research/types";
 import type { ResearchIndexItem } from "@/lib/deep-research/store";
 import { MarkdownView } from "@/components/deep-research/MarkdownView";
 import { LearningMaterials } from "@/components/deep-research/LearningMaterials";
+import { ResearchActions } from "@/components/deep-research/ResearchActions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,6 +34,7 @@ export default function DeepResearchPage() {
   // 入力
   const [topic, setTopic] = useState("");
   const [mode, setMode] = useState<ResearchMode>("standard");
+  const [perspective, setPerspective] = useState<ResearchPerspective>("general");
   const [additionalContext, setAdditionalContext] = useState("");
 
   // 実行・結果
@@ -35,6 +42,7 @@ export default function DeepResearchPage() {
   const [stage, setStage] = useState("");
   const [result, setResult] = useState("");
   const [resultTopic, setResultTopic] = useState(""); // 実行時に確定したトピック（生成/保存はこれを使う）
+  const [resultPerspective, setResultPerspective] = useState<ResearchPerspective>("general");
   const [sources, setSources] = useState<Source[]>([]);
   const [usedModel, setUsedModel] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -94,6 +102,7 @@ export default function DeepResearchPage() {
     setError("");
     setResult("");
     setResultTopic(topic);
+    setResultPerspective(perspective);
     setSources([]);
     setUsedModel(null);
     setStage("preparing");
@@ -103,7 +112,7 @@ export default function DeepResearchPage() {
       const res = await fetch("/api/admin/deep-research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic, mode, additionalContext }),
+        body: JSON.stringify({ topic, mode, perspective, additionalContext }),
       });
 
       if (!res.ok || !res.body) {
@@ -274,6 +283,28 @@ export default function DeepResearchPage() {
         </div>
 
         <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">リサーチの視点</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {RESEARCH_PERSPECTIVES.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                disabled={running}
+                onClick={() => setPerspective(p.id)}
+                className={`text-left rounded-lg border px-3 py-2 transition-colors ${
+                  perspective === p.id
+                    ? "border-sky-400 bg-sky-50"
+                    : "border-slate-200 bg-white hover:bg-slate-50"
+                } disabled:opacity-50`}
+              >
+                <div className="text-sm font-medium text-slate-800">{p.label}</div>
+                <div className="text-xs text-slate-500">{p.desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">追加要件（任意）</label>
           <Textarea
             value={additionalContext}
@@ -342,7 +373,12 @@ export default function DeepResearchPage() {
           )}
 
           {result && !running && (
-            <div className="pt-4 border-t border-slate-100">
+            <div className="pt-4 border-t border-slate-100 space-y-6">
+              <ResearchActions
+                topic={resultTopic || topic}
+                content={result}
+                perspective={resultPerspective}
+              />
               <LearningMaterials topic={resultTopic || topic} content={result} />
             </div>
           )}
@@ -414,7 +450,12 @@ export default function DeepResearchPage() {
                           </div>
                         )}
                         {expandedContent && (
-                          <div className="pt-4 mt-4 border-t border-slate-200">
+                          <div className="pt-4 mt-4 border-t border-slate-200 space-y-6">
+                            <ResearchActions
+                              topic={h.topic}
+                              content={expandedContent}
+                              perspective="general"
+                            />
                             <LearningMaterials topic={h.topic} content={expandedContent} />
                           </div>
                         )}
