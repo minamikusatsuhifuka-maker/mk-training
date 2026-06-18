@@ -8,6 +8,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { RESEARCH_MODES, type ResearchMode } from "@/lib/deep-research/types";
 import type { ResearchIndexItem } from "@/lib/deep-research/store";
 import { MarkdownView } from "@/components/deep-research/MarkdownView";
+import { LearningMaterials } from "@/components/deep-research/LearningMaterials";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,6 +34,7 @@ export default function DeepResearchPage() {
   const [running, setRunning] = useState(false);
   const [stage, setStage] = useState("");
   const [result, setResult] = useState("");
+  const [resultTopic, setResultTopic] = useState(""); // 実行時に確定したトピック（生成/保存はこれを使う）
   const [sources, setSources] = useState<Source[]>([]);
   const [usedModel, setUsedModel] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -91,6 +93,7 @@ export default function DeepResearchPage() {
     setRunning(true);
     setError("");
     setResult("");
+    setResultTopic(topic);
     setSources([]);
     setUsedModel(null);
     setStage("preparing");
@@ -170,7 +173,7 @@ export default function DeepResearchPage() {
       const res = await fetch("/api/admin/deep-research/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic, mode, content: result, sources, model: usedModel }),
+        body: JSON.stringify({ topic: resultTopic || topic, mode, content: result, sources, model: usedModel }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "保存に失敗しました");
@@ -337,6 +340,12 @@ export default function DeepResearchPage() {
               </ul>
             </div>
           )}
+
+          {result && !running && (
+            <div className="pt-4 border-t border-slate-100">
+              <LearningMaterials topic={resultTopic || topic} content={result} />
+            </div>
+          )}
         </div>
       )}
 
@@ -402,6 +411,11 @@ export default function DeepResearchPage() {
                                 </li>
                               ))}
                             </ul>
+                          </div>
+                        )}
+                        {expandedContent && (
+                          <div className="pt-4 mt-4 border-t border-slate-200">
+                            <LearningMaterials topic={h.topic} content={expandedContent} />
                           </div>
                         )}
                       </>
