@@ -911,7 +911,7 @@ export default function AdminPortalPage() {
               </span>
             </label>
             <p className="text-xs text-gray-400 mt-1 ml-6">
-              未読の新着情報がある時、キャラクターが画面上方を横切ります
+              表示期間内の新着情報がある時、キャラクターが画面上方を横切ります
             </p>
           </div>
 
@@ -1051,6 +1051,33 @@ export default function AdminPortalPage() {
               <span>速い（5秒）</span>
               <span>ゆっくり（30秒）</span>
             </div>
+          </div>
+
+          {/* 新着通知アニメの表示期間（日数） */}
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">
+              新着通知アニメの表示期間（日数）
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="30"
+              step="1"
+              value={charSettings.newsNoticeDays}
+              onChange={(e) =>
+                setCharSettings({
+                  ...charSettings,
+                  newsNoticeDays: Math.max(
+                    1,
+                    Math.min(30, Number(e.target.value) || 1)
+                  ),
+                })
+              }
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              お知らせ投稿からこの日数以内は、トップ表示のたびにキャラクターが横切ります（デフォルト3日）
+            </p>
           </div>
 
           {/* プレビュー */}

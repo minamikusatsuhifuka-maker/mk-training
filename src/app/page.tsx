@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   loadPortalItems,
@@ -217,53 +217,6 @@ export default function PortalHome() {
   // 新着情報セクションへのスクロール用ref
   const newsSectionRef = useRef<HTMLElement>(null);
 
-  // 既読のお知らせID（localStorageに永続化）。日付ではなくID単位で管理するため、
-  // 同じ日に新しいお知らせが追加されても正しく「未読」と判定される。
-  const [readIds, setReadIds] = useState<string[]>([]);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("news_read_ids");
-      setReadIds(raw ? (JSON.parse(raw) as string[]) : []);
-    } catch {
-      setReadIds([]);
-    }
-  }, []);
-
-  // 有効かつ未読のお知らせが1件でもあるか
-  const hasUnreadNews = useMemo(
-    () => news.some((n) => !readIds.includes(n.id)),
-    [news, readIds]
-  );
-
-  // 指定IDを既読にして永続化
-  const markNewsRead = (ids: string[]) => {
-    setReadIds((prev) => {
-      const next = Array.from(new Set([...prev, ...ids]));
-      try {
-        localStorage.setItem("news_read_ids", JSON.stringify(next));
-      } catch {
-        /* localStorage不可時は無視 */
-      }
-      return next;
-    });
-  };
-
-  // キャラクタークリックで新着情報セクションへ移動し、表示中のお知らせを既読化
-  const scrollToNews = () => {
-    newsSectionRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-    markNewsRead(news.map((n) => n.id));
-  };
-
-  // お知らせモーダルを開く（開いた時点でそのお知らせを既読化）
-  const openNews = (item: NewsItem) => {
-    setSelectedNews(item);
-    markNewsRead([item.id]);
-  };
-
   // モーダル表示中は背景スクロールをロックし、Escで閉じる
   useEffect(() => {
     if (!selectedNews) return;
@@ -383,12 +336,8 @@ export default function PortalHome() {
 
   return (
     <div className="max-w-2xl mx-auto -m-3 md:-m-6 bg-white min-h-screen">
-      {/* キャラクター通知（未読の新着情報がある時のみ表示） */}
-      <CharacterNotification
-        hasUnreadNews={hasUnreadNews}
-        latestNewsTitle={news[0]?.title}
-        onCharacterClick={scrollToNews}
-      />
+      {/* キャラクター通知（投稿から一定期間内は毎回再生／クリックで中央モーダル） */}
+      <CharacterNotification news={news} onOpenNews={setSelectedNews} />
 
       {/* ① ヘッダーバー */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-gray-100 sticky top-0 bg-white z-10">
@@ -440,7 +389,7 @@ export default function PortalHome() {
           {news.map((item) => (
             <div
               key={item.id}
-              onClick={() => openNews(item)}
+              onClick={() => setSelectedNews(item)}
               className="flex items-start gap-3 p-4 bg-white border border-gray-100 rounded-xl cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors min-h-[60px]"
             >
               <div

@@ -56,6 +56,7 @@ export type CharacterSettings = {
   speed: number; // 横切る秒数 (5-30)
   emoji: string; // 絵文字スタイルの場合
   svgType: CharacterSvgType; // イラストスタイルの場合
+  newsNoticeDays: number; // 新着通知アニメの表示期間（日数）。投稿からこの日数以内は毎回再生
 };
 
 export const DEFAULT_CHARACTER_SETTINGS: CharacterSettings = {
@@ -65,6 +66,7 @@ export const DEFAULT_CHARACTER_SETTINGS: CharacterSettings = {
   speed: 12,
   emoji: "🐈",
   svgType: "cat",
+  newsNoticeDays: 3,
 };
 
 // content_store の id（単一オブジェクトとして保存）

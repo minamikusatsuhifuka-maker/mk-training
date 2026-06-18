@@ -6,23 +6,22 @@ import {
   DEFAULT_CHARACTER_SETTINGS,
   type CharacterSettings,
   type CharacterSvgType,
+  type NewsItem,
 } from "@/types/portal";
 
 type Props = {
-  hasUnreadNews: boolean;
-  latestNewsTitle?: string;
-  onCharacterClick: () => void;
+  /** 有効・新しい順の新着情報（page.tsxで整形済み） */
+  news: NewsItem[];
+  /** アニメ（キャラ／吹き出し）クリック時に開くお知らせ */
+  onOpenNews: (item: NewsItem) => void;
 };
 
-export default function CharacterNotification({
-  hasUnreadNews,
-  latestNewsTitle,
-  onCharacterClick,
-}: Props) {
+export default function CharacterNotification({ news, onOpenNews }: Props) {
   const [settings, setSettings] = useState<CharacterSettings>(
     DEFAULT_CHARACTER_SETTINGS
   );
-  const [show, setShow] = useState(false);
+  // 表示期間（newsNoticeDays日）以内の有効な新着。クライアントでのみ算出する。
+  const [windowNews, setWindowNews] = useState<NewsItem[]>([]);
 
   // 設定を読み込み
   useEffect(() => {
@@ -31,39 +30,49 @@ export default function CharacterNotification({
       .catch(() => {});
   }, []);
 
-  // 表示判定（有効かつ未読のお知らせがあれば必ず表示）
-  // 既読管理はお知らせID単位（page.tsx側）で行うため、ここでは日付による抑制はしない。
+  // 時間ウィンドウ判定：投稿から newsNoticeDays 日以内の新着を抽出。
+  // 「未読」「1日1回」などの抑制は行わず、期間内なら表示のたびに毎回再生する。
   useEffect(() => {
-    setShow(hasUnreadNews && settings.enabled);
-  }, [hasUnreadNews, settings.enabled]);
+    const days =
+      settings.newsNoticeDays ?? DEFAULT_CHARACTER_SETTINGS.newsNoticeDays;
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    const inWindow = news.filter((n) => {
+      const t = new Date(n.createdAt).getTime();
+      return !Number.isNaN(t) && t >= cutoff;
+    });
+    setWindowNews(inWindow);
+  }, [news, settings.newsNoticeDays]);
+
+  const show = settings.enabled && windowNews.length > 0;
+  const latest = windowNews[0];
+
+  if (!show || !latest) return null;
 
   const handleClick = () => {
-    setShow(false);
-    onCharacterClick();
+    onOpenNews(latest);
   };
-
-  if (!show) return null;
 
   return (
     <div
-      className="fixed top-16 left-0 right-0 z-40 pointer-events-none overflow-hidden"
-      style={{ height: settings.size + 56 }}
+      className="fixed top-14 left-0 right-0 z-[200] pointer-events-none overflow-hidden"
+      style={{ height: settings.size + 120 }}
       aria-hidden={false}
     >
-      {/* キャラクター（画面上方を横切る） */}
+      {/* キャラクター（画面上方を横切る／クリックでモーダル） */}
       <div
         className="absolute pointer-events-auto cursor-pointer"
         onClick={handleClick}
-        title={latestNewsTitle ? `新着：${latestNewsTitle}` : "新着情報があります"}
+        role="button"
+        title={latest.title ? `新着：${latest.title}` : "新着情報があります"}
         style={{
           animation: `walkAcross ${settings.speed}s linear infinite`,
-          top: 34,
+          top: 72,
         }}
       >
         <div className="relative">
-          {/* 吹き出し */}
-          <div className="absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap">
-            <div className="bg-teal-600 text-white text-xs px-3 py-1.5 rounded-full shadow-lg animate-bounce">
+          {/* 吹き出し（キャラの上・上下左右パディングで文字切れ防止） */}
+          <div className="absolute -top-3 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap">
+            <div className="bg-teal-600 text-white text-xs leading-none py-2 px-4 rounded-full shadow-lg animate-bounce">
               📢 新着情報があります！
             </div>
             <div className="w-2 h-2 bg-teal-600 rotate-45 mx-auto -mt-1" />
