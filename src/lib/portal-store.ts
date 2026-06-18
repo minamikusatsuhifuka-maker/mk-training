@@ -1,4 +1,4 @@
-// LUMINA ポータル用のSupabaseストレージヘルパ
+// 南草津皮フ科 ポータル用のSupabaseストレージヘルパ
 // content_store の data カラムには { items: [...] } 形式で保存する
 // （単一オブジェクト型は { ...data } の直書き）
 

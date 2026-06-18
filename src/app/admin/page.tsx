@@ -44,7 +44,7 @@ export default function AdminDashboard() {
             <CardHeader>
               <CardTitle className="text-base">🏠 ポータル管理</CardTitle>
               <CardDescription className="text-xs">
-                LUMINAポータルトップ（新着情報・気づきシェア・ありがとうカード・経営方針・今日の一言）の管理
+                ポータルトップ（新着情報・気づきシェア・ありがとうカード・経営方針・今日の一言）の管理
               </CardDescription>
             </CardHeader>
           </Card>

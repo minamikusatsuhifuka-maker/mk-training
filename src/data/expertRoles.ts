@@ -34,7 +34,7 @@ export const EXPERT_ROLES: ExpertRole[] = [
     icon: "🏥",
     color: "teal",
     description:
-      "医療事務・クラーク・カウンセラーの3役を担うLUMINAの中核スタッフ。保険診療から美容診療まで幅広く患者に寄り添う。",
+      "医療事務・クラーク・カウンセラーの3役を担う南草津皮フ科の中核スタッフ。保険診療から美容診療まで幅広く患者に寄り添う。",
     sections: [
       {
         id: "as-office",
@@ -332,7 +332,7 @@ export const EXPERT_ROLES: ExpertRole[] = [
     icon: "🌱",
     color: "green",
     description:
-      "ロールを超えてLUMINAのスタッフ全員に求められる姿勢・行動・マインドセット",
+      "ロールを超えて南草津皮フ科のスタッフ全員に求められる姿勢・行動・マインドセット",
     sections: [
       {
         id: "philosophy",

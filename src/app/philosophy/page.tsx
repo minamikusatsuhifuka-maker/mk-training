@@ -265,7 +265,7 @@ export default function PhilosophyPage() {
           🌱 クリニックの理念・哲学
         </h1>
         <p className="text-sm md:text-base text-muted-foreground mt-3">
-          南草津皮フ科（LUMINA）が大切にする理念・哲学・判断軸
+          南草津皮フ科が大切にする理念・哲学・判断軸
         </p>
       </div>
 

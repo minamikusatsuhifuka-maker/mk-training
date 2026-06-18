@@ -374,7 +374,7 @@ export default function AdminPortalPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">🏠 ポータル管理</h1>
           <p className="text-sm text-gray-500 mt-1">
-            LUMINAポータルトップに表示するコンテンツを管理します
+            ポータルトップに表示するコンテンツを管理します
           </p>
         </div>
         <a

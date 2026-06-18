@@ -140,7 +140,7 @@ export default function AdminKnowledgePage() {
   const [batchProgress, setBatchProgress] = useState("");
   const [batchSaving, setBatchSaving] = useState(false);
 
-  // Supabaseから読み込み（初回は LUMINA 哲学を初期データとして投入）
+  // Supabaseから読み込み（初回は南草津皮フ科の理念・哲学を初期データとして投入）
   const loadDocs = useCallback(async () => {
     setLoading(true);
     try {
@@ -152,15 +152,15 @@ export default function AdminKnowledgePage() {
       const raw = (data?.data as { docs?: KnowledgeDoc[] } | undefined) || {};
       const loaded = raw.docs || [];
 
-      // 初回のみ LUMINA 哲学ドキュメントを初期データとしてSupabaseに保存
+      // 初回のみ南草津皮フ科の理念・哲学ドキュメントを初期データとしてSupabaseに保存
       if (loaded.length === 0) {
         const initialDoc: KnowledgeDoc = {
           id: "lumina-philosophy-001",
-          title: "LUMINA クリニック理念・哲学・判断軸",
+          title: "南草津皮フ科 クリニック理念・哲学・判断軸",
           category: "philosophy",
           content: CLINIC_PHILOSOPHY,
           fileType: "markdown",
-          fileName: "LUMINA_背景情報_移植用.md",
+          fileName: "南草津皮フ科_背景情報_移植用.md",
           charCount: CLINIC_PHILOSOPHY.length,
           isActive: true,
           createdAt: new Date().toISOString(),

@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     if (!item) {
       return NextResponse.json({ error: "itemが指定されていません" }, { status: 400 });
     }
-    prompt = `南草津皮フ科クリニック（滋賀県・LUMINA）の${role}として、以下の「エキスパートに求められる要件」の内容を改善してください。
+    prompt = `南草津皮フ科クリニック（滋賀県）の${role}として、以下の「エキスパートに求められる要件」の内容を改善してください。
 
 セクション: ${section}
 タイトル: ${item.title}
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
 レベル: ${item.level ?? "intermediate"}
 
 【改善の観点】
-- LUMINAの理念（四方よし・リードマネジメント・ティール組織・凡事徹底）に沿っているか
+- 南草津皮フ科の理念（四方よし・リードマネジメント・ティール組織・凡事徹底）に沿っているか
 - 具体的な行動・状態が描かれているか
 - スタッフが「どうすればよいか」が明確か
 - 患者・チームへの価値が伝わるか
@@ -52,14 +52,14 @@ export async function POST(request: Request) {
   "suggestion": "改善のポイントの説明（50文字以内）"
 }`;
   } else if (action === "add_items") {
-    prompt = `南草津皮フ科クリニック（滋賀県・LUMINA）の${role}の「${section}」セクションに追加すべき要件を3件提案してください。
+    prompt = `南草津皮フ科クリニック（滋賀県）の${role}の「${section}」セクションに追加すべき要件を3件提案してください。
 
 既存の項目:
 ${existingItems?.map((i) => `- ${i.title}`).join("\n") || "なし"}
 
 【追加の観点】
 - 既存項目と重複しない
-- LUMINAの理念（四方よし・リードマネジメント・ティール組織・凡事徹底）に沿っている
+- 南草津皮フ科の理念（四方よし・リードマネジメント・ティール組織・凡事徹底）に沿っている
 - 実際の皮膚科・美容皮膚科クリニックで必要なスキル・知識・マインド
 - 具体的で実践的な内容
 
