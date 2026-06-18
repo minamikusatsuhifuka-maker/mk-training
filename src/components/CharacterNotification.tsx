@@ -31,9 +31,12 @@ const CHARACTER_POOL = [
   "🐮",
 ] as const;
 
-// 各キャラ開始の間隔に加えるバッファ(ms)。INTERVAL = 横切り時間D + このバッファ。
-// 重ならない値にしてある。詰めたい/空けたい場合はここを調整する。
-const STAGGER_BUFFER_MS = 600;
+// オーバーラップ再生の係数。INTERVAL = 横切り時間D × この値。
+// D未満にすることで「前のキャラが抜けきる前に次が登場」＝複数が並走する。
+// 小さいほど密に並走（重なりやすい）。調整可能。
+const OVERLAP_RATIO = 0.4;
+// スケジュール間隔の下限(ms)。Dが極端に小さい時に間隔が詰まりすぎないように。
+const MIN_INTERVAL_MS = 300;
 
 export default function CharacterNotification({ news, onOpenNews }: Props) {
   const [settings, setSettings] = useState<CharacterSettings>(
@@ -72,7 +75,8 @@ export default function CharacterNotification({ news, onOpenNews }: Props) {
     if (!settings.enabled || targetNews.length === 0) return;
 
     const dMs = settings.speed * 1000; // 1体の横切り時間
-    const intervalMs = dMs + STAGGER_BUFFER_MS; // 等間隔（重ならない）
+    // オーバーラップ再生：INTERVAL < D にして前のキャラが抜ける前に次を登場させる
+    const intervalMs = Math.max(MIN_INTERVAL_MS, Math.round(dMs * OVERLAP_RATIO));
     const timers: ReturnType<typeof setTimeout>[] = [];
 
     targetNews.forEach((_, i) => {
@@ -128,14 +132,18 @@ export default function CharacterNotification({ news, onOpenNews }: Props) {
             style={{
               // 1巡のみ（infiniteにしない）。横切り後はforwardsで画面外に留める。
               animation: `walkAcross ${settings.speed}s linear forwards`,
-              top: 72,
+              // 並走時に吹き出し同士が完全重なりしないよう軽い縦オフセット（3段で循環）。
+              top: 72 + (i % 3) * 12,
             }}
           >
             <div className="relative">
-              {/* 吹き出し（キャラの上・上下左右パディングで文字切れ防止） */}
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap">
-                <div className="bg-teal-600 text-white text-xs leading-none py-2 px-4 rounded-full shadow-lg animate-bounce">
-                  📢 新着情報があります！
+              {/* 吹き出し（キャラの上・新着タイトルを表示／文字切れ防止のパディング） */}
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 -translate-y-full">
+                <div className="bg-teal-600 text-white text-xs leading-none py-2 px-4 rounded-full shadow-lg animate-bounce flex items-center gap-1 max-w-[220px]">
+                  <span className="shrink-0">📢</span>
+                  <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+                    {item.title}
+                  </span>
                 </div>
                 <div className="w-2 h-2 bg-teal-600 rotate-45 mx-auto -mt-1" />
               </div>

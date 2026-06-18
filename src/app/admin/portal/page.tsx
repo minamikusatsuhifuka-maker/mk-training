@@ -1058,23 +1058,22 @@ export default function AdminPortalPage() {
             <label className="text-sm font-medium text-gray-700 mb-2 block">
               新着通知アニメの表示期間（日数）
             </label>
-            <input
-              type="number"
-              min="1"
-              max="30"
-              step="1"
+            <select
               value={charSettings.newsNoticeDays}
               onChange={(e) =>
                 setCharSettings({
                   ...charSettings,
-                  newsNoticeDays: Math.max(
-                    1,
-                    Math.min(30, Number(e.target.value) || 1)
-                  ),
+                  newsNoticeDays: Number(e.target.value),
                 })
               }
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-            />
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+            >
+              {[1, 3, 5, 7, 14, 30].map((d) => (
+                <option key={d} value={d}>
+                  {d}日
+                </option>
+              ))}
+            </select>
             <p className="text-xs text-gray-400 mt-1">
               お知らせ投稿からこの日数以内は、トップ表示のたびにキャラクターが横切ります（デフォルト3日）
             </p>
