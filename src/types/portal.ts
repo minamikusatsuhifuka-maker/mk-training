@@ -8,6 +8,8 @@ export type NewsItem = {
   content: string;
   createdAt: string;
   isActive: boolean;
+  /** 通知アニメをこの日時まで毎回表示する期限（ISO日時）。未設定の旧データは newsNoticeDays でフォールバック */
+  noticeUntil?: string;
 };
 
 export type HiyariType = "hiyari" | "good";
@@ -47,7 +49,16 @@ export type TodayWord = {
 };
 
 // ─── キャラクター通知設定 ───
-export type CharacterSvgType = "cat" | "dog" | "rabbit" | "bird";
+export type CharacterSvgType =
+  | "cat"
+  | "dog"
+  | "rabbit"
+  | "bird"
+  | "chihuahua"
+  | "sakura"
+  | "sprout"
+  | "star"
+  | "moon";
 
 export type CharacterSettings = {
   enabled: boolean;

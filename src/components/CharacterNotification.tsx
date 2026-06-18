@@ -31,6 +31,19 @@ const CHARACTER_POOL = [
   "🐮",
 ] as const;
 
+// 複数新着時のイラストプール（style=svgのとき使用）。全イラストを順番に循環で割り当てる。
+const SVG_POOL: CharacterSvgType[] = [
+  "cat",
+  "dog",
+  "rabbit",
+  "bird",
+  "chihuahua",
+  "sakura",
+  "sprout",
+  "star",
+  "moon",
+];
+
 // オーバーラップ再生の係数。INTERVAL = 横切り時間D × この値。
 // D未満にすることで「前のキャラが抜けきる前に次が登場」＝複数が並走する。
 // 小さいほど密に並走（重なりやすい）。調整可能。
@@ -54,15 +67,21 @@ export default function CharacterNotification({ news, onOpenNews }: Props) {
       .catch(() => {});
   }, []);
 
-  // 時間ウィンドウ判定：投稿から newsNoticeDays 日以内の新着を createdAt 降順で抽出。
-  // 「未読」「1日1回」などの抑制は行わず、期間内なら表示のたびに毎回再生する。
+  // 通知期限判定：お知らせ毎の noticeUntil（日時）を優先。無ければ createdAt + newsNoticeDays日。
+  // 「未読」「1日1回」などの抑制は行わず、期限内なら表示のたびに毎回再生する。
   useEffect(() => {
     const days =
       settings.newsNoticeDays ?? DEFAULT_CHARACTER_SETTINGS.newsNoticeDays;
-    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    const now = Date.now();
     const inWindow = news.filter((n) => {
-      const t = new Date(n.createdAt).getTime();
-      return !Number.isNaN(t) && t >= cutoff;
+      const created = new Date(n.createdAt).getTime();
+      if (Number.isNaN(created)) return false;
+      if (n.noticeUntil) {
+        const until = new Date(n.noticeUntil).getTime();
+        return !Number.isNaN(until) && now <= until;
+      }
+      // 旧データ（noticeUntil無し）: createdAt + newsNoticeDays日 までフォールバック
+      return now <= created + days * 24 * 60 * 60 * 1000;
     });
     setTargetNews(inWindow);
   }, [news, settings.newsNoticeDays]);
@@ -116,8 +135,11 @@ export default function CharacterNotification({ news, onOpenNews }: Props) {
       {targetNews.map((item, i) => {
         if (!visible.has(i)) return null;
         // 1件のみ：既存のキャラ設定（絵文字/SVG）を優先。
-        // 複数件：プールから重複しない絵文字を割り当て（i % プール長で循環）。
-        const useSvg = isSingle && settings.characterStyle === "svg";
+        // 複数件：style=svgならイラストプール、それ以外は絵文字プールを循環で割り当てる。
+        const useSvg = settings.characterStyle === "svg";
+        const svgType = isSingle
+          ? settings.svgType
+          : SVG_POOL[i % SVG_POOL.length];
         const emojiChar = isSingle
           ? settings.emoji
           : CHARACTER_POOL[i % CHARACTER_POOL.length];
@@ -150,7 +172,7 @@ export default function CharacterNotification({ news, onOpenNews }: Props) {
 
               {/* キャラクター本体 */}
               {useSvg ? (
-                <CharacterSVG type={settings.svgType} size={settings.size} />
+                <CharacterSVG type={svgType} size={settings.size} />
               ) : (
                 <div
                   style={{ fontSize: settings.size, lineHeight: 1 }}
@@ -224,6 +246,128 @@ export function CharacterSVG({
         <path d="M48 38 L52 38 L50 42 Z" fill="#EF9F27" />
         <path d="M25 60 Q15 55 20 68" fill="#378ADD" />
         <path d="M75 60 Q85 55 80 68" fill="#378ADD" />
+      </svg>
+    ),
+    chihuahua: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <path d="M22 16 L17 54 L43 41 Z" fill="#2b2622" />
+        <path d="M78 16 L83 54 L57 41 Z" fill="#2b2622" />
+        <path d="M27 24 L24 47 L39 40 Z" fill="#b9793f" />
+        <path d="M73 24 L76 47 L61 40 Z" fill="#b9793f" />
+        <path
+          d="M50 26 C30 26 24 42 24 57 C24 77 36 87 50 87 C64 87 76 77 76 57 C76 42 70 26 50 26 Z"
+          fill="#2b2622"
+        />
+        <path
+          d="M50 57 C37 57 31 65 31 73 C31 82 40 89 50 89 C60 89 69 82 69 73 C69 65 63 57 50 57 Z"
+          fill="#c98a4b"
+        />
+        <ellipse cx="39" cy="46" rx="4.5" ry="3.4" fill="#b9793f" />
+        <ellipse cx="61" cy="46" rx="4.5" ry="3.4" fill="#b9793f" />
+        <circle cx="39" cy="53" r="4.2" fill="#15110d" />
+        <circle cx="61" cy="53" r="4.2" fill="#15110d" />
+        <circle cx="40.4" cy="51.6" r="1.2" fill="#fff" />
+        <circle cx="62.4" cy="51.6" r="1.2" fill="#fff" />
+        <ellipse cx="50" cy="69" rx="5" ry="3.6" fill="#15110d" />
+        <path
+          d="M50 72 L50 77 M50 77 C46 80 43 79 42 77 M50 77 C54 80 57 79 58 77"
+          stroke="#6b4423"
+          strokeWidth="1.6"
+          fill="none"
+          strokeLinecap="round"
+        />
+      </svg>
+    ),
+    sakura: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <g fill="#f7a8c8">
+          <path d="M50 48 C41 40 39 27 45 18 C46.5 21 48 22 50 22 C52 22 53.5 21 55 18 C61 27 59 40 50 48 Z" />
+          <g transform="rotate(72 50 50)">
+            <path d="M50 48 C41 40 39 27 45 18 C46.5 21 48 22 50 22 C52 22 53.5 21 55 18 C61 27 59 40 50 48 Z" />
+          </g>
+          <g transform="rotate(144 50 50)">
+            <path d="M50 48 C41 40 39 27 45 18 C46.5 21 48 22 50 22 C52 22 53.5 21 55 18 C61 27 59 40 50 48 Z" />
+          </g>
+          <g transform="rotate(216 50 50)">
+            <path d="M50 48 C41 40 39 27 45 18 C46.5 21 48 22 50 22 C52 22 53.5 21 55 18 C61 27 59 40 50 48 Z" />
+          </g>
+          <g transform="rotate(288 50 50)">
+            <path d="M50 48 C41 40 39 27 45 18 C46.5 21 48 22 50 22 C52 22 53.5 21 55 18 C61 27 59 40 50 48 Z" />
+          </g>
+        </g>
+        <circle cx="50" cy="50" r="7.5" fill="#fcd7e6" />
+        <g stroke="#e0648f" strokeWidth="1.3" strokeLinecap="round">
+          <line x1="50" y1="50" x2="50" y2="43" />
+          <line x1="50" y1="50" x2="56.5" y2="46.5" />
+          <line x1="50" y1="50" x2="56.5" y2="53.5" />
+          <line x1="50" y1="50" x2="43.5" y2="53.5" />
+          <line x1="50" y1="50" x2="43.5" y2="46.5" />
+        </g>
+        <g fill="#e0648f">
+          <circle cx="50" cy="42" r="1.5" />
+          <circle cx="57.5" cy="46" r="1.5" />
+          <circle cx="57.5" cy="54" r="1.5" />
+          <circle cx="42.5" cy="54" r="1.5" />
+          <circle cx="42.5" cy="46" r="1.5" />
+        </g>
+      </svg>
+    ),
+    sprout: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <path
+          d="M50 88 L50 54"
+          stroke="#3f9b54"
+          strokeWidth="4"
+          strokeLinecap="round"
+        />
+        <path
+          d="M50 60 C36 60 26 52 24 39 C39 37 50 45 50 60 Z"
+          fill="#5cc06f"
+        />
+        <path
+          d="M50 54 C64 54 74 46 76 33 C61 31 50 39 50 54 Z"
+          fill="#7ad28a"
+        />
+        <path
+          d="M50 60 C42 56 35 50 28 42"
+          stroke="#358a49"
+          strokeWidth="1.4"
+          fill="none"
+          strokeLinecap="round"
+        />
+        <path
+          d="M50 54 C58 50 65 44 72 35"
+          stroke="#4cae62"
+          strokeWidth="1.4"
+          fill="none"
+          strokeLinecap="round"
+        />
+        <path d="M30 88 C36 82 64 82 70 88 Z" fill="#c7a06d" />
+      </svg>
+    ),
+    star: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <path
+          d="M50 14 L61 39 L88 42 L67 60 L73 87 L50 73 L27 87 L33 60 L12 42 L39 39 Z"
+          fill="#ffd24a"
+        />
+        <path
+          d="M50 14 L61 39 L88 42 L67 60 L73 87 L50 73 Z"
+          fill="#fbbf24"
+        />
+        <circle cx="43" cy="43" r="3.6" fill="#fff" opacity="0.55" />
+      </svg>
+    ),
+    moon: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <path
+          d="M70 16 C48 16 30 33 30 53 C30 73 48 90 70 90 C58 82 51 68 51 53 C51 38 58 24 70 16 Z"
+          fill="#ffd45e"
+        />
+        <path
+          d="M77 28 l1.8 4.6 4.6 1.8 -4.6 1.8 -1.8 4.6 -1.8 -4.6 -4.6 -1.8 4.6 -1.8 z"
+          fill="#ffe08a"
+        />
       </svg>
     ),
   };

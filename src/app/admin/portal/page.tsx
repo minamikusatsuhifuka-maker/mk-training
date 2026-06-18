@@ -58,6 +58,11 @@ const CHARACTER_SVGS: { type: CharacterSvgType; label: string }[] = [
   { type: "dog", label: "いぬ" },
   { type: "rabbit", label: "うさぎ" },
   { type: "bird", label: "とり" },
+  { type: "chihuahua", label: "ブラックタンチワワ" },
+  { type: "sakura", label: "さくら" },
+  { type: "sprout", label: "ふたば" },
+  { type: "star", label: "ほし" },
+  { type: "moon", label: "つき" },
 ];
 
 const NEWS_CATEGORIES: { value: NewsCategory; label: string }[] = [
@@ -80,6 +85,33 @@ function formatDateTime(iso: string): string {
   } catch {
     return "";
   }
+}
+
+// ─── datetime-local（ローカル時刻 "YYYY-MM-DDTHH:mm"）⇔ ISO 変換 ───
+function toDatetimeLocal(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+    d.getDate()
+  )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function isoToDatetimeLocal(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return toDatetimeLocal(d);
+}
+
+function datetimeLocalToIso(local: string): string | undefined {
+  if (!local) return undefined;
+  const d = new Date(local);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
+}
+
+// 現在 + days日 を datetime-local 形式で返す（追加フォームの既定値）
+function defaultNoticeLocal(days: number): string {
+  return toDatetimeLocal(new Date(Date.now() + days * 24 * 60 * 60 * 1000));
 }
 
 export default function AdminPortalPage() {
@@ -110,12 +142,14 @@ export default function AdminPortalPage() {
     author: string;
     content: string;
     isActive: boolean;
+    noticeUntil: string; // datetime-local 形式（ローカル時刻）
   }>({
     title: "",
     category: "notice",
     author: "管理者",
     content: "",
     isActive: true,
+    noticeUntil: "",
   });
 
   // 経営方針追加・編集フォーム
@@ -156,6 +190,16 @@ export default function AdminPortalPage() {
     fetchAll().catch(() => setLoading(false));
   }, []);
 
+  // 追加フォームの通知期限を「現在 + newsNoticeDays日」でプリフィル（未入力時のみ）
+  useEffect(() => {
+    if (loading) return;
+    setNewsForm((f) =>
+      f.noticeUntil
+        ? f
+        : { ...f, noticeUntil: defaultNoticeLocal(charSettings.newsNoticeDays) }
+    );
+  }, [loading, charSettings.newsNoticeDays]);
+
   const flash = (text: string) => {
     setMsg(text);
     setTimeout(() => setMsg(null), 3000);
@@ -175,6 +219,7 @@ export default function AdminPortalPage() {
       content: newsForm.content.trim(),
       createdAt: new Date().toISOString(),
       isActive: newsForm.isActive,
+      noticeUntil: datetimeLocalToIso(newsForm.noticeUntil),
     };
     const next = [item, ...news];
     const ok = await savePortalItems(PORTAL_KEYS.news, next);
@@ -187,6 +232,7 @@ export default function AdminPortalPage() {
         author: "管理者",
         content: "",
         isActive: true,
+        noticeUntil: defaultNoticeLocal(charSettings.newsNoticeDays),
       });
       flash("💾 追加しました");
     } else {
@@ -479,6 +525,19 @@ export default function AdminPortalPage() {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-y"
                 />
               </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs text-gray-500 mb-1 block">
+                  通知アニメの表示期限（この日時まで毎回表示）
+                </label>
+                <input
+                  type="datetime-local"
+                  value={newsForm.noticeUntil}
+                  onChange={(e) =>
+                    setNewsForm({ ...newsForm, noticeUntil: e.target.value })
+                  }
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
               <div>
                 <label className="flex items-center gap-2 text-sm text-gray-700">
                   <input
@@ -547,6 +606,24 @@ export default function AdminPortalPage() {
                     {n.content}
                   </p>
                 )}
+                <div className="flex items-center gap-2 flex-wrap pt-1">
+                  <label className="text-xs text-gray-500">
+                    通知期限
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={isoToDatetimeLocal(n.noticeUntil)}
+                    onChange={(e) =>
+                      updateNewsItem(n.id, {
+                        noticeUntil: datetimeLocalToIso(e.target.value),
+                      })
+                    }
+                    className="border border-gray-200 rounded-lg px-2 py-1 text-xs"
+                  />
+                  <span className="text-xs text-gray-400">
+                    （未設定なら {charSettings.newsNoticeDays}日間）
+                  </span>
+                </div>
               </div>
             ))}
             {news.length === 0 && (
@@ -1075,7 +1152,7 @@ export default function AdminPortalPage() {
               ))}
             </select>
             <p className="text-xs text-gray-400 mt-1">
-              お知らせ投稿からこの日数以内は、トップ表示のたびにキャラクターが横切ります（デフォルト3日）
+              新規お知らせの通知期限の既定値（日数）。お知らせごとに日時で上書きできます（デフォルト3日）
             </p>
           </div>
 
