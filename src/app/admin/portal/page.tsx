@@ -143,6 +143,7 @@ export default function AdminPortalPage() {
     content: string;
     isActive: boolean;
     noticeUntil: string; // datetime-local 形式（ローカル時刻）
+    character?: CharacterSvgType; // 通知アニメのキャラ（未設定=おまかせ）
   }>({
     title: "",
     category: "notice",
@@ -150,6 +151,7 @@ export default function AdminPortalPage() {
     content: "",
     isActive: true,
     noticeUntil: "",
+    character: undefined,
   });
 
   // 経営方針追加・編集フォーム
@@ -220,6 +222,7 @@ export default function AdminPortalPage() {
       createdAt: new Date().toISOString(),
       isActive: newsForm.isActive,
       noticeUntil: datetimeLocalToIso(newsForm.noticeUntil),
+      character: newsForm.character,
     };
     const next = [item, ...news];
     const ok = await savePortalItems(PORTAL_KEYS.news, next);
@@ -233,6 +236,7 @@ export default function AdminPortalPage() {
         content: "",
         isActive: true,
         noticeUntil: defaultNoticeLocal(charSettings.newsNoticeDays),
+        character: undefined,
       });
       flash("💾 追加しました");
     } else {
@@ -538,6 +542,48 @@ export default function AdminPortalPage() {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
                 />
               </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs text-gray-500 mb-1 block">
+                  通知アニメのキャラクター
+                </label>
+                <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
+                  {/* おまかせ（自動）：未設定（undefined） */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setNewsForm({ ...newsForm, character: undefined })
+                    }
+                    className={`flex flex-col items-center justify-center gap-1 p-2 rounded-lg border text-[10px] leading-tight ${
+                      !newsForm.character
+                        ? "bg-teal-50 border-teal-300 text-teal-800"
+                        : "border-gray-200 hover:bg-gray-50 text-gray-600"
+                    }`}
+                  >
+                    <span className="text-xl leading-none">🎲</span>
+                    おまかせ
+                  </button>
+                  {CHARACTER_SVGS.map((item) => (
+                    <button
+                      type="button"
+                      key={item.type}
+                      onClick={() =>
+                        setNewsForm({ ...newsForm, character: item.type })
+                      }
+                      className={`flex flex-col items-center justify-center gap-1 p-2 rounded-lg border text-[10px] leading-tight ${
+                        newsForm.character === item.type
+                          ? "bg-teal-50 border-teal-300 text-teal-800"
+                          : "border-gray-200 hover:bg-gray-50 text-gray-600"
+                      }`}
+                    >
+                      <CharacterSVG type={item.type} size={28} />
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  未設定（おまかせ）の場合は自動で割り当てます
+                </p>
+              </div>
               <div>
                 <label className="flex items-center gap-2 text-sm text-gray-700">
                   <input
@@ -623,6 +669,30 @@ export default function AdminPortalPage() {
                   <span className="text-xs text-gray-400">
                     （未設定なら {charSettings.newsNoticeDays}日間）
                   </span>
+                  <label className="text-xs text-gray-500 ml-2">
+                    キャラ
+                  </label>
+                  <select
+                    value={n.character ?? ""}
+                    onChange={(e) =>
+                      updateNewsItem(n.id, {
+                        character: e.target.value
+                          ? (e.target.value as CharacterSvgType)
+                          : undefined,
+                      })
+                    }
+                    className="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white"
+                  >
+                    <option value="">おまかせ（自動）</option>
+                    {CHARACTER_SVGS.map((c) => (
+                      <option key={c.type} value={c.type}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                  {n.character && (
+                    <CharacterSVG type={n.character} size={24} />
+                  )}
                 </div>
               </div>
             ))}

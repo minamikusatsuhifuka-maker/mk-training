@@ -134,10 +134,15 @@ export default function CharacterNotification({ news, onOpenNews }: Props) {
     >
       {targetNews.map((item, i) => {
         if (!visible.has(i)) return null;
-        // 1件のみ：既存のキャラ設定（絵文字/SVG）を優先。
-        // 複数件：style=svgならイラストプール、それ以外は絵文字プールを循環で割り当てる。
-        const useSvg = settings.characterStyle === "svg";
-        const svgType = isSingle
+        // 表示キャラの解決:
+        //  ① news.character（個別指定）があれば、それをイラストで表示（global style や
+        //     SVG_POOL の自動割当より優先）。
+        //  ② 無ければ従来ロジック：1件のみ＝既存のキャラ設定（絵文字/SVG）、複数件＝
+        //     style=svgならイラストプール、それ以外は絵文字プールを循環で割り当てる。
+        const useSvg = !!item.character || settings.characterStyle === "svg";
+        const svgType = item.character
+          ? item.character
+          : isSingle
           ? settings.svgType
           : SVG_POOL[i % SVG_POOL.length];
         const emojiChar = isSingle

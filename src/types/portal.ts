@@ -10,6 +10,8 @@ export type NewsItem = {
   isActive: boolean;
   /** 通知アニメをこの日時まで毎回表示する期限（ISO日時）。未設定の旧データは newsNoticeDays でフォールバック */
   noticeUntil?: string;
+  /** 通知アニメで表示するイラスト（CharacterSvgType の id）。未設定=おまかせ（自動割当） */
+  character?: CharacterSvgType;
 };
 
 export type HiyariType = "hiyari" | "good";
