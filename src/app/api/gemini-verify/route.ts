@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { getSelectedGeminiModel, GEMINI_THINKING_CONFIG } from '@/lib/gemini-models'
 
 export const maxDuration = 60
 
@@ -30,6 +32,13 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 })
+
+    // 管理画面で選択中のGeminiモデルを取得（未設定時はデフォルト）
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+    const model = await getSelectedGeminiModel(supabase)
 
     // 一括評価の場合
     if (body.items && Array.isArray(body.items)) {
@@ -75,13 +84,17 @@ ${JSON.stringify(itemsSummary, null, 2).slice(0, 6000)}
 }`
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: batchPrompt }] }],
-            generationConfig: { temperature: 0.1, maxOutputTokens: 8192 },
+            generationConfig: {
+              temperature: 0.1,
+              maxOutputTokens: 8192,
+              thinkingConfig: GEMINI_THINKING_CONFIG,
+            },
           }),
         }
       )
@@ -97,7 +110,7 @@ ${JSON.stringify(itemsSummary, null, 2).slice(0, 6000)}
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
       if (!jsonMatch) return NextResponse.json({ error: 'Invalid response', raw: text.slice(0, 500) }, { status: 500 })
 
-      return NextResponse.json({ ...JSON.parse(jsonMatch[0]), model: 'gemini-2.5-pro' })
+      return NextResponse.json({ ...JSON.parse(jsonMatch[0]), model })
     }
 
     // 既存の単一アイテム評価処理
@@ -395,13 +408,17 @@ ${JSON.stringify(currentData, null, 2).slice(0, 3000)}
     const prompt = prompts[contentType] || prompts.drug
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 4096 }
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 4096,
+            thinkingConfig: GEMINI_THINKING_CONFIG,
+          }
         })
       }
     )
@@ -419,7 +436,7 @@ ${JSON.stringify(currentData, null, 2).slice(0, 3000)}
 
     try {
       const result = JSON.parse(jsonMatch[0])
-      result.model = 'gemini-2.5-pro'
+      result.model = model
       result.checkedAt = new Date().toISOString()
       return NextResponse.json(result)
     } catch (parseErr) {
@@ -431,7 +448,7 @@ ${JSON.stringify(currentData, null, 2).slice(0, 3000)}
         corrections: {},
         evidenceSource: '解析エラー',
         confidence: 'low',
-        model: 'gemini-2.5-pro',
+        model,
         checkedAt: new Date().toISOString(),
         raw: text.slice(0, 200)
       })

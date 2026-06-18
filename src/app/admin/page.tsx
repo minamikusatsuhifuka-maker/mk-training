@@ -62,6 +62,18 @@ export default function AdminDashboard() {
           </Card>
         </Link>
 
+        {/* AI設定 */}
+        <Link href="/admin/settings">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-teal-400 border-l-4 border-l-teal-500 sm:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">⚙️ AI設定</CardTitle>
+              <CardDescription className="text-xs">
+                管理画面の評価・分析機能で使用するGeminiモデルを選択（既定: Gemini 3.5 Flash）
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
         {stats.map((s) => (
           <Link key={s.href} href={s.href}>
             <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-slate-400">

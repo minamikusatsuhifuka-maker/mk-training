@@ -22,7 +22,9 @@ const adminNav = [
   { label: "📋 業務チェック管理", href: "/admin/operations" },
   { label: "💉 生物学的製剤管理", href: "/admin/biologics" },
   { label: "⭐ エキスパート要件管理", href: "/admin/expert" },
+  { label: "🔬 ディープリサーチ", href: "/admin/deep-research" },
   { label: "📝 更新履歴", href: "/admin/changelog" },
+  { label: "⚙️ AI設定", href: "/admin/settings" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

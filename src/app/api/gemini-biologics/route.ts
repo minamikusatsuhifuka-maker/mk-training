@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { getSelectedGeminiModel, GEMINI_THINKING_CONFIG } from '@/lib/gemini-models'
 
 const SYSTEM_INSTRUCTION = `【重要な指示】
 あなたは日本の医療情報を厳密に評価する専門AIです。
@@ -26,6 +28,13 @@ export async function POST(req: NextRequest) {
   if (!apiKey) {
     return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 })
   }
+
+  // 管理画面で選択中のGeminiモデルを取得（未設定時はデフォルト）
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+  const model = await getSelectedGeminiModel(supabase)
 
   const today = new Date().toISOString().slice(0, 10)
 
@@ -117,7 +126,7 @@ ${JSON.stringify(currentData, null, 2)}
 
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -126,6 +135,7 @@ ${JSON.stringify(currentData, null, 2)}
           generationConfig: {
             temperature: 0.1,
             maxOutputTokens: 8192,
+            thinkingConfig: GEMINI_THINKING_CONFIG,
           }
         })
       }
