@@ -138,6 +138,30 @@ export function parseJsonLoose<T = Record<string, unknown>>(raw: string): T | nu
   return null;
 }
 
+/**
+ * Google検索Grounding付きリサーチを「非ストリーミングで一括取得」する。
+ * streamGeminiApiWithSearch を内部で消費し、本文全文と情報源をまとめて返す。
+ * 疾患リサーチAPIなど、SSE不要でサーバ側で全文を扱いたい用途に使う。
+ * @param prompt 送信するプロンプト
+ * @param model 使用するモデル（省略時は getResearchModel()）
+ * @returns 本文全文と収集した情報源
+ */
+export async function researchWithSearch(
+  prompt: string,
+  model: string = getResearchModel()
+): Promise<{ content: string; sources: { title: string; url: string }[] }> {
+  let content = "";
+  let sources: { title: string; url: string }[] = [];
+  for await (const evt of streamGeminiApiWithSearch(prompt, model)) {
+    if (evt.type === "text") content += evt.content;
+    else if (evt.type === "sources") sources = evt.sources;
+  }
+  if (!content.trim()) {
+    throw new Error("Gemini リサーチの応答が空でした");
+  }
+  return { content, sources };
+}
+
 /** ストリーミングが返すイベント型 */
 export type GeminiStreamEvent =
   | { type: "text"; content: string }

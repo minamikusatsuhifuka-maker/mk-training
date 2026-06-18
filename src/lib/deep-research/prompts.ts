@@ -414,6 +414,99 @@ ${researchText}
 - 出力は上記JSONのみ。`;
 }
 
+// ─────────────────────────────────────────────────────────────
+// STEP 3 作業2: 疾患ディープリサーチ（検索Grounding）＋ 疾患データ更新
+// ─────────────────────────────────────────────────────────────
+
+/** 疾患リサーチに渡す既存データ（Disease の一部・任意項目） */
+export type DiseaseResearchContext = {
+  description?: string;
+  cause?: string;
+  treatment?: string;
+  patientExplanation?: string;
+  keyPoints?: string[];
+};
+
+/**
+ * 疾患のディープリサーチ用プロンプト（検索Grounding前提）。
+ * スタッフの知識・スキル向上のための研修資料を生成する。
+ */
+export function getDiseaseResearchPrompt(
+  diseaseName: string,
+  englishName: string,
+  currentData: DiseaseResearchContext,
+  perspective: ResearchPerspective = "training"
+): string {
+  const perspectiveNote = PERSPECTIVE_INSTRUCTIONS[perspective] || "";
+  const known: string[] = [];
+  if (currentData.description) known.push(`【概要】${currentData.description}`);
+  if (currentData.cause) known.push(`【原因・誘因】${currentData.cause}`);
+  if (currentData.treatment) known.push(`【現行の治療法】${currentData.treatment}`);
+  if (currentData.keyPoints?.length) known.push(`【既知の重要ポイント】\n- ${currentData.keyPoints.join("\n- ")}`);
+  const knownBlock = known.length ? `\n## 当院の既存情報（参考・矛盾なく拡充すること）\n${known.join("\n")}\n` : "";
+
+  return `# 皮膚科疾患の研修リサーチ依頼
+
+皮膚科疾患「${diseaseName}${englishName ? `（${englishName}）` : ""}」について、南草津皮フ科のスタッフ（マルチタスク医療事務・看護師・カウンセラー）の知識・スキル向上のための研修資料を **Markdown** で作成してください。
+${knownBlock}
+## 必ず含める内容
+1. **疾患の概要・病態生理**（専門用語には補足を付け、わかりやすく）
+2. **原因・誘因・リスク因子**
+3. **主な治療法**（2024〜2026年の最新治療・生物学的製剤・JAK阻害薬等を含める）
+4. **スタッフが患者対応で知っておくべきポイント**
+5. **レセプト・算定で注意すべき点**（保険適用・査定リスク等）
+6. **カウンセリング・患者説明のコツ**（不安を和らげる言葉がけ含む）
+
+## 情報の質（極めて重要）
+- PMDA添付文書・日本皮膚科学会ガイドライン・査読論文を最優先の根拠とする
+- 情報源（学会名・ガイドライン名・公的機関名）を本文中に明示する
+- 根拠が不明・不確実な点は「要確認」と明示し、断定しない
+- 「絶対」「100%」等の最大級表現は使わない
+
+${perspectiveNote ? `## リサーチの視点（最優先で反映）\n${perspectiveNote}\n` : ""}
+## クリニックの視点
+※南草津皮フ科は『患者様の人生好転・四方よし（患者・スタッフ・クリニック・社会よし）』を理念とする保険×美容のハイブリッドクリニックです。この視点も踏まえてまとめてください。
+
+## 出力形式
+Markdown 形式（見出し ##/###・箇条書き・**強調** を適切に使用）。前置きやコードフェンスは付けず、本文のみ。`;
+}
+
+/**
+ * 疾患リサーチ結果 → 疾患データ（Disease）更新案の生成プロンプト（JSON出力）。
+ * description / cause / treatment / keyPoints をより充実した内容に再生成する。
+ */
+export function getDiseaseUpdatePrompt(
+  diseaseName: string,
+  currentData: DiseaseResearchContext,
+  researchText: string
+): string {
+  return `あなたはクリニックの疾患情報データベースの編集者です。
+以下のリサーチ結果をもとに、疾患「${diseaseName}」のデータ項目を、現行より充実した正確な内容に再生成し、必ず指定のJSON形式のみで出力してください。
+
+【現行の疾患データ】
+- 概要(description): ${currentData.description || "（未記入）"}
+- 原因・誘因(cause): ${currentData.cause || "（未記入）"}
+- 治療法(treatment): ${currentData.treatment || "（未記入）"}
+- 重要ポイント(keyPoints): ${currentData.keyPoints?.length ? currentData.keyPoints.join(" / ") : "（未記入）"}
+
+【リサーチ結果】
+${researchText}
+
+【出力JSON（このキー構成のみ・前置き/説明/コードフェンス禁止）】
+{
+  "description": "疾患の概要（医療スタッフ向けに2〜3文。当院のハイブリッド診療の文脈も活かす）",
+  "cause": "原因・誘因・リスク因子（1〜3文）",
+  "treatment": "主な治療法（保険診療＋自由診療、最新治療を含め簡潔に）",
+  "keyPoints": ["スタッフが押さえるべき要点1", "要点2", "要点3", "要点4", "要点5"]
+}
+
+【厳守】
+- 現行データの正しい固有名詞（薬剤名・機器名等）は引き継ぐ。リサーチで誤りが判明した場合のみ修正。
+- keyPoints は4〜6件。各要点は具体的で簡潔に。
+- 断定/最大級表現は禁止。根拠が不確実な内容は含めない。
+- 出力は上記JSONのみ。`;
+}
+
 /** リサーチ本文 → 患者向け説明書への変換プロンプト（平易なMarkdown） */
 export function getPatientSheetPrompt(topic: string, researchText: string): string {
   return `あなたは患者さんへの説明資料を作る専門家です。

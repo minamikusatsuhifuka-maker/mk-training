@@ -54,7 +54,8 @@ export type DerivedMaterialType =
   | "knowledge_expert"
   | "quiz"
   | "summary"
-  | "essentials";
+  | "essentials"
+  | "disease_research";
 
 /** 学習資料タイプの表示メタ（ラベル・アイコン・表示形式） */
 export const DERIVED_MATERIAL_META: Record<
@@ -67,6 +68,7 @@ export const DERIVED_MATERIAL_META: Record<
   quiz: { label: "クイズ（4択）", icon: "❓", render: "plain" },
   summary: { label: "要約", icon: "📌", render: "markdown" },
   essentials: { label: "必須のまとめ", icon: "✨", render: "plain" },
+  disease_research: { label: "疾患リサーチ", icon: "🔬", render: "markdown" },
 };
 
 /** 学習資料の本体（全文） */

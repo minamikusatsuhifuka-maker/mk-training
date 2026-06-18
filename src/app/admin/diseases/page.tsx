@@ -34,6 +34,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { GeminiVerifyButton } from "@/components/admin/GeminiVerifyButton";
 import { GeminiBatchVerify } from "@/components/admin/GeminiBatchVerify";
+import { DiseaseResearchModal } from "@/components/admin/DiseaseResearchModal";
 import {
   Table,
   TableBody,
@@ -81,6 +82,22 @@ export default function AdminDiseasesPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const loaded = useRef(false);
+  // 疾患リサーチモーダル（対象疾患の配列を保持。空なら閉）
+  const [researchTargets, setResearchTargets] = useState<Disease[]>([]);
+  const [researchOpen, setResearchOpen] = useState(false);
+
+  const openResearch = (targets: Disease[]) => {
+    if (targets.length === 0) return;
+    setResearchTargets(targets);
+    setResearchOpen(true);
+  };
+
+  // 疾患リサーチの更新案を1件適用（content_diseases を更新）
+  const applyDiseaseUpdate = async (id: string, partial: Partial<Disease>) => {
+    const updated = data.map((d) => (d.id === id ? { ...d, ...partial } : d));
+    setData(updated);
+    await persistData(updated);
+  };
 
   useEffect(() => {
     getContent<Disease>(CONTENT_KEYS.diseases, initialDiseases).then((result) => {
@@ -181,7 +198,17 @@ export default function AdminDiseasesPage() {
       {saving && <div className="text-sm text-muted-foreground animate-pulse">保存中...</div>}
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-bold text-slate-800">疾患管理（{data.length}件）</h1>
-        <Button onClick={openNew}>新規追加</Button>
+        <div className="flex items-center gap-2">
+          {selectedIds.size > 0 && (
+            <Button
+              variant="outline"
+              onClick={() => openResearch(data.filter((d) => selectedIds.has(d.id)))}
+            >
+              🔬 選択した{selectedIds.size}件を一括リサーチ
+            </Button>
+          )}
+          <Button onClick={openNew}>新規追加</Button>
+        </div>
       </div>
 
       <AIGeneratePanel
@@ -252,6 +279,7 @@ export default function AdminDiseasesPage() {
                 <div className="flex gap-1">
                   <Button variant="outline" size="sm" onClick={() => openEdit(d)}>編集</Button>
                   <GeminiVerifyButton contentType="disease" itemName={d.name} currentData={d} />
+                  <Button variant="outline" size="sm" onClick={() => openResearch([d])} title="この疾患をディープリサーチ">🔬</Button>
                   <Button variant="destructive" size="sm" onClick={() => setDeleteId(d.id)}>削除</Button>
                 </div>
               </TableCell>
@@ -390,6 +418,13 @@ export default function AdminDiseasesPage() {
             </select>
           </div>
         }
+      />
+
+      <DiseaseResearchModal
+        open={researchOpen}
+        onOpenChange={setResearchOpen}
+        diseases={researchTargets}
+        onApply={applyDiseaseUpdate}
       />
     </div>
   );
