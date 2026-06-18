@@ -8,8 +8,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   RESEARCH_MODES,
   RESEARCH_PERSPECTIVES,
+  DERIVED_MATERIAL_META,
   type ResearchMode,
   type ResearchPerspective,
+  type DerivedMaterialIndexItem,
+  type DerivedMaterial,
 } from "@/lib/deep-research/types";
 import type { ResearchIndexItem } from "@/lib/deep-research/store";
 import { MarkdownView } from "@/components/deep-research/MarkdownView";
@@ -63,6 +66,27 @@ export default function DeepResearchPage() {
   const [expandedSources, setExpandedSources] = useState<Source[]>([]);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
+  // 保存した学習資料
+  const [materials, setMaterials] = useState<DerivedMaterialIndexItem[]>([]);
+  const [loadingMaterials, setLoadingMaterials] = useState(false);
+  const [expandedMaterialId, setExpandedMaterialId] = useState<string | null>(null);
+  const [expandedMaterial, setExpandedMaterial] = useState<DerivedMaterial | null>(null);
+  const [loadingMaterialDetail, setLoadingMaterialDetail] = useState(false);
+
+  // 学習資料一覧の読み込み
+  const loadMaterials = useCallback(async () => {
+    setLoadingMaterials(true);
+    try {
+      const res = await fetch("/api/admin/deep-research/materials");
+      const json = await res.json();
+      if (res.ok) setMaterials(json.results || []);
+    } catch {
+      // 一覧取得失敗は致命ではないので握りつぶす
+    } finally {
+      setLoadingMaterials(false);
+    }
+  }, []);
+
   // 履歴の読み込み
   const loadHistory = useCallback(async () => {
     setLoadingHistory(true);
@@ -79,7 +103,45 @@ export default function DeepResearchPage() {
 
   useEffect(() => {
     loadHistory();
-  }, [loadHistory]);
+    loadMaterials();
+  }, [loadHistory, loadMaterials]);
+
+  // 学習資料の展開（本体取得）
+  const toggleMaterial = async (id: string) => {
+    if (expandedMaterialId === id) {
+      setExpandedMaterialId(null);
+      setExpandedMaterial(null);
+      return;
+    }
+    setExpandedMaterialId(id);
+    setExpandedMaterial(null);
+    setLoadingMaterialDetail(true);
+    try {
+      const res = await fetch(`/api/admin/deep-research/materials?id=${encodeURIComponent(id)}`);
+      const json = await res.json();
+      if (res.ok && json.result) setExpandedMaterial(json.result as DerivedMaterial);
+    } catch {
+      // 取得失敗時は空表示
+    } finally {
+      setLoadingMaterialDetail(false);
+    }
+  };
+
+  // 学習資料の削除
+  const removeMaterial = async (id: string) => {
+    if (!confirm("この学習資料を削除しますか？")) return;
+    try {
+      const res = await fetch(`/api/admin/deep-research/materials?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        if (expandedMaterialId === id) setExpandedMaterialId(null);
+        await loadMaterials();
+      }
+    } catch {
+      // 握りつぶし
+    }
+  };
 
   // 経過タイマー
   useEffect(() => {
@@ -379,7 +441,7 @@ export default function DeepResearchPage() {
                 content={result}
                 perspective={resultPerspective}
               />
-              <LearningMaterials topic={resultTopic || topic} content={result} />
+              <LearningMaterials topic={resultTopic || topic} content={result} onSaved={loadMaterials} />
             </div>
           )}
         </div>
@@ -456,7 +518,7 @@ export default function DeepResearchPage() {
                               content={expandedContent}
                               perspective="general"
                             />
-                            <LearningMaterials topic={h.topic} content={expandedContent} />
+                            <LearningMaterials topic={h.topic} content={expandedContent} onSaved={loadMaterials} />
                           </div>
                         )}
                       </>
@@ -465,6 +527,71 @@ export default function DeepResearchPage() {
                 )}
               </li>
             ))}
+          </ul>
+        )}
+      </div>
+
+      {/* 保存した学習資料一覧 */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-slate-800">📚 保存した学習資料</h2>
+          <Button variant="ghost" size="sm" onClick={loadMaterials} disabled={loadingMaterials}>
+            {loadingMaterials ? "読込中…" : "🔄 更新"}
+          </Button>
+        </div>
+
+        {materials.length === 0 ? (
+          <p className="text-sm text-slate-400">まだ保存された学習資料はありません。</p>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {materials.map((m) => {
+              const meta = DERIVED_MATERIAL_META[m.type];
+              return (
+                <li key={m.id} className="py-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleMaterial(m.id)}
+                      className="text-left flex-1"
+                    >
+                      <div className="text-sm font-medium text-slate-800">
+                        <span className="mr-1">{meta?.icon ?? "📄"}</span>
+                        {m.title}
+                      </div>
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        {meta?.label ?? m.type} ・ {new Date(m.createdAt).toLocaleString("ja-JP")}
+                      </div>
+                    </button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeMaterial(m.id)}
+                      className="text-red-600"
+                    >
+                      削除
+                    </Button>
+                  </div>
+
+                  {expandedMaterialId === m.id && (
+                    <div className="mt-3 rounded-lg bg-slate-50 border border-slate-100 p-4">
+                      {loadingMaterialDetail ? (
+                        <p className="text-sm text-slate-400">読み込み中…</p>
+                      ) : expandedMaterial ? (
+                        meta?.render === "plain" ? (
+                          <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 leading-relaxed">
+                            {expandedMaterial.content}
+                          </pre>
+                        ) : (
+                          <MarkdownView>{expandedMaterial.content}</MarkdownView>
+                        )
+                      ) : (
+                        <p className="text-sm text-slate-400">本体を取得できませんでした。</p>
+                      )}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

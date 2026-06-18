@@ -19,7 +19,13 @@ import {
   type Manual,
   type OrgKnowledge,
 } from "@/types/knowledge";
-import type { ResearchResult, ResearchSource } from "./types";
+import type {
+  ResearchResult,
+  ResearchSource,
+  DerivedMaterial,
+  DerivedMaterialIndexItem,
+  DerivedMaterialType,
+} from "./types";
 
 /** content_store.content_type（この機能の全レコード共通） */
 const CONTENT_TYPE = "deep_research";
@@ -130,6 +136,115 @@ export async function deleteResearch(id: string): Promise<void> {
     .delete()
     .eq("id", RESEARCH_PREFIX + id);
   if (error) throw new Error(`本体削除に失敗: ${error.message}`);
+}
+
+// ─────────────────────────────────────────────────────────────
+// STEP 3: 生成した学習資料（6タイプ）の保存・一覧・削除
+//   リサーチ本体と同じ「案A: インデックス＋本体分離」方式で content_store に保存。
+//     - derived_materials_index : { items: DerivedMaterialIndexItem[] } … 一覧用・軽量メタ
+//     - derived_material:<id>    : DerivedMaterial … 本体（全文）
+// ─────────────────────────────────────────────────────────────
+
+/** content_store.content_type（学習資料レコード共通） */
+const MATERIAL_CONTENT_TYPE = "deep_research_material";
+/** 学習資料一覧インデックスの id */
+const MATERIAL_INDEX_KEY = "derived_materials_index";
+/** 学習資料本体レコードの id プレフィックス */
+const MATERIAL_PREFIX = "derived_material:";
+
+/** 学習資料インデックス（メタ配列）を取得 */
+async function loadMaterialIndex(): Promise<DerivedMaterialIndexItem[]> {
+  const { data, error } = await supabase
+    .from("content_store")
+    .select("data")
+    .eq("id", MATERIAL_INDEX_KEY)
+    .single();
+  if (error || !data) return [];
+  const payload = data.data as { items?: DerivedMaterialIndexItem[] } | null;
+  return Array.isArray(payload?.items) ? payload.items : [];
+}
+
+/** 学習資料インデックスを保存 */
+async function saveMaterialIndex(items: DerivedMaterialIndexItem[]): Promise<void> {
+  const { error } = await supabase.from("content_store").upsert({
+    id: MATERIAL_INDEX_KEY,
+    content_type: MATERIAL_CONTENT_TYPE,
+    data: { items } as unknown as Record<string, unknown>,
+    updated_at: new Date().toISOString(),
+  });
+  if (error) throw new Error(`学習資料インデックスの保存に失敗: ${error.message}`);
+}
+
+/** 学習資料の一覧取得（新しい順） */
+export async function listDerivedMaterials(): Promise<DerivedMaterialIndexItem[]> {
+  const items = await loadMaterialIndex();
+  return [...items].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
+/** 学習資料の本体（全文）取得。見つからなければ null */
+export async function getDerivedMaterial(id: string): Promise<DerivedMaterial | null> {
+  const { data, error } = await supabase
+    .from("content_store")
+    .select("data")
+    .eq("id", MATERIAL_PREFIX + id)
+    .single();
+  if (error || !data) return null;
+  return (data.data as DerivedMaterial) ?? null;
+}
+
+/** 学習資料を保存（本体を upsert ＋ インデックスに追加）。保存した本体を返す */
+export async function saveDerivedMaterial(input: {
+  title: string;
+  type: DerivedMaterialType;
+  content: string;
+  sourceTopic: string;
+  sourceResearchId?: string | null;
+}): Promise<DerivedMaterial> {
+  const id = crypto.randomUUID();
+  const createdAt = new Date().toISOString();
+  const record: DerivedMaterial = {
+    id,
+    title: input.title,
+    type: input.type,
+    content: input.content,
+    sourceTopic: input.sourceTopic,
+    sourceResearchId: input.sourceResearchId ?? null,
+    createdAt,
+  };
+
+  // 1) 本体を保存（全文はここだけに持たせる）
+  const { error: bodyErr } = await supabase.from("content_store").upsert({
+    id: MATERIAL_PREFIX + id,
+    content_type: MATERIAL_CONTENT_TYPE,
+    data: record as unknown as Record<string, unknown>,
+    updated_at: createdAt,
+  });
+  if (bodyErr) throw new Error(`学習資料の保存に失敗: ${bodyErr.message}`);
+
+  // 2) インデックスに軽量メタを先頭追加
+  const indexItem: DerivedMaterialIndexItem = {
+    id,
+    title: input.title,
+    type: input.type,
+    sourceResearchId: input.sourceResearchId ?? null,
+    createdAt,
+  };
+  const items = await loadMaterialIndex();
+  items.unshift(indexItem);
+  await saveMaterialIndex(items);
+
+  return record;
+}
+
+/** 学習資料を削除（インデックスから除外 ＋ 本体レコード削除） */
+export async function deleteDerivedMaterial(id: string): Promise<void> {
+  const items = await loadMaterialIndex();
+  await saveMaterialIndex(items.filter((it) => it.id !== id));
+  const { error } = await supabase
+    .from("content_store")
+    .delete()
+    .eq("id", MATERIAL_PREFIX + id);
+  if (error) throw new Error(`学習資料の削除に失敗: ${error.message}`);
 }
 
 // ─────────────────────────────────────────────────────────────

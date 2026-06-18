@@ -59,7 +59,15 @@ function quizToText(questions: QuizQuestion[]): string {
     .join("\n\n");
 }
 
-export function LearningMaterials({ topic, content }: { topic: string; content: string }) {
+export function LearningMaterials({
+  topic,
+  content,
+  onSaved,
+}: {
+  topic: string;
+  content: string;
+  onSaved?: () => void;
+}) {
   const [selected, setSelected] = useState<Record<GenType, boolean>>({
     training: false,
     knowledge_basic: false,
@@ -71,6 +79,8 @@ export function LearningMaterials({ topic, content }: { topic: string; content: 
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<Partial<Record<GenType, SlotResult>>>({});
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  // 保存状態（タイプ別）: "saving" | "saved"
+  const [saveState, setSaveState] = useState<Partial<Record<GenType, "saving" | "saved">>>({});
 
   const allSelected = GEN_TYPES.every((t) => selected[t.key]);
   const anySelected = GEN_TYPES.some((t) => selected[t.key]);
@@ -103,6 +113,12 @@ export function LearningMaterials({ topic, content }: { topic: string; content: 
       for (const t of targets) delete next[t.key];
       return next;
     });
+    // 再生成するタイプは保存状態もリセット
+    setSaveState((prev) => {
+      const next = { ...prev };
+      for (const t of targets) delete next[t.key];
+      return next;
+    });
 
     await Promise.allSettled(
       targets.map(async (t) => {
@@ -130,6 +146,39 @@ export function LearningMaterials({ topic, content }: { topic: string; content: 
     );
 
     setBusy(false);
+  };
+
+  // 保存（生成した学習資料を content_store に保存）
+  const saveMaterial = async (key: GenType, text: string) => {
+    if (!text.trim() || saveState[key] === "saving") return;
+    const meta = GEN_TYPES.find((t) => t.key === key);
+    setSaveState((prev) => ({ ...prev, [key]: "saving" }));
+    try {
+      const res = await fetch("/api/admin/deep-research/materials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: `${meta?.label ?? "学習資料"}：${topic}`,
+          type: key,
+          content: text,
+          sourceTopic: topic,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "保存に失敗しました");
+      setSaveState((prev) => ({ ...prev, [key]: "saved" }));
+      onSaved?.();
+    } catch (e) {
+      setResults((prev) => ({
+        ...prev,
+        [key]: { ...(prev[key] || {}), error: e instanceof Error ? e.message : "保存に失敗しました" },
+      }));
+      setSaveState((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
   };
 
   // コピー
@@ -183,9 +232,23 @@ export function LearningMaterials({ topic, content }: { topic: string; content: 
               <div className="flex items-center justify-between mb-2">
                 <h4 className="text-sm font-semibold text-slate-800">{t.label}</h4>
                 {!slot.error && (
-                  <Button variant="ghost" size="sm" onClick={() => copy(t.key, copyText)}>
-                    {copiedKey === t.key ? "✓ コピー済" : "📋 コピー"}
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => saveMaterial(t.key, copyText)}
+                      disabled={saveState[t.key] === "saving" || saveState[t.key] === "saved"}
+                    >
+                      {saveState[t.key] === "saving"
+                        ? "保存中…"
+                        : saveState[t.key] === "saved"
+                        ? "✓ 保存済"
+                        : "💾 保存"}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => copy(t.key, copyText)}>
+                      {copiedKey === t.key ? "✓ コピー済" : "📋 コピー"}
+                    </Button>
+                  </div>
                 )}
               </div>
 

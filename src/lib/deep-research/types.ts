@@ -43,6 +43,52 @@ export type ResearchResult = {
   createdAt: string;
 };
 
+// ─────────────────────────────────────────────────────────────
+// STEP 3: 生成した学習資料（6タイプ）の保存
+// ─────────────────────────────────────────────────────────────
+
+/** 保存できる学習資料の種類（LearningMaterials の GenType と一致） */
+export type DerivedMaterialType =
+  | "training"
+  | "knowledge_basic"
+  | "knowledge_expert"
+  | "quiz"
+  | "summary"
+  | "essentials";
+
+/** 学習資料タイプの表示メタ（ラベル・アイコン・表示形式） */
+export const DERIVED_MATERIAL_META: Record<
+  DerivedMaterialType,
+  { label: string; icon: string; render: "markdown" | "plain" }
+> = {
+  training: { label: "研修資料", icon: "📋", render: "markdown" },
+  knowledge_basic: { label: "知識シート（初心者）", icon: "🌱", render: "markdown" },
+  knowledge_expert: { label: "知識シート（エキスパート）", icon: "🏆", render: "markdown" },
+  quiz: { label: "クイズ（4択）", icon: "❓", render: "plain" },
+  summary: { label: "要約", icon: "📌", render: "markdown" },
+  essentials: { label: "必須のまとめ", icon: "✨", render: "plain" },
+};
+
+/** 学習資料の本体（全文） */
+export type DerivedMaterial = {
+  id: string;
+  title: string;
+  type: DerivedMaterialType;
+  content: string;
+  sourceTopic: string;
+  sourceResearchId?: string | null;
+  createdAt: string;
+};
+
+/** 学習資料一覧用の軽量メタ（全文を含まない） */
+export type DerivedMaterialIndexItem = {
+  id: string;
+  title: string;
+  type: DerivedMaterialType;
+  sourceResearchId?: string | null;
+  createdAt: string;
+};
+
 /** モード設定（UI表示用） */
 export const RESEARCH_MODES: {
   mode: ResearchMode;
