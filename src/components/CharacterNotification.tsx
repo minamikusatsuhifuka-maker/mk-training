@@ -31,23 +31,13 @@ export default function CharacterNotification({
       .catch(() => {});
   }, []);
 
-  // 表示判定（未読があり、今日まだ見ていない場合のみ表示）
+  // 表示判定（有効かつ未読のお知らせがあれば必ず表示）
+  // 既読管理はお知らせID単位（page.tsx側）で行うため、ここでは日付による抑制はしない。
   useEffect(() => {
-    if (!hasUnreadNews || !settings.enabled) {
-      setShow(false);
-      return;
-    }
-    if (typeof window === "undefined") return;
-    const today = new Date().toISOString().slice(0, 10);
-    const lastSeen = localStorage.getItem("news_character_seen");
-    setShow(lastSeen !== today);
+    setShow(hasUnreadNews && settings.enabled);
   }, [hasUnreadNews, settings.enabled]);
 
   const handleClick = () => {
-    if (typeof window !== "undefined") {
-      const today = new Date().toISOString().slice(0, 10);
-      localStorage.setItem("news_character_seen", today);
-    }
     setShow(false);
     onCharacterClick();
   };

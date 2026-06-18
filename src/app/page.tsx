@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   loadPortalItems,
@@ -217,35 +217,67 @@ export default function PortalHome() {
   // 新着情報セクションへのスクロール用ref
   const newsSectionRef = useRef<HTMLElement>(null);
 
-  // 未読の新着情報があるか（クライアントのみ判定）
-  const [hasUnreadNews, setHasUnreadNews] = useState(false);
+  // 既読のお知らせID（localStorageに永続化）。日付ではなくID単位で管理するため、
+  // 同じ日に新しいお知らせが追加されても正しく「未読」と判定される。
+  const [readIds, setReadIds] = useState<string[]>([]);
 
   useEffect(() => {
-    if (news.length === 0) {
-      setHasUnreadNews(false);
-      return;
+    try {
+      const raw = localStorage.getItem("news_read_ids");
+      setReadIds(raw ? (JSON.parse(raw) as string[]) : []);
+    } catch {
+      setReadIds([]);
     }
-    const latest = news[0]?.createdAt?.slice(0, 10);
-    if (!latest) {
-      setHasUnreadNews(false);
-      return;
-    }
-    const lastRead = localStorage.getItem("news_last_read");
-    setHasUnreadNews(lastRead !== latest);
-  }, [news]);
+  }, []);
 
-  // キャラクタークリック／スクロール到達で新着情報セクションへ移動し既読化
+  // 有効かつ未読のお知らせが1件でもあるか
+  const hasUnreadNews = useMemo(
+    () => news.some((n) => !readIds.includes(n.id)),
+    [news, readIds]
+  );
+
+  // 指定IDを既読にして永続化
+  const markNewsRead = (ids: string[]) => {
+    setReadIds((prev) => {
+      const next = Array.from(new Set([...prev, ...ids]));
+      try {
+        localStorage.setItem("news_read_ids", JSON.stringify(next));
+      } catch {
+        /* localStorage不可時は無視 */
+      }
+      return next;
+    });
+  };
+
+  // キャラクタークリックで新着情報セクションへ移動し、表示中のお知らせを既読化
   const scrollToNews = () => {
     newsSectionRef.current?.scrollIntoView({
       behavior: "smooth",
       block: "start",
     });
-    const latest = news[0]?.createdAt;
-    if (latest) {
-      localStorage.setItem("news_last_read", latest.slice(0, 10));
-    }
-    setHasUnreadNews(false);
+    markNewsRead(news.map((n) => n.id));
   };
+
+  // お知らせモーダルを開く（開いた時点でそのお知らせを既読化）
+  const openNews = (item: NewsItem) => {
+    setSelectedNews(item);
+    markNewsRead([item.id]);
+  };
+
+  // モーダル表示中は背景スクロールをロックし、Escで閉じる
+  useEffect(() => {
+    if (!selectedNews) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedNews(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [selectedNews]);
 
   const todayStr = new Date().toLocaleDateString("ja-JP", {
     year: "numeric",
@@ -408,7 +440,7 @@ export default function PortalHome() {
           {news.map((item) => (
             <div
               key={item.id}
-              onClick={() => setSelectedNews(item)}
+              onClick={() => openNews(item)}
               className="flex items-start gap-3 p-4 bg-white border border-gray-100 rounded-xl cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors min-h-[60px]"
             >
               <div
@@ -762,14 +794,14 @@ export default function PortalHome() {
         )}
       </section>
 
-      {/* ニュース詳細モーダル */}
+      {/* ニュース詳細モーダル（画面中央配置） */}
       {selectedNews && (
         <div
-          className="fixed inset-0 bg-black/40 z-50 flex items-end justify-center"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50"
           onClick={() => setSelectedNews(null)}
         >
           <div
-            className="bg-white rounded-t-2xl w-full max-w-lg p-6 pb-8"
+            className="relative w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl bg-white shadow-xl p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between mb-4">
