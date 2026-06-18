@@ -16,12 +16,33 @@ type Props = {
   onOpenNews: (item: NewsItem) => void;
 };
 
+// 複数新着時のキャラクタープール（重複しない絵文字）。
+// character_settings に専用のプール設定が無いためフォールバックとして定義。
+const CHARACTER_POOL = [
+  "🐶",
+  "🐱",
+  "🐰",
+  "🐻",
+  "🦊",
+  "🐼",
+  "🐹",
+  "🐯",
+  "🐨",
+  "🐮",
+] as const;
+
+// 各キャラ開始の間隔に加えるバッファ(ms)。INTERVAL = 横切り時間D + このバッファ。
+// 重ならない値にしてある。詰めたい/空けたい場合はここを調整する。
+const STAGGER_BUFFER_MS = 600;
+
 export default function CharacterNotification({ news, onOpenNews }: Props) {
   const [settings, setSettings] = useState<CharacterSettings>(
     DEFAULT_CHARACTER_SETTINGS
   );
   // 表示期間（newsNoticeDays日）以内の有効な新着。クライアントでのみ算出する。
-  const [windowNews, setWindowNews] = useState<NewsItem[]>([]);
+  const [targetNews, setTargetNews] = useState<NewsItem[]>([]);
+  // 現在アニメ再生中（画面に出ている）キャラのインデックス集合。
+  const [visible, setVisible] = useState<Set<number>>(new Set());
 
   // 設定を読み込み
   useEffect(() => {
@@ -30,7 +51,7 @@ export default function CharacterNotification({ news, onOpenNews }: Props) {
       .catch(() => {});
   }, []);
 
-  // 時間ウィンドウ判定：投稿から newsNoticeDays 日以内の新着を抽出。
+  // 時間ウィンドウ判定：投稿から newsNoticeDays 日以内の新着を createdAt 降順で抽出。
   // 「未読」「1日1回」などの抑制は行わず、期間内なら表示のたびに毎回再生する。
   useEffect(() => {
     const days =
@@ -40,17 +61,47 @@ export default function CharacterNotification({ news, onOpenNews }: Props) {
       const t = new Date(n.createdAt).getTime();
       return !Number.isNaN(t) && t >= cutoff;
     });
-    setWindowNews(inWindow);
+    setTargetNews(inWindow);
   }, [news, settings.newsNoticeDays]);
 
-  const show = settings.enabled && windowNews.length > 0;
-  const latest = windowNews[0];
+  // 等間隔スケジューリング：targetNews を i*INTERVAL でずらして1巡だけ再生する。
+  // 各キャラは開始時に表示、横切り時間D後に非表示。無限ループはしない。
+  // マウント/データ到着のたびに走るため「期間内は毎回再生」は維持される。
+  useEffect(() => {
+    setVisible(new Set());
+    if (!settings.enabled || targetNews.length === 0) return;
 
-  if (!show || !latest) return null;
+    const dMs = settings.speed * 1000; // 1体の横切り時間
+    const intervalMs = dMs + STAGGER_BUFFER_MS; // 等間隔（重ならない）
+    const timers: ReturnType<typeof setTimeout>[] = [];
 
-  const handleClick = () => {
-    onOpenNews(latest);
-  };
+    targetNews.forEach((_, i) => {
+      const startAt = i * intervalMs;
+      // 開始：このキャラを表示
+      timers.push(
+        setTimeout(() => {
+          setVisible((prev) => new Set(prev).add(i));
+        }, startAt)
+      );
+      // 終了：横切り完了後に非表示（1巡で終わる）
+      timers.push(
+        setTimeout(() => {
+          setVisible((prev) => {
+            const next = new Set(prev);
+            next.delete(i);
+            return next;
+          });
+        }, startAt + dMs)
+      );
+    });
+
+    // アンマウント/再スケジュール時に全タイマーをclear
+    return () => timers.forEach(clearTimeout);
+  }, [targetNews, settings.enabled, settings.speed]);
+
+  if (!settings.enabled || targetNews.length === 0) return null;
+
+  const isSingle = targetNews.length === 1;
 
   return (
     <div
@@ -58,39 +109,52 @@ export default function CharacterNotification({ news, onOpenNews }: Props) {
       style={{ height: settings.size + 120 }}
       aria-hidden={false}
     >
-      {/* キャラクター（画面上方を横切る／クリックでモーダル） */}
-      <div
-        className="absolute pointer-events-auto cursor-pointer"
-        onClick={handleClick}
-        role="button"
-        title={latest.title ? `新着：${latest.title}` : "新着情報があります"}
-        style={{
-          animation: `walkAcross ${settings.speed}s linear infinite`,
-          top: 72,
-        }}
-      >
-        <div className="relative">
-          {/* 吹き出し（キャラの上・上下左右パディングで文字切れ防止） */}
-          <div className="absolute -top-3 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap">
-            <div className="bg-teal-600 text-white text-xs leading-none py-2 px-4 rounded-full shadow-lg animate-bounce">
-              📢 新着情報があります！
-            </div>
-            <div className="w-2 h-2 bg-teal-600 rotate-45 mx-auto -mt-1" />
-          </div>
+      {targetNews.map((item, i) => {
+        if (!visible.has(i)) return null;
+        // 1件のみ：既存のキャラ設定（絵文字/SVG）を優先。
+        // 複数件：プールから重複しない絵文字を割り当て（i % プール長で循環）。
+        const useSvg = isSingle && settings.characterStyle === "svg";
+        const emojiChar = isSingle
+          ? settings.emoji
+          : CHARACTER_POOL[i % CHARACTER_POOL.length];
 
-          {/* キャラクター本体 */}
-          {settings.characterStyle === "emoji" ? (
-            <div
-              style={{ fontSize: settings.size, lineHeight: 1 }}
-              className="select-none"
-            >
-              {settings.emoji}
+        return (
+          <div
+            key={item.id}
+            className="absolute pointer-events-auto cursor-pointer"
+            onClick={() => onOpenNews(item)}
+            role="button"
+            title={item.title ? `新着：${item.title}` : "新着情報があります"}
+            style={{
+              // 1巡のみ（infiniteにしない）。横切り後はforwardsで画面外に留める。
+              animation: `walkAcross ${settings.speed}s linear forwards`,
+              top: 72,
+            }}
+          >
+            <div className="relative">
+              {/* 吹き出し（キャラの上・上下左右パディングで文字切れ防止） */}
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap">
+                <div className="bg-teal-600 text-white text-xs leading-none py-2 px-4 rounded-full shadow-lg animate-bounce">
+                  📢 新着情報があります！
+                </div>
+                <div className="w-2 h-2 bg-teal-600 rotate-45 mx-auto -mt-1" />
+              </div>
+
+              {/* キャラクター本体 */}
+              {useSvg ? (
+                <CharacterSVG type={settings.svgType} size={settings.size} />
+              ) : (
+                <div
+                  style={{ fontSize: settings.size, lineHeight: 1 }}
+                  className="select-none"
+                >
+                  {emojiChar}
+                </div>
+              )}
             </div>
-          ) : (
-            <CharacterSVG type={settings.svgType} size={settings.size} />
-          )}
-        </div>
-      </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
