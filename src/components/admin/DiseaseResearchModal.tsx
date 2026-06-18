@@ -73,14 +73,15 @@ export function DiseaseResearchModal({
   const [perspective, setPerspective] = useState<ResearchPerspective>("training");
   const [targets, setTargets] = useState<Record<Target, boolean>>({
     material: true,
-    org_knowledge: false,
+    org_knowledge: true,
     manual: false,
-    disease_update: false,
+    disease_update: true,
   });
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{ index: number; total: number; name: string } | null>(null);
   const [results, setResults] = useState<PerResult[]>([]);
   const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [finished, setFinished] = useState(false);
 
   const anyTarget = Object.values(targets).some(Boolean);
   const toggleTarget = (key: Target) =>
@@ -89,6 +90,7 @@ export function DiseaseResearchModal({
   const run = async () => {
     if (running || !anyTarget || diseases.length === 0) return;
     setRunning(true);
+    setFinished(false);
     setResults([]);
     const selectedTargets = (Object.keys(targets) as Target[]).filter((t) => targets[t]);
     const collected: PerResult[] = [];
@@ -136,7 +138,22 @@ export function DiseaseResearchModal({
 
     setProgress(null);
     setRunning(false);
+    setFinished(true);
     if (collected.some((r) => r.saved.includes(TARGET_LABEL.material))) onSavedMaterial?.();
+  };
+
+  /** 完了サマリー文を組み立てる（保存先ごとの件数） */
+  const summaryText = (): string => {
+    const count = (label: string) => results.filter((r) => r.saved.includes(label)).length;
+    const parts: string[] = [];
+    const m = count(TARGET_LABEL.material);
+    const k = count(TARGET_LABEL.org_knowledge);
+    const man = count(TARGET_LABEL.manual);
+    if (m) parts.push(`学習資料${m}件`);
+    if (k) parts.push(`組織ナレッジ${k}件`);
+    if (man) parts.push(`マニュアル${man}件`);
+    const base = `✅ ${results.length}件の疾患をリサーチしました。`;
+    return parts.length ? `${base}${parts.join("・")}を保存しました。` : base;
   };
 
   // 疾患更新案を反映
@@ -225,10 +242,25 @@ export function DiseaseResearchModal({
             {running ? "リサーチ中…" : "🔬 リサーチ開始"}
           </Button>
 
-          {/* 進捗 */}
+          {/* 進捗バー */}
           {progress && (
-            <div className="text-sm text-sky-700 animate-pulse">
-              {progress.index}/{progress.total} {progress.name} をリサーチ中…
+            <div className="space-y-1.5">
+              <div className="text-sm text-sky-700">
+                {progress.index}/{progress.total} {progress.name} をリサーチ中…
+              </div>
+              <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+                <div
+                  className="h-full bg-sky-500 transition-all duration-300"
+                  style={{ width: `${Math.round((progress.index / progress.total) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* 完了サマリー */}
+          {finished && !running && results.length > 0 && (
+            <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-800">
+              {summaryText()}
             </div>
           )}
 
@@ -275,7 +307,7 @@ export function DiseaseResearchModal({
                             onClick={() => applyUpdate(r)}
                             disabled={applyingId === r.disease.id}
                           >
-                            {applyingId === r.disease.id ? "適用中…" : "適用する"}
+                            {applyingId === r.disease.id ? "更新中…" : "この疾患を更新"}
                           </Button>
                         )}
                       </div>

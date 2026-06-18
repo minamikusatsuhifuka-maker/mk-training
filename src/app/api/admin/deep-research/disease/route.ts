@@ -105,7 +105,7 @@ export async function POST(request: Request) {
     if (targets.includes("material")) {
       try {
         const saved = await saveDerivedMaterial({
-          title: `疾患リサーチ：${diseaseName}`,
+          title: `【疾患研修】${diseaseName}`,
           type: "disease_research",
           content: researchText,
           sourceTopic: diseaseName,
