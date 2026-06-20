@@ -10,6 +10,8 @@ import {
 import CharacterNotification from "@/components/CharacterNotification";
 import {
   PORTAL_KEYS,
+  URGENCY_META,
+  urgencyOf,
   type NewsItem,
   type NewsCategory,
   type HiyariItem,
@@ -405,13 +407,23 @@ export default function PortalHome() {
                   {formatDate(item.createdAt)} · {item.author}
                 </p>
               </div>
-              <span
-                className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${badgeStyle(
-                  item.category
-                )}`}
-              >
-                {categoryLabel(item.category)}
-              </span>
+              <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                <span
+                  className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
+                    URGENCY_META[urgencyOf(item)].badge
+                  }`}
+                >
+                  {URGENCY_META[urgencyOf(item)].emoji}{" "}
+                  {URGENCY_META[urgencyOf(item)].label}
+                </span>
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full font-medium ${badgeStyle(
+                    item.category
+                  )}`}
+                >
+                  {categoryLabel(item.category)}
+                </span>
+              </div>
             </div>
           ))}
           {news.length === 0 && (
@@ -754,13 +766,23 @@ export default function PortalHome() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between mb-4">
-              <span
-                className={`text-xs px-2 py-0.5 rounded-full font-medium ${badgeStyle(
-                  selectedNews.category
-                )}`}
-              >
-                {categoryLabel(selectedNews.category)}
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span
+                  className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
+                    URGENCY_META[urgencyOf(selectedNews)].badge
+                  }`}
+                >
+                  {URGENCY_META[urgencyOf(selectedNews)].emoji}{" "}
+                  {URGENCY_META[urgencyOf(selectedNews)].label}
+                </span>
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full font-medium ${badgeStyle(
+                    selectedNews.category
+                  )}`}
+                >
+                  {categoryLabel(selectedNews.category)}
+                </span>
+              </div>
               <button
                 type="button"
                 onClick={() => setSelectedNews(null)}

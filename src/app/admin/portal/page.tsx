@@ -12,8 +12,12 @@ import {
 import {
   PORTAL_KEYS,
   DEFAULT_CHARACTER_SETTINGS,
+  URGENCY_META,
+  URGENCY_OPTIONS,
+  urgencyOf,
   type NewsItem,
   type NewsCategory,
+  type Urgency,
   type HiyariItem,
   type ThankyouItem,
   type PolicyItem,
@@ -139,6 +143,7 @@ export default function AdminPortalPage() {
   const [newsForm, setNewsForm] = useState<{
     title: string;
     category: NewsCategory;
+    urgency: Urgency;
     author: string;
     content: string;
     isActive: boolean;
@@ -147,6 +152,7 @@ export default function AdminPortalPage() {
   }>({
     title: "",
     category: "notice",
+    urgency: "normal",
     author: "管理者",
     content: "",
     isActive: true,
@@ -217,6 +223,7 @@ export default function AdminPortalPage() {
       id: `news_${Date.now()}`,
       title: newsForm.title.trim(),
       category: newsForm.category,
+      urgency: newsForm.urgency,
       author: newsForm.author.trim() || "管理者",
       content: newsForm.content.trim(),
       createdAt: new Date().toISOString(),
@@ -232,6 +239,7 @@ export default function AdminPortalPage() {
       setNewsForm({
         title: "",
         category: "notice",
+        urgency: "normal",
         author: "管理者",
         content: "",
         isActive: true,
@@ -506,6 +514,37 @@ export default function AdminPortalPage() {
               </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">
+                  緊急度
+                </label>
+                <select
+                  value={newsForm.urgency}
+                  onChange={(e) =>
+                    setNewsForm({
+                      ...newsForm,
+                      urgency: e.target.value as Urgency,
+                    })
+                  }
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+                >
+                  {URGENCY_OPTIONS.map((u) => (
+                    <option key={u.value} value={u.value}>
+                      {URGENCY_META[u.value].emoji} {u.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="mt-1">
+                  <span
+                    className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
+                      URGENCY_META[newsForm.urgency].badge
+                    }`}
+                  >
+                    {URGENCY_META[newsForm.urgency].emoji}{" "}
+                    {URGENCY_META[newsForm.urgency].label}
+                  </span>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">
                   投稿者
                 </label>
                 <input
@@ -619,9 +658,19 @@ export default function AdminPortalPage() {
               >
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">
-                      {n.title}
-                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-gray-900">
+                        {n.title}
+                      </p>
+                      <span
+                        className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
+                          URGENCY_META[urgencyOf(n)].badge
+                        }`}
+                      >
+                        {URGENCY_META[urgencyOf(n)].emoji}{" "}
+                        {URGENCY_META[urgencyOf(n)].label}
+                      </span>
+                    </div>
                     <p className="text-xs text-gray-500 mt-0.5">
                       {NEWS_CATEGORIES.find((c) => c.value === n.category)?.label}{" "}
                       · {n.author} · {formatDateTime(n.createdAt)}
@@ -669,6 +718,24 @@ export default function AdminPortalPage() {
                   <span className="text-xs text-gray-400">
                     （未設定なら {charSettings.newsNoticeDays}日間）
                   </span>
+                  <label className="text-xs text-gray-500 ml-2">
+                    緊急度
+                  </label>
+                  <select
+                    value={urgencyOf(n)}
+                    onChange={(e) =>
+                      updateNewsItem(n.id, {
+                        urgency: e.target.value as Urgency,
+                      })
+                    }
+                    className="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white"
+                  >
+                    {URGENCY_OPTIONS.map((u) => (
+                      <option key={u.value} value={u.value}>
+                        {URGENCY_META[u.value].emoji} {u.label}
+                      </option>
+                    ))}
+                  </select>
                   <label className="text-xs text-gray-500 ml-2">
                     キャラ
                   </label>

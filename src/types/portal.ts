@@ -1,5 +1,8 @@
 export type NewsCategory = "important" | "drug_info" | "notice" | "event";
 
+/** 緊急度（カテゴリとは別軸）。emergency=赤 / semi=黄 / normal=緑 */
+export type Urgency = "emergency" | "semi" | "normal";
+
 export type NewsItem = {
   id: string;
   title: string;
@@ -12,7 +15,46 @@ export type NewsItem = {
   noticeUntil?: string;
   /** 通知アニメで表示するイラスト（CharacterSvgType の id）。未設定=おまかせ（自動割当） */
   character?: CharacterSvgType;
+  /** 緊急度。未設定の旧データは "normal"（緑）として扱う */
+  urgency?: Urgency;
 };
+
+// ─── 緊急度の表示メタ（色・ラベル・アイコン） ───
+export const URGENCY_META: Record<
+  Urgency,
+  { label: string; emoji: string; badge: string; dot: string }
+> = {
+  emergency: {
+    label: "緊急",
+    emoji: "🚨",
+    badge: "bg-red-100 text-red-700",
+    dot: "bg-red-500",
+  },
+  semi: {
+    label: "準緊急",
+    emoji: "⚠️",
+    badge: "bg-amber-100 text-amber-700",
+    dot: "bg-amber-500",
+  },
+  normal: {
+    label: "通常",
+    emoji: "✅",
+    badge: "bg-green-100 text-green-700",
+    dot: "bg-green-500",
+  },
+};
+
+// 選択UI用（追加フォーム・一覧の <select>）
+export const URGENCY_OPTIONS: { value: Urgency; label: string }[] = [
+  { value: "emergency", label: "緊急" },
+  { value: "semi", label: "準緊急" },
+  { value: "normal", label: "通常（特に急ぎでない）" },
+];
+
+/** 旧データ（未設定）は "normal" として扱う */
+export function urgencyOf(n: { urgency?: Urgency }): Urgency {
+  return n.urgency ?? "normal";
+}
 
 export type HiyariType = "hiyari" | "good";
 
