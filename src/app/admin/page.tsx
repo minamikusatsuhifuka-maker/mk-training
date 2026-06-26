@@ -62,6 +62,18 @@ export default function AdminDashboard() {
           </Card>
         </Link>
 
+        {/* スタッフ名簿 */}
+        <Link href="/admin/staff-members">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-teal-400 border-l-4 border-l-teal-500 sm:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">👥 スタッフ名簿</CardTitle>
+              <CardDescription className="text-xs">
+                「みんなのタスク」の担当者候補に使うスタッフ名を追加・削除
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
         {/* AI設定 */}
         <Link href="/admin/settings">
           <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-teal-400 border-l-4 border-l-teal-500 sm:col-span-2">
