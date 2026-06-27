@@ -8,6 +8,7 @@ const adminNav = [
   { label: "📊 ダッシュボード", href: "/admin" },
   { label: "🏠 ポータル管理", href: "/admin/portal" },
   { label: "🏛️ 組織知識ベース管理", href: "/admin/knowledge-system" },
+  { label: "🧭 AI背景情報", href: "/admin/ai-background" },
   { label: "📚 知識ベース管理", href: "/admin/knowledge" },
   { label: "🦠 疾患管理", href: "/admin/diseases" },
   { label: "💊 薬剤管理", href: "/admin/drugs" },

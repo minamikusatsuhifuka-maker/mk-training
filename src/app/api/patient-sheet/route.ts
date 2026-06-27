@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { generateText, stripCodeFence } from "@/lib/deep-research/gemini-research";
 import { getPatientSheetPrompt } from "@/lib/deep-research/prompts";
+import { getAiBackgroundBlock } from "@/lib/ai-background";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -20,7 +21,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const prompt = getPatientSheetPrompt(topic, content);
+    const prompt =
+      (await getAiBackgroundBlock()) + getPatientSheetPrompt(topic, content);
     const markdown = stripCodeFence(await generateText(prompt, { temperature: 0.4 }));
 
     return NextResponse.json({ markdown });

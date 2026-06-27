@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildFullKnowledgeContext } from "@/lib/knowledge-server";
+import { getAiBackgroundBlock } from "@/lib/ai-background";
 
 export const maxDuration = 60;
 
@@ -58,7 +59,8 @@ export async function POST(req: NextRequest) {
 
   // 理念 + 追加ドキュメント（Supabase）を結合してフルプロンプトを構築
   const knowledgeContext = await buildFullKnowledgeContext();
-  const systemPrompt = baseSystemPrompt + knowledgeContext;
+  const bgBlock = await getAiBackgroundBlock();
+  const systemPrompt = bgBlock + baseSystemPrompt + knowledgeContext;
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",

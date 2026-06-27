@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAiBackgroundBlock } from "@/lib/ai-background";
 
 export const maxDuration = 60;
 
@@ -89,7 +90,7 @@ ${existingItems?.map((i) => `- ${i.title}`).join("\n") || "なし"}
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 1500,
-        messages: [{ role: "user", content: prompt }],
+        messages: [{ role: "user", content: (await getAiBackgroundBlock()) + prompt }],
       }),
     });
 

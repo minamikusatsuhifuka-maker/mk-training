@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAiBackgroundBlock } from "@/lib/ai-background";
 
 export const maxDuration = 60;
 
@@ -72,7 +73,7 @@ ${truncated}
       body: JSON.stringify({
         model: "claude-sonnet-4-5",
         max_tokens: 8000,
-        messages: [{ role: "user", content: prompt }],
+        messages: [{ role: "user", content: (await getAiBackgroundBlock()) + prompt }],
       }),
     });
 

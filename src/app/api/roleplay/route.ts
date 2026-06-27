@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildFullKnowledgeContext } from "@/lib/knowledge-server";
 import { AI_JUDGMENT_AXES } from "@/lib/clinic-philosophy";
+import { getAiBackgroundBlock } from "@/lib/ai-background";
 
 export const maxDuration = 60;
 
@@ -73,6 +74,7 @@ export async function POST(req: NextRequest) {
 
   // 理念 + 追加ドキュメントを取得（全アクションで共通）
   const knowledgeContext = await buildFullKnowledgeContext();
+  const bgBlock = await getAiBackgroundBlock();
 
   if (action === "start") {
     const systemPrompt = scenarioPrompts[scenario] || scenarioPrompts.biologics;
@@ -87,6 +89,7 @@ export async function POST(req: NextRequest) {
         model: "claude-sonnet-4-5",
         max_tokens: 300,
         system:
+          bgBlock +
           systemPrompt +
           "\n\n最初の一言から始めてください。短めに（1〜2文）。" +
           knowledgeContext,
@@ -115,6 +118,7 @@ export async function POST(req: NextRequest) {
         model: "claude-sonnet-4-5",
         max_tokens: 200,
         system:
+          bgBlock +
           systemPrompt +
           "\n\nスタッフの説明に対して自然に反応し、次の質問や不安を述べてください。短めに（1〜3文）。" +
           knowledgeContext,
@@ -166,7 +170,7 @@ ${knowledgeContext}`;
       body: JSON.stringify({
         model: "claude-sonnet-4-5",
         max_tokens: 1000,
-        messages: [{ role: "user", content: feedbackPrompt }],
+        messages: [{ role: "user", content: bgBlock + feedbackPrompt }],
       }),
     });
     const data = await response.json();

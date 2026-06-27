@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAiBackgroundBlock } from "@/lib/ai-background";
 
 export const maxDuration = 60;
 
@@ -76,7 +77,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 500,
-        system: systemPrompt,
+        system: (await getAiBackgroundBlock()) + systemPrompt,
         messages: messages.map((m) => ({
           role: m.role === "ai" ? "assistant" : "user",
           content: m.content,

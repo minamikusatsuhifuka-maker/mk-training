@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildFullKnowledgeContext } from "@/lib/knowledge-server";
 import { AI_JUDGMENT_AXES } from "@/lib/clinic-philosophy";
+import { getAiBackgroundBlock } from "@/lib/ai-background";
 
 export const maxDuration = 60;
 
@@ -13,6 +14,7 @@ export async function POST(req: NextRequest) {
 
   // 理念 + 追加ドキュメント（生成・採点プロンプト末尾に付与）
   const knowledgeContext = await buildFullKnowledgeContext();
+  const bgBlock = await getAiBackgroundBlock();
   let prompt = "";
 
   if (action === "generate") {
@@ -95,7 +97,7 @@ ${knowledgeContext}`;
     body: JSON.stringify({
       model: "claude-sonnet-4-5",
       max_tokens: 1500,
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: "user", content: bgBlock + prompt }],
     }),
   });
 

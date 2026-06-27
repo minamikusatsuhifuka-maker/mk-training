@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAiBackgroundBlock } from "@/lib/ai-background";
 
 type GenerateType = "drug" | "disease" | "quiz" | "contraindication";
 type Mode = "fast" | "quality";
@@ -99,7 +100,7 @@ async function callAnthropic(
     body: JSON.stringify({
       model,
       max_tokens: maxTokens,
-      system: systemPrompts[type],
+      system: (await getAiBackgroundBlock()) + systemPrompts[type],
       messages: [{ role: "user", content: keyword }],
     }),
   });
