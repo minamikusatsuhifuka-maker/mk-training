@@ -131,3 +131,84 @@ export function compareByDue(a: StaffTask, b: StaffTask): number {
   if (!b.due) return -1;
   return new Date(a.due).getTime() - new Date(b.due).getTime();
 }
+
+// ─── 確認用サンプル ───
+// サンプルは "sample-" 接頭辞の固定IDで管理。実データと混ざらず、いつでも消せる。
+export const SAMPLE_PREFIX = "sample-";
+export const SAMPLE_MEMBERS = ["田中", "佐藤", "山本", "鈴木"];
+
+export function isSampleTask(t: StaffTask): boolean {
+  return t.id.startsWith(SAMPLE_PREFIX);
+}
+
+// now を基準に「dayOffset 日後の h:m」のISO（ローカル時刻ベース）
+function atRelativeDay(
+  now: Date,
+  dayOffset: number,
+  h: number,
+  m: number
+): string {
+  const d = new Date(now);
+  d.setDate(d.getDate() + dayOffset);
+  d.setHours(h, m, 0, 0);
+  return d.toISOString();
+}
+
+// 投入時の現在時刻を基準に相対計算したサンプル8件を生成
+export function buildSampleTasks(now: Date): StaffTask[] {
+  const nowIso = now.toISOString();
+  const base = (
+    id: string,
+    title: string,
+    assignee: string,
+    due: string | undefined,
+    status: TaskStatus,
+    note?: string
+  ): StaffTask => ({
+    id,
+    title,
+    assignee,
+    due,
+    status,
+    note,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  });
+
+  return [
+    base("sample-1", "軟膏類の発注（在庫補充）", "山本", atRelativeDay(now, -1, 17, 0), "doing", "在庫1本のみ"),
+    base("sample-2", "自費カウンセリング資料の差し替え", "佐藤", atRelativeDay(now, 0, 18, 0), "todo"),
+    base("sample-3", "新人研修スケジュール作成", "田中", atRelativeDay(now, 1, 12, 0), "todo"),
+    base("sample-4", "予約システムのマニュアル更新", "鈴木", atRelativeDay(now, 2, 12, 0), "doing"),
+    base("sample-5", "物品棚卸し", "鈴木", atRelativeDay(now, 4, 12, 0), "todo"),
+    base("sample-6", "学会の参加申込", "佐藤", atRelativeDay(now, 9, 12, 0), "doing"),
+    base("sample-7", "観葉植物の水やり当番表", "田中", undefined, "todo"),
+    base("sample-8", "待合のPOP張り替え", "山本", atRelativeDay(now, -3, 12, 0), "done"),
+  ];
+}
+
+// 既存タスクにサンプルを id でマージ（同IDは置換）。元の並び順を保持。
+export function mergeSampleTasks(
+  existing: StaffTask[],
+  samples: StaffTask[]
+): StaffTask[] {
+  const map = new Map(existing.map((t) => [t.id, t]));
+  samples.forEach((s) => map.set(s.id, s));
+  return Array.from(map.values());
+}
+
+// "sample-" のタスクのみ除去（実データは残す）
+export function clearSampleTasks(tasks: StaffTask[]): StaffTask[] {
+  return tasks.filter((t) => !isSampleTask(t));
+}
+
+export function hasSampleTasks(tasks: StaffTask[]): boolean {
+  return tasks.some(isSampleTask);
+}
+
+// staff_members に名前を重複なくマージ
+export function mergeMembers(existing: string[], add: string[]): string[] {
+  const set = new Set(existing);
+  add.forEach((m) => m && set.add(m));
+  return Array.from(set);
+}

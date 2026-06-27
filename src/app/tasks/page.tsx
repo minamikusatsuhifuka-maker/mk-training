@@ -17,6 +17,7 @@ import {
   loadTasks,
   saveTasks,
   loadStaffMembers,
+  saveStaffMembers,
   newTaskId,
   dueColor,
   DUE_BADGE_CLASS,
@@ -26,6 +27,13 @@ import {
   compareByDue,
   STATUS_LABELS,
   STATUS_ORDER,
+  SAMPLE_MEMBERS,
+  buildSampleTasks,
+  mergeSampleTasks,
+  clearSampleTasks,
+  hasSampleTasks,
+  mergeMembers,
+  isSampleTask,
   type StaffTask,
   type TaskStatus,
 } from "@/lib/staff-tasks";
@@ -141,6 +149,25 @@ export default function TasksPage() {
     );
     persist(next);
     setEditing(null);
+  };
+
+  // ─── 確認用サンプル ───
+  // タスクが0件、または現存タスクが sample- のみのとき投入ボタンを出す
+  const canSeed = tasks.length === 0 || tasks.every(isSampleTask);
+  const showClear = hasSampleTasks(tasks);
+
+  const handleSeed = async () => {
+    const samples = buildSampleTasks(new Date());
+    await persist(mergeSampleTasks(tasks, samples));
+    const nextMembers = mergeMembers(members, SAMPLE_MEMBERS);
+    if (nextMembers.length !== members.length) {
+      setMembers(nextMembers);
+      await saveStaffMembers(nextMembers);
+    }
+  };
+
+  const handleClearSamples = async () => {
+    await persist(clearSampleTasks(tasks));
   };
 
   // ─── レンダリング補助 ───
@@ -275,8 +302,30 @@ export default function TasksPage() {
             />
             完了を隠す
           </label>
+          {showClear && (
+            <button
+              type="button"
+              onClick={handleClearSamples}
+              className="text-xs text-foreground/50 hover:text-red-600 underline underline-offset-2"
+            >
+              サンプルを消す
+            </button>
+          )}
         </div>
       </div>
+
+      {/* 確認用サンプル投入 */}
+      {canSeed && (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={handleSeed}
+            className="text-xs text-foreground/60 hover:text-foreground hover:border-foreground/30 border border-dashed border-border rounded-md px-3 py-1.5 transition-colors"
+          >
+            ✨ サンプルを入れて試す（8件）
+          </button>
+        </div>
+      )}
 
       {/* 本体 */}
       {visibleTasks.length === 0 ? (
