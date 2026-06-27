@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
+import { FileImport } from "@/components/tasks/FileImport";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -170,6 +171,17 @@ export default function TasksPage() {
     await persist(clearSampleTasks(tasks));
   };
 
+  // ファイルAI解析からの取り込み（新規IDで追加・担当者はstaff_membersにマージ）
+  const handleImport = async (newTasks: StaffTask[]) => {
+    await persist([...newTasks, ...tasks]);
+    const names = newTasks.map((t) => t.assignee).filter(Boolean);
+    const nextMembers = mergeMembers(members, names);
+    if (nextMembers.length !== members.length) {
+      setMembers(nextMembers);
+      await saveStaffMembers(nextMembers);
+    }
+  };
+
   // ─── レンダリング補助 ───
   const tabBtn = (key: ViewKey, label: string) => (
     <button
@@ -273,6 +285,9 @@ export default function TasksPage() {
           </Button>
         </div>
       </div>
+
+      {/* ファイルからAIでタスク化 */}
+      <FileImport knownMembers={assigneeOptions} onImport={handleImport} />
 
       {/* ビュー切替 + フィルタ */}
       <div className="flex flex-wrap items-center justify-between gap-3">

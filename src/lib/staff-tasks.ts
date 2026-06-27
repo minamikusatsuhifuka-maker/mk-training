@@ -212,3 +212,57 @@ export function mergeMembers(existing: string[], add: string[]): string[] {
   add.forEach((m) => m && set.add(m));
   return Array.from(set);
 }
+
+// ─── AI解析（ファイル取り込み）用 ───
+// AIが返すタスク候補（dueは YYYY-MM-DD または null）
+export type ParsedTask = {
+  title: string;
+  assignee: string;
+  due: string | null;
+  status: TaskStatus;
+  note: string;
+};
+
+// AIの生オブジェクトを ParsedTask に正規化（不正な行は null）
+export function normalizeParsedTask(raw: unknown): ParsedTask | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const title = String(o.title ?? "").trim();
+  if (!title) return null;
+
+  const statusRaw = String(o.status ?? "").trim();
+  const status: TaskStatus = (STATUS_ORDER as string[]).includes(statusRaw)
+    ? (statusRaw as TaskStatus)
+    : "todo";
+
+  let due: string | null = null;
+  if (typeof o.due === "string") {
+    const m = o.due.match(/^\d{4}-\d{2}-\d{2}/);
+    if (m) due = m[0];
+  }
+
+  return {
+    title,
+    assignee: String(o.assignee ?? "").trim(),
+    due,
+    status,
+    note: String(o.note ?? "").trim(),
+  };
+}
+
+// 日付のみ(YYYY-MM-DD) → ISO（ローカル0時基準）。空ならundefined
+export function dateOnlyToIso(d: string | null | undefined): string | undefined {
+  if (!d) return undefined;
+  const dt = new Date(`${d}T00:00:00`);
+  if (isNaN(dt.getTime())) return undefined;
+  return dt.toISOString();
+}
+
+// ISO → date入力値(YYYY-MM-DD)
+export function isoToDateInput(iso: string | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
