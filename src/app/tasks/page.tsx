@@ -26,6 +26,12 @@ import {
   isoToLocalInput,
   localInputToIso,
   compareByDue,
+  bucketOf,
+  taskCounts,
+  DUE_BUCKET_ORDER,
+  DUE_BUCKET_LABEL,
+  DUE_BUCKET_TEXT,
+  DUE_BUCKET_BORDER,
   STATUS_LABELS,
   STATUS_ORDER,
   SAMPLE_MEMBERS,
@@ -56,6 +62,10 @@ export default function TasksPage() {
   const [view, setView] = useState<ViewKey>("due");
   const [filterAssignee, setFilterAssignee] = useState<string>("");
   const [hideDone, setHideDone] = useState(false);
+  // 件数サマリーから切り替える期限フィルタ
+  const [dueFilter, setDueFilter] = useState<"none" | "overdue" | "today">(
+    "none"
+  );
 
   // 表示列数（端末ごとのUI設定。localStorageに保持）。既定は3列
   const [columns, setColumns] = useState<1 | 2 | 3>(3);
@@ -126,14 +136,29 @@ export default function TasksPage() {
     return Array.from(set).sort((a, b) => a.localeCompare(b, "ja"));
   }, [members, tasks]);
 
-  // 表示対象（フィルタ適用後）
+  // 担当者フィルタのみ適用した母集団（件数サマリーの集計用＝完了を隠すの影響を受けない）
+  const assigneeFilteredTasks = useMemo(() => {
+    if (!filterAssignee) return tasks;
+    return tasks.filter((t) => t.assignee === filterAssignee);
+  }, [tasks, filterAssignee]);
+
+  // 件数サマリー（常に実数）
+  const counts = useMemo(
+    () => (now ? taskCounts(assigneeFilteredTasks, now) : null),
+    [assigneeFilteredTasks, now]
+  );
+
+  // 表示対象（担当者＋完了を隠す＋期限サマリーフィルタ）
   const visibleTasks = useMemo(() => {
-    return tasks.filter((t) => {
-      if (filterAssignee && t.assignee !== filterAssignee) return false;
+    return assigneeFilteredTasks.filter((t) => {
       if (hideDone && t.status === "done") return false;
+      if (dueFilter !== "none") {
+        if (!now) return true;
+        if (bucketOf(t, now) !== dueFilter) return false;
+      }
       return true;
     });
-  }, [tasks, filterAssignee, hideDone]);
+  }, [assigneeFilteredTasks, hideDone, dueFilter, now]);
 
   // ─── 操作 ───
   const handleAdd = async () => {
@@ -164,6 +189,20 @@ export default function TasksPage() {
     const updated = tasks.map((t) =>
       t.id === id
         ? { ...t, status: next, updatedAt: new Date().toISOString() }
+        : t
+    );
+    persist(updated);
+  };
+
+  // ワンタップ完了/解除（未完了→done、done→todo）
+  const handleToggleDone = (id: string) => {
+    const updated = tasks.map((t) =>
+      t.id === id
+        ? {
+            ...t,
+            status: (t.status === "done" ? "todo" : "done") as TaskStatus,
+            updatedAt: new Date().toISOString(),
+          }
         : t
     );
     persist(updated);
@@ -322,6 +361,50 @@ export default function TasksPage() {
       {/* ファイルからAIでタスク化 */}
       <FileImport knownMembers={assigneeOptions} onImport={handleImport} />
 
+      {/* 件数サマリー */}
+      {counts && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              setDueFilter((p) => (p === "overdue" ? "none" : "overdue"))
+            }
+            className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+              dueFilter === "overdue"
+                ? "border-red-400 bg-red-50 ring-1 ring-red-300"
+                : "border-border bg-card hover:bg-accent"
+            }`}
+          >
+            <p className="text-xs text-muted-foreground">超過</p>
+            <p className="text-2xl font-bold text-red-600">{counts.overdue}</p>
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setDueFilter((p) => (p === "today" ? "none" : "today"))
+            }
+            className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+              dueFilter === "today"
+                ? "border-yellow-400 bg-yellow-50 ring-1 ring-yellow-300"
+                : "border-border bg-card hover:bg-accent"
+            }`}
+          >
+            <p className="text-xs text-muted-foreground">今日</p>
+            <p className="text-2xl font-bold text-yellow-600">{counts.today}</p>
+          </button>
+          <div className="rounded-lg border border-border bg-card px-3 py-2">
+            <p className="text-xs text-muted-foreground">未完了</p>
+            <p className="text-2xl font-bold text-foreground">{counts.open}</p>
+          </div>
+          <div className="rounded-lg border border-border bg-card px-3 py-2">
+            <p className="text-xs text-muted-foreground">完了</p>
+            <p className="text-2xl font-bold text-muted-foreground">
+              {counts.done}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ビュー切替 + フィルタ */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-1 rounded-lg border border-border bg-card p-1">
@@ -406,6 +489,7 @@ export default function TasksPage() {
           cols={effectiveCols}
           now={now}
           onStatus={handleStatusChange}
+          onToggleDone={handleToggleDone}
           onEdit={setEditing}
           onDelete={handleDelete}
         />
@@ -415,6 +499,7 @@ export default function TasksPage() {
           cols={effectiveCols}
           now={now}
           onStatus={handleStatusChange}
+          onToggleDone={handleToggleDone}
           onEdit={setEditing}
           onDelete={handleDelete}
         />
@@ -423,6 +508,7 @@ export default function TasksPage() {
           tasks={visibleTasks}
           now={now}
           onStatus={handleStatusChange}
+          onToggleDone={handleToggleDone}
           onEdit={setEditing}
           onDelete={handleDelete}
         />
@@ -445,6 +531,7 @@ export default function TasksPage() {
 type RowHandlers = {
   now: Date;
   onStatus: (id: string, s: TaskStatus) => void;
+  onToggleDone: (id: string) => void;
   onEdit: (t: StaffTask) => void;
   onDelete: (id: string) => void;
 };
@@ -453,29 +540,47 @@ function TaskCard({
   task,
   now,
   onStatus,
+  onToggleDone,
   onEdit,
   onDelete,
   showAssignee = true,
 }: RowHandlers & { task: StaffTask; showAssignee?: boolean }) {
   const kind = dueColor(task.due, task.status, now);
+  const bucket = bucketOf(task, now);
+  const isDone = task.status === "done";
   return (
-    <div className="flex h-full flex-col gap-2 rounded-md border border-border bg-card px-3 py-2">
-      {/* 上段：内容＋メモ */}
-      <div className="min-w-0">
-        <p
-          className={`text-sm font-medium break-words ${
-            task.status === "done"
-              ? "line-through text-muted-foreground"
-              : ""
+    <div
+      className={`flex h-full flex-col gap-2 rounded-md border border-l-4 border-border bg-card px-3 py-2 ${DUE_BUCKET_BORDER[bucket]}`}
+    >
+      {/* 上段：丸チェック＋内容＋メモ */}
+      <div className="flex items-start gap-2 min-w-0">
+        <button
+          type="button"
+          onClick={() => onToggleDone(task.id)}
+          title={isDone ? "未着手に戻す" : "完了にする"}
+          aria-label={isDone ? "未着手に戻す" : "完了にする"}
+          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs transition-colors ${
+            isDone
+              ? "border-emerald-500 bg-emerald-500 text-white"
+              : "border-foreground/30 text-transparent hover:border-emerald-500 hover:text-emerald-500"
           }`}
         >
-          {task.title}
-        </p>
-        {task.note && (
-          <p className="text-xs text-muted-foreground mt-0.5 break-words">
-            {task.note}
+          ✓
+        </button>
+        <div className="min-w-0 flex-1">
+          <p
+            className={`text-sm font-medium break-words ${
+              isDone ? "line-through text-muted-foreground" : ""
+            }`}
+          >
+            {task.title}
           </p>
-        )}
+          {task.note && (
+            <p className="text-xs text-muted-foreground mt-0.5 break-words">
+              {task.note}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* 下段：担当者／期限／状態／操作（狭くても折り返す） */}
@@ -545,19 +650,45 @@ function TaskGrid({
   );
 }
 
-// ─── 期限順ビュー ───
+// ─── 期限順ビュー（期限グループ見出し付き） ───
 function DueView({
   tasks,
   cols,
   ...h
 }: RowHandlers & { tasks: StaffTask[]; cols: number }) {
-  const sorted = [...tasks].sort(compareByDue);
+  // バケットごとに振り分け
+  const groups = new Map<string, StaffTask[]>();
+  tasks.forEach((t) => {
+    const b = bucketOf(t, h.now);
+    if (!groups.has(b)) groups.set(b, []);
+    groups.get(b)!.push(t);
+  });
+
   return (
-    <TaskGrid cols={cols}>
-      {sorted.map((t) => (
-        <TaskCard key={t.id} task={t} {...h} />
-      ))}
-    </TaskGrid>
+    <div className="space-y-5">
+      {DUE_BUCKET_ORDER.map((bucket) => {
+        const list = groups.get(bucket);
+        if (!list || list.length === 0) return null; // 0件グループは出さない
+        const sorted = [...list].sort(compareByDue);
+        return (
+          <div key={bucket} className="space-y-2">
+            <h3
+              className={`text-sm font-semibold flex items-center gap-2 ${DUE_BUCKET_TEXT[bucket]}`}
+            >
+              {DUE_BUCKET_LABEL[bucket]}
+              <span className="text-xs font-normal text-muted-foreground">
+                {list.length} 件
+              </span>
+            </h3>
+            <TaskGrid cols={cols}>
+              {sorted.map((t) => (
+                <TaskCard key={t.id} task={t} {...h} />
+              ))}
+            </TaskGrid>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

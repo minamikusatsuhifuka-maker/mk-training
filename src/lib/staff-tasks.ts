@@ -132,6 +132,101 @@ export function compareByDue(a: StaffTask, b: StaffTask): number {
   return new Date(a.due).getTime() - new Date(b.due).getTime();
 }
 
+// ─── 期限バケット（グループ見出し・サマリー集計用） ───
+// 日付（ローカル/Asia/Tokyo相当）で判定。dueColor(時刻ベース)とは別用途。
+export type DueBucket =
+  | "overdue"
+  | "today"
+  | "tomorrow"
+  | "later"
+  | "nodue"
+  | "done";
+
+function startOfDay(d: Date): number {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x.getTime();
+}
+
+export function bucketOf(task: StaffTask, now: Date): DueBucket {
+  if (task.status === "done") return "done";
+  if (!task.due) return "nodue";
+  const due = new Date(task.due);
+  if (isNaN(due.getTime())) return "nodue";
+  const diffDays = Math.round(
+    (startOfDay(due) - startOfDay(now)) / 86400000
+  );
+  if (diffDays < 0) return "overdue";
+  if (diffDays === 0) return "today";
+  if (diffDays === 1) return "tomorrow";
+  return "later";
+}
+
+// グループ表示順とラベル
+export const DUE_BUCKET_ORDER: DueBucket[] = [
+  "overdue",
+  "today",
+  "tomorrow",
+  "later",
+  "nodue",
+  "done",
+];
+
+export const DUE_BUCKET_LABEL: Record<DueBucket, string> = {
+  overdue: "超過",
+  today: "今日",
+  tomorrow: "明日",
+  later: "それ以降",
+  nodue: "期限なし",
+  done: "完了",
+};
+
+// 見出しの文字色アクセント（赤/黄/通常/グレー）
+export const DUE_BUCKET_TEXT: Record<DueBucket, string> = {
+  overdue: "text-red-600",
+  today: "text-yellow-700",
+  tomorrow: "text-yellow-700",
+  later: "text-foreground",
+  nodue: "text-foreground",
+  done: "text-muted-foreground",
+};
+
+// カード左端の色帯（border-left）
+export const DUE_BUCKET_BORDER: Record<DueBucket, string> = {
+  overdue: "border-l-red-400",
+  today: "border-l-yellow-400",
+  tomorrow: "border-l-yellow-400",
+  later: "border-l-emerald-300",
+  nodue: "border-l-slate-200",
+  done: "border-l-slate-300",
+};
+
+// 件数サマリー（超過/今日/未完了/完了）。openは未完了合計
+export type TaskCounts = {
+  overdue: number;
+  today: number;
+  open: number;
+  done: number;
+};
+
+export function taskCounts(tasks: StaffTask[], now: Date): TaskCounts {
+  let overdue = 0;
+  let today = 0;
+  let open = 0;
+  let done = 0;
+  for (const t of tasks) {
+    if (t.status === "done") {
+      done++;
+      continue;
+    }
+    open++;
+    const b = bucketOf(t, now);
+    if (b === "overdue") overdue++;
+    else if (b === "today") today++;
+  }
+  return { overdue, today, open, done };
+}
+
 // ─── 確認用サンプル ───
 // サンプルは "sample-" 接頭辞の固定IDで管理。実データと混ざらず、いつでも消せる。
 export const SAMPLE_PREFIX = "sample-";

@@ -8,6 +8,7 @@ import {
   loadTodayWord,
 } from "@/lib/portal-store";
 import CharacterNotification from "@/components/CharacterNotification";
+import { loadTasks, taskCounts } from "@/lib/staff-tasks";
 import {
   PORTAL_KEYS,
   URGENCY_META,
@@ -198,6 +199,12 @@ export default function PortalHome() {
   );
   const [todayWord, setTodayWord] = useState<TodayWord>(DEFAULT_TODAY_WORD);
 
+  // タスクの期限切れ・今日件数（バッジ用）
+  const [taskAlert, setTaskAlert] = useState<{
+    overdue: number;
+    today: number;
+  } | null>(null);
+
   // モーダル状態
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
 
@@ -272,6 +279,16 @@ export default function PortalHome() {
       setTodayWord(word);
     };
     fetchAll().catch(() => {});
+  }, []);
+
+  // タスクの超過/今日件数を算出（クライアント側＝SSR安全）
+  useEffect(() => {
+    loadTasks()
+      .then((tasks) => {
+        const c = taskCounts(tasks, new Date());
+        setTaskAlert({ overdue: c.overdue, today: c.today });
+      })
+      .catch(() => {});
   }, []);
 
   // 気づきシェア投稿
@@ -372,6 +389,34 @@ export default function PortalHome() {
           <p className="text-xs text-teal-600 mt-2">— {todayWord.author}</p>
         </div>
       </section>
+
+      {/* タスク期限アラート（超過/今日が0なら非表示） */}
+      {taskAlert && (taskAlert.overdue > 0 || taskAlert.today > 0) && (
+        <section className="px-4 pt-4">
+          <Link
+            href="/tasks"
+            className="flex items-center gap-3 p-3 bg-white border border-gray-100 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors"
+          >
+            <span className="text-xl">📋</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900">みんなのタスク</p>
+              <p className="text-xs text-gray-400">未完了の期限を確認</p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {taskAlert.overdue > 0 && (
+                <span className="text-xs px-2 py-1 rounded-full font-medium bg-red-50 text-red-700">
+                  期限切れ {taskAlert.overdue}件
+                </span>
+              )}
+              {taskAlert.today > 0 && (
+                <span className="text-xs px-2 py-1 rounded-full font-medium bg-yellow-50 text-yellow-700">
+                  今日 {taskAlert.today}件
+                </span>
+              )}
+            </div>
+          </Link>
+        </section>
+      )}
 
       {/* ③ 新着情報 */}
       <section
