@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { FileImport } from "@/components/tasks/FileImport";
 import { Button } from "@/components/ui/button";
@@ -57,6 +57,10 @@ export default function TasksPage() {
   const [filterAssignee, setFilterAssignee] = useState<string>("");
   const [hideDone, setHideDone] = useState(false);
 
+  // 表示列数（端末ごとのUI設定。localStorageに保持）
+  const [columns, setColumns] = useState<1 | 2 | 3>(1);
+  const [winW, setWinW] = useState(1280);
+
   // 追加フォーム
   const [title, setTitle] = useState("");
   const [assignee, setAssignee] = useState("");
@@ -78,6 +82,35 @@ export default function TasksPage() {
       .catch(() => {})
       .finally(() => setLoaded(true));
   }, []);
+
+  // 列数設定の読み込み＋画面幅の追従（SSRハイドレーション安全：mount後のみ）
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("tasks_view_columns");
+      if (saved === "1" || saved === "2" || saved === "3") {
+        setColumns(Number(saved) as 1 | 2 | 3);
+      }
+    } catch {
+      /* ignore */
+    }
+    const onResize = () => setWinW(window.innerWidth);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const changeColumns = (c: 1 | 2 | 3) => {
+    setColumns(c);
+    try {
+      localStorage.setItem("tasks_view_columns", String(c));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  // 選択列数は「広い画面での最大列数」。狭い画面では自動で減らす。
+  const effectiveCols =
+    winW < 768 ? 1 : winW < 1024 ? Math.min(columns, 2) : Math.min(columns, 3);
 
   // タスク配列を保存して state も更新
   const persist = async (next: StaffTask[]) => {
@@ -317,6 +350,26 @@ export default function TasksPage() {
             />
             完了を隠す
           </label>
+          {/* 列数セレクタ（状態別は元々列構成のため非表示） */}
+          {view !== "status" && (
+            <div className="flex gap-0.5 rounded-md border border-border bg-card p-0.5">
+              {([1, 2, 3] as const).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => changeColumns(c)}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    columns === c
+                      ? "bg-teal text-teal-foreground font-medium"
+                      : "text-foreground/70 hover:bg-accent"
+                  }`}
+                  title={`${c}列表示`}
+                >
+                  {c}列
+                </button>
+              ))}
+            </div>
+          )}
           {showClear && (
             <button
               type="button"
@@ -350,6 +403,7 @@ export default function TasksPage() {
       ) : view === "due" ? (
         <DueView
           tasks={visibleTasks}
+          cols={effectiveCols}
           now={now}
           onStatus={handleStatusChange}
           onEdit={setEditing}
@@ -358,6 +412,7 @@ export default function TasksPage() {
       ) : view === "assignee" ? (
         <AssigneeView
           tasks={visibleTasks}
+          cols={effectiveCols}
           now={now}
           onStatus={handleStatusChange}
           onEdit={setEditing}
@@ -394,7 +449,7 @@ type RowHandlers = {
   onDelete: (id: string) => void;
 };
 
-function TaskRow({
+function TaskCard({
   task,
   now,
   onStatus,
@@ -404,10 +459,11 @@ function TaskRow({
 }: RowHandlers & { task: StaffTask; showAssignee?: boolean }) {
   const kind = dueColor(task.due, task.status, now);
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
-      <div className="flex-1 min-w-[180px]">
+    <div className="flex h-full flex-col gap-2 rounded-md border border-border bg-card px-3 py-2">
+      {/* 上段：内容＋メモ */}
+      <div className="min-w-0">
         <p
-          className={`text-sm font-medium ${
+          className={`text-sm font-medium break-words ${
             task.status === "done"
               ? "line-through text-muted-foreground"
               : ""
@@ -416,50 +472,75 @@ function TaskRow({
           {task.title}
         </p>
         {task.note && (
-          <p className="text-xs text-muted-foreground mt-0.5">{task.note}</p>
+          <p className="text-xs text-muted-foreground mt-0.5 break-words">
+            {task.note}
+          </p>
         )}
       </div>
 
-      {showAssignee && (
-        <span className="text-xs text-foreground/70 min-w-[64px]">
-          {task.assignee || "—"}
+      {/* 下段：担当者／期限／状態／操作（狭くても折り返す） */}
+      <div className="mt-auto flex flex-wrap items-center gap-2">
+        {showAssignee && (
+          <span className="text-xs text-foreground/70 truncate max-w-[120px]">
+            {task.assignee || "—"}
+          </span>
+        )}
+
+        <span
+          className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${DUE_BADGE_CLASS[kind]}`}
+        >
+          {formatDue(task.due)}
         </span>
-      )}
 
-      <span
-        className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${DUE_BADGE_CLASS[kind]}`}
-      >
-        {formatDue(task.due)}
-      </span>
+        <select
+          value={task.status}
+          onChange={(e) => onStatus(task.id, e.target.value as TaskStatus)}
+          className={`h-8 rounded-md border px-2 text-xs ${STATUS_SELECT_CLASS[task.status]}`}
+        >
+          {STATUS_ORDER.map((s) => (
+            <option key={s} value={s}>
+              {STATUS_LABELS[s]}
+            </option>
+          ))}
+        </select>
 
-      <select
-        value={task.status}
-        onChange={(e) => onStatus(task.id, e.target.value as TaskStatus)}
-        className={`h-8 rounded-md border px-2 text-xs ${STATUS_SELECT_CLASS[task.status]}`}
-      >
-        {STATUS_ORDER.map((s) => (
-          <option key={s} value={s}>
-            {STATUS_LABELS[s]}
-          </option>
-        ))}
-      </select>
+        <div className="ml-auto flex items-center">
+          <button
+            type="button"
+            onClick={() => onEdit(task)}
+            className="text-xs text-foreground/60 hover:text-foreground px-1.5 py-1"
+            title="編集"
+          >
+            ✏️
+          </button>
+          <button
+            type="button"
+            onClick={() => onDelete(task.id)}
+            className="text-xs text-foreground/60 hover:text-red-600 px-1.5 py-1"
+            title="削除"
+          >
+            🗑️
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-      <button
-        type="button"
-        onClick={() => onEdit(task)}
-        className="text-xs text-foreground/60 hover:text-foreground px-1.5 py-1"
-        title="編集"
-      >
-        ✏️
-      </button>
-      <button
-        type="button"
-        onClick={() => onDelete(task.id)}
-        className="text-xs text-foreground/60 hover:text-red-600 px-1.5 py-1"
-        title="削除"
-      >
-        🗑️
-      </button>
+// 列数に応じたグリッドコンテナ
+function TaskGrid({
+  cols,
+  children,
+}: {
+  cols: number;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className="grid gap-2"
+      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+    >
+      {children}
     </div>
   );
 }
@@ -467,23 +548,25 @@ function TaskRow({
 // ─── 期限順ビュー ───
 function DueView({
   tasks,
+  cols,
   ...h
-}: RowHandlers & { tasks: StaffTask[] }) {
+}: RowHandlers & { tasks: StaffTask[]; cols: number }) {
   const sorted = [...tasks].sort(compareByDue);
   return (
-    <div className="space-y-2">
+    <TaskGrid cols={cols}>
       {sorted.map((t) => (
-        <TaskRow key={t.id} task={t} {...h} />
+        <TaskCard key={t.id} task={t} {...h} />
       ))}
-    </div>
+    </TaskGrid>
   );
 }
 
 // ─── 担当者別ビュー ───
 function AssigneeView({
   tasks,
+  cols,
   ...h
-}: RowHandlers & { tasks: StaffTask[] }) {
+}: RowHandlers & { tasks: StaffTask[]; cols: number }) {
   const groups = new Map<string, StaffTask[]>();
   tasks.forEach((t) => {
     const key = t.assignee || "（未割当）";
@@ -506,9 +589,11 @@ function AssigneeView({
                 未完了 {open} 件 / 全 {list.length} 件
               </span>
             </h3>
-            {sorted.map((t) => (
-              <TaskRow key={t.id} task={t} {...h} showAssignee={false} />
-            ))}
+            <TaskGrid cols={cols}>
+              {sorted.map((t) => (
+                <TaskCard key={t.id} task={t} {...h} showAssignee={false} />
+              ))}
+            </TaskGrid>
           </div>
         );
       })}
@@ -538,7 +623,11 @@ function StatusView({
             {list.length === 0 ? (
               <p className="text-xs text-muted-foreground py-2">なし</p>
             ) : (
-              list.map((t) => <TaskRow key={t.id} task={t} {...h} />)
+              <div className="space-y-2">
+                {list.map((t) => (
+                  <TaskCard key={t.id} task={t} {...h} />
+                ))}
+              </div>
             )}
           </div>
         );
