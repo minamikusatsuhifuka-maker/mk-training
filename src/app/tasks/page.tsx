@@ -57,8 +57,8 @@ export default function TasksPage() {
   const [filterAssignee, setFilterAssignee] = useState<string>("");
   const [hideDone, setHideDone] = useState(false);
 
-  // 表示列数（端末ごとのUI設定。localStorageに保持）
-  const [columns, setColumns] = useState<1 | 2 | 3>(1);
+  // 表示列数（端末ごとのUI設定。localStorageに保持）。既定は3列
+  const [columns, setColumns] = useState<1 | 2 | 3>(3);
   const [winW, setWinW] = useState(1280);
 
   // 追加フォーム
