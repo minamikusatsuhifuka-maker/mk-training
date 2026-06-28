@@ -78,7 +78,7 @@ export default function AdminDashboard() {
         <Link href="/admin/ai-background">
           <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-teal-400 border-l-4 border-l-teal-500 sm:col-span-2">
             <CardHeader>
-              <CardTitle className="text-base">🧭 AI背景情報（理念・方針）</CardTitle>
+              <CardTitle className="text-base">🧭 背景情報・理念管理</CardTitle>
               <CardDescription className="text-xs">
                 理念・経営方針を1か所で編集。相談・ロールプレイ・症例・ロードマップ・知識生成など主要AIに共通で反映
               </CardDescription>
