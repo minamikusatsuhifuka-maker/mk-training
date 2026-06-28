@@ -50,6 +50,18 @@ export default function AdminDashboard() {
           </Card>
         </Link>
 
+        {/* サイドバー構成 */}
+        <Link href="/admin/nav">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-pink-400 border-l-4 border-l-pink-500 sm:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">🧭 サイドバー構成</CardTitle>
+              <CardDescription className="text-xs">
+                スタッフ側サイドバーのカテゴリ・メニューの並び・所属・表示/非表示・表示名を編集
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
         {/* 組織知識ベース管理 */}
         <Link href="/admin/knowledge-system">
           <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-purple-400 border-l-4 border-l-purple-500 sm:col-span-2">

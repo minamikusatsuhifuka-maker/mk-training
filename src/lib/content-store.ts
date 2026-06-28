@@ -16,6 +16,7 @@ export const CONTENT_KEYS = {
   contraindications: 'content_contraindications',
   biologics: 'biologics_data',
   expertRoles: 'expert_roles',
+  navConfig: 'portal_nav_config',
 } as const
 
 // データを取得（Supabase優先、失敗時はlocalStorageにフォールバック）
@@ -72,6 +73,82 @@ export async function saveContent<T>(key: string, data: T[]): Promise<boolean> {
     return true
   } catch (err) {
     console.error('Save error:', err)
+    return false
+  }
+}
+
+// オブジェクト（配列でない設定）を取得。Supabase優先、失敗時はlocalStorage、最後にfallback。
+export async function getContentObject<T>(key: string, fallback: T | null = null): Promise<T | null> {
+  try {
+    const { data, error } = await supabase
+      .from('content_store')
+      .select('data')
+      .eq('id', key)
+      .single()
+
+    if (error || !data || data.data == null) {
+      if (typeof window !== 'undefined') {
+        const local = localStorage.getItem('mk_' + key)
+        if (local) return JSON.parse(local) as T
+      }
+      return fallback
+    }
+    return data.data as T
+  } catch {
+    if (typeof window !== 'undefined') {
+      const local = localStorage.getItem('mk_' + key)
+      if (local) return JSON.parse(local) as T
+    }
+    return fallback
+  }
+}
+
+// オブジェクト（配列でない設定）を保存。
+export async function saveContentObject<T>(key: string, data: T): Promise<boolean> {
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('mk_' + key, JSON.stringify(data))
+    } catch { /* ignore */ }
+  }
+
+  try {
+    const { error } = await supabase
+      .from('content_store')
+      .upsert({
+        id: key,
+        content_type: key.split('_')[0],
+        data: data as unknown as Record<string, unknown>,
+        updated_at: new Date().toISOString(),
+      })
+
+    if (error) {
+      console.error('Supabase save error:', error)
+      return false
+    }
+    return true
+  } catch (err) {
+    console.error('Save error:', err)
+    return false
+  }
+}
+
+// 設定を削除して既定（フォールバック）に戻す。
+export async function deleteContent(key: string): Promise<boolean> {
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem('mk_' + key)
+    } catch { /* ignore */ }
+  }
+
+  try {
+    const { error } = await supabase.from('content_store').delete().eq('id', key)
+    if (error) {
+      console.error('Supabase delete error:', error)
+      return false
+    }
+    return true
+  } catch (err) {
+    console.error('Delete error:', err)
     return false
   }
 }

@@ -4,65 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-
-const navSections = [
-  {
-    title: "ホーム",
-    items: [
-      { label: "🏠 ホーム", href: "/" },
-    ],
-  },
-  {
-    title: "理念・想い",
-    items: [
-      { label: "🏛️ 理念・院長の想い", href: "/philosophy" },
-    ],
-  },
-  {
-    title: "医療知識",
-    items: [
-      { label: "🏛️ 組織知識ベース", href: "/knowledge" },
-      { label: "疾患", href: "/diseases" },
-      { label: "薬剤", href: "/drugs" },
-      { label: "禁忌・注意", href: "/contraindications" },
-      { label: "🤰 妊娠・授乳と薬剤", href: "/pregnancy" },
-      { label: "⚡ 相互作用チェック", href: "/interactions" },
-      { label: "💉 生物学的製剤", href: "/biologics" },
-      { label: "👶 年齢注意薬剤", href: "/age-restrictions" },
-    ],
-  },
-  {
-    title: "当院の美容",
-    items: [
-      { label: "美容メニュー", href: "/cosmetic" },
-      { label: "スキンケア", href: "/skincare" },
-      { label: "💬 カウンセリングガイド", href: "/counseling" },
-    ],
-  },
-  {
-    title: "業務・接遇",
-    items: [
-      { label: "📋 みんなのタスク", href: "/tasks" },
-      { label: "📋 業務チェックリスト", href: "/operations" },
-      { label: "💴 算定・点数表", href: "/medical-fees" },
-      { label: "⭐ エキスパートの働き方", href: "/expert" },
-      { label: "🚀 成長ロードマップ", href: "/growth-builder" },
-    ],
-  },
-  {
-    title: "確認テスト",
-    items: [
-      { label: "クイズ", href: "/quiz" },
-      { label: "📊 学習進捗", href: "/progress" },
-      { label: "🤖 AIアシスタント", href: "/ai-chat" },
-      { label: "🏥 症例学習", href: "/case-study" },
-      { label: "🎭 ロールプレイ", href: "/roleplay" },
-    ],
-  },
-];
+import { useResolvedNav } from "@/lib/use-nav";
 
 export function Sidebar() {
   const pathname = usePathname();
+  const navSections = useResolvedNav().filter((s) => s.items.length > 0);
 
   return (
     <aside className="w-[220px] shrink-0 border-r border-border bg-[var(--sidebar)] flex flex-col h-screen sticky top-0">
@@ -76,9 +22,9 @@ export function Sidebar() {
       <ScrollArea className="flex-1 px-3 py-4">
         <nav className="space-y-5">
           {navSections.map((section) => (
-            <div key={section.title}>
+            <div key={section.id}>
               <p className="px-2 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {section.title}
+                {section.label}
               </p>
               <ul className="space-y-0.5">
                 {section.items.map((item) => {

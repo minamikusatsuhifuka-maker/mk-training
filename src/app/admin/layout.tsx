@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 const adminNav = [
   { label: "📊 ダッシュボード", href: "/admin" },
   { label: "🏠 ポータル管理", href: "/admin/portal" },
+  { label: "🧭 サイドバー構成", href: "/admin/nav" },
   { label: "🏛️ 組織知識ベース管理", href: "/admin/knowledge-system" },
   { label: "🧭 背景情報・理念管理", href: "/admin/ai-background" },
   { label: "📚 知識ベース管理", href: "/admin/knowledge" },
