@@ -13,8 +13,8 @@ export const AI_PROVIDER_SETTING_KEY = "ai_provider_setting";
 
 export type AiProvider = "claude" | "gemini";
 
-// 既定は claude（現状維持）
-export const DEFAULT_AI_PROVIDER: AiProvider = "claude";
+// 既定は gemini（新規/未設定では Gemini 3.5-flash で動く。トグルで claude に戻せる）
+export const DEFAULT_AI_PROVIDER: AiProvider = "gemini";
 
 // Claude の既定モデル（各 route の従来モデルを尊重するため override 可能）
 const DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-5";
@@ -26,7 +26,8 @@ function serverSupabase(): SupabaseClient | null {
   return createClient(url, key);
 }
 
-// 現在のプロバイダ設定を content_store から取得（未設定・失敗時は claude）
+// 現在のプロバイダ設定を content_store から取得（未設定・失敗時は既定 gemini）。
+// 保存値がある場合はそれを優先（明示的に claude を選べば claude）。
 export async function getAiProvider(): Promise<AiProvider> {
   try {
     const supabase = serverSupabase();
@@ -37,7 +38,7 @@ export async function getAiProvider(): Promise<AiProvider> {
       .eq("id", AI_PROVIDER_SETTING_KEY)
       .single();
     const provider = (data?.data as { provider?: string } | null)?.provider;
-    return provider === "gemini" ? "gemini" : DEFAULT_AI_PROVIDER;
+    return provider === "claude" ? "claude" : DEFAULT_AI_PROVIDER;
   } catch {
     return DEFAULT_AI_PROVIDER;
   }
