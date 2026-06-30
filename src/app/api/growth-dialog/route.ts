@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAiBackgroundBlock } from "@/lib/ai-background";
+import { callAI } from "@/lib/ai-provider";
 
 export const maxDuration = 60;
 
@@ -22,14 +23,6 @@ export async function POST(req: NextRequest) {
       customRole?: string;
       dialogStep: number;
     };
-
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "ANTHROPIC_API_KEY が設定されていません" },
-        { status: 500 }
-      );
-    }
 
     const roleName =
       role === "custom"
@@ -67,37 +60,26 @@ export async function POST(req: NextRequest) {
 - 返答は200文字以内で簡潔に
 - Markdownの**太字**は使ってよいが、箇条書きは最小限に`;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 500,
-        system: (await getAiBackgroundBlock()) + systemPrompt,
-        messages: messages.map((m) => ({
-          role: m.role === "ai" ? "assistant" : "user",
-          content: m.content,
-        })),
-      }),
+    const result = await callAI({
+      claudeModel: "claude-sonnet-4-6",
+      maxTokens: 500,
+      system: (await getAiBackgroundBlock()) + systemPrompt,
+      messages: messages.map((m) => ({
+        role: (m.role === "ai" ? "assistant" : "user") as
+          | "assistant"
+          | "user",
+        content: m.content,
+      })),
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
+    if (!result.ok) {
       return NextResponse.json(
-        { error: `Anthropic API error: ${errText.slice(0, 200)}` },
+        { error: `AI API error: ${(result.error || "").slice(0, 200)}` },
         { status: 500 }
       );
     }
 
-    const data = (await response.json()) as {
-      content?: Array<{ text?: string }>;
-    };
-    const text = data.content?.[0]?.text ?? "";
-    return NextResponse.json({ message: text });
+    return NextResponse.json({ message: result.text });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Unknown error" },

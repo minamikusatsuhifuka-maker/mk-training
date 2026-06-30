@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAiBackgroundBlock } from "@/lib/ai-background";
+import { callAI } from "@/lib/ai-provider";
 
 export const maxDuration = 120;
 
@@ -10,14 +11,6 @@ export async function POST(req: NextRequest) {
       content: unknown;
       instruction?: string;
     };
-
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "ANTHROPIC_API_KEY が設定されていません" },
-        { status: 500 }
-      );
-    }
 
     const typeName =
       type === "manual"
@@ -45,32 +38,21 @@ ${JSON.stringify(content, null, 2).slice(0, 3000)}
 内容は改善した方がよい部分のみブラッシュアップしてください。
 JSON以外のテキストは絶対に含めないでください。`;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 6000,
-        messages: [{ role: "user", content: (await getAiBackgroundBlock()) + prompt }],
-      }),
+    const result = await callAI({
+      claudeModel: "claude-sonnet-4-6",
+      maxTokens: 6000,
+      json: true,
+      messages: [{ role: "user", content: (await getAiBackgroundBlock()) + prompt }],
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
+    if (!result.ok) {
       return NextResponse.json(
-        { error: `Anthropic API error: ${errText.slice(0, 200)}` },
+        { error: `AI API error: ${(result.error || "").slice(0, 200)}` },
         { status: 500 }
       );
     }
 
-    const data = (await response.json()) as {
-      content?: Array<{ text?: string }>;
-    };
-    const text = data.content?.[0]?.text ?? "";
+    const text = result.text;
     const cleaned = text
       .replace(/```json\s*/g, "")
       .replace(/```\s*/g, "")

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAiBackgroundBlock } from "@/lib/ai-background";
+import { callAI } from "@/lib/ai-provider";
 
 export const maxDuration = 120;
 
@@ -215,14 +216,6 @@ export async function POST(req: NextRequest) {
         notes?: string;
       };
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "ANTHROPIC_API_KEY が設定されていません" },
-        { status: 500 }
-      );
-    }
-
     const roleName =
       role === "custom"
         ? customRole?.trim() || "カスタムロール"
@@ -251,32 +244,21 @@ export async function POST(req: NextRequest) {
 
     const maxTokens = type === "skillmap" ? 10000 : 8000;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: maxTokens,
-        messages: [{ role: "user", content: (await getAiBackgroundBlock()) + prompt }],
-      }),
+    const aiResult = await callAI({
+      claudeModel: "claude-sonnet-4-6",
+      maxTokens,
+      json: true,
+      messages: [{ role: "user", content: (await getAiBackgroundBlock()) + prompt }],
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
+    if (!aiResult.ok) {
       return NextResponse.json(
-        { error: `Anthropic API error: ${errText.slice(0, 200)}` },
+        { error: `AI API error: ${(aiResult.error || "").slice(0, 200)}` },
         { status: 500 }
       );
     }
 
-    const data = (await response.json()) as {
-      content?: Array<{ text?: string }>;
-    };
-    const text = data.content?.[0]?.text ?? "";
+    const text = aiResult.text;
 
     // デバッグ用ログ（Vercelのログで確認）
     console.log("Response length:", text.length);

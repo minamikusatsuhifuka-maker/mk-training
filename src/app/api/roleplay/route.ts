@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildFullKnowledgeContext } from "@/lib/knowledge-server";
 import { AI_JUDGMENT_AXES } from "@/lib/clinic-philosophy";
 import { getAiBackgroundBlock } from "@/lib/ai-background";
+import { callAI } from "@/lib/ai-provider";
 
 export const maxDuration = 60;
 
@@ -68,9 +69,6 @@ const scenarioPrompts: Record<string, string> = {
 
 export async function POST(req: NextRequest) {
   const { action, scenario, messages, staffResponses } = await req.json();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey)
-    return NextResponse.json({ error: "No API key" }, { status: 500 });
 
   // 理念 + 追加ドキュメントを取得（全アクションで共通）
   const knowledgeContext = await buildFullKnowledgeContext();
@@ -78,55 +76,40 @@ export async function POST(req: NextRequest) {
 
   if (action === "start") {
     const systemPrompt = scenarioPrompts[scenario] || scenarioPrompts.biologics;
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-5",
-        max_tokens: 300,
-        system:
-          bgBlock +
-          systemPrompt +
-          "\n\n最初の一言から始めてください。短めに（1〜2文）。" +
-          knowledgeContext,
-        messages: [
-          {
-            role: "user",
-            content: "患者として最初の質問や挨拶をしてください。",
-          },
-        ],
-      }),
+    const result = await callAI({
+      maxTokens: 300,
+      system:
+        bgBlock +
+        systemPrompt +
+        "\n\n最初の一言から始めてください。短めに（1〜2文）。" +
+        knowledgeContext,
+      messages: [
+        {
+          role: "user",
+          content: "患者として最初の質問や挨拶をしてください。",
+        },
+      ],
     });
-    const data = await response.json();
-    return NextResponse.json({ message: data.content?.[0]?.text || "" });
+    return NextResponse.json({ message: result.text });
   }
 
   if (action === "continue") {
     const systemPrompt = scenarioPrompts[scenario] || scenarioPrompts.biologics;
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-5",
-        max_tokens: 200,
-        system:
-          bgBlock +
-          systemPrompt +
-          "\n\nスタッフの説明に対して自然に反応し、次の質問や不安を述べてください。短めに（1〜3文）。" +
-          knowledgeContext,
-        messages: messages,
-      }),
+    const result = await callAI({
+      maxTokens: 200,
+      system:
+        bgBlock +
+        systemPrompt +
+        "\n\nスタッフの説明に対して自然に反応し、次の質問や不安を述べてください。短めに（1〜3文）。" +
+        knowledgeContext,
+      messages: (messages || []).map(
+        (m: { role: string; content: string }) => ({
+          role: m.role === "assistant" ? "assistant" : "user",
+          content: m.content,
+        })
+      ),
     });
-    const data = await response.json();
-    return NextResponse.json({ message: data.content?.[0]?.text || "" });
+    return NextResponse.json({ message: result.text });
   }
 
   if (action === "feedback") {
@@ -160,21 +143,14 @@ ${AI_JUDGMENT_AXES}
 }
 ${knowledgeContext}`;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-5",
-        max_tokens: 1000,
-        messages: [{ role: "user", content: bgBlock + feedbackPrompt }],
-      }),
+    const result = await callAI({
+      maxTokens: 1000,
+      json: true,
+      messages: [{ role: "user", content: bgBlock + feedbackPrompt }],
     });
-    const data = await response.json();
-    const text: string = data.content?.[0]?.text || "";
+    if (!result.ok)
+      return NextResponse.json({ error: result.error }, { status: 500 });
+    const text: string = result.text;
     const cleaned = text
       .replace(/```json\s*/g, "")
       .replace(/```\s*/g, "")

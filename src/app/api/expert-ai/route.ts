@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAiBackgroundBlock } from "@/lib/ai-background";
+import { callAI } from "@/lib/ai-provider";
 
 export const maxDuration = 60;
 
@@ -13,11 +14,6 @@ type ExpertItem = {
 
 // エキスパート要件のAI改善・項目追加API
 export async function POST(request: Request) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey || apiKey === "dummy_key_please_replace") {
-    return NextResponse.json({ error: "ANTHROPIC_API_KEY が設定されていません" }, { status: 500 });
-  }
-
   const body = await request.json();
   const { action, role, section, item, existingItems } = body as {
     action?: string;
@@ -80,30 +76,21 @@ ${existingItems?.map((i) => `- ${i.title}`).join("\n") || "なし"}
   }
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1500,
-        messages: [{ role: "user", content: (await getAiBackgroundBlock()) + prompt }],
-      }),
+    const result = await callAI({
+      claudeModel: "claude-sonnet-4-6",
+      maxTokens: 1500,
+      json: true,
+      messages: [{ role: "user", content: (await getAiBackgroundBlock()) + prompt }],
     });
 
-    if (!response.ok) {
-      const errBody = await response.text().catch(() => "");
+    if (!result.ok) {
       return NextResponse.json(
-        { error: `API エラー (${response.status}): ${errBody.slice(0, 200)}` },
+        { error: `API エラー: ${(result.error || "").slice(0, 200)}` },
         { status: 500 }
       );
     }
 
-    const data = await response.json();
-    const text: string = data.content?.[0]?.text ?? "";
+    const text: string = result.text;
     const cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {

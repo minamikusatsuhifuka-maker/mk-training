@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildFullKnowledgeContext } from "@/lib/knowledge-server";
 import { getAiBackgroundBlock } from "@/lib/ai-background";
+import { callAI } from "@/lib/ai-provider";
 
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   const { messages } = await req.json();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey)
-    return NextResponse.json({ error: "API key not set" }, { status: 500 });
 
   const baseSystemPrompt = `あなたは南草津皮フ科クリニックのスタッフ研修用AIアシスタントです。
 以下の専門知識を持ち、スタッフの質問に正確・丁寧に答えてください。
@@ -62,30 +60,18 @@ export async function POST(req: NextRequest) {
   const bgBlock = await getAiBackgroundBlock();
   const systemPrompt = bgBlock + baseSystemPrompt + knowledgeContext;
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-5",
-      max_tokens: 1500,
-      system: systemPrompt,
-      messages: messages.map((m: { role: string; content: string }) => ({
-        role: m.role,
-        content: m.content,
-      })),
-    }),
+  const result = await callAI({
+    system: systemPrompt,
+    maxTokens: 1500,
+    messages: messages.map((m: { role: string; content: string }) => ({
+      role: m.role === "assistant" ? "assistant" : "user",
+      content: m.content,
+    })),
   });
 
-  if (!response.ok) {
-    const err = await response.text();
-    return NextResponse.json({ error: err }, { status: 500 });
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: 500 });
   }
 
-  const data = await response.json();
-  const text = data.content?.[0]?.text || "";
-  return NextResponse.json({ message: text });
+  return NextResponse.json({ message: result.text });
 }

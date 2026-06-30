@@ -2,15 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildFullKnowledgeContext } from "@/lib/knowledge-server";
 import { AI_JUDGMENT_AXES } from "@/lib/clinic-philosophy";
 import { getAiBackgroundBlock } from "@/lib/ai-background";
+import { callAI } from "@/lib/ai-provider";
 
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   const { action, difficulty, category, userAnswer, caseContent } =
     await req.json();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey)
-    return NextResponse.json({ error: "No API key" }, { status: 500 });
 
   // 理念 + 追加ドキュメント（生成・採点プロンプト末尾に付与）
   const knowledgeContext = await buildFullKnowledgeContext();
@@ -87,27 +85,15 @@ ${AI_JUDGMENT_AXES}
 ${knowledgeContext}`;
   }
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-5",
-      max_tokens: 1500,
-      messages: [{ role: "user", content: bgBlock + prompt }],
-    }),
+  const result = await callAI({
+    maxTokens: 1500,
+    json: true,
+    messages: [{ role: "user", content: bgBlock + prompt }],
   });
 
-  if (!response.ok)
-    return NextResponse.json(
-      { error: await response.text() },
-      { status: 500 }
-    );
-  const data = await response.json();
-  const text: string = data.content?.[0]?.text || "";
+  if (!result.ok)
+    return NextResponse.json({ error: result.error }, { status: 500 });
+  const text: string = result.text;
   const cleaned = text
     .replace(/```json\s*/g, "")
     .replace(/```\s*/g, "")

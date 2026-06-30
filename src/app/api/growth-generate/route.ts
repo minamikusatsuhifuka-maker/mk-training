@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAiBackgroundBlock } from "@/lib/ai-background";
+import { callAI } from "@/lib/ai-provider";
 
 export const maxDuration = 120;
 
@@ -18,14 +19,6 @@ export async function POST(req: NextRequest) {
       dialogContext?: Record<string, string> | string;
       mode?: "dialog" | "template";
     };
-
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "ANTHROPIC_API_KEY が設定されていません" },
-        { status: 500 }
-      );
-    }
 
     const roleName =
       role === "custom"
@@ -66,32 +59,21 @@ export async function POST(req: NextRequest) {
   "mindset": "## 💡 大切にしてほしいマインドセット\\n\\n### このロールの核心にある考え方\\n（2〜3段落で、このロールで最も大切なマインドを記述）\\n\\n### 成功の八原則の実践\\n1. 明確なビジョン: （このロールでのビジョンの持ち方）\\n2. コミットメント: （このロールでのコミットメントの意味）\\n3. 冒険: （安全圏から出ることの具体例）\\n4. パートナーシップ: （誰とどう連携するか）\\n5. 正直: （正直さを実践する場面）\\n6. シェアする: （何を共有するか）\\n7. 責任（自分が源）: （自責で考える場面）\\n8. 凡事徹底: （このロールの凡事とは何か）\\n\\n### 日々の実践チェック\\n- 今日、四方よしの選択ができましたか？\\n- 今日、誰かの役に立てましたか？\\n- 今日、一つでも新しいことを学びましたか？\\n- 今日、感謝を伝えましたか？"
 }`;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 8000,
-        messages: [{ role: "user", content: (await getAiBackgroundBlock()) + prompt }],
-      }),
+    const result = await callAI({
+      claudeModel: "claude-sonnet-4-6",
+      maxTokens: 8000,
+      json: true,
+      messages: [{ role: "user", content: (await getAiBackgroundBlock()) + prompt }],
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
+    if (!result.ok) {
       return NextResponse.json(
-        { error: `Anthropic API error: ${errText.slice(0, 200)}` },
+        { error: `AI API error: ${(result.error || "").slice(0, 200)}` },
         { status: 500 }
       );
     }
 
-    const data = (await response.json()) as {
-      content?: Array<{ text?: string }>;
-    };
-    const text = data.content?.[0]?.text ?? "";
+    const text = result.text;
     const cleaned = text
       .replace(/```json\s*/g, "")
       .replace(/```\s*/g, "")

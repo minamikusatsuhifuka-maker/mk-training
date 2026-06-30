@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAiBackgroundBlock } from "@/lib/ai-background";
+import { callAI } from "@/lib/ai-provider";
 
 export const maxDuration = 60;
 
@@ -18,9 +19,6 @@ const DIFFICULTY_LABELS: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: "API key not set" }, { status: 500 });
-
   try {
     const { content, count = 10, difficulty = "medium" } = (await req.json()) as {
       content: string;
@@ -63,27 +61,17 @@ ${truncated}
 - 解説は学習に役立つ内容を必ず含める
 - 資料に書かれていない内容は問題にしない`;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-5",
-        max_tokens: 8000,
-        messages: [{ role: "user", content: (await getAiBackgroundBlock()) + prompt }],
-      }),
+    const result = await callAI({
+      maxTokens: 8000,
+      json: true,
+      messages: [{ role: "user", content: (await getAiBackgroundBlock()) + prompt }],
     });
 
-    if (!response.ok) {
-      const err = await response.text();
-      return NextResponse.json({ error: err }, { status: 500 });
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: 500 });
     }
 
-    const data = await response.json();
-    const text: string = data.content?.[0]?.text || "";
+    const text: string = result.text;
 
     // JSON抽出（コードブロックや前後のテキストを除去）
     let jsonText = text.trim();
