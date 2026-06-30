@@ -1,6 +1,7 @@
 // スタッフ向けAI機能の共通呼び出しヘルパー。
 // 管理トグル（content_store キー ai_provider_setting）に応じて Claude / Gemini を切替える。
-// 既定は 'claude'（現状維持）。プロンプト本文・理念注入・出力整形は各 route 側に残す。
+// 既定は 'gemini'（gemini-3.5-flash）。保存値があればそれを優先（トグルで claude に戻せる）。
+// プロンプト本文・理念注入・出力整形は各 route 側に残す。
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   getSelectedGeminiModel,
