@@ -357,7 +357,7 @@ export default function AdminExpertPage() {
   };
 
   if (loading) {
-    return <p className="text-sm text-slate-500 animate-pulse">読み込み中...</p>;
+    return <p className="text-sm text-slate-600 animate-pulse">読み込み中...</p>;
   }
 
   return (
@@ -366,7 +366,7 @@ export default function AdminExpertPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">⭐ エキスパート要件管理</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-gray-600 mt-1">
             AIの力を借りてエキスパート要件を改善・追加できます
           </p>
         </div>
@@ -540,7 +540,7 @@ export default function AdminExpertPage() {
                           {/* 編集フォーム */}
                           <div className="space-y-2">
                             <div>
-                              <label className="text-[11px] font-medium text-slate-500">タイトル</label>
+                              <label className="text-[11px] font-medium text-slate-800">タイトル</label>
                               <input
                                 value={item.title}
                                 onChange={(e) =>
@@ -551,7 +551,7 @@ export default function AdminExpertPage() {
                               />
                             </div>
                             <div>
-                              <label className="text-[11px] font-medium text-slate-500">詳細</label>
+                              <label className="text-[11px] font-medium text-slate-800">詳細</label>
                               <textarea
                                 value={item.detail}
                                 onChange={(e) =>
@@ -564,7 +564,7 @@ export default function AdminExpertPage() {
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                               <div>
-                                <label className="text-[11px] font-medium text-slate-500">レベル</label>
+                                <label className="text-[11px] font-medium text-slate-800">レベル</label>
                                 <select
                                   value={item.level}
                                   onChange={(e) =>
@@ -582,7 +582,7 @@ export default function AdminExpertPage() {
                                 </select>
                               </div>
                               <div>
-                                <label className="text-[11px] font-medium text-slate-500">カテゴリ</label>
+                                <label className="text-[11px] font-medium text-slate-800">カテゴリ</label>
                                 <select
                                   value={item.category}
                                   onChange={(e) =>

@@ -36,7 +36,7 @@ export function Sidebar() {
                         className={`block rounded-md px-2 py-1.5 text-sm transition-colors ${
                           isActive
                             ? "bg-teal-light text-teal font-medium"
-                            : "text-foreground/70 hover:bg-accent hover:text-foreground"
+                            : "text-foreground hover:bg-accent"
                         }`}
                       >
                         {item.label}

@@ -491,7 +491,7 @@ export default function AdminPortalPage() {
 
   if (loading) {
     return (
-      <p className="text-sm text-slate-500 animate-pulse">読み込み中...</p>
+      <p className="text-sm text-slate-600 animate-pulse">読み込み中...</p>
     );
   }
 
@@ -500,7 +500,7 @@ export default function AdminPortalPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">🏠 ポータル管理</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-gray-600 mt-1">
             ポータルトップに表示するコンテンツを管理します
           </p>
         </div>
@@ -530,7 +530,7 @@ export default function AdminPortalPage() {
             className={`shrink-0 px-4 py-2 text-sm border-b-2 transition-colors ${
               tab === t.key
                 ? "border-teal-500 text-teal-700 font-medium"
-                : "border-transparent text-gray-500 hover:text-gray-700"
+                : "border-transparent text-gray-700 hover:text-gray-900"
             }`}
           >
             {t.label}
@@ -548,7 +548,7 @@ export default function AdminPortalPage() {
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="sm:col-span-2">
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   タイトル <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -561,7 +561,7 @@ export default function AdminPortalPage() {
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   カテゴリ
                 </label>
                 <select
@@ -582,7 +582,7 @@ export default function AdminPortalPage() {
                 </select>
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   緊急度
                 </label>
                 <select
@@ -613,7 +613,7 @@ export default function AdminPortalPage() {
                 </div>
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   投稿者
                 </label>
                 <input
@@ -625,7 +625,7 @@ export default function AdminPortalPage() {
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   本文
                 </label>
                 <textarea
@@ -638,7 +638,7 @@ export default function AdminPortalPage() {
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   通知アニメの表示期限（この日時まで毎回表示）
                 </label>
                 <input
@@ -651,7 +651,7 @@ export default function AdminPortalPage() {
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   通知アニメのキャラクター
                 </label>
                 <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
@@ -688,7 +688,7 @@ export default function AdminPortalPage() {
                     </button>
                   ))}
                 </div>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-gray-600 mt-1">
                   未設定（おまかせ）の場合は自動で割り当てます
                 </p>
               </div>
@@ -742,7 +742,7 @@ export default function AdminPortalPage() {
                         {URGENCY_META[urgencyOf(n)].label}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <p className="text-xs text-gray-600 mt-0.5">
                       {NEWS_CATEGORIES.find((c) => c.value === n.category)?.label}{" "}
                       · {n.author} · {formatDateTime(n.createdAt)}
                     </p>
@@ -773,7 +773,7 @@ export default function AdminPortalPage() {
                   </p>
                 )}
                 <div className="flex items-center gap-2 flex-wrap pt-1">
-                  <label className="text-xs text-gray-500">
+                  <label className="text-xs text-gray-800">
                     通知期限
                   </label>
                   <input
@@ -786,10 +786,10 @@ export default function AdminPortalPage() {
                     }
                     className="border border-gray-200 rounded-lg px-2 py-1 text-xs"
                   />
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-gray-600">
                     （未設定なら {charSettings.newsNoticeDays}日間）
                   </span>
-                  <label className="text-xs text-gray-500 ml-2">
+                  <label className="text-xs text-gray-800 ml-2">
                     緊急度
                   </label>
                   <select
@@ -807,7 +807,7 @@ export default function AdminPortalPage() {
                       </option>
                     ))}
                   </select>
-                  <label className="text-xs text-gray-500 ml-2">
+                  <label className="text-xs text-gray-800 ml-2">
                     キャラ
                   </label>
                   <select
@@ -835,7 +835,7 @@ export default function AdminPortalPage() {
               </div>
             ))}
             {news.length === 0 && (
-              <p className="text-sm text-gray-400 text-center py-8">
+              <p className="text-sm text-gray-600 text-center py-8">
                 まだ新着情報がありません
               </p>
             )}
@@ -845,7 +845,7 @@ export default function AdminPortalPage() {
 
       {tab === "archive" && (
         <div className="space-y-2">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-600">
             通知期限が過ぎたお知らせです。復元すると新着情報の一覧に戻ります（データは削除されません）。
           </p>
           <h2 className="text-base font-semibold text-gray-800">
@@ -873,7 +873,7 @@ export default function AdminPortalPage() {
                         {URGENCY_META[urgencyOf(n)].label}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <p className="text-xs text-gray-600 mt-0.5">
                       {NEWS_CATEGORIES.find((c) => c.value === n.category)?.label}{" "}
                       · {n.author} · 投稿: {formatDateTime(n.createdAt)} ·
                       アーカイブ: {formatDateTime(n.archivedAt)}
@@ -904,7 +904,7 @@ export default function AdminPortalPage() {
               </div>
             ))}
           {newsArchive.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-8">
+            <p className="text-sm text-gray-600 text-center py-8">
               アーカイブはありません
             </p>
           )}
@@ -913,7 +913,7 @@ export default function AdminPortalPage() {
 
       {tab === "hiyari" && (
         <div className="space-y-2">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-600">
             気づきシェアの一覧です（投稿はスタッフ画面から行います）
           </p>
           {hiyari.map((h) => (
@@ -932,7 +932,7 @@ export default function AdminPortalPage() {
                   >
                     {h.type === "hiyari" ? "ヒヤリハット" : "良いこと共有"}
                   </span>
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-gray-600">
                     {formatDateTime(h.createdAt)}
                   </span>
                 </div>
@@ -947,13 +947,13 @@ export default function AdminPortalPage() {
               <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
                 {h.text}
               </p>
-              <p className="text-xs text-gray-400 mt-2">
+              <p className="text-xs text-gray-600 mt-2">
                 {h.role} · {h.isAnonymous ? "匿名" : h.role}
               </p>
             </div>
           ))}
           {hiyari.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-8">
+            <p className="text-sm text-gray-600 text-center py-8">
               まだ投稿がありません
             </p>
           )}
@@ -962,7 +962,7 @@ export default function AdminPortalPage() {
 
       {tab === "thankyou" && (
         <div className="space-y-2">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-600">
             ありがとうカードの一覧です（投稿はスタッフ画面から行います）
           </p>
           {thankyou.map((t) => (
@@ -982,13 +982,13 @@ export default function AdminPortalPage() {
                   削除
                 </button>
               </div>
-              <p className="text-xs text-gray-400 mt-2">
+              <p className="text-xs text-gray-600 mt-2">
                 {t.fromName} → {t.toName} · {formatDateTime(t.createdAt)}
               </p>
             </div>
           ))}
           {thankyou.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-8">
+            <p className="text-sm text-gray-600 text-center py-8">
               まだ投稿がありません
             </p>
           )}
@@ -1015,7 +1015,7 @@ export default function AdminPortalPage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">年度</label>
+                <label className="text-xs text-gray-800 mb-1 block">年度</label>
                 <input
                   type="number"
                   value={policyForm.year}
@@ -1044,7 +1044,7 @@ export default function AdminPortalPage() {
                 </label>
               </div>
               <div className="sm:col-span-2">
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   パーパス <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -1056,7 +1056,7 @@ export default function AdminPortalPage() {
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   ミッション
                 </label>
                 <input
@@ -1068,7 +1068,7 @@ export default function AdminPortalPage() {
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   ビジョン
                 </label>
                 <input
@@ -1080,7 +1080,7 @@ export default function AdminPortalPage() {
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   バリュー
                 </label>
                 <input
@@ -1092,7 +1092,7 @@ export default function AdminPortalPage() {
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   詳細テキスト（任意）
                 </label>
                 <textarea
@@ -1147,15 +1147,15 @@ export default function AdminPortalPage() {
                       <p className="text-sm text-gray-800 mt-1">{p.purpose}</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 mt-2 text-xs text-gray-600">
                         <p>
-                          <span className="text-gray-400">ミッション：</span>
+                          <span className="text-gray-600">ミッション：</span>
                           {p.mission}
                         </p>
                         <p>
-                          <span className="text-gray-400">ビジョン：</span>
+                          <span className="text-gray-600">ビジョン：</span>
                           {p.vision}
                         </p>
                         <p>
-                          <span className="text-gray-400">バリュー：</span>
+                          <span className="text-gray-600">バリュー：</span>
                           {p.value}
                         </p>
                       </div>
@@ -1189,7 +1189,7 @@ export default function AdminPortalPage() {
                 </div>
               ))}
             {policies.length === 0 && (
-              <p className="text-sm text-gray-400 text-center py-8">
+              <p className="text-sm text-gray-600 text-center py-8">
                 まだ経営方針がありません
               </p>
             )}
@@ -1203,7 +1203,7 @@ export default function AdminPortalPage() {
             今日の一言（ヒーローセクションに表示）
           </h2>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">
+            <label className="text-xs text-gray-800 mb-1 block">
               一言テキスト
             </label>
             <textarea
@@ -1217,7 +1217,7 @@ export default function AdminPortalPage() {
             />
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">
+            <label className="text-xs text-gray-800 mb-1 block">
               出典・著者
             </label>
             <input
@@ -1229,7 +1229,7 @@ export default function AdminPortalPage() {
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
             />
           </div>
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-gray-600">
             最終更新：{formatDateTime(todayWord.updatedAt)}
           </p>
           <button
@@ -1263,7 +1263,7 @@ export default function AdminPortalPage() {
                 キャラクター通知を有効にする
               </span>
             </label>
-            <p className="text-xs text-gray-400 mt-1 ml-6">
+            <p className="text-xs text-gray-600 mt-1 ml-6">
               表示期間内の新着情報がある時、キャラクターが画面上方を横切ります
             </p>
           </div>
@@ -1375,7 +1375,7 @@ export default function AdminPortalPage() {
               }
               className="w-full"
             />
-            <div className="flex justify-between text-xs text-gray-400 mt-1">
+            <div className="flex justify-between text-xs text-gray-600 mt-1">
               <span>小さい</span>
               <span>大きい</span>
             </div>
@@ -1400,7 +1400,7 @@ export default function AdminPortalPage() {
               }
               className="w-full"
             />
-            <div className="flex justify-between text-xs text-gray-400 mt-1">
+            <div className="flex justify-between text-xs text-gray-600 mt-1">
               <span>速い（5秒）</span>
               <span>ゆっくり（30秒）</span>
             </div>
@@ -1427,14 +1427,14 @@ export default function AdminPortalPage() {
                 </option>
               ))}
             </select>
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-gray-600 mt-1">
               新規お知らせの通知期限の既定値（日数）。お知らせごとに日時で上書きできます（デフォルト3日）
             </p>
           </div>
 
           {/* プレビュー */}
           <div className="border border-gray-200 rounded-xl p-4 bg-gray-50 relative overflow-hidden">
-            <p className="text-xs text-gray-400 mb-2">プレビュー</p>
+            <p className="text-xs text-gray-800 mb-2">プレビュー</p>
             <div className="relative" style={{ height: charSettings.size + 10 }}>
               <div
                 className="absolute top-0"

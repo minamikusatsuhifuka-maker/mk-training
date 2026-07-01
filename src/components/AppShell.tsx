@@ -55,7 +55,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                             className={`block rounded-md px-2 py-2 text-sm min-h-[44px] flex items-center transition-colors ${
                               pathname === item.href
                                 ? "bg-teal-light text-teal font-medium"
-                                : "text-foreground/70 hover:bg-accent"
+                                : "text-foreground hover:bg-accent"
                             }`}
                           >
                             {item.label}

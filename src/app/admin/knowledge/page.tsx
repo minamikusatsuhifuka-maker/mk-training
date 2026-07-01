@@ -570,7 +570,7 @@ export default function AdminKnowledgePage() {
     <div className="max-w-4xl mx-auto p-4 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">📚 知識ベース・資料管理</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <p className="text-sm text-gray-600 mt-1">
           AIアシスタント・症例学習・ロールプレイで参照される資料を管理します。管理者のみが閲覧・編集できます。
         </p>
       </div>
@@ -690,13 +690,13 @@ export default function AdminKnowledgePage() {
                 <p className="text-sm mt-1">しばらくお待ちください</p>
               </div>
             ) : (
-              <div className="text-gray-500">
+              <div className="text-gray-700">
                 <p className="text-3xl mb-2">📂</p>
                 <p className="font-medium">
                   ファイルをドラッグ&ドロップ（最大{MAX_BATCH_FILES}件）
                 </p>
                 <p className="text-sm mt-1">または クリックして選択（複数選択可）</p>
-                <p className="text-xs mt-3 text-gray-400">
+                <p className="text-xs mt-3 text-gray-600">
                   対応形式: PDF・Word(.docx)・テキスト(.txt/.md)・画像(.jpg/.png/.webp)
                 </p>
               </div>
@@ -856,7 +856,7 @@ export default function AdminKnowledgePage() {
                     </select>
 
                     {/* 文字数 */}
-                    <span className="text-xs text-gray-400 shrink-0">
+                    <span className="text-xs text-gray-600 shrink-0">
                       {file.charCount.toLocaleString()}文字
                     </span>
 
@@ -899,7 +899,7 @@ export default function AdminKnowledgePage() {
         <div>
           <div className="flex justify-between items-center mb-1">
             <label className="text-xs font-medium text-gray-600">内容（Markdown形式推奨）*</label>
-            <span className="text-xs text-gray-400">{content.length.toLocaleString()}文字</span>
+            <span className="text-xs text-gray-600">{content.length.toLocaleString()}文字</span>
           </div>
           <textarea
             value={content}
@@ -993,10 +993,10 @@ export default function AdminKnowledgePage() {
                             <span className="text-gray-600 truncate">
                               {doc.title}
                             </span>
-                            <span className="text-gray-400 shrink-0">
+                            <span className="text-gray-600 shrink-0">
                               {(doc.charCount ?? doc.content.length).toLocaleString()}文字
                             </span>
-                            <span className="text-gray-400 shrink-0">
+                            <span className="text-gray-600 shrink-0">
                               {doc.createdAt.slice(0, 10)}
                             </span>
                           </div>
@@ -1034,9 +1034,9 @@ export default function AdminKnowledgePage() {
         </details>
 
         {loading ? (
-          <div className="text-center py-8 text-gray-400">読み込み中...</div>
+          <div className="text-center py-8 text-gray-600">読み込み中...</div>
         ) : docs.length === 0 ? (
-          <div className="text-center py-8 text-gray-400 border-2 border-dashed rounded-xl">
+          <div className="text-center py-8 text-gray-600 border-2 border-dashed rounded-xl">
             <p>まだ資料がありません</p>
             <p className="text-sm mt-1">上のフォームから追加してください</p>
           </div>
@@ -1055,13 +1055,13 @@ export default function AdminKnowledgePage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`text-xs px-2 py-0.5 rounded-full border ${catColor}`}>{catLabel}</span>
                       {doc.fileName && (
-                        <span className="text-xs text-gray-400">📎 {doc.fileName}</span>
+                        <span className="text-xs text-gray-600">📎 {doc.fileName}</span>
                       )}
-                      <span className="text-xs text-gray-400">{charCount.toLocaleString()}文字</span>
+                      <span className="text-xs text-gray-600">{charCount.toLocaleString()}文字</span>
                     </div>
                     <p className="font-medium text-gray-800 mt-1">{doc.title}</p>
                     {expandedId !== doc.id && (
-                      <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                      <p className="text-xs text-gray-600 mt-1 line-clamp-2">
                         {doc.content.slice(0, 120)}
                         {doc.content.length > 120 && "..."}
                       </p>

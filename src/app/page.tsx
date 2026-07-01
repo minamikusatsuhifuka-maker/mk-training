@@ -372,10 +372,10 @@ export default function PortalHome() {
       <header className="flex items-center justify-between px-4 py-3 border-b border-gray-100 sticky top-0 bg-white z-10">
         <div>
           <p className="text-base font-medium text-gray-900">南草津皮フ科</p>
-          <p className="text-xs text-gray-400">スタッフポータル</p>
+          <p className="text-xs text-gray-600">スタッフポータル</p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-500">{todayStr}</span>
+          <span className="text-xs text-gray-600">{todayStr}</span>
           <div className="w-8 h-8 rounded-full bg-teal-50 flex items-center justify-center text-xs font-medium text-teal-700">
             あ
           </div>
@@ -387,7 +387,7 @@ export default function PortalHome() {
         <p className="text-xl font-medium text-gray-900 leading-snug">
           おはようございます
         </p>
-        <p className="text-sm text-gray-500 mt-1">
+        <p className="text-sm text-gray-600 mt-1">
           本日の診療も、四方よしの精神で。
         </p>
 
@@ -410,7 +410,7 @@ export default function PortalHome() {
             <span className="text-xl">📋</span>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900">みんなのタスク</p>
-              <p className="text-xs text-gray-400">未完了の期限を確認</p>
+              <p className="text-xs text-gray-600">未完了の期限を確認</p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               {taskAlert.overdue > 0 && (
@@ -434,10 +434,10 @@ export default function PortalHome() {
         className="px-4 py-5 border-b border-gray-100 scroll-mt-16"
       >
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+          <h2 className="text-xs font-medium text-gray-800 uppercase tracking-wider">
             新着情報
           </h2>
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-gray-600">
             {news.length}件表示中
           </span>
         </div>
@@ -460,7 +460,7 @@ export default function PortalHome() {
                 <p className="text-base text-gray-900 leading-snug">
                   {item.title}
                 </p>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-gray-600 mt-1">
                   {formatDate(item.createdAt)} · {item.author}
                 </p>
               </div>
@@ -484,7 +484,7 @@ export default function PortalHome() {
             </div>
           ))}
           {news.length === 0 && (
-            <p className="text-xs text-gray-400 py-4 text-center">
+            <p className="text-xs text-gray-600 py-4 text-center">
               新着情報はありません
             </p>
           )}
@@ -493,7 +493,7 @@ export default function PortalHome() {
 
       {/* ④ クイックアクセス */}
       <section className="px-4 py-5 border-b border-gray-100">
-        <h2 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
+        <h2 className="text-xs font-medium text-gray-800 uppercase tracking-wider mb-3">
           クイックアクセス
         </h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -505,7 +505,7 @@ export default function PortalHome() {
               <div className={cardClass}>
                 <p className="text-2xl mb-1.5">{link.icon}</p>
                 <p className="text-sm font-medium text-gray-800">{link.name}</p>
-                <p className="text-xs text-gray-400 mt-1 leading-tight">
+                <p className="text-xs text-gray-600 mt-1 leading-tight">
                   {link.sub}
                 </p>
               </div>
@@ -531,7 +531,7 @@ export default function PortalHome() {
       {/* ⑤ 気づきシェア */}
       <section id="hiyari" className="px-4 py-5 border-b border-gray-100">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+          <h2 className="text-xs font-medium text-gray-800 uppercase tracking-wider">
             気づきシェア
           </h2>
           <button
@@ -559,18 +559,18 @@ export default function PortalHome() {
                 >
                   {item.type === "hiyari" ? "ヒヤリハット" : "良いこと共有"}
                 </span>
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-gray-600">
                   {formatDate(item.createdAt)}
                 </span>
               </div>
               <p className="text-sm text-gray-800 leading-relaxed">{item.text}</p>
-              <p className="text-xs text-gray-400 mt-2">
+              <p className="text-xs text-gray-600 mt-2">
                 {item.role} · {item.isAnonymous ? "匿名" : item.role}
               </p>
             </div>
           ))}
           {hiyariItems.length === 0 && (
-            <p className="text-xs text-gray-400 py-4 text-center">
+            <p className="text-xs text-gray-600 py-4 text-center">
               まだ投稿がありません。最初の気づきを共有しませんか？
             </p>
           )}
@@ -669,7 +669,7 @@ export default function PortalHome() {
       {/* ⑥ ありがとうカード */}
       <section className="px-4 py-5 border-b border-gray-100">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+          <h2 className="text-xs font-medium text-gray-800 uppercase tracking-wider">
             ありがとうカード
           </h2>
           <button
@@ -694,7 +694,7 @@ export default function PortalHome() {
                 <p className="text-sm text-gray-800 leading-relaxed">
                   {item.message}
                 </p>
-                <p className="text-xs text-gray-400 mt-1.5">
+                <p className="text-xs text-gray-600 mt-1.5">
                   {item.fromName} → {item.toName} · {formatDate(item.createdAt)}
                 </p>
               </div>
@@ -702,7 +702,7 @@ export default function PortalHome() {
             </div>
           ))}
           {thankyouItems.length === 0 && (
-            <p className="text-xs text-gray-400 py-4 text-center">
+            <p className="text-xs text-gray-600 py-4 text-center">
               まだ投稿がありません。同僚に感謝を伝えましょう。
             </p>
           )}
@@ -730,7 +730,7 @@ export default function PortalHome() {
                 </button>
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   宛先（誰に感謝しますか？）
                 </label>
                 <input
@@ -741,7 +741,7 @@ export default function PortalHome() {
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   あなたの名前
                 </label>
                 <input
@@ -752,7 +752,7 @@ export default function PortalHome() {
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   メッセージ
                 </label>
                 <textarea
@@ -779,7 +779,7 @@ export default function PortalHome() {
       {/* ⑦ 経営方針 */}
       <section className="px-4 py-5">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+          <h2 className="text-xs font-medium text-gray-800 uppercase tracking-wider">
             経営方針
           </h2>
         </div>
@@ -853,7 +853,7 @@ export default function PortalHome() {
             <h3 className="text-base font-medium text-gray-900 mb-2">
               {selectedNews.title}
             </h3>
-            <p className="text-xs text-gray-400 mb-4">
+            <p className="text-xs text-gray-600 mb-4">
               {formatDate(selectedNews.createdAt)} · {selectedNews.author}
             </p>
             <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">

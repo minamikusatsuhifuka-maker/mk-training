@@ -231,7 +231,7 @@ export default function CosmeticPage() {
                   <button
                     type="button"
                     onClick={() => startEdit(item)}
-                    className="text-xs px-2 py-1 border rounded hover:bg-gray-50 text-gray-500 shrink-0"
+                    className="text-xs px-2 py-1 border rounded hover:bg-gray-50 text-gray-700 shrink-0"
                   >
                     ✏️ 編集
                   </button>

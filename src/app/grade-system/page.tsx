@@ -335,10 +335,10 @@ export default function GradeSystemPage() {
                     <p className="text-sm font-semibold text-slate-800">
                       {g.grade}
                     </p>
-                    <p className="text-xs text-slate-500">{g.name}</p>
+                    <p className="text-xs text-slate-600">{g.name}</p>
                   </div>
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1.5">{g.period}</p>
+                <p className="text-[11px] text-slate-600 mt-1.5">{g.period}</p>
               </button>
             );
           })}

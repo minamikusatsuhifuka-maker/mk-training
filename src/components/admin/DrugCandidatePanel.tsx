@@ -303,7 +303,7 @@ export function DrugCandidatePanel({ onGenerated, placeholderExamples }: Props) 
                   <p className="text-sm font-medium text-slate-800 truncate">{c.name}</p>
                   <div className="flex flex-wrap gap-2 mt-0.5">
                     {c.genericName && (
-                      <span className="text-xs text-slate-500">{c.genericName}</span>
+                      <span className="text-xs text-slate-600">{c.genericName}</span>
                     )}
                     {c.category && (
                       <span className="text-xs px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">

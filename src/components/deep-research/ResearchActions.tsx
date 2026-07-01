@@ -230,7 +230,7 @@ export function ResearchActions({
                       </li>
                     ))}
                   </ul>
-                  {q.explanation && <div className="mt-1 text-xs text-slate-500">解説: {q.explanation}</div>}
+                  {q.explanation && <div className="mt-1 text-xs text-slate-600">解説: {q.explanation}</div>}
                 </li>
               ))}
             </ol>

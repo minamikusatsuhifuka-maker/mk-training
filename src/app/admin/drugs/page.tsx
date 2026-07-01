@@ -351,9 +351,9 @@ export default function AdminDrugsPage() {
                               className="rounded"
                             />
                           </th>
-                          <th className="text-left px-2 py-2 text-xs font-medium text-gray-500">薬品名</th>
-                          <th className="text-left px-2 py-2 text-xs font-medium text-gray-500">規格</th>
-                          <th className="text-left px-2 py-2 text-xs font-medium text-gray-500">適応</th>
+                          <th className="text-left px-2 py-2 text-xs font-medium text-gray-800">薬品名</th>
+                          <th className="text-left px-2 py-2 text-xs font-medium text-gray-800">規格</th>
+                          <th className="text-left px-2 py-2 text-xs font-medium text-gray-800">適応</th>
                           <th className="px-2 py-2"></th>
                         </tr>
                       </thead>
@@ -365,7 +365,7 @@ export default function AdminDrugsPage() {
                             </td>
                             <td className="px-2 py-1.5">
                               <p className="font-medium text-sm truncate">{drug.name}</p>
-                              {drug.genericName && <p className="text-xs text-gray-500 truncate">{drug.genericName}</p>}
+                              {drug.genericName && <p className="text-xs text-gray-600 truncate">{drug.genericName}</p>}
                             </td>
                             <td className="px-2 py-1.5 text-xs text-gray-600 truncate">{drug.spec}</td>
                             <td className="px-2 py-1.5 text-xs text-gray-600 truncate">{drug.indication}</td>

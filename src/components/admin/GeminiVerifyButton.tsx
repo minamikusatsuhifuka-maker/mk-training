@@ -97,7 +97,7 @@ export function GeminiVerifyButton({
               </button>
             </div>
 
-            <p className="text-sm text-gray-500 mb-3">
+            <p className="text-sm text-gray-600 mb-3">
               確認対象:{" "}
               <span className="font-medium text-gray-800">{itemName}</span>
             </p>
@@ -181,13 +181,13 @@ export function GeminiVerifyButton({
             )}
 
             {result.evidenceSource && (
-              <div className="text-xs text-gray-500 flex items-start gap-1 mb-3">
+              <div className="text-xs text-gray-600 flex items-start gap-1 mb-3">
                 <span>📚</span>
                 <span>参照: {result.evidenceSource}</span>
               </div>
             )}
 
-            <p className="text-xs text-gray-400 mb-4">
+            <p className="text-xs text-gray-600 mb-4">
               確信度: {result.confidence} | {result.model}
             </p>
 

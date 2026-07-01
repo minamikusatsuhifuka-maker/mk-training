@@ -43,7 +43,7 @@ export default function StaffMembersAdminPage() {
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-800">👥 スタッフ名簿</h1>
-        <p className="text-sm text-slate-500 mt-1">
+        <p className="text-sm text-slate-600 mt-1">
           「みんなのタスク」の担当者候補に使う名前を管理します（追加・削除のみ）
         </p>
       </div>
@@ -67,9 +67,9 @@ export default function StaffMembersAdminPage() {
         </div>
 
         {!loaded ? (
-          <p className="text-sm text-slate-400">読み込み中...</p>
+          <p className="text-sm text-slate-600">読み込み中...</p>
         ) : members.length === 0 ? (
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-slate-600">
             まだ登録がありません。タスクの担当者欄は自由入力でも使えます。
           </p>
         ) : (
@@ -92,7 +92,7 @@ export default function StaffMembersAdminPage() {
           </ul>
         )}
 
-        {saving && <p className="text-xs text-slate-400">保存中...</p>}
+        {saving && <p className="text-xs text-slate-600">保存中...</p>}
       </div>
     </div>
   );

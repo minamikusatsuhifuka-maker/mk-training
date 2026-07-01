@@ -207,7 +207,7 @@ export function GeminiBatchVerify({
                 >
                   問題あり: {result.issuesFound}件
                 </span>
-                <span className="text-xs bg-gray-100 px-2 py-1 rounded text-gray-500">
+                <span className="text-xs bg-gray-100 px-2 py-1 rounded text-gray-600">
                   {result.model}
                 </span>
               </div>
@@ -394,12 +394,12 @@ export function GeminiBatchVerify({
                   )}
 
                   {item.evidenceSource && (
-                    <div className="mt-2 text-xs text-gray-500 flex items-start gap-1">
+                    <div className="mt-2 text-xs text-gray-600 flex items-start gap-1">
                       <span>📚</span>
                       <span>参照: {item.evidenceSource}</span>
                     </div>
                   )}
-                  <p className="text-xs text-gray-400 mt-1">確信度: {item.confidence}</p>
+                  <p className="text-xs text-gray-600 mt-1">確信度: {item.confidence}</p>
                 </div>
               ))}
             </div>

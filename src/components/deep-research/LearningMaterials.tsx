@@ -281,7 +281,7 @@ export function LearningMaterials({
                         ))}
                       </ul>
                       {q.explanation && (
-                        <div className="mt-1 text-xs text-slate-500">解説: {q.explanation}</div>
+                        <div className="mt-1 text-xs text-slate-600">解説: {q.explanation}</div>
                       )}
                     </li>
                   ))}

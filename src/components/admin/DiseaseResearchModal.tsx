@@ -212,7 +212,7 @@ export function DiseaseResearchModal({
                   } disabled:opacity-50`}
                 >
                   <div className="text-sm font-medium text-slate-800">{p.label}</div>
-                  <div className="text-xs text-slate-500">{p.desc}</div>
+                  <div className="text-xs text-slate-600">{p.desc}</div>
                 </button>
               ))}
             </div>

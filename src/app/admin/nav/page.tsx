@@ -229,7 +229,7 @@ export default function AdminNavPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-800">🧭 サイドバー構成の管理</h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-slate-600 mt-1">
             スタッフポータルのカテゴリ・メニューの並び・所属・表示/非表示・表示名を編集できます。変更は自動保存され、スタッフ側はリロードで反映されます。
           </p>
         </div>

@@ -20,7 +20,7 @@ export default function AdminDashboard() {
     <div className="max-w-4xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-800">管理ダッシュボード</h1>
-        <p className="text-sm text-slate-500 mt-1">コンテンツの管理・編集が行えます</p>
+        <p className="text-sm text-slate-600 mt-1">コンテンツの管理・編集が行えます</p>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -29,7 +29,7 @@ export default function AdminDashboard() {
             <CardHeader className="pb-2 pt-4 px-4">
               <p className="text-3xl font-bold text-slate-700">
                 {s.count}
-                <span className="text-base font-normal text-slate-400 ml-1">{s.unit}</span>
+                <span className="text-base font-normal text-slate-600 ml-1">{s.unit}</span>
               </p>
               <CardDescription>{s.label}</CardDescription>
             </CardHeader>

@@ -103,7 +103,7 @@ export default function AiBackgroundAdminPage() {
         <h1 className="text-2xl font-bold text-slate-800">
           🧭 背景情報・理念管理
         </h1>
-        <p className="text-sm text-slate-500 mt-1">
+        <p className="text-sm text-slate-600 mt-1">
           ここに入れた理念・方針が、相談・ロールプレイ・症例・成長ロードマップ・知識ベース生成など主要AIに共通で反映されます。
         </p>
       </div>
@@ -136,14 +136,14 @@ export default function AiBackgroundAdminPage() {
         <div className="flex items-center justify-between flex-wrap gap-2">
           <p
             className={`text-xs ${
-              charCount > 4000 ? "text-amber-600" : "text-slate-400"
+              charCount > 4000 ? "text-amber-600" : "text-slate-600"
             }`}
           >
             {charCount.toLocaleString()} 字（目安: 2,000〜4,000字程度に収めると安定。注入時は6,000字でトリム）
           </p>
           <div className="flex items-center gap-3">
             {savedAt && (
-              <span className="text-xs text-slate-400">保存: {savedAt}</span>
+              <span className="text-xs text-slate-600">保存: {savedAt}</span>
             )}
             <button
               type="button"
@@ -156,7 +156,7 @@ export default function AiBackgroundAdminPage() {
           </div>
         </div>
 
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-slate-600">
           ※ 空にして保存すると、各AIプロンプトから共通背景ブロックが省略されます（エラーにはなりません）。
         </p>
       </div>

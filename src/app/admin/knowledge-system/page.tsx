@@ -529,7 +529,7 @@ export default function AdminKnowledgeSystemPage() {
   };
 
   if (loading) {
-    return <p className="text-sm text-slate-500 animate-pulse">読み込み中...</p>;
+    return <p className="text-sm text-slate-600 animate-pulse">読み込み中...</p>;
   }
 
   // ─── フィルタ適用 ───
@@ -550,7 +550,7 @@ export default function AdminKnowledgeSystemPage() {
     <div className="max-w-5xl space-y-5">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">🏛️ 組織知識ベース管理</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <p className="text-sm text-gray-600 mt-1">
           マニュアル・スキルマップ・組織ナレッジをAIと共に構築・管理します
         </p>
       </div>
@@ -571,7 +571,7 @@ export default function AdminKnowledgeSystemPage() {
             className={`whitespace-nowrap shrink-0 px-4 py-2 text-sm border-b-2 transition-colors min-h-[40px] ${
               tab === t.key
                 ? "border-teal-500 text-teal-700 font-medium"
-                : "border-transparent text-gray-500 hover:text-gray-700"
+                : "border-transparent text-gray-700 hover:text-gray-900"
             }`}
           >
             {t.label}
@@ -650,12 +650,12 @@ export default function AdminKnowledgeSystemPage() {
                           下書き
                         </span>
                       )}
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-gray-600">
                         v{m.version}
                       </span>
                     </div>
                     <h3 className="font-medium text-gray-900">{m.title}</h3>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-gray-600 mt-1">
                       {m.steps.length}ステップ · {m.faq.length}FAQ
                     </p>
                   </div>
@@ -699,7 +699,7 @@ export default function AdminKnowledgeSystemPage() {
               </div>
             ))}
             {filteredManuals.length === 0 && (
-              <p className="text-sm text-gray-400 text-center py-12">
+              <p className="text-sm text-gray-600 text-center py-12">
                 マニュアルはまだありません。「✨ AIで生成」で作成してください。
               </p>
             )}
@@ -752,7 +752,7 @@ export default function AdminKnowledgeSystemPage() {
                       )}
                     </div>
                     <h3 className="font-medium text-gray-900">{s.title}</h3>
-                    <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                    <p className="text-xs text-gray-600 mt-1 leading-relaxed">
                       {s.description}
                     </p>
                   </div>
@@ -806,7 +806,7 @@ export default function AdminKnowledgeSystemPage() {
               </div>
             ))}
             {skillmaps.length === 0 && (
-              <p className="text-sm text-gray-400 text-center py-12">
+              <p className="text-sm text-gray-600 text-center py-12">
                 スキルマップはまだありません。「✨ AIで生成」で作成してください。
               </p>
             )}
@@ -919,7 +919,7 @@ export default function AdminKnowledgeSystemPage() {
                   <h3 className="text-base font-semibold text-gray-900 leading-snug">
                     {k.title}
                   </h3>
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-gray-600 mt-1">
                     {k.author} · {formatDate(k.createdAt)}
                   </p>
                 </div>
@@ -931,7 +931,7 @@ export default function AdminKnowledgeSystemPage() {
                     <div className="flex gap-2">
                       <span className="text-sm flex-shrink-0">📍</span>
                       <div className="flex-1">
-                        <p className="text-xs font-medium text-gray-500 mb-0.5">
+                        <p className="text-xs font-medium text-gray-800 mb-0.5">
                           場面・状況
                         </p>
                         <p className="text-sm text-gray-700 leading-relaxed">
@@ -946,7 +946,7 @@ export default function AdminKnowledgeSystemPage() {
                     <div className="flex gap-2">
                       <span className="text-sm flex-shrink-0">💡</span>
                       <div className="flex-1">
-                        <p className="text-xs font-medium text-gray-500 mb-1">
+                        <p className="text-xs font-medium text-gray-800 mb-1">
                           内容・気づき
                         </p>
                         <div className="text-sm text-gray-800 leading-relaxed space-y-1">
@@ -971,7 +971,7 @@ export default function AdminKnowledgeSystemPage() {
                     <div className="flex gap-2">
                       <span className="text-sm flex-shrink-0">💎</span>
                       <div className="flex-1">
-                        <p className="text-xs font-medium text-gray-500 mb-1">
+                        <p className="text-xs font-medium text-gray-800 mb-1">
                           価値・組織への影響
                         </p>
                         <div className="text-sm leading-relaxed">
@@ -986,7 +986,7 @@ export default function AdminKnowledgeSystemPage() {
                     <div className="flex gap-2">
                       <span className="text-sm flex-shrink-0">✅</span>
                       <div className="flex-1">
-                        <p className="text-xs font-medium text-gray-500 mb-1">
+                        <p className="text-xs font-medium text-gray-800 mb-1">
                           具体的なアクション
                         </p>
                         <ul className="space-y-1">
@@ -1023,7 +1023,7 @@ export default function AdminKnowledgeSystemPage() {
               </div>
             ))}
             {filteredKnowledges.length === 0 && (
-              <p className="text-sm text-gray-400 text-center py-12">
+              <p className="text-sm text-gray-600 text-center py-12">
                 該当するナレッジはありません
               </p>
             )}
@@ -1048,7 +1048,7 @@ export default function AdminKnowledgeSystemPage() {
             {showAiGenerate !== "knowledges" && (
               <>
                 <div>
-                  <label className="text-xs text-gray-500 mb-1 block">
+                  <label className="text-xs text-gray-800 mb-1 block">
                     対象ロール
                   </label>
                   <select
@@ -1069,7 +1069,7 @@ export default function AdminKnowledgeSystemPage() {
                 </div>
                 {aiGenForm.role === "custom" && (
                   <div>
-                    <label className="text-xs text-gray-500 mb-1 block">
+                    <label className="text-xs text-gray-800 mb-1 block">
                       カスタムロール名
                     </label>
                     <input
@@ -1089,7 +1089,7 @@ export default function AdminKnowledgeSystemPage() {
             )}
 
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">
+              <label className="text-xs text-gray-800 mb-1 block">
                 テーマ {showAiGenerate === "manuals" && <span className="text-red-500">*</span>}
               </label>
               <input
@@ -1110,7 +1110,7 @@ export default function AdminKnowledgeSystemPage() {
 
             {showAiGenerate === "manuals" && (
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   カテゴリ
                 </label>
                 <select
@@ -1129,7 +1129,7 @@ export default function AdminKnowledgeSystemPage() {
 
             {showAiGenerate === "knowledges" && (
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   カテゴリ
                 </label>
                 <select
@@ -1148,7 +1148,7 @@ export default function AdminKnowledgeSystemPage() {
             )}
 
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">
+              <label className="text-xs text-gray-800 mb-1 block">
                 特記事項（任意）
               </label>
               <textarea
@@ -1199,7 +1199,7 @@ export default function AdminKnowledgeSystemPage() {
               現在の内容を AI が指示に従って改善します。
             </p>
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">
+              <label className="text-xs text-gray-800 mb-1 block">
                 改善の指示（任意）
               </label>
               <textarea
@@ -1209,7 +1209,7 @@ export default function AdminKnowledgeSystemPage() {
                 placeholder="例: もっと初心者向けに、もっと具体的に、注意事項を増やして..."
                 className="w-full border rounded-xl px-3 py-2 text-base resize-none"
               />
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-gray-600 mt-1">
                 空欄でも「全体的に実践的・具体的に改善」されます。
               </p>
             </div>
@@ -1441,12 +1441,12 @@ function ManualEditModal({
         <div className="flex-1 overflow-y-auto">
           {/* Section 1: 基本情報 */}
           <div className="bg-gray-50 px-6 py-4 border-b">
-            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">
+            <h3 className="text-xs font-medium text-gray-800 uppercase tracking-wider mb-3">
               基本情報
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-3">
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   タイトル
                 </label>
                 <input
@@ -1458,7 +1458,7 @@ function ManualEditModal({
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   ロール
                 </label>
                 <select
@@ -1478,7 +1478,7 @@ function ManualEditModal({
                 </select>
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   カテゴリ
                 </label>
                 <select
@@ -1495,7 +1495,7 @@ function ManualEditModal({
               </div>
               {draft.role === "custom" && (
                 <div>
-                  <label className="text-xs text-gray-500 mb-1 block">
+                  <label className="text-xs text-gray-800 mb-1 block">
                     カスタムロール名
                   </label>
                   <input
@@ -1508,7 +1508,7 @@ function ManualEditModal({
                 </div>
               )}
               <div className="md:col-span-3">
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-gray-800 mb-1 block">
                   🎯 目的（なぜこのマニュアルが必要か）
                 </label>
                 <textarea
@@ -1526,7 +1526,7 @@ function ManualEditModal({
           {/* Section 2: ステップ */}
           <div className="px-6 py-4 border-b">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <h3 className="text-xs font-medium text-gray-800 uppercase tracking-wider">
                 手順ステップ ({draft.steps.length}件)
               </h3>
               <button
@@ -1581,7 +1581,7 @@ function ManualEditModal({
                   </div>
                   <div className="px-4 py-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs text-gray-400 mb-1 block">
+                      <label className="text-xs text-gray-800 mb-1 block">
                         詳細説明（①②③で番号付け推奨）
                       </label>
                       <textarea
@@ -1596,7 +1596,7 @@ function ManualEditModal({
                     </div>
                     <div className="space-y-2">
                       <div>
-                        <label className="text-xs text-gray-400 mb-1 block">
+                        <label className="text-xs text-gray-800 mb-1 block">
                           ✅ 確認ポイント（1行1件・「〜か」形式）
                         </label>
                         <textarea
@@ -1614,7 +1614,7 @@ function ManualEditModal({
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-400 mb-1 block">
+                        <label className="text-xs text-gray-800 mb-1 block">
                           💡 コツ・ポイント（任意）
                         </label>
                         <textarea
@@ -1637,7 +1637,7 @@ function ManualEditModal({
           {/* Section 3: Todoリスト */}
           <div className="px-6 py-4 border-b">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <h3 className="text-xs font-medium text-gray-800 uppercase tracking-wider">
                 ✅ Todoリスト ({(draft.todoItems ?? []).length}件)
               </h3>
               <button
@@ -1701,7 +1701,7 @@ function ManualEditModal({
                 </div>
               ))}
               {(draft.todoItems ?? []).length === 0 && (
-                <p className="text-xs text-gray-400 text-center py-3">
+                <p className="text-xs text-gray-600 text-center py-3">
                   Todoリストがありません。「+ 追加」から追加するか、AI生成で自動作成してください。
                 </p>
               )}
@@ -1711,7 +1711,7 @@ function ManualEditModal({
           {/* Section 4: 注意事項・FAQ */}
           <div className="px-6 py-4 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">
+              <label className="text-xs font-medium text-gray-800 uppercase tracking-wider mb-2 block">
                 ⚠️ 注意事項（1行1件）
               </label>
               <textarea
@@ -1730,7 +1730,7 @@ function ManualEditModal({
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">
+              <label className="text-xs font-medium text-gray-800 uppercase tracking-wider mb-2 block">
                 ❓ FAQ（Q:〜 A:〜 の形式で、空行区切り）
               </label>
               <textarea
@@ -1817,7 +1817,7 @@ function SkillMapEditModal({
 
         <div className="space-y-3">
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">
+            <label className="text-xs text-gray-800 mb-1 block">
               タイトル
             </label>
             <input
@@ -1827,7 +1827,7 @@ function SkillMapEditModal({
             />
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">説明</label>
+            <label className="text-xs text-gray-800 mb-1 block">説明</label>
             <textarea
               value={draft.description}
               onChange={(e) =>
@@ -1852,7 +1852,7 @@ function SkillMapEditModal({
             <p className="text-sm font-medium text-gray-700">
               レベル一覧（{draft.levels.length}）
             </p>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-600">
               内容の細かい編集はAI改善でブラッシュアップしてください。
             </p>
             <div className="space-y-2">
@@ -1865,7 +1865,7 @@ function SkillMapEditModal({
                     {lvl.grade}：{lvl.name}
                   </p>
                   <p className="text-xs text-gray-600 mt-0.5">{lvl.purpose}</p>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-600 mt-1">
                     スキル {lvl.skills.length} ・知識 {lvl.knowledge.length} ・マインド {lvl.mindset.length}
                   </p>
                   <p className="text-xs text-teal-700 mt-1">

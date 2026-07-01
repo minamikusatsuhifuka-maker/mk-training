@@ -237,7 +237,7 @@ export default function KnowledgePage() {
             className={`whitespace-nowrap shrink-0 px-4 py-2 text-sm border-b-2 transition-colors min-h-[40px] ${
               tab === t.key
                 ? "border-teal-500 text-teal-700 font-medium"
-                : "border-transparent text-gray-500 hover:text-gray-700"
+                : "border-transparent text-gray-700 hover:text-gray-900"
             }`}
           >
             {t.label}
@@ -279,7 +279,7 @@ export default function KnowledgePage() {
           </div>
 
           {filteredManuals.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-12">
+            <p className="text-sm text-gray-600 text-center py-12">
               公開されているマニュアルはまだありません
             </p>
           )}
@@ -311,7 +311,7 @@ export default function KnowledgePage() {
                     </span>
                   </div>
                   <p className="font-medium text-gray-900">{m.title}</p>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-600 mt-1">
                     {m.steps.length}ステップ · {m.faq.length}FAQ
                   </p>
                 </button>
@@ -450,7 +450,7 @@ export default function KnowledgePage() {
       {tab === "skillmaps" && (
         <div className="space-y-3">
           {skillmaps.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-12">
+            <p className="text-sm text-gray-600 text-center py-12">
               公開されているスキルマップはまだありません
             </p>
           )}
@@ -481,7 +481,7 @@ export default function KnowledgePage() {
                   {activeSkillMap.description}
                 </p>
                 <div className="mt-3">
-                  <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                  <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
                     <span>習得進捗</span>
                     <span>
                       {skillMapStats.done} / {skillMapStats.total}
@@ -602,7 +602,7 @@ export default function KnowledgePage() {
           </div>
 
           {filteredKnowledges.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-12">
+            <p className="text-sm text-gray-600 text-center py-12">
               該当するナレッジはまだありません
             </p>
           )}
@@ -620,13 +620,13 @@ export default function KnowledgePage() {
                 >
                   {KNOWLEDGE_TYPE_LABEL[k.type]}
                 </span>
-                <span className="text-xs text-gray-400 ml-auto">
+                <span className="text-xs text-gray-600 ml-auto">
                   {k.author} · {formatDate(k.createdAt)}
                 </span>
               </div>
               <h3 className="font-medium text-gray-900 mb-1">{k.title}</h3>
               {k.situation && (
-                <p className="text-xs text-gray-500 mb-2">
+                <p className="text-xs text-gray-600 mb-2">
                   📍 {k.situation}
                 </p>
               )}
@@ -684,11 +684,11 @@ export default function KnowledgePage() {
                     ✕
                   </button>
                 </div>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-600">
                   気づき・改善案・成功事例などを投稿してください。管理者承認後に公開されます。
                 </p>
                 <div>
-                  <label className="text-xs text-gray-500 mb-1 block">
+                  <label className="text-xs text-gray-800 mb-1 block">
                     タイプ
                   </label>
                   <select
@@ -708,7 +708,7 @@ export default function KnowledgePage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 mb-1 block">
+                  <label className="text-xs text-gray-800 mb-1 block">
                     タイトル <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -721,7 +721,7 @@ export default function KnowledgePage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 mb-1 block">
+                  <label className="text-xs text-gray-800 mb-1 block">
                     場面・状況
                   </label>
                   <input
@@ -737,7 +737,7 @@ export default function KnowledgePage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 mb-1 block">
+                  <label className="text-xs text-gray-800 mb-1 block">
                     内容・気づき <span className="text-red-500">*</span>
                   </label>
                   <textarea
@@ -753,7 +753,7 @@ export default function KnowledgePage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 mb-1 block">
+                  <label className="text-xs text-gray-800 mb-1 block">
                     組織への影響・価値
                   </label>
                   <textarea
@@ -766,7 +766,7 @@ export default function KnowledgePage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 mb-1 block">
+                  <label className="text-xs text-gray-800 mb-1 block">
                     タグ（カンマ区切り）
                   </label>
                   <input
@@ -795,7 +795,7 @@ export default function KnowledgePage() {
                 </div>
                 {!submitForm.isAnonymous && (
                   <div>
-                    <label className="text-xs text-gray-500 mb-1 block">
+                    <label className="text-xs text-gray-800 mb-1 block">
                       お名前
                     </label>
                     <input
@@ -859,7 +859,7 @@ function SkillSection({
               <p className="text-sm font-medium text-gray-800">
                 {it.title}
                 {!it.isRequired && (
-                  <span className="ml-2 text-xs text-gray-400">（推奨）</span>
+                  <span className="ml-2 text-xs text-gray-600">（推奨）</span>
                 )}
               </p>
               {it.description && (

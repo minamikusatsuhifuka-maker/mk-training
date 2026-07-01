@@ -496,16 +496,16 @@ export default function AgeRestrictionsPage() {
               </colgroup>
               <thead>
                 <tr className="bg-slate-50 border-b">
-                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-500">
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-800">
                     薬剤名
                   </th>
-                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-500">
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-800">
                     年齢制限（要約）
                   </th>
-                  <th className="text-center px-3 py-2 text-xs font-medium text-slate-500">
+                  <th className="text-center px-3 py-2 text-xs font-medium text-slate-800">
                     レベル
                   </th>
-                  <th className="text-center px-3 py-2 text-xs font-medium text-slate-500">
+                  <th className="text-center px-3 py-2 text-xs font-medium text-slate-800">
                     添付文書
                   </th>
                 </tr>
@@ -622,7 +622,7 @@ export default function AgeRestrictionsPage() {
 
               {/* 年齢制限ルール */}
               <div className="px-4 pb-3 space-y-2">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                <p className="text-xs font-semibold text-slate-800 uppercase tracking-wider">
                   年齢制限
                 </p>
                 {drug.ageRule.map((rule, i) => {

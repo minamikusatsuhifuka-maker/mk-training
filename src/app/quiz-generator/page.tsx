@@ -204,9 +204,9 @@ export default function QuizGeneratorPage() {
           <div>
             <label className="text-xs font-medium text-gray-600">資料を選択</label>
             {docsLoading ? (
-              <p className="text-sm text-gray-400 mt-1">読み込み中...</p>
+              <p className="text-sm text-gray-600 mt-1">読み込み中...</p>
             ) : docs.length === 0 ? (
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-sm text-gray-600 mt-1">
                 有効な資料がありません。
                 <a href="/admin/knowledge" className="text-teal-600 underline ml-1">
                   知識ベースに追加
@@ -230,7 +230,7 @@ export default function QuizGeneratorPage() {
           <div>
             <div className="flex justify-between items-center mb-1">
               <label className="text-xs font-medium text-gray-600">テキスト *</label>
-              <span className="text-xs text-gray-400">{pastedText.length.toLocaleString()}文字</span>
+              <span className="text-xs text-gray-600">{pastedText.length.toLocaleString()}文字</span>
             </div>
             <textarea
               value={pastedText}

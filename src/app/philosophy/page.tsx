@@ -578,7 +578,7 @@ export default function PhilosophyPage() {
         <div className="bg-gradient-to-br from-teal-50/50 to-white border border-teal-100 rounded-2xl p-6 md:p-8">
           <div className="mb-6">
             <h2 className="text-xl font-medium text-gray-900">成功の八原則</h2>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-gray-600 mt-1">
               © Achievement Corp. — スタッフ全員が体現すべき原則
             </p>
           </div>
@@ -601,7 +601,7 @@ export default function PhilosophyPage() {
                       {p.title}
                     </p>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                  <p className="text-xs text-gray-600 mt-1 leading-relaxed">
                     {p.detail}
                   </p>
                 </div>
@@ -609,7 +609,7 @@ export default function PhilosophyPage() {
             ))}
           </div>
 
-          <p className="text-xs text-gray-400 mt-4 text-right">
+          <p className="text-xs text-gray-600 mt-4 text-right">
             © Copyright 2013 Achievement Corp., All rights reserved.
           </p>
         </div>

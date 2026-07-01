@@ -362,7 +362,7 @@ export default function GrowthBuilderPage() {
           <h1 className="text-xl md:text-2xl font-medium text-gray-900">
             🚀 成長ロードマップビルダー
           </h1>
-          <p className="text-sm text-gray-500 mt-2 leading-relaxed">
+          <p className="text-sm text-gray-600 mt-2 leading-relaxed">
             AIと対話しながら、あなたのロールに必要なスキル・知識・マインドを一括生成します
           </p>
         </div>
@@ -465,7 +465,7 @@ export default function GrowthBuilderPage() {
             </button>
           </div>
           {!isRoleReady && (
-            <p className="text-xs text-gray-400 mt-3 text-center">
+            <p className="text-xs text-gray-600 mt-3 text-center">
               ロールを選択してください
             </p>
           )}
@@ -483,7 +483,7 @@ export default function GrowthBuilderPage() {
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
           <div>
             <p className="font-medium text-gray-900">🤝 対話モード</p>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-600">
               {getRoleName(selectedRole, customRole)} ·
               質問{Math.min(dialogStep + 1, 6)}/6目安
             </p>
@@ -530,7 +530,7 @@ export default function GrowthBuilderPage() {
               <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center text-sm flex-shrink-0 mr-2">
                 🤖
               </div>
-              <div className="bg-gray-100 text-gray-500 px-4 py-3 rounded-2xl rounded-tl-sm text-sm animate-pulse">
+              <div className="bg-gray-100 text-gray-600 px-4 py-3 rounded-2xl rounded-tl-sm text-sm animate-pulse">
                 考え中...
               </div>
             </div>
@@ -573,7 +573,7 @@ export default function GrowthBuilderPage() {
               送信
             </button>
           </div>
-          <p className="text-xs text-gray-400 mt-2 text-center">
+          <p className="text-xs text-gray-600 mt-2 text-center">
             Shift+Enterで改行 ·
             対話が進んだら生成ボタンが表示されます
           </p>
@@ -592,7 +592,7 @@ export default function GrowthBuilderPage() {
         <h2 className="text-lg font-medium text-gray-900 mb-2">
           6種類の資料を生成中...
         </h2>
-        <p className="text-sm text-gray-500 text-center mb-6">
+        <p className="text-sm text-gray-600 text-center mb-6">
           AIがあなたのロールに合わせた資料を作成しています。
           <br />
           30秒〜1分ほどお待ちください。
@@ -640,7 +640,7 @@ export default function GrowthBuilderPage() {
             <h1 className="text-xl md:text-2xl font-medium text-gray-900">
               ✨ 成長ロードマップ
             </h1>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-gray-600 mt-1">
               {getRoleName(selectedRole, customRole)} 向け
             </p>
           </div>

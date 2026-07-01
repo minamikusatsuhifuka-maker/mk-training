@@ -106,7 +106,7 @@ export default function SettingsPage() {
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">⚙️ AI設定</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <p className="text-sm text-gray-600 mt-1">
           管理画面の評価・分析機能で使用するGeminiモデルを選択します
         </p>
       </div>
@@ -115,7 +115,7 @@ export default function SettingsPage() {
         <h2 className="text-lg font-medium text-gray-900 mb-1">
           🤖 Geminiモデル選択
         </h2>
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-600 mb-4">
           ※ 下の「AIプロバイダ」で Gemini を選択した場合、ここで選んだモデルがスタッフ向けAI機能にも適用されます
         </p>
 
@@ -138,7 +138,7 @@ export default function SettingsPage() {
               />
               <div>
                 <p className="text-sm font-medium text-gray-900">{m.label}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{m.desc}</p>
+                <p className="text-xs text-gray-600 mt-0.5">{m.desc}</p>
               </div>
             </label>
           ))}
@@ -158,7 +158,7 @@ export default function SettingsPage() {
         <h2 className="text-lg font-medium text-gray-900 mb-1">
           🔀 AIプロバイダ
         </h2>
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-600 mb-4">
           Geminiは安価・高速です。会話品質はClaudeの方が安定する場合があります。Gemini選択時はモデルは上の「Geminiモデル」設定（3.5-flash/3.1-pro）が使われます。切替後に各機能を試してください。
         </p>
 
@@ -181,7 +181,7 @@ export default function SettingsPage() {
               />
               <div>
                 <p className="text-sm font-medium text-gray-900">{p.label}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{p.desc}</p>
+                <p className="text-xs text-gray-600 mt-0.5">{p.desc}</p>
               </div>
             </label>
           ))}

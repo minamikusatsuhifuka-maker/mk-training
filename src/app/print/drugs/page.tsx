@@ -12,7 +12,7 @@ export default function PrintDrugsPage() {
     <div>
       <div className="print-header text-center mb-6">
         <h1 className="text-xl font-bold">南草津皮フ科 薬剤規格リスト</h1>
-        <p className="text-sm text-gray-500">研修用資料 - {today}</p>
+        <p className="text-sm text-gray-600">研修用資料 - {today}</p>
       </div>
       <h1 className="text-xl font-bold mb-1 no-print">南草津皮フ科 薬剤規格リスト</h1>
       <p className="text-sm text-muted-foreground mb-4 no-print">{drugs.length}品目 - {today}</p>
@@ -43,7 +43,7 @@ export default function PrintDrugsPage() {
         </div>
       ))}
 
-      <div className="print-header mt-8 pt-4 border-t text-center text-xs text-gray-400">
+      <div className="print-header mt-8 pt-4 border-t text-center text-xs text-gray-600">
         南草津皮フ科 スタッフ研修資料 - 印刷日: {today}
       </div>
     </div>

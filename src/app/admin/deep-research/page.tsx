@@ -303,7 +303,7 @@ export default function DeepResearchPage() {
     <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-800">🔬 ディープリサーチ</h1>
-        <p className="text-sm text-slate-500 mt-1">
+        <p className="text-sm text-slate-600 mt-1">
           トピックを入力すると、Web検索を使って調査し Markdown レポートを生成します（Gemini 3.5 Flash）。
         </p>
       </div>
@@ -338,7 +338,7 @@ export default function DeepResearchPage() {
                 <div className="text-sm font-medium text-slate-800">
                   {m.icon} {m.label}
                 </div>
-                <div className="text-xs text-slate-500">{m.description}</div>
+                <div className="text-xs text-slate-600">{m.description}</div>
               </button>
             ))}
           </div>
@@ -360,7 +360,7 @@ export default function DeepResearchPage() {
                 } disabled:opacity-50`}
               >
                 <div className="text-sm font-medium text-slate-800">{p.label}</div>
-                <div className="text-xs text-slate-500">{p.desc}</div>
+                <div className="text-xs text-slate-600">{p.desc}</div>
               </button>
             ))}
           </div>
@@ -382,7 +382,7 @@ export default function DeepResearchPage() {
             {running ? "リサーチ中…" : "🔍 リサーチ実行"}
           </Button>
           {running && (
-            <span className="text-sm text-slate-500">
+            <span className="text-sm text-slate-600">
               {STAGE_LABELS[stage] || "処理中…"}（{elapsed}秒）
             </span>
           )}
@@ -411,7 +411,7 @@ export default function DeepResearchPage() {
           {result ? (
             <MarkdownView>{result}</MarkdownView>
           ) : (
-            <p className="text-sm text-slate-400">{STAGE_LABELS[stage] || "生成を待っています…"}</p>
+            <p className="text-sm text-slate-600">{STAGE_LABELS[stage] || "生成を待っています…"}</p>
           )}
 
           {sources.length > 0 && (
@@ -457,7 +457,7 @@ export default function DeepResearchPage() {
         </div>
 
         {history.length === 0 ? (
-          <p className="text-sm text-slate-400">まだ保存された履歴はありません。</p>
+          <p className="text-sm text-slate-600">まだ保存された履歴はありません。</p>
         ) : (
           <ul className="divide-y divide-slate-100">
             {history.map((h) => (
@@ -469,7 +469,7 @@ export default function DeepResearchPage() {
                     className="text-left flex-1"
                   >
                     <div className="text-sm font-medium text-slate-800">{h.topic}</div>
-                    <div className="text-xs text-slate-400 mt-0.5">
+                    <div className="text-xs text-slate-600 mt-0.5">
                       {new Date(h.createdAt).toLocaleString("ja-JP")}
                       {h.mode ? ` ・ ${h.mode}` : ""}
                       {h.model ? ` ・ ${h.model}` : ""}
@@ -488,7 +488,7 @@ export default function DeepResearchPage() {
                 {expandedId === h.id && (
                   <div className="mt-3 rounded-lg bg-slate-50 border border-slate-100 p-4">
                     {loadingDetail ? (
-                      <p className="text-sm text-slate-400">読み込み中…</p>
+                      <p className="text-sm text-slate-600">読み込み中…</p>
                     ) : (
                       <>
                         <MarkdownView>{expandedContent}</MarkdownView>
@@ -541,7 +541,7 @@ export default function DeepResearchPage() {
         </div>
 
         {materials.length === 0 ? (
-          <p className="text-sm text-slate-400">まだ保存された学習資料はありません。</p>
+          <p className="text-sm text-slate-600">まだ保存された学習資料はありません。</p>
         ) : (
           <ul className="divide-y divide-slate-100">
             {materials.map((m) => {
@@ -558,7 +558,7 @@ export default function DeepResearchPage() {
                         <span className="mr-1">{meta?.icon ?? "📄"}</span>
                         {m.title}
                       </div>
-                      <div className="text-xs text-slate-400 mt-0.5">
+                      <div className="text-xs text-slate-600 mt-0.5">
                         {meta?.label ?? m.type} ・ {new Date(m.createdAt).toLocaleString("ja-JP")}
                       </div>
                     </button>
@@ -575,7 +575,7 @@ export default function DeepResearchPage() {
                   {expandedMaterialId === m.id && (
                     <div className="mt-3 rounded-lg bg-slate-50 border border-slate-100 p-4">
                       {loadingMaterialDetail ? (
-                        <p className="text-sm text-slate-400">読み込み中…</p>
+                        <p className="text-sm text-slate-600">読み込み中…</p>
                       ) : expandedMaterial ? (
                         meta?.render === "plain" ? (
                           <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 leading-relaxed">
@@ -585,7 +585,7 @@ export default function DeepResearchPage() {
                           <MarkdownView>{expandedMaterial.content}</MarkdownView>
                         )
                       ) : (
-                        <p className="text-sm text-slate-400">本体を取得できませんでした。</p>
+                        <p className="text-sm text-slate-600">本体を取得できませんでした。</p>
                       )}
                     </div>
                   )}
