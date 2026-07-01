@@ -13,6 +13,9 @@ import {
 import {
   PORTAL_KEYS,
   DEFAULT_CHARACTER_SETTINGS,
+  DEFAULT_HOME_LAYOUT,
+  HOME_SECTION_LABELS,
+  resolveHomeLayout,
   URGENCY_META,
   URGENCY_OPTIONS,
   urgencyOf,
@@ -28,6 +31,7 @@ import {
   type TodayWord,
   type CharacterSettings,
   type CharacterSvgType,
+  type HomeSectionConfig,
 } from "@/types/portal";
 import { CharacterSVG } from "@/components/CharacterNotification";
 
@@ -38,7 +42,8 @@ type TabKey =
   | "thankyou"
   | "policy"
   | "word"
-  | "character";
+  | "character"
+  | "layout";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "news", label: "📢 新着情報" },
@@ -48,6 +53,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "policy", label: "🎯 経営方針" },
   { key: "word", label: "💬 今日の一言" },
   { key: "character", label: "🐾 キャラクター" },
+  { key: "layout", label: "🧩 レイアウト" },
 ];
 
 const CHARACTER_EMOJIS = [
@@ -186,11 +192,17 @@ export default function AdminPortalPage() {
   });
   const [editingPolicyId, setEditingPolicyId] = useState<string | null>(null);
 
+  // ホーム画面のセクション並び順（管理画面「レイアウト」タブで編集）
+  const [homeLayout, setHomeLayout] =
+    useState<HomeSectionConfig[]>(DEFAULT_HOME_LAYOUT);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [savingLayout, setSavingLayout] = useState(false);
+
   useEffect(() => {
     const fetchAll = async () => {
       // 管理画面を開くたびに期限切れの新着をアーカイブへ移動（冪等）
       await archiveExpiredNews().catch(() => {});
-      const [n, na, h, t, p, w, c] = await Promise.all([
+      const [n, na, h, t, p, w, c, layout] = await Promise.all([
         loadPortalItems<NewsItem>(PORTAL_KEYS.news, []),
         loadPortalItems<ArchivedNewsItem>(PORTAL_KEYS.newsArchive, []),
         loadPortalItems<HiyariItem>(PORTAL_KEYS.hiyari, []),
@@ -202,6 +214,10 @@ export default function AdminPortalPage() {
           updatedAt: new Date().toISOString(),
         }),
         loadCharacterSettings(),
+        loadPortalItems<HomeSectionConfig>(
+          PORTAL_KEYS.homeLayout,
+          DEFAULT_HOME_LAYOUT
+        ),
       ]);
       setNews(n);
       setNewsArchive(na);
@@ -210,10 +226,66 @@ export default function AdminPortalPage() {
       setPolicies(p);
       setTodayWord(w);
       setCharSettings(c);
+      setHomeLayout(resolveHomeLayout(layout));
       setLoading(false);
     };
     fetchAll().catch(() => setLoading(false));
   }, []);
+
+  // ─────────────────────────────────────
+  // ホーム画面レイアウト（並び順・表示/非表示）
+  // ─────────────────────────────────────
+  const moveHomeSection = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= homeLayout.length) return;
+    const next = [...homeLayout];
+    [next[index], next[target]] = [next[target], next[index]];
+    setHomeLayout(next);
+  };
+
+  const toggleHomeSectionHidden = (key: HomeSectionConfig["key"]) => {
+    setHomeLayout((prev) =>
+      prev.map((s) => (s.key === key ? { ...s, hidden: !s.hidden } : s))
+    );
+  };
+
+  const handleLayoutDrop = (index: number) => {
+    if (draggedIndex === null || draggedIndex === index) {
+      setDraggedIndex(null);
+      return;
+    }
+    const next = [...homeLayout];
+    const [moved] = next.splice(draggedIndex, 1);
+    next.splice(index, 0, moved);
+    setHomeLayout(next);
+    setDraggedIndex(null);
+  };
+
+  const handleSaveLayout = async () => {
+    setSavingLayout(true);
+    const normalized = homeLayout.map((s, i) => ({ ...s, order: i }));
+    const ok = await savePortalItems(PORTAL_KEYS.homeLayout, normalized);
+    setSavingLayout(false);
+    if (ok) {
+      setHomeLayout(normalized);
+      flash("💾 レイアウトを保存しました");
+    } else {
+      alert("保存に失敗しました");
+    }
+  };
+
+  const handleReloadSavedLayout = async () => {
+    const layout = await loadPortalItems<HomeSectionConfig>(
+      PORTAL_KEYS.homeLayout,
+      DEFAULT_HOME_LAYOUT
+    );
+    setHomeLayout(resolveHomeLayout(layout));
+    flash("🔄 保存済みの並びを読み込みました");
+  };
+
+  const handleResetLayoutToDefault = () => {
+    setHomeLayout(DEFAULT_HOME_LAYOUT);
+  };
 
   // 追加フォームの通知期限を「現在 + newsNoticeDays日」でプリフィル（未入力時のみ）
   useEffect(() => {
@@ -237,6 +309,7 @@ export default function AdminPortalPage() {
     if (!newsForm.title.trim()) return;
     setSaving(true);
     const item: NewsItem = {
+      // eslint-disable-next-line react-hooks/purity -- 送信ボタン押下時のみ実行される既存のID採番（レンダー中には呼ばれない）
       id: `news_${Date.now()}`,
       title: newsForm.title.trim(),
       category: newsForm.category,
@@ -409,6 +482,7 @@ export default function AdminPortalPage() {
       );
     } else {
       // 新規追加
+      // eslint-disable-next-line react-hooks/purity -- 保存ボタン押下時のみ実行される既存のID採番（レンダー中には呼ばれない）
       const id = `policy_${policyForm.year}_${Date.now()}`;
       const newItem: PolicyItem = { ...policyForm, id };
       next = policyForm.isActive
@@ -1471,6 +1545,111 @@ export default function AdminPortalPage() {
           >
             {savingChar ? "保存中..." : "💾 設定を保存"}
           </button>
+        </div>
+      )}
+
+      {tab === "layout" && (
+        <div className="space-y-4 max-w-xl">
+          <p className="text-sm text-gray-600">
+            スタッフ側ホーム画面のセクション表示順を編集します（サイドバー構成とは別の設定です）。
+            ドラッグ&amp;ドロップ、または「上へ／下へ」ボタンで並び替え、チェックを外すと該当セクションをホームから非表示にできます。
+          </p>
+
+          <div className="space-y-2">
+            {homeLayout.map((section, index) => (
+              <div
+                key={section.key}
+                draggable
+                onDragStart={() => setDraggedIndex(index)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => handleLayoutDrop(index)}
+                className={`flex items-center gap-3 p-3 border rounded-xl bg-white cursor-move transition-colors ${
+                  draggedIndex === index
+                    ? "border-teal-400 bg-teal-50"
+                    : "border-gray-200"
+                } ${section.hidden ? "opacity-50" : ""}`}
+              >
+                <span className="text-gray-600 select-none" title="ドラッグして並び替え">
+                  ⠿
+                </span>
+                <span className="flex-1 text-sm font-medium text-gray-800">
+                  {HOME_SECTION_LABELS[section.key] ?? section.key}
+                </span>
+                <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!section.hidden}
+                    onChange={() => toggleHomeSectionHidden(section.key)}
+                  />
+                  表示
+                </label>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => moveHomeSection(index, -1)}
+                    disabled={index === 0}
+                    className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-30"
+                    title="上へ"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveHomeSection(index, 1)}
+                    disabled={index === homeLayout.length - 1}
+                    className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-30"
+                    title="下へ"
+                  >
+                    ↓
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* プレビュー（簡易：現在の表示順のみのリスト） */}
+          <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
+            <p className="text-xs font-medium text-gray-800 mb-1.5">
+              プレビュー（ホームでの表示順）
+            </p>
+            <ol className="text-xs text-gray-700 list-decimal list-inside space-y-0.5">
+              {homeLayout
+                .filter((s) => !s.hidden)
+                .map((s) => (
+                  <li key={s.key}>{HOME_SECTION_LABELS[s.key] ?? s.key}</li>
+                ))}
+            </ol>
+            {homeLayout.every((s) => s.hidden) && (
+              <p className="text-xs text-gray-600">
+                すべて非表示に設定されています
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleSaveLayout}
+              disabled={savingLayout}
+              className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
+            >
+              {savingLayout ? "保存中..." : "💾 保存"}
+            </button>
+            <button
+              type="button"
+              onClick={handleReloadSavedLayout}
+              className="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50"
+            >
+              🔄 現在の並びを初期値として取り込む
+            </button>
+            <button
+              type="button"
+              onClick={handleResetLayoutToDefault}
+              className="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50"
+            >
+              ↩️ 既定に戻す
+            </button>
+          </div>
         </div>
       )}
     </div>

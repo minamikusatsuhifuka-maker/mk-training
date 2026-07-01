@@ -168,6 +168,80 @@ export const PORTAL_KEYS = {
   thankyou: "portal_thankyou",
   policy: "portal_policy",
   todayWord: "portal_today_word",
+  homeLayout: "portal_home_layout",
 } as const;
 
 export type PortalKey = (typeof PORTAL_KEYS)[keyof typeof PORTAL_KEYS];
+
+// ─── ホーム画面のセクション並び順設定（管理画面「ポータル管理→レイアウト」で編集） ───
+export type HomeSectionKey =
+  | "today_word"
+  | "news"
+  | "quick_access"
+  | "kizuki"
+  | "thanks"
+  | "policy";
+
+export type HomeSectionConfig = {
+  key: HomeSectionKey;
+  order: number;
+  hidden?: boolean;
+};
+
+export const HOME_SECTION_LABELS: Record<HomeSectionKey, string> = {
+  today_word: "💬 今日の一言",
+  news: "📢 新着情報",
+  quick_access: "⚡ クイックアクセス",
+  kizuki: "💛 気づきシェア",
+  thanks: "♥ ありがとうカード",
+  policy: "🎯 経営方針",
+};
+
+// 現状のハードコード順（未設定/不正時のフォールバック用の既定値）
+export const DEFAULT_HOME_LAYOUT: HomeSectionConfig[] = [
+  { key: "today_word", order: 0 },
+  { key: "news", order: 1 },
+  { key: "quick_access", order: 2 },
+  { key: "kizuki", order: 3 },
+  { key: "thanks", order: 4 },
+  { key: "policy", order: 5 },
+];
+
+const HOME_SECTION_KEYS = new Set<HomeSectionKey>(
+  DEFAULT_HOME_LAYOUT.map((s) => s.key)
+);
+
+// 保存済み設定を検証・補完する。空/不正なら既定順に丸ごとフォールバック（ホームが壊れない）。
+// 保存済み設定に無いキー（将来追加されたセクション）は末尾に自動追加する。
+export function resolveHomeLayout(
+  saved: HomeSectionConfig[] | null | undefined
+): HomeSectionConfig[] {
+  const valid = Array.isArray(saved)
+    ? saved.filter(
+        (s): s is HomeSectionConfig =>
+          !!s && typeof s.order === "number" && HOME_SECTION_KEYS.has(s.key)
+      )
+    : [];
+
+  const seen = new Set<HomeSectionKey>();
+  const deduped = valid.filter((s) => {
+    if (seen.has(s.key)) return false;
+    seen.add(s.key);
+    return true;
+  });
+
+  if (deduped.length === 0) return DEFAULT_HOME_LAYOUT;
+
+  const sorted = [...deduped].sort((a, b) => a.order - b.order);
+  const missing = DEFAULT_HOME_LAYOUT.filter((s) => !seen.has(s.key));
+  return [...sorted, ...missing];
+}
+
+// スタッフ側ホーム表示用：非表示を除いたキーの描画順配列
+export function visibleHomeSectionKeys(
+  saved: HomeSectionConfig[] | null | undefined
+): HomeSectionKey[] {
+  return resolveHomeLayout(saved)
+    .filter((s) => !s.hidden)
+    .map((s) => s.key);
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   loadPortalItems,
@@ -17,6 +17,8 @@ import {
   urgencyCardClass,
   isNewsExpired,
   DEFAULT_CHARACTER_SETTINGS,
+  DEFAULT_HOME_LAYOUT,
+  visibleHomeSectionKeys,
   type NewsItem,
   type NewsCategory,
   type HiyariItem,
@@ -24,6 +26,8 @@ import {
   type ThankyouItem,
   type PolicyItem,
   type TodayWord,
+  type HomeSectionConfig,
+  type HomeSectionKey,
 } from "@/types/portal";
 
 // ─── 初期データ（Supabaseが空のときのフォールバック） ───
@@ -203,6 +207,11 @@ export default function PortalHome() {
   );
   const [todayWord, setTodayWord] = useState<TodayWord>(DEFAULT_TODAY_WORD);
 
+  // ホーム画面のセクション表示順（管理画面「ポータル管理→レイアウト」で編集）
+  const [sectionOrder, setSectionOrder] = useState<HomeSectionKey[]>(
+    DEFAULT_HOME_LAYOUT.map((s) => s.key)
+  );
+
   // タスクの期限切れ・今日件数（バッジ用）
   const [taskAlert, setTaskAlert] = useState<{
     overdue: number;
@@ -254,7 +263,7 @@ export default function PortalHome() {
 
   useEffect(() => {
     const fetchAll = async () => {
-      const [newsList, hiyariList, tyList, policyList, word, charSettings] =
+      const [newsList, hiyariList, tyList, policyList, word, charSettings, layout] =
         await Promise.all([
           loadPortalItems<NewsItem>(PORTAL_KEYS.news, DEFAULT_NEWS),
           loadPortalItems<HiyariItem>(PORTAL_KEYS.hiyari, []),
@@ -262,7 +271,13 @@ export default function PortalHome() {
           loadPortalItems<PolicyItem>(PORTAL_KEYS.policy, [DEFAULT_POLICY]),
           loadTodayWord(DEFAULT_TODAY_WORD),
           loadCharacterSettings(),
+          loadPortalItems<HomeSectionConfig>(
+            PORTAL_KEYS.homeLayout,
+            DEFAULT_HOME_LAYOUT
+          ),
         ]);
+
+      setSectionOrder(visibleHomeSectionKeys(layout));
 
       // 期限切れ（noticeUntil超過 or createdAt+newsNoticeDays超過）は表示しない。
       // read-only（トップ側では portal_news への書き込みは行わない）。
@@ -363,26 +378,9 @@ export default function PortalHome() {
     }
   };
 
-  return (
-    <div className="max-w-2xl mx-auto -m-3 md:-m-6 bg-white min-h-screen">
-      {/* キャラクター通知（投稿から一定期間内は毎回再生／クリックで中央モーダル） */}
-      <CharacterNotification news={news} onOpenNews={setSelectedNews} />
-
-      {/* ① ヘッダーバー */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-gray-100 sticky top-0 bg-white z-10">
-        <div>
-          <p className="text-base font-medium text-gray-900">南草津皮フ科</p>
-          <p className="text-xs text-gray-600">スタッフポータル</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-600">{todayStr}</span>
-          <div className="w-8 h-8 rounded-full bg-teal-50 flex items-center justify-center text-xs font-medium text-teal-700">
-            あ
-          </div>
-        </div>
-      </header>
-
-      {/* ② 今日の一言ヒーローセクション */}
+  // セクション単位のJSX（管理画面「レイアウト」タブの並び順・表示設定に従って描画順を決める）
+  const sectionNodes: Record<HomeSectionKey, React.ReactNode> = {
+    today_word: (
       <section className="px-4 py-5 border-b border-gray-100">
         <p className="text-xl font-medium text-gray-900 leading-snug">
           おはようございます
@@ -399,36 +397,8 @@ export default function PortalHome() {
           <p className="text-xs text-teal-600 mt-2">— {todayWord.author}</p>
         </div>
       </section>
-
-      {/* タスク期限アラート（超過/今日が0なら非表示） */}
-      {taskAlert && (taskAlert.overdue > 0 || taskAlert.today > 0) && (
-        <section className="px-4 pt-4">
-          <Link
-            href="/tasks"
-            className="flex items-center gap-3 p-3 bg-white border border-gray-100 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors"
-          >
-            <span className="text-xl">📋</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900">みんなのタスク</p>
-              <p className="text-xs text-gray-600">未完了の期限を確認</p>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {taskAlert.overdue > 0 && (
-                <span className="text-xs px-2 py-1 rounded-full font-medium bg-red-50 text-red-700">
-                  期限切れ {taskAlert.overdue}件
-                </span>
-              )}
-              {taskAlert.today > 0 && (
-                <span className="text-xs px-2 py-1 rounded-full font-medium bg-yellow-50 text-yellow-700">
-                  今日 {taskAlert.today}件
-                </span>
-              )}
-            </div>
-          </Link>
-        </section>
-      )}
-
-      {/* ③ 新着情報 */}
+    ),
+    news: (
       <section
         ref={newsSectionRef}
         className="px-4 py-5 border-b border-gray-100 scroll-mt-16"
@@ -490,8 +460,8 @@ export default function PortalHome() {
           )}
         </div>
       </section>
-
-      {/* ④ クイックアクセス */}
+    ),
+    quick_access: (
       <section className="px-4 py-5 border-b border-gray-100">
         <h2 className="text-xs font-medium text-gray-800 uppercase tracking-wider mb-3">
           クイックアクセス
@@ -527,8 +497,8 @@ export default function PortalHome() {
           })}
         </div>
       </section>
-
-      {/* ⑤ 気づきシェア */}
+    ),
+    kizuki: (
       <section id="hiyari" className="px-4 py-5 border-b border-gray-100">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xs font-medium text-gray-800 uppercase tracking-wider">
@@ -665,8 +635,8 @@ export default function PortalHome() {
           </div>
         )}
       </section>
-
-      {/* ⑥ ありがとうカード */}
+    ),
+    thanks: (
       <section className="px-4 py-5 border-b border-gray-100">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xs font-medium text-gray-800 uppercase tracking-wider">
@@ -775,8 +745,8 @@ export default function PortalHome() {
           </div>
         )}
       </section>
-
-      {/* ⑦ 経営方針 */}
+    ),
+    policy: (
       <section className="px-4 py-5">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xs font-medium text-gray-800 uppercase tracking-wider">
@@ -811,6 +781,60 @@ export default function PortalHome() {
           </div>
         )}
       </section>
+    ),
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto -m-3 md:-m-6 bg-white min-h-screen">
+      {/* キャラクター通知（投稿から一定期間内は毎回再生／クリックで中央モーダル） */}
+      <CharacterNotification news={news} onOpenNews={setSelectedNews} />
+
+      {/* ① ヘッダーバー（並び替え対象外・常に先頭固定） */}
+      <header className="flex items-center justify-between px-4 py-3 border-b border-gray-100 sticky top-0 bg-white z-10">
+        <div>
+          <p className="text-base font-medium text-gray-900">南草津皮フ科</p>
+          <p className="text-xs text-gray-600">スタッフポータル</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-gray-600">{todayStr}</span>
+          <div className="w-8 h-8 rounded-full bg-teal-50 flex items-center justify-center text-xs font-medium text-teal-700">
+            あ
+          </div>
+        </div>
+      </header>
+
+      {/* タスク期限アラート（超過/今日が0なら非表示・並び替え対象外） */}
+      {taskAlert && (taskAlert.overdue > 0 || taskAlert.today > 0) && (
+        <section className="px-4 pt-4">
+          <Link
+            href="/tasks"
+            className="flex items-center gap-3 p-3 bg-white border border-gray-100 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors"
+          >
+            <span className="text-xl">📋</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900">みんなのタスク</p>
+              <p className="text-xs text-gray-600">未完了の期限を確認</p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {taskAlert.overdue > 0 && (
+                <span className="text-xs px-2 py-1 rounded-full font-medium bg-red-50 text-red-700">
+                  期限切れ {taskAlert.overdue}件
+                </span>
+              )}
+              {taskAlert.today > 0 && (
+                <span className="text-xs px-2 py-1 rounded-full font-medium bg-yellow-50 text-yellow-700">
+                  今日 {taskAlert.today}件
+                </span>
+              )}
+            </div>
+          </Link>
+        </section>
+      )}
+
+      {/* ②〜⑦ 管理画面「ポータル管理→レイアウト」で設定した順・表示設定で描画 */}
+      {sectionOrder.map((key) => (
+        <Fragment key={key}>{sectionNodes[key]}</Fragment>
+      ))}
 
       {/* ニュース詳細モーダル（画面中央配置） */}
       {selectedNews && (
