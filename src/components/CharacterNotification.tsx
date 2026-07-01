@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { loadCharacterSettings } from "@/lib/portal-store";
 import {
   DEFAULT_CHARACTER_SETTINGS,
@@ -55,6 +55,11 @@ export default function CharacterNotification({ news, onOpenNews }: Props) {
   const [settings, setSettings] = useState<CharacterSettings>(
     DEFAULT_CHARACTER_SETTINGS
   );
+  // 設定（横切り速度D・有効/無効）を読み込み終えたか。
+  // 既定値でアニメを開始してから実設定に差し替わると、その差し替えで
+  // アニメ effect が再実行され横切りが途中で止まる。これを防ぐため、
+  // 設定が確定するまでは再生を開始しない。
+  const [settingsReady, setSettingsReady] = useState(false);
   // 表示期間（newsNoticeDays日）以内の有効な新着。クライアントでのみ算出する。
   const [targetNews, setTargetNews] = useState<NewsItem[]>([]);
   // 現在アニメ再生中（画面に出ている）キャラのインデックス集合。
@@ -64,7 +69,8 @@ export default function CharacterNotification({ news, onOpenNews }: Props) {
   useEffect(() => {
     loadCharacterSettings()
       .then(setSettings)
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setSettingsReady(true));
   }, []);
 
   // 通知期限判定：お知らせ毎の noticeUntil（日時）を優先。無ければ createdAt + newsNoticeDays日。
@@ -86,12 +92,45 @@ export default function CharacterNotification({ news, onOpenNews }: Props) {
     setTargetNews(inWindow);
   }, [news, settings.newsNoticeDays]);
 
+  // 対象新着の「id集合（順序込み）」を安定文字列化。
+  // targetNews は news 到着やタスク読み込み等の再レンダーで“中身が同じでも
+  // 別参照”に作り直されるため、参照を依存に使うとアニメが毎回リセットされる。
+  // id集合を署名化し、これが実際に変わった時だけ再生させる。
+  const targetSignature = useMemo(
+    () => targetNews.map((n) => n.id).join("|"),
+    [targetNews]
+  );
+
+  // 再生トリガのキー：対象新着id集合＋有効フラグ＋横切り速度D。
+  // これらが実際に変わった時だけアニメを再スケジュールする（無関係な再レンダーでは不変）。
+  const playKey = useMemo(
+    () => `${settings.enabled ? "on" : "off"}:${settings.speed}:${targetSignature}`,
+    [settings.enabled, settings.speed, targetSignature]
+  );
+
+  // 同じ playKey を二重に再生しないためのガード（マウント中のみ有効）。
+  // 無関係な再レンダーで setTimeout が clear／再開されないことを保証する。
+  const playedKeyRef = useRef<string | null>(null);
+
   // 等間隔スケジューリング：targetNews を i*INTERVAL でずらして1巡だけ再生する。
   // 各キャラは開始時に表示、横切り時間D後に非表示。無限ループはしない。
-  // マウント/データ到着のたびに走るため「期間内は毎回再生」は維持される。
+  // 再マウント（別ページから戻る等）のたびに走るため「期間内は毎回再生」は維持される。
   useEffect(() => {
+    // 設定確定前は開始しない（既定→実設定の切替でアニメが途中で止まるのを防ぐ）。
+    if (!settingsReady) return;
+
+    if (!settings.enabled || targetNews.length === 0) {
+      setVisible(new Set());
+      playedKeyRef.current = null;
+      return;
+    }
+
+    // 同じ対象新着集合を再生済みなら、無関係な再レンダーでは何もしない。
+    // ここで return することでタイマーを clear せず、横切りを最後まで見せる。
+    if (playedKeyRef.current === playKey) return;
+    playedKeyRef.current = playKey;
+
     setVisible(new Set());
-    if (!settings.enabled || targetNews.length === 0) return;
 
     const dMs = settings.speed * 1000; // 1体の横切り時間
     // オーバーラップ再生：INTERVAL < D にして前のキャラが抜ける前に次を登場させる
@@ -118,9 +157,12 @@ export default function CharacterNotification({ news, onOpenNews }: Props) {
       );
     });
 
-    // アンマウント/再スケジュール時に全タイマーをclear
+    // アンマウント時、または対象新着id集合／速度が実際に変わった時だけ全タイマーをclear。
+    // 毎レンダーでは clear しない（playKey が同一なら上で早期 return するため）。
     return () => timers.forEach(clearTimeout);
-  }, [targetNews, settings.enabled, settings.speed]);
+    // targetNews / settings.speed は playKey に内包済み。参照変化での再実行を避けるため依存に入れない。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsReady, playKey]);
 
   if (!settings.enabled || targetNews.length === 0) return null;
 
