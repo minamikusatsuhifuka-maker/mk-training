@@ -17,7 +17,7 @@ export const medicalFees: MedicalFee[] = [
   {id:"f03",code:"A001",name:"外来管理加算",points:52,category:"初診・再診",description:"再診料に加算。処置・手術・検査等を行わない場合で、患者の療養上必要な指導を行った場合",notes:"5分以上の診療が必要。処置・注射・リハビリ等を行った場合は算定不可"},
   {id:"f04",code:"B001-3",name:"生活習慣病管理料（皮膚科）",points:333,category:"医学管理",description:"慢性疾患（アトピー性皮膚炎等）の継続的な管理を行う場合",notes:"月1回算定。治療計画書の交付が必要"},
   {id:"f05",code:"B001-7",name:"難病外来指導管理料",points:270,category:"医学管理",description:"難病（天疱瘡・乾癬等の指定難病）患者への指導管理",notes:"月1回算定。指定難病に限定"},
-  {id:"f06",code:"D006-11",name:"FLCRAスクリーニング検査（ドロップスクリーン）",points:200,category:"検査",description:"41種類のアレルゲン一括スクリーニング検査",notes:"アレルギー疾患の原因特定に使用"},
+  {id:"f06",code:"D015",name:"ドロップスクリーン 41種アレルギー検査（D015）",points:1430,category:"検査",description:"41種類のアレルゲン一括スクリーニング検査（D015：特異的IgE半定量・定量検査。1回の採血で複数項目を測定した場合は1,430点が上限）",notes:"アレルギー疾患の原因特定に使用。View39とは測定項目数・原理が異なるが、算定点数区分（D015）・上限点数は同じ"},
   {id:"f07",code:"D291-2",name:"アレルギー検査（View39・特異的IgE抗体）",points:1430,category:"検査",description:"39種類のアレルゲン特異的IgE抗体を一括測定",notes:"複数のアレルギー原因を一度に調べる"},
   {id:"f08",code:"D007",name:"皮膚生検（病理検査含む）",points:630,category:"検査",description:"皮膚の一部を切り取り組織学的に検査する",notes:"病理診断料が別途加算される"},
   {id:"f09",code:"D012",name:"梅毒血清反応（RPR）",points:34,category:"検査",description:"梅毒の診断のための血清学的検査",notes:"薬疹・バラ色粃糠疹との鑑別に使用"},
