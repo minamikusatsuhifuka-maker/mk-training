@@ -8,6 +8,7 @@ import {
   saveTodayWord,
   loadCharacterSettings,
   saveCharacterSettings,
+  archiveExpiredNews,
 } from "@/lib/portal-store";
 import {
   PORTAL_KEYS,
@@ -15,7 +16,10 @@ import {
   URGENCY_META,
   URGENCY_OPTIONS,
   urgencyOf,
+  urgencyCardClass,
+  isNewsExpired,
   type NewsItem,
+  type ArchivedNewsItem,
   type NewsCategory,
   type Urgency,
   type HiyariItem,
@@ -27,10 +31,18 @@ import {
 } from "@/types/portal";
 import { CharacterSVG } from "@/components/CharacterNotification";
 
-type TabKey = "news" | "hiyari" | "thankyou" | "policy" | "word" | "character";
+type TabKey =
+  | "news"
+  | "archive"
+  | "hiyari"
+  | "thankyou"
+  | "policy"
+  | "word"
+  | "character";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "news", label: "📢 新着情報" },
+  { key: "archive", label: "🗄️ アーカイブ" },
   { key: "hiyari", label: "💛 気づきシェア" },
   { key: "thankyou", label: "♥ ありがとうカード" },
   { key: "policy", label: "🎯 経営方針" },
@@ -126,6 +138,7 @@ export default function AdminPortalPage() {
 
   // データ
   const [news, setNews] = useState<NewsItem[]>([]);
+  const [newsArchive, setNewsArchive] = useState<ArchivedNewsItem[]>([]);
   const [hiyari, setHiyari] = useState<HiyariItem[]>([]);
   const [thankyou, setThankyou] = useState<ThankyouItem[]>([]);
   const [policies, setPolicies] = useState<PolicyItem[]>([]);
@@ -175,8 +188,11 @@ export default function AdminPortalPage() {
 
   useEffect(() => {
     const fetchAll = async () => {
-      const [n, h, t, p, w, c] = await Promise.all([
+      // 管理画面を開くたびに期限切れの新着をアーカイブへ移動（冪等）
+      await archiveExpiredNews().catch(() => {});
+      const [n, na, h, t, p, w, c] = await Promise.all([
         loadPortalItems<NewsItem>(PORTAL_KEYS.news, []),
+        loadPortalItems<ArchivedNewsItem>(PORTAL_KEYS.newsArchive, []),
         loadPortalItems<HiyariItem>(PORTAL_KEYS.hiyari, []),
         loadPortalItems<ThankyouItem>(PORTAL_KEYS.thankyou, []),
         loadPortalItems<PolicyItem>(PORTAL_KEYS.policy, []),
@@ -188,6 +204,7 @@ export default function AdminPortalPage() {
         loadCharacterSettings(),
       ]);
       setNews(n);
+      setNewsArchive(na);
       setHiyari(h);
       setThankyou(t);
       setPolicies(p);
@@ -272,6 +289,58 @@ export default function AdminPortalPage() {
     if (ok) {
       setNews(next);
       flash("🗑️ 削除しました");
+    }
+  };
+
+  // ─────────────────────────────────────
+  // アーカイブ（期限切れ）
+  // ─────────────────────────────────────
+  // portal_news へ戻す。期限切れのままだと次回アーカイブ処理で即座に
+  // 再アーカイブされるため、期限切れの場合は 現在+newsNoticeDays日 に更新する
+  // （必要ならこの後 news 一覧で通知期限を編集できる）。
+  const restoreArchivedNews = async (id: string) => {
+    const item = newsArchive.find((a) => a.id === id);
+    if (!item) return;
+    setSaving(true);
+    const rest: NewsItem = {
+      id: item.id,
+      title: item.title,
+      category: item.category,
+      author: item.author,
+      content: item.content,
+      createdAt: item.createdAt,
+      isActive: item.isActive,
+      noticeUntil: item.noticeUntil,
+      character: item.character,
+      urgency: item.urgency,
+    };
+    const days = charSettings.newsNoticeDays ?? DEFAULT_CHARACTER_SETTINGS.newsNoticeDays;
+    const restored: NewsItem = isNewsExpired(rest, days)
+      ? { ...rest, noticeUntil: datetimeLocalToIso(defaultNoticeLocal(days)) }
+      : rest;
+    const nextNews = [restored, ...news];
+    const nextArchive = newsArchive.filter((a) => a.id !== id);
+    const [okNews, okArchive] = await Promise.all([
+      savePortalItems(PORTAL_KEYS.news, nextNews),
+      savePortalItems(PORTAL_KEYS.newsArchive, nextArchive),
+    ]);
+    setSaving(false);
+    if (okNews && okArchive) {
+      setNews(nextNews);
+      setNewsArchive(nextArchive);
+      flash("↩️ 復元しました");
+    }
+  };
+
+  const deleteArchivedNewsForever = async (id: string) => {
+    if (!confirm("このお知らせを完全に削除しますか？（元に戻せません）")) return;
+    setSaving(true);
+    const next = newsArchive.filter((a) => a.id !== id);
+    const ok = await savePortalItems(PORTAL_KEYS.newsArchive, next);
+    setSaving(false);
+    if (ok) {
+      setNewsArchive(next);
+      flash("🗑️ 完全に削除しました");
     }
   };
 
@@ -654,7 +723,9 @@ export default function AdminPortalPage() {
             {news.map((n) => (
               <div
                 key={n.id}
-                className="bg-white border border-gray-200 rounded-xl p-4 space-y-2"
+                className={`rounded-xl p-4 space-y-2 ${
+                  urgencyCardClass(n) || "bg-white border border-gray-200"
+                }`}
               >
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="flex-1 min-w-0">
@@ -769,6 +840,74 @@ export default function AdminPortalPage() {
               </p>
             )}
           </div>
+        </div>
+      )}
+
+      {tab === "archive" && (
+        <div className="space-y-2">
+          <p className="text-sm text-gray-500">
+            通知期限が過ぎたお知らせです。復元すると新着情報の一覧に戻ります（データは削除されません）。
+          </p>
+          <h2 className="text-base font-semibold text-gray-800">
+            アーカイブ（{newsArchive.length}件）
+          </h2>
+          {[...newsArchive]
+            .sort((a, b) => (a.archivedAt < b.archivedAt ? 1 : -1))
+            .map((n) => (
+              <div
+                key={n.id}
+                className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-2"
+              >
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-gray-900">
+                        {n.title}
+                      </p>
+                      <span
+                        className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
+                          URGENCY_META[urgencyOf(n)].badge
+                        }`}
+                      >
+                        {URGENCY_META[urgencyOf(n)].emoji}{" "}
+                        {URGENCY_META[urgencyOf(n)].label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {NEWS_CATEGORIES.find((c) => c.value === n.category)?.label}{" "}
+                      · {n.author} · 投稿: {formatDateTime(n.createdAt)} ·
+                      アーカイブ: {formatDateTime(n.archivedAt)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => restoreArchivedNews(n.id)}
+                      className="text-xs px-2 py-1 border border-teal-200 text-teal-600 rounded hover:bg-teal-50"
+                    >
+                      復元
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteArchivedNewsForever(n.id)}
+                      className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50"
+                    >
+                      完全削除
+                    </button>
+                  </div>
+                </div>
+                {n.content && (
+                  <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">
+                    {n.content}
+                  </p>
+                )}
+              </div>
+            ))}
+          {newsArchive.length === 0 && (
+            <p className="text-sm text-gray-400 text-center py-8">
+              アーカイブはありません
+            </p>
+          )}
         </div>
       )}
 

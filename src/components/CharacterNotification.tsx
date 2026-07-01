@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { loadCharacterSettings } from "@/lib/portal-store";
 import {
   DEFAULT_CHARACTER_SETTINGS,
+  isNewsExpired,
   type CharacterSettings,
   type CharacterSvgType,
   type NewsItem,
@@ -79,16 +80,7 @@ export default function CharacterNotification({ news, onOpenNews }: Props) {
     const days =
       settings.newsNoticeDays ?? DEFAULT_CHARACTER_SETTINGS.newsNoticeDays;
     const now = Date.now();
-    const inWindow = news.filter((n) => {
-      const created = new Date(n.createdAt).getTime();
-      if (Number.isNaN(created)) return false;
-      if (n.noticeUntil) {
-        const until = new Date(n.noticeUntil).getTime();
-        return !Number.isNaN(until) && now <= until;
-      }
-      // 旧データ（noticeUntil無し）: createdAt + newsNoticeDays日 までフォールバック
-      return now <= created + days * 24 * 60 * 60 * 1000;
-    });
+    const inWindow = news.filter((n) => !isNewsExpired(n, days, now));
     setTargetNews(inWindow);
   }, [news, settings.newsNoticeDays]);
 

@@ -6,6 +6,7 @@ import {
   loadPortalItems,
   savePortalItems,
   loadTodayWord,
+  loadCharacterSettings,
 } from "@/lib/portal-store";
 import CharacterNotification from "@/components/CharacterNotification";
 import { loadTasks, taskCounts } from "@/lib/staff-tasks";
@@ -13,6 +14,9 @@ import {
   PORTAL_KEYS,
   URGENCY_META,
   urgencyOf,
+  urgencyCardClass,
+  isNewsExpired,
+  DEFAULT_CHARACTER_SETTINGS,
   type NewsItem,
   type NewsCategory,
   type HiyariItem,
@@ -250,17 +254,23 @@ export default function PortalHome() {
 
   useEffect(() => {
     const fetchAll = async () => {
-      const [newsList, hiyariList, tyList, policyList, word] = await Promise.all([
-        loadPortalItems<NewsItem>(PORTAL_KEYS.news, DEFAULT_NEWS),
-        loadPortalItems<HiyariItem>(PORTAL_KEYS.hiyari, []),
-        loadPortalItems<ThankyouItem>(PORTAL_KEYS.thankyou, []),
-        loadPortalItems<PolicyItem>(PORTAL_KEYS.policy, [DEFAULT_POLICY]),
-        loadTodayWord(DEFAULT_TODAY_WORD),
-      ]);
+      const [newsList, hiyariList, tyList, policyList, word, charSettings] =
+        await Promise.all([
+          loadPortalItems<NewsItem>(PORTAL_KEYS.news, DEFAULT_NEWS),
+          loadPortalItems<HiyariItem>(PORTAL_KEYS.hiyari, []),
+          loadPortalItems<ThankyouItem>(PORTAL_KEYS.thankyou, []),
+          loadPortalItems<PolicyItem>(PORTAL_KEYS.policy, [DEFAULT_POLICY]),
+          loadTodayWord(DEFAULT_TODAY_WORD),
+          loadCharacterSettings(),
+        ]);
 
+      // 期限切れ（noticeUntil超過 or createdAt+newsNoticeDays超過）は表示しない。
+      // read-only（トップ側では portal_news への書き込みは行わない）。
+      const days =
+        charSettings.newsNoticeDays ?? DEFAULT_CHARACTER_SETTINGS.newsNoticeDays;
       setNews(
         newsList
-          .filter((n) => n.isActive)
+          .filter((n) => n.isActive && !isNewsExpired(n, days))
           .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
           .slice(0, 5)
       );
@@ -437,7 +447,9 @@ export default function PortalHome() {
             <div
               key={item.id}
               onClick={() => setSelectedNews(item)}
-              className="flex items-start gap-3 p-4 bg-white border border-gray-100 rounded-xl cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors min-h-[60px]"
+              className={`flex items-start gap-3 p-4 rounded-xl cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors min-h-[60px] ${
+                urgencyCardClass(item) || "bg-white border border-gray-100"
+              }`}
             >
               <div
                 className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${dotColor(
@@ -807,7 +819,9 @@ export default function PortalHome() {
           onClick={() => setSelectedNews(null)}
         >
           <div
-            className="relative w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl bg-white shadow-xl p-6"
+            className={`relative w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl shadow-xl p-6 ${
+              urgencyCardClass(selectedNews) || "bg-white"
+            }`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between mb-4">

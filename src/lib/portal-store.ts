@@ -3,10 +3,12 @@
 // （単一オブジェクト型は { ...data } の直書き）
 
 import { supabase } from "./supabase";
-import type { CharacterSettings, TodayWord } from "@/types/portal";
+import type { ArchivedNewsItem, CharacterSettings, NewsItem, TodayWord } from "@/types/portal";
 import {
   CHARACTER_SETTINGS_KEY,
   DEFAULT_CHARACTER_SETTINGS,
+  PORTAL_KEYS,
+  isNewsExpired,
 } from "@/types/portal";
 
 // 配列型データ取得（items配列を返す。失敗時はdefault）
@@ -121,4 +123,34 @@ export async function saveCharacterSettings(
   settings: CharacterSettings
 ): Promise<boolean> {
   return savePortalObject<CharacterSettings>(CHARACTER_SETTINGS_KEY, settings);
+}
+
+// ─── 期限切れお知らせのアーカイブ化 ───
+// portal_news の期限切れ項目を portal_news_archive へ移動し、portal_news から除去する。
+// 既にアーカイブ済みのIDは二重追加しない（冪等）。管理画面の読み込み時にのみ呼ぶこと。
+export async function archiveExpiredNews(): Promise<number> {
+  const [news, archive, charSettings] = await Promise.all([
+    loadPortalItems<NewsItem>(PORTAL_KEYS.news, []),
+    loadPortalItems<ArchivedNewsItem>(PORTAL_KEYS.newsArchive, []),
+    loadCharacterSettings(),
+  ]);
+
+  const now = Date.now();
+  const days = charSettings.newsNoticeDays ?? DEFAULT_CHARACTER_SETTINGS.newsNoticeDays;
+  const expired = news.filter((n) => isNewsExpired(n, days, now));
+  if (expired.length === 0) return 0;
+
+  const archivedIds = new Set(archive.map((a) => a.id));
+  const newlyArchived: ArchivedNewsItem[] = expired
+    .filter((n) => !archivedIds.has(n.id))
+    .map((n) => ({ ...n, archivedAt: new Date().toISOString() }));
+  const remainingNews = news.filter((n) => !expired.some((e) => e.id === n.id));
+
+  const [okNews, okArchive] = await Promise.all([
+    savePortalItems(PORTAL_KEYS.news, remainingNews),
+    newlyArchived.length > 0
+      ? savePortalItems(PORTAL_KEYS.newsArchive, [...archive, ...newlyArchived])
+      : Promise.resolve(true),
+  ]);
+  return okNews && okArchive ? newlyArchived.length : 0;
 }

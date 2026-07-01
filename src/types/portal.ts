@@ -20,27 +20,35 @@ export type NewsItem = {
 };
 
 // ─── 緊急度の表示メタ（色・ラベル・アイコン） ───
+// border/bg はカード枠の色付け用（normalは空文字＝既存の枠を変更しない）。
+// Tailwind purge回避のためリテラルクラスで定義。
 export const URGENCY_META: Record<
   Urgency,
-  { label: string; emoji: string; badge: string; dot: string }
+  { label: string; emoji: string; badge: string; dot: string; border: string; bg: string }
 > = {
   emergency: {
     label: "緊急",
     emoji: "🚨",
     badge: "bg-red-100 text-red-700",
     dot: "bg-red-500",
+    border: "border-2 border-red-300",
+    bg: "bg-red-50",
   },
   semi: {
     label: "準緊急",
     emoji: "⚠️",
     badge: "bg-amber-100 text-amber-700",
     dot: "bg-amber-500",
+    border: "border-2 border-amber-300",
+    bg: "bg-amber-50",
   },
   normal: {
     label: "通常",
     emoji: "✅",
     badge: "bg-green-100 text-green-700",
     dot: "bg-green-500",
+    border: "",
+    bg: "",
   },
 };
 
@@ -55,6 +63,32 @@ export const URGENCY_OPTIONS: { value: Urgency; label: string }[] = [
 export function urgencyOf(n: { urgency?: Urgency }): Urgency {
   return n.urgency ?? "normal";
 }
+
+/** 緊急度に応じたカード枠クラス（normalは既存の枠のまま変更しない＝空文字） */
+export function urgencyCardClass(n: { urgency?: Urgency }): string {
+  const u = urgencyOf(n);
+  if (u === "normal") return "";
+  return `${URGENCY_META[u].border} ${URGENCY_META[u].bg}`;
+}
+
+// お知らせ毎の noticeUntil（日時）を優先。無ければ createdAt + newsNoticeDays日。
+// CharacterNotification の通知アニメ表示期限と同じロジック（期限切れ判定）。
+export function isNewsExpired(
+  n: Pick<NewsItem, "createdAt" | "noticeUntil">,
+  newsNoticeDays: number,
+  now: number = Date.now()
+): boolean {
+  const created = new Date(n.createdAt).getTime();
+  if (Number.isNaN(created)) return false;
+  if (n.noticeUntil) {
+    const until = new Date(n.noticeUntil).getTime();
+    return Number.isNaN(until) || now > until;
+  }
+  return now > created + newsNoticeDays * 24 * 60 * 60 * 1000;
+}
+
+/** portal_news_archive に保存する形（元の全フィールド＋archivedAt） */
+export type ArchivedNewsItem = NewsItem & { archivedAt: string };
 
 export type HiyariType = "hiyari" | "good";
 
@@ -129,6 +163,7 @@ export const CHARACTER_SETTINGS_KEY = "character_settings";
 
 export const PORTAL_KEYS = {
   news: "portal_news",
+  newsArchive: "portal_news_archive",
   hiyari: "portal_hiyari",
   thankyou: "portal_thankyou",
   policy: "portal_policy",
