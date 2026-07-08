@@ -34,10 +34,21 @@ import {
   type HomeSectionConfig,
 } from "@/types/portal";
 import { CharacterSVG } from "@/components/CharacterNotification";
+import {
+  buildNewsHistory,
+  filterNewsHistory,
+  groupNewsHistory,
+  newsCategoryMeta,
+  HISTORY_STATUS_META,
+  NEWS_CATEGORY_OPTIONS,
+  type NewsHistoryGroupAxis,
+  type NewsHistoryStatus,
+} from "@/lib/news-history";
 
 type TabKey =
   | "news"
   | "archive"
+  | "history"
   | "hiyari"
   | "thankyou"
   | "policy"
@@ -48,6 +59,7 @@ type TabKey =
 const TABS: { key: TabKey; label: string }[] = [
   { key: "news", label: "📢 新着情報" },
   { key: "archive", label: "🗄️ アーカイブ" },
+  { key: "history", label: "🕘 共有履歴" },
   { key: "hiyari", label: "💛 気づきシェア" },
   { key: "thankyou", label: "♥ ありがとうカード" },
   { key: "policy", label: "🎯 経営方針" },
@@ -191,6 +203,19 @@ export default function AdminPortalPage() {
     isActive: false,
   });
   const [editingPolicyId, setEditingPolicyId] = useState<string | null>(null);
+
+  // 共有履歴タブ（検索・グループ切替・フィルタ）
+  const [historyKeyword, setHistoryKeyword] = useState("");
+  const [historyAxis, setHistoryAxis] = useState<NewsHistoryGroupAxis>("flat");
+  const [historyCategory, setHistoryCategory] = useState<NewsCategory | "all">(
+    "all"
+  );
+  const [historyUrgency, setHistoryUrgency] = useState<Urgency | "all">("all");
+  const [historyStatus, setHistoryStatus] = useState<NewsHistoryStatus | "all">(
+    "all"
+  );
+  const [historyFrom, setHistoryFrom] = useState("");
+  const [historyTo, setHistoryTo] = useState("");
 
   // ホーム画面のセクション並び順（管理画面「レイアウト」タブで編集）
   const [homeLayout, setHomeLayout] =
@@ -561,6 +586,36 @@ export default function AdminPortalPage() {
     } else {
       alert("保存に失敗しました");
     }
+  };
+
+  // ─────────────────────────────────────
+  // 共有履歴（現行＋アーカイブの統合ビュー。データの持ち方は変えない）
+  // ─────────────────────────────────────
+  const newsHistoryAll = buildNewsHistory(news, newsArchive);
+  const newsHistoryFiltered = filterNewsHistory(newsHistoryAll, {
+    keyword: historyKeyword,
+    category: historyCategory,
+    urgency: historyUrgency,
+    status: historyStatus,
+    dateFrom: historyFrom,
+    dateTo: historyTo,
+  });
+  const newsHistoryGroups = groupNewsHistory(newsHistoryFiltered, historyAxis);
+  const historyFilterActive =
+    historyKeyword.trim() !== "" ||
+    historyCategory !== "all" ||
+    historyUrgency !== "all" ||
+    historyStatus !== "all" ||
+    historyFrom !== "" ||
+    historyTo !== "";
+
+  const resetHistoryFilters = () => {
+    setHistoryKeyword("");
+    setHistoryCategory("all");
+    setHistoryUrgency("all");
+    setHistoryStatus("all");
+    setHistoryFrom("");
+    setHistoryTo("");
   };
 
   if (loading) {
@@ -982,6 +1037,259 @@ export default function AdminPortalPage() {
               アーカイブはありません
             </p>
           )}
+        </div>
+      )}
+
+      {tab === "history" && (
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            現行掲載中とアーカイブ（期限切れ）を横断した共有履歴です。削除しない限りお知らせはここに残り続けます。
+          </p>
+
+          {/* 検索・グループ切替・フィルタ */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+            <input
+              value={historyKeyword}
+              onChange={(e) => setHistoryKeyword(e.target.value)}
+              placeholder="🔍 キーワード検索（タイトル・本文、空白区切りでAND検索）"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+            />
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-gray-600">グループ：</span>
+              {(
+                [
+                  { value: "flat", label: "新しい順" },
+                  { value: "category", label: "カテゴリ別" },
+                  { value: "urgency", label: "緊急度別" },
+                  { value: "month", label: "年月別" },
+                ] as { value: NewsHistoryGroupAxis; label: string }[]
+              ).map((a) => (
+                <button
+                  key={a.value}
+                  type="button"
+                  onClick={() => setHistoryAxis(a.value)}
+                  className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                    historyAxis === a.value
+                      ? "bg-teal-50 border-teal-300 text-teal-800 font-medium"
+                      : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {a.label}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+              <div>
+                <label className="text-xs text-gray-800 mb-1 block">状態</label>
+                <select
+                  value={historyStatus}
+                  onChange={(e) =>
+                    setHistoryStatus(e.target.value as NewsHistoryStatus | "all")
+                  }
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                >
+                  <option value="all">すべて</option>
+                  <option value="live">掲載中</option>
+                  <option value="archived">期限切れ</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-800 mb-1 block">
+                  カテゴリ
+                </label>
+                <select
+                  value={historyCategory}
+                  onChange={(e) =>
+                    setHistoryCategory(e.target.value as NewsCategory | "all")
+                  }
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                >
+                  <option value="all">すべて</option>
+                  {NEWS_CATEGORY_OPTIONS.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-800 mb-1 block">
+                  緊急度
+                </label>
+                <select
+                  value={historyUrgency}
+                  onChange={(e) =>
+                    setHistoryUrgency(e.target.value as Urgency | "all")
+                  }
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                >
+                  <option value="all">すべて</option>
+                  {URGENCY_OPTIONS.map((u) => (
+                    <option key={u.value} value={u.value}>
+                      {URGENCY_META[u.value].emoji} {u.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-800 mb-1 block">
+                  開始日（投稿日）
+                </label>
+                <input
+                  type="date"
+                  value={historyFrom}
+                  onChange={(e) => setHistoryFrom(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-800 mb-1 block">
+                  終了日（投稿日）
+                </label>
+                <input
+                  type="date"
+                  value={historyTo}
+                  onChange={(e) => setHistoryTo(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <p className="text-xs text-gray-600">
+                表示中 {newsHistoryFiltered.length}件 ／ 全
+                {newsHistoryAll.length}件
+              </p>
+              {historyFilterActive && (
+                <button
+                  type="button"
+                  onClick={resetHistoryFilters}
+                  className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 text-gray-600"
+                >
+                  ✕ 条件をクリア
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 0件メッセージ */}
+          {newsHistoryFiltered.length === 0 && (
+            <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
+              <p className="text-sm text-gray-700">
+                {historyFilterActive
+                  ? "🔍 検索・絞り込み条件に一致するお知らせが見つかりませんでした"
+                  : "お知らせの履歴はまだありません"}
+              </p>
+              {historyFilterActive && (
+                <p className="text-xs text-gray-500 mt-1">
+                  条件を変えるか「✕ 条件をクリア」で全件表示に戻せます
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* グループごとの一覧 */}
+          {newsHistoryGroups.map((g) => (
+            <div key={g.key} className="space-y-2">
+              <h2 className="text-sm font-semibold text-gray-800">
+                {g.label}
+                <span className="ml-2 text-xs font-normal text-gray-500">
+                  {g.items.length}件
+                </span>
+              </h2>
+              {g.items.map((item) => (
+                <div
+                  key={`${item.status}_${item.id}`}
+                  className={`rounded-xl p-4 space-y-2 ${
+                    urgencyCardClass(item) ||
+                    (item.status === "archived"
+                      ? "bg-gray-50 border border-gray-200"
+                      : "bg-white border border-gray-200")
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium text-gray-900">
+                          {item.title}
+                        </p>
+                        <span
+                          className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
+                            URGENCY_META[urgencyOf(item)].badge
+                          }`}
+                        >
+                          {URGENCY_META[urgencyOf(item)].emoji}{" "}
+                          {URGENCY_META[urgencyOf(item)].label}
+                        </span>
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            newsCategoryMeta(item.category).badge
+                          }`}
+                        >
+                          {newsCategoryMeta(item.category).label}
+                        </span>
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full ${
+                            HISTORY_STATUS_META[item.status].badge
+                          }`}
+                        >
+                          {HISTORY_STATUS_META[item.status].label}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600 mt-0.5">
+                        {item.author} · 投稿: {formatDateTime(item.createdAt)}
+                        {item.status === "archived" && item.archivedAt
+                          ? ` · アーカイブ: ${formatDateTime(item.archivedAt)}`
+                          : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {item.status === "live" ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setTab("news")}
+                            className="text-xs px-2 py-1 border border-teal-200 text-teal-600 rounded hover:bg-teal-50"
+                            title="新着情報タブで通知期限・緊急度などを編集"
+                          >
+                            📢 編集（新着情報タブへ）
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteNewsItem(item.id)}
+                            className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50"
+                          >
+                            削除
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => restoreArchivedNews(item.id)}
+                            className="text-xs px-2 py-1 border border-teal-200 text-teal-600 rounded hover:bg-teal-50"
+                          >
+                            復元
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteArchivedNewsForever(item.id)}
+                            className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50"
+                          >
+                            完全削除
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  {item.content && (
+                    <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">
+                      {item.content}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       )}
 
