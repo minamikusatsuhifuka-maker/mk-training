@@ -1,8 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { FileImport } from "@/components/tasks/FileImport";
+import { loadPortalItems } from "@/lib/portal-store";
+import {
+  TASKS_PAGE_LAYOUT_KEY,
+  DEFAULT_TASKS_LAYOUT,
+  visibleTasksSectionKeys,
+  type TasksSectionConfig,
+  type TasksSectionKey,
+} from "@/lib/section-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -82,12 +90,25 @@ export default function TasksPage() {
   // 編集ダイアログ
   const [editing, setEditing] = useState<StaffTask | null>(null);
 
+  // セクション並び順（content_store: tasks_page_layout。未設定/不正なら既定順）
+  const [sectionOrder, setSectionOrder] = useState<TasksSectionKey[]>(() =>
+    visibleTasksSectionKeys(null)
+  );
+
   useEffect(() => {
     setNow(new Date());
-    Promise.all([loadTasks(), loadStaffMembers()])
-      .then(([t, m]) => {
+    Promise.all([
+      loadTasks(),
+      loadStaffMembers(),
+      loadPortalItems<TasksSectionConfig>(
+        TASKS_PAGE_LAYOUT_KEY,
+        DEFAULT_TASKS_LAYOUT
+      ),
+    ])
+      .then(([t, m, layout]) => {
         setTasks(t);
         setMembers(m);
+        setSectionOrder(visibleTasksSectionKeys(layout));
       })
       .catch(() => {})
       .finally(() => setLoaded(true));
@@ -281,15 +302,10 @@ export default function TasksPage() {
     );
   }
 
-  return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
-      <PageHeader
-        title="📋 みんなのタスク"
-        description="クリニック全体のタスクを「誰が・何を・いつまで」で見える化"
-        badge={`未完了 ${tasks.filter((t) => t.status !== "done").length} 件`}
-      />
-
-      {/* 追加フォーム */}
+  // ─── セクション本体（並び替え可能な単位。中身・機能は従来どおり） ───
+  const sectionNodes: Record<TasksSectionKey, ReactNode> = {
+    // 追加フォーム
+    add_form: (
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <h2 className="text-sm font-semibold">タスクを追加</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -357,12 +373,15 @@ export default function TasksPage() {
           </Button>
         </div>
       </div>
+    ),
 
-      {/* ファイルからAIでタスク化 */}
+    // ファイルからAIでタスク化
+    ai_import: (
       <FileImport knownMembers={assigneeOptions} onImport={handleImport} />
+    ),
 
-      {/* 件数サマリー */}
-      {counts && (
+    // 件数サマリー
+    summary: counts && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <button
             type="button"
@@ -403,8 +422,11 @@ export default function TasksPage() {
             </p>
           </div>
         </div>
-      )}
+    ),
 
+    // ビュー切替ツールバー＋タスク一覧（一体で1セクション扱い）
+    task_list: (
+      <>
       {/* ビュー切替 + フィルタ */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-1 rounded-lg border border-border bg-card p-1">
@@ -513,6 +535,22 @@ export default function TasksPage() {
           onDelete={handleDelete}
         />
       )}
+      </>
+    ),
+  };
+
+  return (
+    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
+      <PageHeader
+        title="📋 みんなのタスク"
+        description="クリニック全体のタスクを「誰が・何を・いつまで」で見える化"
+        badge={`未完了 ${tasks.filter((t) => t.status !== "done").length} 件`}
+      />
+
+      {/* セクション（管理画面「ポータル管理→レイアウト」の設定順に描画） */}
+      {sectionOrder.map((key) => (
+        <Fragment key={key}>{sectionNodes[key]}</Fragment>
+      ))}
 
       {/* 編集ダイアログ */}
       {editing && (

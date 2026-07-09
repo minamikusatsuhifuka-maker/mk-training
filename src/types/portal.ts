@@ -1,3 +1,5 @@
+import { resolveSectionLayout, visibleSectionKeys } from "@/lib/section-layout";
+
 export type NewsCategory = "important" | "drug_info" | "notice" | "event";
 
 /** 緊急度（カテゴリとは別軸）。emergency=赤 / semi=黄 / normal=緑 */
@@ -207,41 +209,18 @@ export const DEFAULT_HOME_LAYOUT: HomeSectionConfig[] = [
   { key: "policy", order: 5 },
 ];
 
-const HOME_SECTION_KEYS = new Set<HomeSectionKey>(
-  DEFAULT_HOME_LAYOUT.map((s) => s.key)
-);
-
 // 保存済み設定を検証・補完する。空/不正なら既定順に丸ごとフォールバック（ホームが壊れない）。
 // 保存済み設定に無いキー（将来追加されたセクション）は末尾に自動追加する。
+// 実装は汎用ヘルパ（/tasks と共通）に委譲。
 export function resolveHomeLayout(
   saved: HomeSectionConfig[] | null | undefined
 ): HomeSectionConfig[] {
-  const valid = Array.isArray(saved)
-    ? saved.filter(
-        (s): s is HomeSectionConfig =>
-          !!s && typeof s.order === "number" && HOME_SECTION_KEYS.has(s.key)
-      )
-    : [];
-
-  const seen = new Set<HomeSectionKey>();
-  const deduped = valid.filter((s) => {
-    if (seen.has(s.key)) return false;
-    seen.add(s.key);
-    return true;
-  });
-
-  if (deduped.length === 0) return DEFAULT_HOME_LAYOUT;
-
-  const sorted = [...deduped].sort((a, b) => a.order - b.order);
-  const missing = DEFAULT_HOME_LAYOUT.filter((s) => !seen.has(s.key));
-  return [...sorted, ...missing];
+  return resolveSectionLayout(saved, DEFAULT_HOME_LAYOUT);
 }
 
 // スタッフ側ホーム表示用：非表示を除いたキーの描画順配列
 export function visibleHomeSectionKeys(
   saved: HomeSectionConfig[] | null | undefined
 ): HomeSectionKey[] {
-  return resolveHomeLayout(saved)
-    .filter((s) => !s.hidden)
-    .map((s) => s.key);
+  return visibleSectionKeys(saved, DEFAULT_HOME_LAYOUT);
 }

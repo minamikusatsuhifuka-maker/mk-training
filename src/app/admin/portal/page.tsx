@@ -34,6 +34,14 @@ import {
   type HomeSectionConfig,
 } from "@/types/portal";
 import { CharacterSVG } from "@/components/CharacterNotification";
+import { SectionLayoutEditor } from "@/components/admin/SectionLayoutEditor";
+import {
+  TASKS_PAGE_LAYOUT_KEY,
+  TASKS_SECTION_LABELS,
+  DEFAULT_TASKS_LAYOUT,
+  resolveTasksLayout,
+  type TasksSectionConfig,
+} from "@/lib/section-layout";
 import {
   buildNewsHistory,
   filterNewsHistory,
@@ -220,14 +228,18 @@ export default function AdminPortalPage() {
   // ホーム画面のセクション並び順（管理画面「レイアウト」タブで編集）
   const [homeLayout, setHomeLayout] =
     useState<HomeSectionConfig[]>(DEFAULT_HOME_LAYOUT);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [savingLayout, setSavingLayout] = useState(false);
+
+  // みんなのタスク（/tasks）のセクション並び順（同タブで編集）
+  const [tasksLayout, setTasksLayout] =
+    useState<TasksSectionConfig[]>(DEFAULT_TASKS_LAYOUT);
+  const [savingTasksLayout, setSavingTasksLayout] = useState(false);
 
   useEffect(() => {
     const fetchAll = async () => {
       // 管理画面を開くたびに期限切れの新着をアーカイブへ移動（冪等）
       await archiveExpiredNews().catch(() => {});
-      const [n, na, h, t, p, w, c, layout] = await Promise.all([
+      const [n, na, h, t, p, w, c, layout, tLayout] = await Promise.all([
         loadPortalItems<NewsItem>(PORTAL_KEYS.news, []),
         loadPortalItems<ArchivedNewsItem>(PORTAL_KEYS.newsArchive, []),
         loadPortalItems<HiyariItem>(PORTAL_KEYS.hiyari, []),
@@ -243,6 +255,10 @@ export default function AdminPortalPage() {
           PORTAL_KEYS.homeLayout,
           DEFAULT_HOME_LAYOUT
         ),
+        loadPortalItems<TasksSectionConfig>(
+          TASKS_PAGE_LAYOUT_KEY,
+          DEFAULT_TASKS_LAYOUT
+        ),
       ]);
       setNews(n);
       setNewsArchive(na);
@@ -252,6 +268,7 @@ export default function AdminPortalPage() {
       setTodayWord(w);
       setCharSettings(c);
       setHomeLayout(resolveHomeLayout(layout));
+      setTasksLayout(resolveTasksLayout(tLayout));
       setLoading(false);
     };
     fetchAll().catch(() => setLoading(false));
@@ -259,33 +276,8 @@ export default function AdminPortalPage() {
 
   // ─────────────────────────────────────
   // ホーム画面レイアウト（並び順・表示/非表示）
+  // ※ 並び替え操作自体は SectionLayoutEditor 内で処理
   // ─────────────────────────────────────
-  const moveHomeSection = (index: number, direction: -1 | 1) => {
-    const target = index + direction;
-    if (target < 0 || target >= homeLayout.length) return;
-    const next = [...homeLayout];
-    [next[index], next[target]] = [next[target], next[index]];
-    setHomeLayout(next);
-  };
-
-  const toggleHomeSectionHidden = (key: HomeSectionConfig["key"]) => {
-    setHomeLayout((prev) =>
-      prev.map((s) => (s.key === key ? { ...s, hidden: !s.hidden } : s))
-    );
-  };
-
-  const handleLayoutDrop = (index: number) => {
-    if (draggedIndex === null || draggedIndex === index) {
-      setDraggedIndex(null);
-      return;
-    }
-    const next = [...homeLayout];
-    const [moved] = next.splice(draggedIndex, 1);
-    next.splice(index, 0, moved);
-    setHomeLayout(next);
-    setDraggedIndex(null);
-  };
-
   const handleSaveLayout = async () => {
     setSavingLayout(true);
     const normalized = homeLayout.map((s, i) => ({ ...s, order: i }));
@@ -310,6 +302,35 @@ export default function AdminPortalPage() {
 
   const handleResetLayoutToDefault = () => {
     setHomeLayout(DEFAULT_HOME_LAYOUT);
+  };
+
+  // ─────────────────────────────────────
+  // みんなのタスク（/tasks）レイアウト
+  // ─────────────────────────────────────
+  const handleSaveTasksLayout = async () => {
+    setSavingTasksLayout(true);
+    const normalized = tasksLayout.map((s, i) => ({ ...s, order: i }));
+    const ok = await savePortalItems(TASKS_PAGE_LAYOUT_KEY, normalized);
+    setSavingTasksLayout(false);
+    if (ok) {
+      setTasksLayout(normalized);
+      flash("💾 みんなのタスクの並びを保存しました");
+    } else {
+      alert("保存に失敗しました");
+    }
+  };
+
+  const handleReloadSavedTasksLayout = async () => {
+    const layout = await loadPortalItems<TasksSectionConfig>(
+      TASKS_PAGE_LAYOUT_KEY,
+      DEFAULT_TASKS_LAYOUT
+    );
+    setTasksLayout(resolveTasksLayout(layout));
+    flash("🔄 保存済みの並びを読み込みました");
+  };
+
+  const handleResetTasksLayoutToDefault = () => {
+    setTasksLayout(DEFAULT_TASKS_LAYOUT);
   };
 
   // 追加フォームの通知期限を「現在 + newsNoticeDays日」でプリフィル（未入力時のみ）
@@ -1857,107 +1878,40 @@ export default function AdminPortalPage() {
       )}
 
       {tab === "layout" && (
-        <div className="space-y-4 max-w-xl">
-          <p className="text-sm text-gray-600">
-            スタッフ側ホーム画面のセクション表示順を編集します（サイドバー構成とは別の設定です）。
-            ドラッグ&amp;ドロップ、または「上へ／下へ」ボタンで並び替え、チェックを外すと該当セクションをホームから非表示にできます。
-          </p>
+        <div className="space-y-8">
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold text-gray-800">
+              🏠 ホーム画面のセクション並び
+            </h2>
+            <SectionLayoutEditor
+              layout={homeLayout}
+              labels={HOME_SECTION_LABELS}
+              onChange={setHomeLayout}
+              onSave={handleSaveLayout}
+              saving={savingLayout}
+              onReload={handleReloadSavedLayout}
+              onReset={handleResetLayoutToDefault}
+              description="スタッフ側ホーム画面のセクション表示順を編集します（サイドバー構成とは別の設定です）。ドラッグ&ドロップ、または「上へ／下へ」ボタンで並び替え、チェックを外すと該当セクションをホームから非表示にできます。"
+              previewTitle="プレビュー（ホームでの表示順）"
+            />
+          </section>
 
-          <div className="space-y-2">
-            {homeLayout.map((section, index) => (
-              <div
-                key={section.key}
-                draggable
-                onDragStart={() => setDraggedIndex(index)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => handleLayoutDrop(index)}
-                className={`flex items-center gap-3 p-3 border rounded-xl bg-white cursor-move transition-colors ${
-                  draggedIndex === index
-                    ? "border-teal-400 bg-teal-50"
-                    : "border-gray-200"
-                } ${section.hidden ? "opacity-50" : ""}`}
-              >
-                <span className="text-gray-600 select-none" title="ドラッグして並び替え">
-                  ⠿
-                </span>
-                <span className="flex-1 text-sm font-medium text-gray-800">
-                  {HOME_SECTION_LABELS[section.key] ?? section.key}
-                </span>
-                <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={!section.hidden}
-                    onChange={() => toggleHomeSectionHidden(section.key)}
-                  />
-                  表示
-                </label>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => moveHomeSection(index, -1)}
-                    disabled={index === 0}
-                    className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-30"
-                    title="上へ"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveHomeSection(index, 1)}
-                    disabled={index === homeLayout.length - 1}
-                    className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-30"
-                    title="下へ"
-                  >
-                    ↓
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* プレビュー（簡易：現在の表示順のみのリスト） */}
-          <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
-            <p className="text-xs font-medium text-gray-800 mb-1.5">
-              プレビュー（ホームでの表示順）
-            </p>
-            <ol className="text-xs text-gray-700 list-decimal list-inside space-y-0.5">
-              {homeLayout
-                .filter((s) => !s.hidden)
-                .map((s) => (
-                  <li key={s.key}>{HOME_SECTION_LABELS[s.key] ?? s.key}</li>
-                ))}
-            </ol>
-            {homeLayout.every((s) => s.hidden) && (
-              <p className="text-xs text-gray-600">
-                すべて非表示に設定されています
-              </p>
-            )}
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={handleSaveLayout}
-              disabled={savingLayout}
-              className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
-            >
-              {savingLayout ? "保存中..." : "💾 保存"}
-            </button>
-            <button
-              type="button"
-              onClick={handleReloadSavedLayout}
-              className="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50"
-            >
-              🔄 現在の並びを初期値として取り込む
-            </button>
-            <button
-              type="button"
-              onClick={handleResetLayoutToDefault}
-              className="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50"
-            >
-              ↩️ 既定に戻す
-            </button>
-          </div>
+          <section className="space-y-3 border-t border-gray-200 pt-6">
+            <h2 className="text-sm font-semibold text-gray-800">
+              📋 みんなのタスクのセクション並び
+            </h2>
+            <SectionLayoutEditor
+              layout={tasksLayout}
+              labels={TASKS_SECTION_LABELS}
+              onChange={setTasksLayout}
+              onSave={handleSaveTasksLayout}
+              saving={savingTasksLayout}
+              onReload={handleReloadSavedTasksLayout}
+              onReset={handleResetTasksLayoutToDefault}
+              description="スタッフ側「みんなのタスク」（/tasks）のセクション表示順を編集します。保存するとスタッフ側は次回表示（リロード）から反映されます。ページタイトルは常に先頭固定です。"
+              previewTitle="プレビュー（/tasks での表示順）"
+            />
+          </section>
         </div>
       )}
     </div>
