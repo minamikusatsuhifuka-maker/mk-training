@@ -5,13 +5,14 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { Sidebar } from "@/components/sidebar";
 import { useResolvedNav } from "@/lib/use-nav";
+import { UserMenu } from "@/components/UserMenu";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const mobileNavSections = useResolvedNav().filter((s) => s.items.length > 0);
   const isAdmin = pathname.startsWith("/admin");
-  const isLogin = pathname === "/login";
+  const isLogin = pathname === "/login" || pathname === "/reset-password";
 
   if (isAdmin || isLogin) {
     return <>{children}</>;
@@ -66,6 +67,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   </div>
                 ))}
               </nav>
+              <div className="px-3 py-2 border-t">
+                <UserMenu onNavigate={() => setMenuOpen(false)} />
+              </div>
               <div className="px-3 py-3 border-t">
                 <Link href="/admin" onClick={() => setMenuOpen(false)} className="flex items-center gap-1.5 px-2 py-2 text-xs text-muted-foreground hover:text-foreground">
                   <span>⚙</span><span>管理画面</span>

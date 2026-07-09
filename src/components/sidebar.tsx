@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useResolvedNav } from "@/lib/use-nav";
+import { UserMenu } from "@/components/UserMenu";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -49,6 +50,12 @@ export function Sidebar() {
           ))}
         </nav>
       </ScrollArea>
+
+      {/* ログイン状態 */}
+      <Separator />
+      <div className="px-3 py-2">
+        <UserMenu />
+      </div>
 
       {/* Admin link */}
       <Separator />
