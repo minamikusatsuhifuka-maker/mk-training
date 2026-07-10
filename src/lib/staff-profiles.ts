@@ -6,6 +6,7 @@
 // 写真は Supabase Storage バケット staff-photos（public read）。
 
 import { loadPortalItems, loadPortalObject } from "./portal-store";
+import { supabase } from "./supabase";
 
 export const STAFF_PROFILES_INDEX_KEY = "staff_profiles_index";
 
@@ -89,6 +90,29 @@ export async function loadProfilesIndex(): Promise<StaffProfileIndexEntry[]> {
   return [...items].sort((a, b) =>
     (a.kana || a.name).localeCompare(b.kana || b.name, "ja")
   );
+}
+
+// 全スタッフのプロフィール本体を1クエリで取得（一覧カード表示用）。
+// index に項目値を同期させる方式より単純で、保存経路が増えてもズレない。
+export async function loadAllStaffProfiles(): Promise<
+  Record<string, StaffProfile>
+> {
+  try {
+    const { data, error } = await supabase
+      .from("content_store")
+      .select("id, data")
+      .like("id", "staff_profile:%");
+    if (error || !data) return {};
+    const map: Record<string, StaffProfile> = {};
+    for (const row of data) {
+      const p = row.data as StaffProfile | null;
+      if (!p || typeof p.userId !== "string") continue;
+      map[p.userId] = { ...emptyProfile(p.userId), ...p };
+    }
+    return map;
+  } catch {
+    return {};
+  }
 }
 
 export async function loadStaffProfile(

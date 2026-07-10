@@ -22,6 +22,7 @@ export const MASTER_CATEGORIES: MasterCategory[] = [
 // key = ルート（既存メニューの安定ID）。ルートは変更しない。
 export const MASTER_ITEMS: MasterItem[] = [
   { key: "/", href: "/", label: "🏠 ホーム", categoryId: "home" },
+  { key: "/members", href: "/members", label: "👥 メンバー紹介", categoryId: "home" },
 
   { key: "/philosophy", href: "/philosophy", label: "🏛️ 理念・院長の想い", categoryId: "philosophy" },
 
@@ -39,7 +40,6 @@ export const MASTER_ITEMS: MasterItem[] = [
   { key: "/counseling", href: "/counseling", label: "💬 カウンセリングガイド", categoryId: "beauty" },
 
   { key: "/tasks", href: "/tasks", label: "📋 みんなのタスク", categoryId: "work" },
-  { key: "/members", href: "/members", label: "👥 メンバー紹介", categoryId: "work" },
   { key: "/news-history", href: "/news-history", label: "📜 お知らせ履歴", categoryId: "work" },
   { key: "/operations", href: "/operations", label: "📋 業務チェックリスト", categoryId: "work" },
   { key: "/medical-fees", href: "/medical-fees", label: "💴 算定・点数表", categoryId: "work" },

@@ -16,6 +16,15 @@ import {
   type ProfileFieldDef,
   type ProfileFieldType,
 } from "@/lib/profile-fields";
+import {
+  BASIC_CARD_FIELDS,
+  DEFAULT_MEMBERS_CARD_CONFIG,
+  MAX_CARD_FIELD_IDS,
+  MAX_CARD_FIELDS_SHOWN,
+  loadMembersCardConfig,
+  saveMembersCardConfig,
+  type MembersCardConfig,
+} from "@/lib/members-card";
 
 // 追加項目のid自動生成（既定項目のidとは衝突しない接頭辞つき）
 function generateFieldId(): string {
@@ -33,11 +42,20 @@ export default function ProfileFieldsAdminPage() {
   const [newPlaceholder, setNewPlaceholder] = useState("");
   const [newType, setNewType] = useState<ProfileFieldType>("text");
 
+  // メンバー紹介カードの表示項目設定（指示書32）
+  const [cardConfig, setCardConfig] = useState<MembersCardConfig>(
+    DEFAULT_MEMBERS_CARD_CONFIG
+  );
+  const [cardSaving, setCardSaving] = useState(false);
+
   useEffect(() => {
     loadProfileFieldConfig()
       .then(setFields)
       .catch(() => setFields(DEFAULT_PROFILE_FIELDS))
       .finally(() => setLoaded(true));
+    loadMembersCardConfig()
+      .then(setCardConfig)
+      .catch(() => {});
   }, []);
 
   const flash = (msg: string) => {
@@ -100,6 +118,52 @@ export default function ProfileFieldsAdminPage() {
       return;
     }
     setFields(DEFAULT_PROFILE_FIELDS.map((f) => ({ ...f })));
+  };
+
+  // ─── カード表示項目 ───
+  // 選択肢 = 基本項目 + 現在編集中のカスタム項目（非表示は除く）
+  const cardOptions = [
+    ...BASIC_CARD_FIELDS,
+    ...fields
+      .filter((f) => !f.hidden)
+      .map((f) => ({ id: f.id, label: f.label })),
+  ];
+
+  const toggleCardField = (id: string) => {
+    if (cardConfig.fieldIds.includes(id)) {
+      setCardConfig((c) => ({
+        ...c,
+        fieldIds: c.fieldIds.filter((x) => x !== id),
+      }));
+      return;
+    }
+    if (cardConfig.fieldIds.length >= MAX_CARD_FIELD_IDS) {
+      setError(`カードに表示できる項目は最大${MAX_CARD_FIELD_IDS}個です`);
+      return;
+    }
+    setError("");
+    setCardConfig((c) => ({ ...c, fieldIds: [...c.fieldIds, id] }));
+  };
+
+  const moveCardField = (index: number, dir: -1 | 1) =>
+    setCardConfig((c) => {
+      const to = index + dir;
+      if (to < 0 || to >= c.fieldIds.length) return c;
+      const next = [...c.fieldIds];
+      [next[index], next[to]] = [next[to], next[index]];
+      return { ...c, fieldIds: next };
+    });
+
+  const handleSaveCardConfig = async () => {
+    setCardSaving(true);
+    setError("");
+    const ok = await saveMembersCardConfig(cardConfig);
+    setCardSaving(false);
+    if (!ok) {
+      setError("カード表示設定の保存に失敗しました");
+      return;
+    }
+    flash("💾 メンバー紹介カードの表示項目を保存しました");
   };
 
   const handleSave = async () => {
@@ -282,6 +346,128 @@ export default function ProfileFieldsAdminPage() {
             <Button type="button" onClick={handleSave} disabled={saving}>
               {saving ? "保存中..." : "💾 保存"}
             </Button>
+          </div>
+
+          {/* メンバー紹介カードの表示項目 */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-800">
+                🃏 メンバー紹介カードの表示項目
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">
+                /members の一覧カードに表示する内容を選びます（項目は最大
+                {MAX_CARD_FIELD_IDS}個選択・カードには値が入っている項目を上から最大
+                {MAX_CARD_FIELDS_SHOWN}個表示）。値が空の項目はその人のカードには出ません。
+              </p>
+            </div>
+
+            {/* 基本表示のON/OFF */}
+            <div className="flex flex-wrap gap-4">
+              {(
+                [
+                  { key: "showKana", label: "ふりがな" },
+                  { key: "showRole", label: "役職" },
+                  { key: "showMessage", label: "ひとこと" },
+                ] as const
+              ).map((opt) => (
+                <label
+                  key={opt.key}
+                  className="flex items-center gap-1.5 text-sm text-slate-700"
+                >
+                  <input
+                    type="checkbox"
+                    checked={cardConfig[opt.key]}
+                    onChange={(e) =>
+                      setCardConfig((c) => ({
+                        ...c,
+                        [opt.key]: e.target.checked,
+                      }))
+                    }
+                  />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
+
+            {/* 選択中（順序つき） */}
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-slate-600">
+                選択中の項目（上から順に表示）
+              </p>
+              {cardConfig.fieldIds.length === 0 ? (
+                <p className="text-xs text-slate-500">
+                  追加の項目はありません（下から選べます）。
+                </p>
+              ) : (
+                <ul className="space-y-1">
+                  {cardConfig.fieldIds.map((id, i) => {
+                    const opt = cardOptions.find((o) => o.id === id);
+                    return (
+                      <li
+                        key={id}
+                        className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-1.5"
+                      >
+                        <span className="text-sm flex-1">
+                          {opt?.label ?? `${id}（削除済みの項目）`}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => moveCardField(i, -1)}
+                          disabled={i === 0}
+                          className="text-xs px-2 py-1 border border-slate-200 rounded hover:bg-white disabled:opacity-30"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveCardField(i, 1)}
+                          disabled={i === cardConfig.fieldIds.length - 1}
+                          className="text-xs px-2 py-1 border border-slate-200 rounded hover:bg-white disabled:opacity-30"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleCardField(id)}
+                          className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50"
+                        >
+                          外す
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            {/* 未選択の選択肢 */}
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-slate-600">追加できる項目</p>
+              <div className="flex flex-wrap gap-2">
+                {cardOptions
+                  .filter((o) => !cardConfig.fieldIds.includes(o.id))
+                  .map((o) => (
+                    <button
+                      key={o.id}
+                      type="button"
+                      onClick={() => toggleCardField(o.id)}
+                      className="text-xs px-2.5 py-1 border border-slate-200 rounded-full hover:bg-slate-50"
+                    >
+                      ＋ {o.label}
+                    </button>
+                  ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                onClick={handleSaveCardConfig}
+                disabled={cardSaving}
+              >
+                {cardSaving ? "保存中..." : "💾 カード表示設定を保存"}
+              </Button>
+            </div>
           </div>
         </>
       )}

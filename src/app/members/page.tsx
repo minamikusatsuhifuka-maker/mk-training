@@ -15,6 +15,7 @@ import {
 import {
   loadProfilesIndex,
   loadStaffProfile,
+  loadAllStaffProfiles,
   type StaffProfile,
   type StaffProfileIndexEntry,
 } from "@/lib/staff-profiles";
@@ -23,6 +24,13 @@ import {
   visibleProfileFields,
   type ProfileFieldDef,
 } from "@/lib/profile-fields";
+import {
+  BASIC_CARD_FIELDS,
+  DEFAULT_MEMBERS_CARD_CONFIG,
+  MAX_CARD_FIELDS_SHOWN,
+  loadMembersCardConfig,
+  type MembersCardConfig,
+} from "@/lib/members-card";
 
 function Avatar({
   url,
@@ -31,12 +39,14 @@ function Avatar({
 }: {
   url?: string;
   name: string;
-  size: "sm" | "lg";
+  size: "sm" | "lg" | "xl";
 }) {
   const cls =
     size === "sm"
       ? "h-16 w-16 text-2xl"
-      : "h-20 w-20 text-3xl";
+      : size === "lg"
+        ? "h-20 w-20 text-3xl"
+        : "h-24 w-24 text-4xl";
   if (url) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
@@ -63,23 +73,67 @@ export default function MembersPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [zoomPhoto, setZoomPhoto] = useState<string | null>(null);
   const [fieldDefs, setFieldDefs] = useState<ProfileFieldDef[]>([]);
+  const [profiles, setProfiles] = useState<Record<string, StaffProfile>>({});
+  const [cardConfig, setCardConfig] = useState<MembersCardConfig>(
+    DEFAULT_MEMBERS_CARD_CONFIG
+  );
 
   useEffect(() => {
     loadProfilesIndex()
       .then(setMembers)
       .catch(() => {})
       .finally(() => setLoaded(true));
-    // カスタム項目の定義（表示ラベル・並び順）
+    // カード表示用: プロフィール本体（1クエリ一括）・カスタム項目定義・カード設定
+    loadAllStaffProfiles()
+      .then(setProfiles)
+      .catch(() => {});
     loadProfileFieldConfig()
       .then((defs) => setFieldDefs(visibleProfileFields(defs)))
+      .catch(() => {});
+    loadMembersCardConfig()
+      .then(setCardConfig)
       .catch(() => {});
   }, []);
 
   const openDetail = async (entry: StaffProfileIndexEntry) => {
+    // 一括取得済みならそれを使い、無ければ従来どおり個別取得
+    const cached = profiles[entry.userId];
+    if (cached) {
+      setSelected(cached);
+      return;
+    }
     setDetailLoading(true);
     const p = await loadStaffProfile(entry.userId).catch(() => null);
     setDetailLoading(false);
     if (p) setSelected(p);
+  };
+
+  // カードに表示する項目（設定の順序で、ラベルを解決できたものだけ）
+  const cardFields = cardConfig.fieldIds
+    .map((id) => {
+      const basic = BASIC_CARD_FIELDS.find((f) => f.id === id);
+      if (basic) return basic;
+      const def = fieldDefs.find((f) => f.id === id);
+      return def ? { id: def.id, label: def.label } : null;
+    })
+    .filter((f): f is { id: string; label: string } => f !== null);
+
+  // 1人分のカードに載せる項目値（値が空のものは出さない・最大N個）
+  const cardValuesOf = (userId: string): { id: string; label: string; value: string }[] => {
+    const p = profiles[userId];
+    if (!p) return [];
+    const values: { id: string; label: string; value: string }[] = [];
+    for (const f of cardFields) {
+      if (values.length >= MAX_CARD_FIELDS_SHOWN) break;
+      const v =
+        f.id === "bio"
+          ? p.bio
+          : f.id === "hobbies"
+            ? p.hobbies
+            : (p.customFields?.[f.id] ?? "");
+      if (v.trim()) values.push({ id: f.id, label: f.label, value: v });
+    }
+    return values;
   };
 
   return (
@@ -109,32 +163,55 @@ export default function MembersPage() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {members.map((m) => (
-            <button
-              key={m.userId}
-              type="button"
-              onClick={() => openDetail(m)}
-              disabled={detailLoading}
-              className="flex items-center gap-3 rounded-lg border border-border bg-card p-4 text-left hover:bg-accent transition-colors"
-            >
-              <Avatar url={m.avatarUrl} name={m.name} size="sm" />
-              <div className="min-w-0">
-                {m.kana && (
-                  <p className="text-[11px] text-muted-foreground truncate">
-                    {m.kana}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {members.map((m) => {
+            const values = cardValuesOf(m.userId);
+            return (
+              <button
+                key={m.userId}
+                type="button"
+                onClick={() => openDetail(m)}
+                disabled={detailLoading}
+                className="rounded-xl border border-border bg-card p-5 text-left hover:bg-accent transition-colors space-y-3"
+              >
+                <div className="flex items-center gap-4">
+                  <Avatar url={m.avatarUrl} name={m.name} size="xl" />
+                  <div className="min-w-0">
+                    {cardConfig.showKana && m.kana && (
+                      <p className="text-xs text-muted-foreground truncate">
+                        {m.kana}
+                      </p>
+                    )}
+                    <p className="text-lg font-bold truncate">{m.name}</p>
+                    {cardConfig.showRole && m.role && (
+                      <span className="inline-block mt-0.5 text-xs px-2 py-0.5 rounded-full bg-teal-light text-teal">
+                        {m.role}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {cardConfig.showMessage && m.message && (
+                  <p className="text-sm bg-teal-light/40 rounded-md px-3 py-1.5 line-clamp-2">
+                    💬 {m.message}
                   </p>
                 )}
-                <p className="text-sm font-semibold truncate">{m.name}</p>
-                {m.role && <p className="text-xs text-teal">{m.role}</p>}
-                {m.message && (
-                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                    {m.message}
-                  </p>
+                {values.length > 0 && (
+                  <dl className="space-y-1.5">
+                    {values.map((v) => (
+                      <div key={v.id}>
+                        <dt className="text-[11px] font-semibold text-muted-foreground">
+                          {v.label}
+                        </dt>
+                        <dd className="text-sm line-clamp-2 whitespace-pre-wrap">
+                          {v.value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
                 )}
-              </div>
-            </button>
-          ))}
+              </button>
+            );
+          })}
         </div>
       )}
 
