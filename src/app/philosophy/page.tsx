@@ -177,14 +177,25 @@ const fourZones = [
   },
 ];
 
+// 選択理論（ウィリアム・グラッサー）の定義どおりの7項目。順番も含めて変更しない。
 const ngActions = [
-  "強制する",
-  "脅す",
-  "批判・責める",
+  "批判する",
+  "責める",
   "文句を言う",
-  "ご褒美で釣る",
-  "口うるさく言う",
-  "脅かす",
+  "ガミガミ言う",
+  "脅す",
+  "罰する",
+  "目先の褒美で釣る",
+];
+
+const caringHabits = [
+  "傾聴する",
+  "支援する",
+  "励ます",
+  "尊敬する",
+  "信頼する",
+  "受容する",
+  "意見の違いについて常に交渉する",
 ];
 
 const leadPrinciples = [
@@ -508,16 +519,17 @@ export default function PhilosophyPage() {
             リードマネジメント
           </h2>
         </div>
+        {/* 選択理論の7つの習慣（左右対比） */}
         <div className="grid md:grid-cols-2 gap-4">
-          {/* NG行動 */}
+          {/* 致命的な7つの習慣 */}
           <Card className="bg-red-50 border-2 border-red-200 p-5">
             <Badge className="bg-red-600 text-white mb-3">
-              ❌ 外的コントロールの7つのNG
+              ❌ 致命的な7つの習慣（外的コントロール）
             </Badge>
             <h3 className="font-bold text-red-900 mb-3">これは絶対にしない</h3>
             <ol className="space-y-2 text-sm text-red-900">
               {ngActions.map((a, i) => (
-                <li key={i} className="flex items-start gap-2">
+                <li key={i} className="flex items-start gap-2 min-h-7">
                   <span className="shrink-0 w-6 h-6 rounded-full bg-red-200 text-red-800 flex items-center justify-center text-xs font-bold">
                     {i + 1}
                   </span>
@@ -527,26 +539,47 @@ export default function PhilosophyPage() {
             </ol>
           </Card>
 
-          {/* リードマネジャー5原則 */}
-          <Card className="bg-teal-50 border-2 border-teal-200 p-5">
-            <Badge className="bg-teal-600 text-white mb-3">
-              ✓ リードマネジャーの5原則
+          {/* 身につけたい7つの習慣 */}
+          <Card className="bg-emerald-50 border-2 border-emerald-200 p-5">
+            <Badge className="bg-emerald-600 text-white mb-3">
+              ✅ 身につけたい7つの習慣
             </Badge>
-            <h3 className="font-bold text-teal-900 mb-3">
-              これを大切にする
-            </h3>
-            <ol className="space-y-2 text-sm text-teal-900">
-              {leadPrinciples.map((p, i) => (
-                <li key={i} className="flex items-start gap-2">
-                  <span className="shrink-0 w-6 h-6 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-xs font-bold">
+            <h3 className="font-bold text-emerald-900 mb-3">これを実践する</h3>
+            <ol className="space-y-2 text-sm text-emerald-900">
+              {caringHabits.map((h, i) => (
+                <li key={i} className="flex items-start gap-2 min-h-7">
+                  <span className="shrink-0 w-6 h-6 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-xs font-bold">
                     {i + 1}
                   </span>
-                  <span className="pt-0.5">{p}</span>
+                  <span className="pt-0.5">{h}</span>
                 </li>
               ))}
             </ol>
           </Card>
         </div>
+        <p className="text-xs text-slate-500 text-right mt-2">
+          — ウィリアム・グラッサー『選択理論』
+        </p>
+
+        {/* リードマネジャー5原則 */}
+        <Card className="bg-teal-50 border-2 border-teal-200 p-5 mt-4">
+          <Badge className="bg-teal-600 text-white mb-3">
+            ✓ リードマネジャーの5原則
+          </Badge>
+          <h3 className="font-bold text-teal-900 mb-3">
+            これを大切にする
+          </h3>
+          <ol className="space-y-2 text-sm text-teal-900">
+            {leadPrinciples.map((p, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <span className="shrink-0 w-6 h-6 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-xs font-bold">
+                  {i + 1}
+                </span>
+                <span className="pt-0.5">{p}</span>
+              </li>
+            ))}
+          </ol>
+        </Card>
       </section>
 
       {/* 9. 7つの習慣 */}
