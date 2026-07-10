@@ -46,6 +46,9 @@ export type StaffProfile = {
   message: string; // ひとこと
   avatarUrl: string;
   photos: ProfilePhoto[];
+  // カスタム項目の回答（キー = profile_field_config の fieldId）。
+  // 設定から消えた fieldId の値も保持する（非表示になるだけで消さない）。
+  customFields: Record<string, string>;
   updatedAt: string;
 };
 
@@ -70,6 +73,7 @@ export function emptyProfile(userId: string, name = ""): StaffProfile {
     message: "",
     avatarUrl: "",
     photos: [],
+    customFields: {},
     updatedAt: "",
   };
 }

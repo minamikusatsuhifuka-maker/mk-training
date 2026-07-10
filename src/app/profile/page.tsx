@@ -23,11 +23,17 @@ import {
   emptyProfile,
   type StaffProfile,
 } from "@/lib/staff-profiles";
+import {
+  loadProfileFieldConfig,
+  visibleProfileFields,
+  type ProfileFieldDef,
+} from "@/lib/profile-fields";
 
 export default function ProfilePage() {
   const router = useRouter();
   const [profile, setProfile] = useState<StaffProfile | null>(null);
   const [email, setEmail] = useState("");
+  const [fieldDefs, setFieldDefs] = useState<ProfileFieldDef[]>([]);
   const [captions, setCaptions] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -64,6 +70,10 @@ export default function ProfilePage() {
         router.replace("/login?next=/profile");
         return;
       }
+      // カスタム項目の定義を読み込む（失敗しても既定セットにフォールバック）
+      loadProfileFieldConfig()
+        .then((defs) => setFieldDefs(visibleProfileFields(defs)))
+        .catch(() => {});
       const res = await fetch("/api/profile");
       if (res.status === 401) {
         router.replace("/login?next=/profile");
@@ -112,6 +122,7 @@ export default function ProfilePage() {
         hobbies: profile.hobbies,
         message: profile.message,
         photoCaptions: captions,
+        customFields: profile.customFields,
       }),
     });
     setSaving(false);
@@ -381,6 +392,52 @@ export default function ProfilePage() {
           />
         </div>
       </div>
+
+      {/* もっと自己紹介（カスタム項目・すべて任意） */}
+      {fieldDefs.length > 0 && (
+        <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+          <h2 className="text-sm font-semibold">
+            ✨ もっと自己紹介
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
+              書きたい項目だけでOK
+            </span>
+          </h2>
+          {fieldDefs.map((f) => (
+            <div key={f.id} className="space-y-1">
+              <Label htmlFor={`cf-${f.id}`}>{f.label}</Label>
+              {f.type === "textarea" ? (
+                <Textarea
+                  id={`cf-${f.id}`}
+                  rows={3}
+                  value={profile.customFields[f.id] ?? ""}
+                  onChange={(e) =>
+                    set("customFields", {
+                      ...profile.customFields,
+                      [f.id]: e.target.value,
+                    })
+                  }
+                  placeholder={f.placeholder}
+                />
+              ) : (
+                <Input
+                  id={`cf-${f.id}`}
+                  value={profile.customFields[f.id] ?? ""}
+                  onChange={(e) =>
+                    set("customFields", {
+                      ...profile.customFields,
+                      [f.id]: e.target.value,
+                    })
+                  }
+                  placeholder={f.placeholder}
+                />
+              )}
+            </div>
+          ))}
+          <p className="text-xs text-muted-foreground">
+            入力内容は「💾 保存」ボタンで保存されます。
+          </p>
+        </div>
+      )}
 
       {/* 共有写真 */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">

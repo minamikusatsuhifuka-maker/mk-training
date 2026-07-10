@@ -83,6 +83,28 @@ export async function PUT(req: NextRequest) {
       : p;
   });
 
+  // カスタム項目: 送られたキーだけを更新（空文字は削除）。
+  // 送られなかったキー（非表示・設定から削除済みの回答）はそのまま保持する。
+  const currentCustom =
+    current.customFields && typeof current.customFields === "object"
+      ? current.customFields
+      : {};
+  const customFields: Record<string, string> = { ...currentCustom };
+  if (body.customFields && typeof body.customFields === "object") {
+    for (const [key, value] of Object.entries(
+      body.customFields as Record<string, unknown>
+    )) {
+      const id = key.trim().slice(0, 64);
+      if (!id || typeof value !== "string") continue;
+      const v = value.trim().slice(0, 2000);
+      if (v) {
+        customFields[id] = v;
+      } else {
+        delete customFields[id];
+      }
+    }
+  }
+
   const next = {
     ...current,
     userId: user.id,
@@ -93,6 +115,7 @@ export async function PUT(req: NextRequest) {
     hobbies: cleanText(body.hobbies, "hobbies"),
     message: cleanText(body.message, "message"),
     photos,
+    customFields,
   };
 
   try {

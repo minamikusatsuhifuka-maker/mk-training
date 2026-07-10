@@ -18,6 +18,11 @@ import {
   type StaffProfile,
   type StaffProfileIndexEntry,
 } from "@/lib/staff-profiles";
+import {
+  loadProfileFieldConfig,
+  visibleProfileFields,
+  type ProfileFieldDef,
+} from "@/lib/profile-fields";
 
 function Avatar({
   url,
@@ -57,12 +62,17 @@ export default function MembersPage() {
   const [selected, setSelected] = useState<StaffProfile | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [zoomPhoto, setZoomPhoto] = useState<string | null>(null);
+  const [fieldDefs, setFieldDefs] = useState<ProfileFieldDef[]>([]);
 
   useEffect(() => {
     loadProfilesIndex()
       .then(setMembers)
       .catch(() => {})
       .finally(() => setLoaded(true));
+    // カスタム項目の定義（表示ラベル・並び順）
+    loadProfileFieldConfig()
+      .then((defs) => setFieldDefs(visibleProfileFields(defs)))
+      .catch(() => {});
   }, []);
 
   const openDetail = async (entry: StaffProfileIndexEntry) => {
@@ -182,6 +192,20 @@ export default function MembersPage() {
                   </p>
                 </div>
               )}
+
+              {/* カスタム項目（値が入っているものだけ表示） */}
+              {fieldDefs
+                .filter((f) => (selected.customFields?.[f.id] ?? "").trim())
+                .map((f) => (
+                  <div key={f.id}>
+                    <h3 className="text-xs font-semibold text-muted-foreground mb-1">
+                      {f.label}
+                    </h3>
+                    <p className="text-sm whitespace-pre-wrap">
+                      {selected.customFields[f.id]}
+                    </p>
+                  </div>
+                ))}
 
               {selected.photos.length > 0 && (
                 <div>
