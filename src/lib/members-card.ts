@@ -1,18 +1,13 @@
-// メンバー紹介カードの表示項目設定（指示書32）
+// メンバー紹介カードの表示項目設定（指示書32、38で上限撤廃）
 // content_store `members_card_config` に保存:
-//   { fieldIds: string[](順序付き・最大5), showKana, showRole, showMessage }
+//   { fieldIds: string[](順序付き・上限なし), showKana, showRole, showMessage }
 // fieldIds には基本項目（bio/hobbies）と profile_field_config のカスタム項目 id が入る。
-// 設定が無い・不正なら既定（ふりがな/役職/ひとことON＋趣味・特技1つ）にフォールバック。
+// 設定が未保存なら「全カスタム項目＋自己紹介・趣味特技」（書いたものは全部出る）が既定。
+// 値が入っている項目はすべてカードに表示する（指示書38・表示数上限なし）。
 
 import { loadPortalObject, savePortalObject } from "./portal-store";
 
 export const MEMBERS_CARD_CONFIG_KEY = "members_card_config";
-
-// 選択できる fieldIds の上限
-export const MAX_CARD_FIELD_IDS = 5;
-
-// 1枚のカードに実際に表示する項目数の上限（値が空の項目は数えない）
-export const MAX_CARD_FIELDS_SHOWN = 3;
 
 export type MembersCardConfig = {
   fieldIds: string[];
@@ -34,6 +29,11 @@ export const DEFAULT_MEMBERS_CARD_CONFIG: MembersCardConfig = {
   showMessage: true,
 };
 
+// 未保存時の既定 fieldIds:「全カスタム項目＋自己紹介・趣味特技」（書いたものは全部出る）
+export function defaultCardFieldIds(customFieldIds: string[]): string[] {
+  return [...customFieldIds, ...BASIC_CARD_FIELDS.map((f) => f.id)];
+}
+
 export function normalizeMembersCardConfig(raw: unknown): MembersCardConfig {
   if (!raw || typeof raw !== "object") return { ...DEFAULT_MEMBERS_CARD_CONFIG };
   const o = raw as Record<string, unknown>;
@@ -41,7 +41,6 @@ export function normalizeMembersCardConfig(raw: unknown): MembersCardConfig {
     ? o.fieldIds
         .filter((id): id is string => typeof id === "string" && !!id.trim())
         .map((id) => id.trim())
-        .slice(0, MAX_CARD_FIELD_IDS)
     : DEFAULT_MEMBERS_CARD_CONFIG.fieldIds;
   return {
     fieldIds: [...new Set(fieldIds)],
@@ -58,6 +57,13 @@ export function normalizeMembersCardConfig(raw: unknown): MembersCardConfig {
         ? o.showMessage
         : DEFAULT_MEMBERS_CARD_CONFIG.showMessage,
   };
+}
+
+// 保存済み設定を返す。未保存・不正な形なら null（呼び出し側で全項目既定を組み立てる）
+export async function loadMembersCardConfigOrNull(): Promise<MembersCardConfig | null> {
+  const payload = await loadPortalObject<unknown>(MEMBERS_CARD_CONFIG_KEY, null);
+  if (!payload || typeof payload !== "object") return null;
+  return normalizeMembersCardConfig(payload);
 }
 
 export async function loadMembersCardConfig(): Promise<MembersCardConfig> {

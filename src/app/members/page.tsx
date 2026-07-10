@@ -43,8 +43,8 @@ import {
 import {
   BASIC_CARD_FIELDS,
   DEFAULT_MEMBERS_CARD_CONFIG,
-  MAX_CARD_FIELDS_SHOWN,
-  loadMembersCardConfig,
+  defaultCardFieldIds,
+  loadMembersCardConfigOrNull,
   type MembersCardConfig,
 } from "@/lib/members-card";
 
@@ -153,11 +153,19 @@ export default function MembersPage() {
     loadAllStaffProfiles()
       .then(setProfiles)
       .catch(() => {});
-    loadProfileFieldConfig()
-      .then((defs) => setFieldDefs(visibleProfileFields(defs)))
-      .catch(() => {});
-    loadMembersCardConfig()
-      .then(setCardConfig)
+    // 項目定義とカード設定は同時に解決する（未保存時の既定=全項目 を組み立てるため）
+    Promise.all([loadProfileFieldConfig(), loadMembersCardConfigOrNull()])
+      .then(([defs, cfg]) => {
+        const visible = visibleProfileFields(defs);
+        setFieldDefs(visible);
+        setCardConfig(
+          cfg ?? {
+            ...DEFAULT_MEMBERS_CARD_CONFIG,
+            // 未保存なら「全カスタム項目＋自己紹介・趣味特技」＝書いたものは全部出る
+            fieldIds: defaultCardFieldIds(visible.map((f) => f.id)),
+          }
+        );
+      })
       .catch(() => {});
   }, []);
 
@@ -175,29 +183,36 @@ export default function MembersPage() {
   };
 
   // カードに表示する項目（設定の順序で、ラベルを解決できたものだけ）
-  const cardFields = cardConfig.fieldIds
+  // long=true は長文になりがちな項目（自己紹介/趣味特技/textarea項目）→ 2行line-clamp表示
+  type CardField = { id: string; label: string; long: boolean };
+  const cardFields: CardField[] = cardConfig.fieldIds
     .map((id) => {
       const basic = BASIC_CARD_FIELDS.find((f) => f.id === id);
-      if (basic) return basic;
+      if (basic) return { ...basic, long: true };
       const def = fieldDefs.find((f) => f.id === id);
-      return def ? { id: def.id, label: def.label } : null;
+      return def
+        ? { id: def.id, label: def.label, long: def.type === "textarea" }
+        : null;
     })
-    .filter((f): f is { id: string; label: string } => f !== null);
+    .filter((f): f is CardField => f !== null);
 
-  // 1人分のカードに載せる項目値（値が空のものは出さない・最大N個）
-  const cardValuesOf = (userId: string): { id: string; label: string; value: string }[] => {
+  // 1人分のカードに載せる項目値（値が空のものは出さない・入力済みはすべて表示）
+  const cardValuesOf = (
+    userId: string
+  ): { id: string; label: string; value: string; long: boolean }[] => {
     const p = profiles[userId];
     if (!p) return [];
-    const values: { id: string; label: string; value: string }[] = [];
+    const values: { id: string; label: string; value: string; long: boolean }[] =
+      [];
     for (const f of cardFields) {
-      if (values.length >= MAX_CARD_FIELDS_SHOWN) break;
       const v =
         f.id === "bio"
           ? p.bio
           : f.id === "hobbies"
             ? p.hobbies
             : (p.customFields?.[f.id] ?? "");
-      if (v.trim()) values.push({ id: f.id, label: f.label, value: v });
+      if (v.trim())
+        values.push({ id: f.id, label: f.label, value: v, long: f.long });
     }
     return values;
   };
@@ -229,7 +244,7 @@ export default function MembersPage() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-4">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-4 items-start">
           {members.map((m) => {
             const values = cardValuesOf(m.userId);
             const c = roleColorOf(m.role);
@@ -239,7 +254,7 @@ export default function MembersPage() {
                 type="button"
                 onClick={() => openDetail(m)}
                 disabled={detailLoading}
-                className="flex flex-col gap-3.5 rounded-2xl border border-gray-200 bg-white p-6 text-left transition hover:border-gray-300 hover:shadow-sm"
+                className="@container flex flex-col gap-3.5 rounded-2xl border border-gray-200 bg-white p-6 text-left transition hover:border-gray-300 hover:shadow-sm"
               >
                 {/* ヘッダー: アバター＋名前ブロック */}
                 <div className="flex items-center gap-3.5">
@@ -270,18 +285,24 @@ export default function MembersPage() {
                   </p>
                 )}
 
-                {/* カスタム項目（ヘアライン区切り＋アイコン付き2カラム行） */}
+                {/* 項目ゾーン（入力済みはすべて表示。カード幅480px以上で2カラムに流す） */}
                 {values.length > 0 && (
-                  <dl className="border-t border-gray-100 pt-3 space-y-2">
+                  <dl className="grid grid-cols-1 @[480px]:grid-cols-2 gap-x-6 gap-y-2 border-t border-gray-100 pt-3">
                     {values.map((v) => {
                       const Icon = fieldIconOf(v.id);
                       return (
-                        <div key={v.id} className="flex items-center gap-2">
-                          <dt className="flex w-[88px] flex-none items-center gap-1.5 text-[13px] text-gray-400">
+                        <div key={v.id} className="flex items-start gap-2 min-w-0">
+                          <dt className="flex min-w-[96px] max-w-[160px] flex-none items-center gap-1.5 text-[13px] text-gray-400">
                             <Icon className="h-3.5 w-3.5 shrink-0" />
                             <span className="truncate">{v.label}</span>
                           </dt>
-                          <dd className="min-w-0 flex-1 truncate text-[13px] text-gray-800">
+                          <dd
+                            className={`min-w-0 flex-1 text-[13px] text-gray-800 ${
+                              v.long
+                                ? "line-clamp-2 whitespace-pre-wrap"
+                                : "truncate"
+                            }`}
+                          >
                             {v.value}
                           </dd>
                         </div>

@@ -13,15 +13,15 @@ import {
   DEFAULT_PROFILE_FIELDS,
   loadProfileFieldConfig,
   saveProfileFieldConfig,
+  visibleProfileFields,
   type ProfileFieldDef,
   type ProfileFieldType,
 } from "@/lib/profile-fields";
 import {
   BASIC_CARD_FIELDS,
   DEFAULT_MEMBERS_CARD_CONFIG,
-  MAX_CARD_FIELD_IDS,
-  MAX_CARD_FIELDS_SHOWN,
-  loadMembersCardConfig,
+  defaultCardFieldIds,
+  loadMembersCardConfigOrNull,
   saveMembersCardConfig,
   type MembersCardConfig,
 } from "@/lib/members-card";
@@ -49,13 +49,21 @@ export default function ProfileFieldsAdminPage() {
   const [cardSaving, setCardSaving] = useState(false);
 
   useEffect(() => {
-    loadProfileFieldConfig()
-      .then(setFields)
+    // カード設定が未保存なら「全カスタム項目＋自己紹介・趣味特技」を既定として編集開始
+    Promise.all([loadProfileFieldConfig(), loadMembersCardConfigOrNull()])
+      .then(([defs, cfg]) => {
+        setFields(defs);
+        setCardConfig(
+          cfg ?? {
+            ...DEFAULT_MEMBERS_CARD_CONFIG,
+            fieldIds: defaultCardFieldIds(
+              visibleProfileFields(defs).map((f) => f.id)
+            ),
+          }
+        );
+      })
       .catch(() => setFields(DEFAULT_PROFILE_FIELDS))
       .finally(() => setLoaded(true));
-    loadMembersCardConfig()
-      .then(setCardConfig)
-      .catch(() => {});
   }, []);
 
   const flash = (msg: string) => {
@@ -137,11 +145,6 @@ export default function ProfileFieldsAdminPage() {
       }));
       return;
     }
-    if (cardConfig.fieldIds.length >= MAX_CARD_FIELD_IDS) {
-      setError(`カードに表示できる項目は最大${MAX_CARD_FIELD_IDS}個です`);
-      return;
-    }
-    setError("");
     setCardConfig((c) => ({ ...c, fieldIds: [...c.fieldIds, id] }));
   };
 
@@ -355,9 +358,8 @@ export default function ProfileFieldsAdminPage() {
                 🃏 メンバー紹介カードの表示項目
               </h2>
               <p className="text-xs text-slate-500 mt-1">
-                /members の一覧カードに表示する内容を選びます（項目は最大
-                {MAX_CARD_FIELD_IDS}個選択・カードには値が入っている項目を上から最大
-                {MAX_CARD_FIELDS_SHOWN}個表示）。値が空の項目はその人のカードには出ません。
+                /members
+                の一覧カードに表示する項目と順序を選びます（選択数の上限なし）。選んだ項目のうち、値が入っているものはすべてカードに表示されます。値が空の項目はその人のカードには出ません。
               </p>
             </div>
 
