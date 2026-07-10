@@ -16,6 +16,11 @@ import {
   type NewsHistoryGroupAxis,
 } from "@/lib/news-history";
 import { URGENCY_META, urgencyOf, urgencyCardClass } from "@/types/portal";
+import {
+  useNewsReactions,
+  ReactionBar,
+  ReactionSummary,
+} from "@/components/NewsReactions";
 
 const GROUP_AXES: { value: NewsHistoryGroupAxis; label: string }[] = [
   { value: "flat", label: "新しい順" },
@@ -45,6 +50,9 @@ export default function NewsHistoryPage() {
   const [keyword, setKeyword] = useState("");
   const [axis, setAxis] = useState<NewsHistoryGroupAxis>("flat");
   const [selected, setSelected] = useState<NewsHistoryItem | null>(null);
+
+  // お知らせリアクション（👍✅❤️🙏🎉・匿名OK）
+  const reactions = useNewsReactions();
 
   useEffect(() => {
     getNewsHistory()
@@ -162,7 +170,8 @@ export default function NewsHistoryPage() {
                       {item.title}
                     </p>
                     <p className="text-xs text-gray-600 mt-1">
-                      {formatDateTime(item.createdAt)} · 👤 {item.author}
+                      {formatDateTime(item.createdAt)} · 👤 {item.author}{" "}
+                      <ReactionSummary map={reactions.map} newsId={item.id} />
                     </p>
                   </div>
                   <div className="flex flex-col items-end gap-1 flex-shrink-0">
@@ -247,6 +256,7 @@ export default function NewsHistoryPage() {
             <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
               {selected.content}
             </p>
+            <ReactionBar newsId={selected.id} controller={reactions} />
           </div>
         </div>
       )}

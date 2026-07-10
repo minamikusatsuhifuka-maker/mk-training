@@ -13,6 +13,12 @@ import CharacterNotification from "@/components/CharacterNotification";
 import { loadTasks, taskCounts } from "@/lib/staff-tasks";
 import { getCurrentActorName, monthlyTopContributors } from "@/lib/news-log";
 import {
+  useNewsReactions,
+  ReactionBar,
+  ReactionSummary,
+} from "@/components/NewsReactions";
+import { NEWS_AUTHOR_LS_KEY } from "@/lib/news-reactions";
+import {
   PORTAL_KEYS,
   URGENCY_META,
   URGENCY_OPTIONS,
@@ -35,9 +41,6 @@ import {
   type HomeSectionConfig,
   type HomeSectionKey,
 } from "@/types/portal";
-
-// 発信者名の前回値を覚える localStorage キー
-const NEWS_AUTHOR_LS_KEY = "portal_news_author";
 
 // 投稿フォームのカテゴリ・キャラ選択肢（管理画面と同じ内容）
 const NEWS_CATEGORY_CHOICES: { value: NewsCategory; label: string }[] = [
@@ -287,6 +290,9 @@ export default function PortalHome() {
   const [monthlyTop, setMonthlyTop] = useState<
     { author: string; count: number }[]
   >([]);
+
+  // お知らせリアクション（👍✅❤️🙏🎉・匿名OK）
+  const reactions = useNewsReactions();
 
   // 気づきシェア投稿フォーム
   const [showHiyariForm, setShowHiyariForm] = useState(false);
@@ -614,7 +620,8 @@ export default function PortalHome() {
                   {item.title}
                 </p>
                 <p className="text-xs text-gray-600 mt-1">
-                  {formatDate(item.createdAt)} · 👤 {item.author}
+                  {formatDate(item.createdAt)} · 👤 {item.author}{" "}
+                  <ReactionSummary map={reactions.map} newsId={item.id} />
                 </p>
               </div>
               <div className="flex flex-col items-end gap-1 flex-shrink-0">
@@ -1081,6 +1088,7 @@ export default function PortalHome() {
             <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
               {selectedNews.content}
             </p>
+            <ReactionBar newsId={selectedNews.id} controller={reactions} />
           </div>
         </div>
       )}

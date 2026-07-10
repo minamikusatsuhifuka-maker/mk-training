@@ -19,6 +19,12 @@ import {
   NEWS_LOG_ACTION_META,
 } from "@/lib/news-log";
 import {
+  loadNewsReactions,
+  saveNewsReactions,
+  totalReactionsOf,
+  type NewsReactionsMap,
+} from "@/lib/news-reactions";
+import {
   PORTAL_KEYS,
   NEWS_LOG_MAX,
   DEFAULT_CHARACTER_SETTINGS,
@@ -228,6 +234,7 @@ export default function AdminPortalPage() {
 
   // 共有ログ・貢献タブ（指示書36）
   const [newsLog, setNewsLog] = useState<NewsLogEntry[]>([]);
+  const [newsReactions, setNewsReactions] = useState<NewsReactionsMap>({});
   const [actorName, setActorName] = useState("管理者");
   const [logAction, setLogAction] = useState<NewsLogAction | "all">("all");
   const [logActor, setLogActor] = useState<string>("all");
@@ -260,7 +267,8 @@ export default function AdminPortalPage() {
     const fetchAll = async () => {
       // 管理画面を開くたびに期限切れの新着をアーカイブへ移動（冪等）
       await archiveExpiredNews().catch(() => {});
-      const [n, na, h, t, p, w, c, layout, tLayout, nlog] = await Promise.all([
+      const [n, na, h, t, p, w, c, layout, tLayout, nlog, rx] =
+        await Promise.all([
         loadPortalItems<NewsItem>(PORTAL_KEYS.news, []),
         loadPortalItems<ArchivedNewsItem>(PORTAL_KEYS.newsArchive, []),
         loadPortalItems<HiyariItem>(PORTAL_KEYS.hiyari, []),
@@ -281,6 +289,7 @@ export default function AdminPortalPage() {
           DEFAULT_TASKS_LAYOUT
         ),
         loadNewsLog(),
+        loadNewsReactions(),
       ]);
       setNews(n);
       setNewsArchive(na);
@@ -292,6 +301,7 @@ export default function AdminPortalPage() {
       setHomeLayout(resolveHomeLayout(layout));
       setTasksLayout(resolveTasksLayout(tLayout));
       setNewsLog(nlog);
+      setNewsReactions(rx);
       setLoading(false);
     };
     fetchAll().catch(() => setLoading(false));
@@ -307,6 +317,16 @@ export default function AdminPortalPage() {
   const contributionRows = aggregateNewsContributions(
     buildNewsHistory(news, newsArchive)
   );
+  // 発信者別「もらったリアクション数」（参考情報・指示書37R）
+  const reactionsByAuthor = new Map<string, number>();
+  for (const item of buildNewsHistory(news, newsArchive)) {
+    const author = (item.author ?? "").trim() || "（無記名）";
+    reactionsByAuthor.set(
+      author,
+      (reactionsByAuthor.get(author) ?? 0) +
+        totalReactionsOf(newsReactions, item.id)
+    );
+  }
   const logActors = [...new Set(newsLog.map((l) => l.actor))].sort((a, b) =>
     a.localeCompare(b, "ja")
   );
@@ -559,6 +579,17 @@ export default function AdminPortalPage() {
     setSaving(false);
     if (ok) {
       setNewsArchive(next);
+      // リアクションデータの後始末（肥大化対策・失敗しても削除自体は成立）
+      try {
+        const rx = await loadNewsReactions();
+        if (rx[id]) {
+          const nextRx = { ...rx };
+          delete nextRx[id];
+          if (await saveNewsReactions(nextRx)) setNewsReactions(nextRx);
+        }
+      } catch {
+        // 後始末失敗は無視（次回の完全削除時などに残っていても実害なし）
+      }
       await trackNewsLog({
         action: "delete",
         newsId: id,
@@ -1442,7 +1473,10 @@ export default function AdminPortalPage() {
                       <th className="text-left py-2 pr-3 font-medium">発信者</th>
                       <th className="text-right py-2 px-3 font-medium">今月</th>
                       <th className="text-right py-2 px-3 font-medium">先月</th>
-                      <th className="text-right py-2 pl-3 font-medium">累計</th>
+                      <th className="text-right py-2 px-3 font-medium">累計</th>
+                      <th className="text-right py-2 pl-3 font-medium">
+                        もらったリアクション
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1460,8 +1494,11 @@ export default function AdminPortalPage() {
                         <td className="py-2 px-3 text-right text-gray-600">
                           {r.lastMonth}
                         </td>
-                        <td className="py-2 pl-3 text-right text-gray-600">
+                        <td className="py-2 px-3 text-right text-gray-600">
                           {r.total}
+                        </td>
+                        <td className="py-2 pl-3 text-right text-gray-600">
+                          {reactionsByAuthor.get(r.author) ?? 0}
                         </td>
                       </tr>
                     ))}
