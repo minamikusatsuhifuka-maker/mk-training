@@ -38,6 +38,7 @@ export default function StaffAccountsAdminPage() {
   const [users, setUsers] = useState<AccountSummary[]>([]);
   const [me, setMe] = useState("");
   const [bootstrap, setBootstrap] = useState(false);
+  const [preLogin, setPreLogin] = useState(false);
   const [needLogin, setNeedLogin] = useState(false);
   const [serviceError, setServiceError] = useState("");
   const [loaded, setLoaded] = useState(false);
@@ -48,11 +49,18 @@ export default function StaffAccountsAdminPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  // 発行直後の仮パスワード（この画面でのみ一度だけ表示。どこにも保存しない）
+  const [issued, setIssued] = useState<{ email: string; password: string } | null>(
+    null
+  );
+  const [copied, setCopied] = useState(false);
+
   const reload = useCallback(async () => {
     const res = await fetch("/api/admin/staff-accounts");
     const j = (await res.json().catch(() => null)) as {
       users?: AccountSummary[];
       bootstrap?: boolean;
+      preLogin?: boolean;
       me?: string;
       error?: string;
     } | null;
@@ -65,6 +73,7 @@ export default function StaffAccountsAdminPage() {
     } else if (res.ok && j) {
       setUsers(j.users ?? []);
       setBootstrap(!!j.bootstrap);
+      setPreLogin(!!j.preLogin);
       setMe(j.me ?? "");
       setNeedLogin(false);
       setServiceError("");
@@ -96,12 +105,59 @@ export default function StaffAccountsAdminPage() {
     } | null;
     setBusy(false);
     if (!res.ok) {
-      setError(j?.error ?? "操作に失敗しました");
+      let msg = j?.error ?? "操作に失敗しました";
+      // メール送信のレート制限時は、メール不要の代替手段を案内する
+      if (/rate limit/i.test(msg)) {
+        msg += "（メール送信の制限中です。各アカウントの「🔑 仮パスワード発行」も利用できます）";
+      }
+      setError(msg);
       return false;
     }
     setMessage(successMsg);
     await reload();
     return true;
+  };
+
+  // 仮パスワード発行（サーバー生成 → この画面で一度だけ表示）
+  const issueTempPassword = async (u: AccountSummary) => {
+    if (
+      !confirm(
+        `${u.email} に仮パスワードを発行しますか？\n（このアカウントの現在のパスワードは使えなくなります）`
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setMessage("");
+    setIssued(null);
+    setCopied(false);
+    const res = await fetch("/api/admin/staff-accounts/temp-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: u.id }),
+    });
+    const j = (await res.json().catch(() => null)) as {
+      tempPassword?: string;
+      error?: string;
+    } | null;
+    setBusy(false);
+    if (!res.ok || !j?.tempPassword) {
+      setError(j?.error ?? "仮パスワードの発行に失敗しました");
+      return;
+    }
+    setIssued({ email: u.email, password: j.tempPassword });
+  };
+
+  const copyIssuedPassword = async () => {
+    if (!issued) return;
+    try {
+      await navigator.clipboard.writeText(issued.password);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("コピーに失敗しました。手動で選択してコピーしてください");
+    }
   };
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -157,6 +213,14 @@ export default function StaffAccountsAdminPage() {
             </div>
           )}
 
+          {preLogin && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+              ⚠️
+              まだ誰もログインしていないため、初期セットアップとして未ログインでも「🔑
+              仮パスワード発行」だけ利用できます。誰かが一度ログインすると、以降の操作にはログインが必要になります。
+            </div>
+          )}
+
           {(message || error) && (
             <p
               className={`text-sm rounded-md px-3 py-2 border ${
@@ -169,7 +233,42 @@ export default function StaffAccountsAdminPage() {
             </p>
           )}
 
-          {/* 招待フォーム */}
+          {/* 発行した仮パスワード（一度だけ表示） */}
+          {issued && (
+            <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 space-y-2">
+              <p className="text-sm font-semibold text-teal-900">
+                🔑 {issued.email} の仮パスワードを発行しました
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="text-base font-mono tracking-wider bg-white border border-teal-200 rounded-md px-3 py-1.5 select-all">
+                  {issued.password}
+                </code>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={copyIssuedPassword}
+                >
+                  {copied ? "✅ コピーしました" : "📋 コピー"}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setIssued(null)}
+                  className="text-xs text-teal-700 underline underline-offset-2"
+                >
+                  閉じる
+                </button>
+              </div>
+              <p className="text-xs text-teal-800">
+                ⚠️
+                この画面を閉じると再表示できません。本人に直接（口頭・対面などで）渡し、初回ログイン後に
+                /profile の「パスワード変更」で自分のパスワードに変更してもらってください。
+              </p>
+            </div>
+          )}
+
+          {/* 招待フォーム（未ログインの初期セットアップ中は招待不可のため隠す） */}
+          {!preLogin && (
           <form
             onSubmit={handleInvite}
             className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3"
@@ -198,6 +297,7 @@ export default function StaffAccountsAdminPage() {
               </Button>
             </div>
           </form>
+          )}
 
           {/* 一覧 */}
           <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3">
@@ -246,7 +346,17 @@ export default function StaffAccountsAdminPage() {
                       {fmt(u.lastSignInAt)}
                     </p>
                     <div className="flex gap-2 mt-2">
-                      {!u.lastSignInAt && !u.banned && (
+                      {!u.banned && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => issueTempPassword(u)}
+                          className="text-xs px-2 py-1 border border-teal-200 text-teal-700 rounded hover:bg-teal-50 disabled:opacity-50"
+                        >
+                          🔑 仮パスワード発行
+                        </button>
+                      )}
+                      {!preLogin && !u.lastSignInAt && !u.banned && (
                         <button
                           type="button"
                           disabled={busy}
@@ -261,7 +371,8 @@ export default function StaffAccountsAdminPage() {
                           再招待
                         </button>
                       )}
-                      {u.id !== me &&
+                      {!preLogin &&
+                        u.id !== me &&
                         (u.banned ? (
                           <button
                             type="button"

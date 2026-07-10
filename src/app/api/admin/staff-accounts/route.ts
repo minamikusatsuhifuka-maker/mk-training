@@ -85,6 +85,16 @@ export async function GET() {
       if (users.length === 0) {
         return NextResponse.json({ users: [], bootstrap: true });
       }
+      // ユーザーは存在するがまだ誰も一度もログインしていない場合は、
+      // 初期セットアップ救済として一覧の閲覧（＝仮パスワード発行の入口）を許可する。
+      // 誰か1人でもログイン履歴がつけば、以後はログイン必須に戻る。
+      if (users.every((u) => !u.last_sign_in_at)) {
+        return NextResponse.json({
+          users: users.map(toSummary),
+          bootstrap: false,
+          preLogin: true,
+        });
+      }
       return NextResponse.json(
         { error: "この操作にはログインが必要です" },
         { status: 401 }

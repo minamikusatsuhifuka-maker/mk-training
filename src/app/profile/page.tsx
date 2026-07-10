@@ -35,6 +35,11 @@ export default function ProfilePage() {
   const [error, setError] = useState("");
   const [dragOver, setDragOver] = useState(false);
 
+  // パスワード変更（仮パスワードでログインした人が自分で変更できるように）
+  const [newPassword, setNewPassword] = useState("");
+  const [newPassword2, setNewPassword2] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const photosInputRef = useRef<HTMLInputElement>(null);
 
@@ -116,6 +121,36 @@ export default function ProfilePage() {
       return;
     }
     flash("💾 プロフィールを保存しました");
+  };
+
+  // ─── パスワード変更 ───
+  const handleChangePassword = async () => {
+    if (newPassword.length < 8) {
+      fail("新しいパスワードは8文字以上にしてください");
+      return;
+    }
+    if (newPassword !== newPassword2) {
+      fail("確認用のパスワードが一致しません");
+      return;
+    }
+    setChangingPassword(true);
+    setError("");
+    const supabase = getSupabaseBrowserClient();
+    const { error: pwError } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+    setChangingPassword(false);
+    if (pwError) {
+      fail(
+        /same|different/i.test(pwError.message)
+          ? "現在と同じパスワードには変更できません"
+          : `パスワードの変更に失敗しました: ${pwError.message}`
+      );
+      return;
+    }
+    setNewPassword("");
+    setNewPassword2("");
+    flash("🔒 パスワードを変更しました。次回から新しいパスワードでログインしてください");
   };
 
   // ─── 写真アップロード ───
@@ -433,6 +468,48 @@ export default function ProfilePage() {
         <Button onClick={handleSave} disabled={saving || uploading}>
           {saving ? "保存中..." : "💾 保存"}
         </Button>
+      </div>
+
+      {/* パスワード変更 */}
+      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+        <h2 className="text-sm font-semibold">🔒 パスワード変更</h2>
+        <p className="text-xs text-muted-foreground">
+          仮パスワードでログインした方は、ここで自分のパスワードに変更してください（8文字以上）。
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label htmlFor="p-new-password">新しいパスワード</Label>
+            <Input
+              id="p-new-password"
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="8文字以上"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="p-new-password2">新しいパスワード（確認）</Label>
+            <Input
+              id="p-new-password2"
+              type="password"
+              autoComplete="new-password"
+              value={newPassword2}
+              onChange={(e) => setNewPassword2(e.target.value)}
+              placeholder="もう一度入力"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleChangePassword}
+            disabled={changingPassword || !newPassword || !newPassword2}
+          >
+            {changingPassword ? "変更中..." : "パスワードを変更"}
+          </Button>
+        </div>
       </div>
     </div>
   );
