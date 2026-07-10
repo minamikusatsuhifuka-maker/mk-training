@@ -9,9 +9,18 @@ import {
   loadCharacterSettings,
   saveCharacterSettings,
   archiveExpiredNews,
+  appendNewsLog,
+  loadNewsLog,
 } from "@/lib/portal-store";
 import {
+  getCurrentActorName,
+  buildNewsUpdateDetail,
+  aggregateNewsContributions,
+  NEWS_LOG_ACTION_META,
+} from "@/lib/news-log";
+import {
   PORTAL_KEYS,
+  NEWS_LOG_MAX,
   DEFAULT_CHARACTER_SETTINGS,
   DEFAULT_HOME_LAYOUT,
   HOME_SECTION_LABELS,
@@ -24,6 +33,9 @@ import {
   type NewsItem,
   type ArchivedNewsItem,
   type NewsCategory,
+  type NewsLogAction,
+  type NewsLogEntry,
+  type NewsLogInput,
   type Urgency,
   type HiyariItem,
   type ThankyouItem,
@@ -57,6 +69,7 @@ type TabKey =
   | "news"
   | "archive"
   | "history"
+  | "contrib"
   | "hiyari"
   | "thankyou"
   | "policy"
@@ -68,6 +81,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "news", label: "📢 新着情報" },
   { key: "archive", label: "🗄️ アーカイブ" },
   { key: "history", label: "🕘 共有履歴" },
+  { key: "contrib", label: "📊 共有ログ・貢献" },
   { key: "hiyari", label: "💛 気づきシェア" },
   { key: "thankyou", label: "♥ ありがとうカード" },
   { key: "policy", label: "🎯 経営方針" },
@@ -212,6 +226,13 @@ export default function AdminPortalPage() {
   });
   const [editingPolicyId, setEditingPolicyId] = useState<string | null>(null);
 
+  // 共有ログ・貢献タブ（指示書36）
+  const [newsLog, setNewsLog] = useState<NewsLogEntry[]>([]);
+  const [actorName, setActorName] = useState("管理者");
+  const [logAction, setLogAction] = useState<NewsLogAction | "all">("all");
+  const [logActor, setLogActor] = useState<string>("all");
+  const [logKeyword, setLogKeyword] = useState("");
+
   // 共有履歴タブ（検索・グループ切替・フィルタ）
   const [historyKeyword, setHistoryKeyword] = useState("");
   const [historyAxis, setHistoryAxis] = useState<NewsHistoryGroupAxis>("flat");
@@ -239,7 +260,7 @@ export default function AdminPortalPage() {
     const fetchAll = async () => {
       // 管理画面を開くたびに期限切れの新着をアーカイブへ移動（冪等）
       await archiveExpiredNews().catch(() => {});
-      const [n, na, h, t, p, w, c, layout, tLayout] = await Promise.all([
+      const [n, na, h, t, p, w, c, layout, tLayout, nlog] = await Promise.all([
         loadPortalItems<NewsItem>(PORTAL_KEYS.news, []),
         loadPortalItems<ArchivedNewsItem>(PORTAL_KEYS.newsArchive, []),
         loadPortalItems<HiyariItem>(PORTAL_KEYS.hiyari, []),
@@ -259,6 +280,7 @@ export default function AdminPortalPage() {
           TASKS_PAGE_LAYOUT_KEY,
           DEFAULT_TASKS_LAYOUT
         ),
+        loadNewsLog(),
       ]);
       setNews(n);
       setNewsArchive(na);
@@ -269,10 +291,56 @@ export default function AdminPortalPage() {
       setCharSettings(c);
       setHomeLayout(resolveHomeLayout(layout));
       setTasksLayout(resolveTasksLayout(tLayout));
+      setNewsLog(nlog);
       setLoading(false);
     };
     fetchAll().catch(() => setLoading(false));
+    // 操作ログのactor名: ログイン中ならプロフィール名、未ログインなら「管理者」
+    getCurrentActorName()
+      .then((name) => {
+        if (name) setActorName(name);
+      })
+      .catch(() => {});
   }, []);
+
+  // 共有ログ・貢献タブの派生データ（データ量はログ最大1,000件・お知らせ数十件程度）
+  const contributionRows = aggregateNewsContributions(
+    buildNewsHistory(news, newsArchive)
+  );
+  const logActors = [...new Set(newsLog.map((l) => l.actor))].sort((a, b) =>
+    a.localeCompare(b, "ja")
+  );
+  const filteredLog = newsLog
+    .filter((l) => {
+      if (logAction !== "all" && l.action !== logAction) return false;
+      if (logActor !== "all" && l.actor !== logActor) return false;
+      const kw = logKeyword.trim().toLowerCase();
+      if (
+        kw &&
+        !`${l.newsTitle} ${l.actor} ${l.detail ?? ""}`
+          .toLowerCase()
+          .includes(kw)
+      ) {
+        return false;
+      }
+      return true;
+    })
+    .sort((a, b) => (a.at < b.at ? 1 : -1));
+
+  // 操作ログを追記し、画面上のログ一覧にも即時反映する（ログ失敗は本体処理を妨げない）
+  const trackNewsLog = async (input: NewsLogInput) => {
+    await appendNewsLog(input).catch(() => {});
+    setNewsLog((prev) =>
+      [
+        {
+          ...input,
+          id: `nlog_local_${Date.now()}`,
+          at: new Date().toISOString(),
+        },
+        ...prev,
+      ].slice(0, 1000)
+    );
+  };
 
   // ─────────────────────────────────────
   // ホーム画面レイアウト（並び順・表示/非表示）
@@ -372,6 +440,13 @@ export default function AdminPortalPage() {
     setSaving(false);
     if (ok) {
       setNews(next);
+      await trackNewsLog({
+        action: "create",
+        newsId: item.id,
+        newsTitle: item.title,
+        actor: actorName,
+        source: "admin",
+      });
       setNewsForm({
         title: "",
         category: "notice",
@@ -390,11 +465,20 @@ export default function AdminPortalPage() {
 
   const updateNewsItem = async (id: string, patch: Partial<NewsItem>) => {
     setSaving(true);
+    const before = news.find((n) => n.id === id);
     const next = news.map((n) => (n.id === id ? { ...n, ...patch } : n));
     const ok = await savePortalItems(PORTAL_KEYS.news, next);
     setSaving(false);
     if (ok) {
       setNews(next);
+      await trackNewsLog({
+        action: "update",
+        newsId: id,
+        newsTitle: (patch.title ?? before?.title ?? "").toString(),
+        actor: actorName,
+        source: "admin",
+        detail: buildNewsUpdateDetail(before, patch),
+      });
       flash("💾 更新しました");
     }
   };
@@ -402,11 +486,19 @@ export default function AdminPortalPage() {
   const deleteNewsItem = async (id: string) => {
     if (!confirm("この新着情報を削除しますか？")) return;
     setSaving(true);
+    const target = news.find((n) => n.id === id);
     const next = news.filter((n) => n.id !== id);
     const ok = await savePortalItems(PORTAL_KEYS.news, next);
     setSaving(false);
     if (ok) {
       setNews(next);
+      await trackNewsLog({
+        action: "delete",
+        newsId: id,
+        newsTitle: target?.title ?? "",
+        actor: actorName,
+        source: "admin",
+      });
       flash("🗑️ 削除しました");
     }
   };
@@ -447,6 +539,13 @@ export default function AdminPortalPage() {
     if (okNews && okArchive) {
       setNews(nextNews);
       setNewsArchive(nextArchive);
+      await trackNewsLog({
+        action: "restore",
+        newsId: restored.id,
+        newsTitle: restored.title,
+        actor: actorName,
+        source: "admin",
+      });
       flash("↩️ 復元しました");
     }
   };
@@ -454,11 +553,20 @@ export default function AdminPortalPage() {
   const deleteArchivedNewsForever = async (id: string) => {
     if (!confirm("このお知らせを完全に削除しますか？（元に戻せません）")) return;
     setSaving(true);
+    const target = newsArchive.find((a) => a.id === id);
     const next = newsArchive.filter((a) => a.id !== id);
     const ok = await savePortalItems(PORTAL_KEYS.newsArchive, next);
     setSaving(false);
     if (ok) {
       setNewsArchive(next);
+      await trackNewsLog({
+        action: "delete",
+        newsId: id,
+        newsTitle: target?.title ?? "",
+        actor: actorName,
+        source: "admin",
+        detail: "アーカイブから完全削除",
+      });
       flash("🗑️ 完全に削除しました");
     }
   };
@@ -1257,7 +1365,7 @@ export default function AdminPortalPage() {
                         </span>
                       </div>
                       <p className="text-xs text-gray-600 mt-0.5">
-                        {item.author} · 投稿: {formatDateTime(item.createdAt)}
+                        👤 {item.author} · 投稿: {formatDateTime(item.createdAt)}
                         {item.status === "archived" && item.archivedAt
                           ? ` · アーカイブ: ${formatDateTime(item.archivedAt)}`
                           : ""}
@@ -1311,6 +1419,134 @@ export default function AdminPortalPage() {
               ))}
             </div>
           ))}
+        </div>
+      )}
+
+      {tab === "contrib" && (
+        <div className="space-y-6">
+          {/* 貢献集計 */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 className="text-sm font-bold text-gray-800">
+              📈 共有の貢献（発信者別）
+            </h2>
+            <p className="text-xs text-gray-500 mt-1 mb-3">
+              件数は評価の参考情報です。共有の質・内容と合わせてご覧ください。
+            </p>
+            {contributionRows.length === 0 ? (
+              <p className="text-sm text-gray-500">まだ投稿がありません。</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-gray-500 border-b border-gray-200">
+                      <th className="text-left py-2 pr-3 font-medium">発信者</th>
+                      <th className="text-right py-2 px-3 font-medium">今月</th>
+                      <th className="text-right py-2 px-3 font-medium">先月</th>
+                      <th className="text-right py-2 pl-3 font-medium">累計</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {contributionRows.map((r) => (
+                      <tr
+                        key={r.author}
+                        className="border-b border-gray-100 last:border-0"
+                      >
+                        <td className="py-2 pr-3 text-gray-800">
+                          👤 {r.author}
+                        </td>
+                        <td className="py-2 px-3 text-right font-medium text-gray-900">
+                          {r.thisMonth}
+                        </td>
+                        <td className="py-2 px-3 text-right text-gray-600">
+                          {r.lastMonth}
+                        </td>
+                        <td className="py-2 pl-3 text-right text-gray-600">
+                          {r.total}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* 操作ログ */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 className="text-sm font-bold text-gray-800 mb-3">
+              🕘 操作ログ（最新{NEWS_LOG_MAX}件まで保持）
+            </h2>
+            <div className="flex flex-wrap gap-2 mb-3">
+              <select
+                value={logAction}
+                onChange={(e) =>
+                  setLogAction(e.target.value as NewsLogAction | "all")
+                }
+                className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white"
+              >
+                <option value="all">すべての操作</option>
+                {(
+                  Object.keys(NEWS_LOG_ACTION_META) as NewsLogAction[]
+                ).map((a) => (
+                  <option key={a} value={a}>
+                    {NEWS_LOG_ACTION_META[a].label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={logActor}
+                onChange={(e) => setLogActor(e.target.value)}
+                className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white"
+              >
+                <option value="all">すべての操作者</option>
+                {logActors.map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={logKeyword}
+                onChange={(e) => setLogKeyword(e.target.value)}
+                placeholder="キーワード検索（タイトル・操作者・詳細）"
+                className="flex-1 min-w-[180px] px-3 py-1.5 text-xs border border-gray-200 rounded-lg"
+              />
+            </div>
+            {filteredLog.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                該当するログがありません。
+              </p>
+            ) : (
+              <div className="space-y-1.5 max-h-[520px] overflow-y-auto">
+                {filteredLog.map((l) => (
+                  <div
+                    key={l.id}
+                    className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-xs"
+                  >
+                    <span className="text-gray-500 tabular-nums">
+                      {formatDateTime(l.at)}
+                    </span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full font-medium ${NEWS_LOG_ACTION_META[l.action]?.badge ?? "bg-gray-200 text-gray-600"}`}
+                    >
+                      {NEWS_LOG_ACTION_META[l.action]?.label ?? l.action}
+                    </span>
+                    <span className="font-medium text-gray-800 truncate max-w-[240px]">
+                      {l.newsTitle || "（無題）"}
+                    </span>
+                    <span className="text-gray-600">👤 {l.actor}</span>
+                    <span className="text-gray-400">
+                      {l.source === "top" ? "トップ投稿" : "管理画面"}
+                    </span>
+                    {l.detail && (
+                      <span className="text-gray-500">｜{l.detail}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

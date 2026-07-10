@@ -7,20 +7,26 @@ import {
   savePortalItems,
   loadTodayWord,
   loadCharacterSettings,
+  appendNewsLog,
 } from "@/lib/portal-store";
 import CharacterNotification from "@/components/CharacterNotification";
 import { loadTasks, taskCounts } from "@/lib/staff-tasks";
+import { getCurrentActorName, monthlyTopContributors } from "@/lib/news-log";
 import {
   PORTAL_KEYS,
   URGENCY_META,
+  URGENCY_OPTIONS,
   urgencyOf,
   urgencyCardClass,
   isNewsExpired,
   DEFAULT_CHARACTER_SETTINGS,
   DEFAULT_HOME_LAYOUT,
   visibleHomeSectionKeys,
+  type ArchivedNewsItem,
   type NewsItem,
   type NewsCategory,
+  type Urgency,
+  type CharacterSvgType,
   type HiyariItem,
   type HiyariType,
   type ThankyouItem,
@@ -29,6 +35,29 @@ import {
   type HomeSectionConfig,
   type HomeSectionKey,
 } from "@/types/portal";
+
+// 発信者名の前回値を覚える localStorage キー
+const NEWS_AUTHOR_LS_KEY = "portal_news_author";
+
+// 投稿フォームのカテゴリ・キャラ選択肢（管理画面と同じ内容）
+const NEWS_CATEGORY_CHOICES: { value: NewsCategory; label: string }[] = [
+  { value: "important", label: "重要" },
+  { value: "drug_info", label: "新薬情報" },
+  { value: "notice", label: "お知らせ" },
+  { value: "event", label: "イベント" },
+];
+
+const NEWS_CHARACTER_CHOICES: { value: CharacterSvgType; label: string }[] = [
+  { value: "cat", label: "ねこ" },
+  { value: "dog", label: "いぬ" },
+  { value: "rabbit", label: "うさぎ" },
+  { value: "bird", label: "とり" },
+  { value: "chihuahua", label: "ブラックタンチワワ" },
+  { value: "sakura", label: "さくら" },
+  { value: "sprout", label: "ふたば" },
+  { value: "star", label: "ほし" },
+  { value: "moon", label: "つき" },
+];
 
 // ─── 初期データ（Supabaseが空のときのフォールバック） ───
 const DEFAULT_NEWS: NewsItem[] = [
@@ -114,6 +143,26 @@ function formatDate(iso: string): string {
   } catch {
     return "";
   }
+}
+
+// ─── datetime-local（"YYYY-MM-DDTHH:mm"）⇔ ISO 変換（管理画面と同じロジック） ───
+function toDatetimeLocal(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+    d.getDate()
+  )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function datetimeLocalToIso(local: string): string | undefined {
+  if (!local) return undefined;
+  const d = new Date(local);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
+}
+
+// 現在 + days日 を datetime-local 形式で返す（投稿フォームの通知期限の既定値）
+function defaultNoticeLocal(days: number): string {
+  return toDatetimeLocal(new Date(Date.now() + days * 24 * 60 * 60 * 1000));
 }
 
 // ─── クイックアクセス ───
@@ -221,6 +270,24 @@ export default function PortalHome() {
   // モーダル状態
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
 
+  // お知らせ投稿フォーム（トップから誰でも投稿・指示書36）
+  const [showNewsForm, setShowNewsForm] = useState(false);
+  const [noticeDays, setNoticeDays] = useState(
+    DEFAULT_CHARACTER_SETTINGS.newsNoticeDays
+  );
+  const [nfAuthor, setNfAuthor] = useState("");
+  const [nfTitle, setNfTitle] = useState("");
+  const [nfCategory, setNfCategory] = useState<NewsCategory>("notice");
+  const [nfUrgency, setNfUrgency] = useState<Urgency>("normal");
+  const [nfContent, setNfContent] = useState("");
+  const [nfNoticeUntil, setNfNoticeUntil] = useState("");
+  const [nfCharacter, setNfCharacter] = useState<CharacterSvgType | "">("");
+
+  // 🙌 今月の共有（貢献の称賛表示。0件の月は非表示）
+  const [monthlyTop, setMonthlyTop] = useState<
+    { author: string; count: number }[]
+  >([]);
+
   // 気づきシェア投稿フォーム
   const [showHiyariForm, setShowHiyariForm] = useState(false);
   const [hiyariType, setHiyariType] = useState<HiyariType>("hiyari");
@@ -254,6 +321,36 @@ export default function PortalHome() {
     };
   }, [selectedNews]);
 
+  // 投稿フォームモーダルも同様（背景スクロールロック＋Escで閉じる）
+  useEffect(() => {
+    if (!showNewsForm) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowNewsForm(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [showNewsForm]);
+
+  // 発信者名のプリフィル: 前回入力（localStorage）→ ログイン中ならプロフィール名で上書き
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(NEWS_AUTHOR_LS_KEY);
+      if (saved) setNfAuthor(saved);
+    } catch {
+      // localStorage不可の環境では空のまま（手入力）
+    }
+    getCurrentActorName()
+      .then((name) => {
+        if (name) setNfAuthor(name);
+      })
+      .catch(() => {});
+  }, []);
+
   const todayStr = new Date().toLocaleDateString("ja-JP", {
     year: "numeric",
     month: "long",
@@ -263,32 +360,43 @@ export default function PortalHome() {
 
   useEffect(() => {
     const fetchAll = async () => {
-      const [newsList, hiyariList, tyList, policyList, word, charSettings, layout] =
-        await Promise.all([
-          loadPortalItems<NewsItem>(PORTAL_KEYS.news, DEFAULT_NEWS),
-          loadPortalItems<HiyariItem>(PORTAL_KEYS.hiyari, []),
-          loadPortalItems<ThankyouItem>(PORTAL_KEYS.thankyou, []),
-          loadPortalItems<PolicyItem>(PORTAL_KEYS.policy, [DEFAULT_POLICY]),
-          loadTodayWord(DEFAULT_TODAY_WORD),
-          loadCharacterSettings(),
-          loadPortalItems<HomeSectionConfig>(
-            PORTAL_KEYS.homeLayout,
-            DEFAULT_HOME_LAYOUT
-          ),
-        ]);
+      const [
+        newsList,
+        newsArchiveList,
+        hiyariList,
+        tyList,
+        policyList,
+        word,
+        charSettings,
+        layout,
+      ] = await Promise.all([
+        loadPortalItems<NewsItem>(PORTAL_KEYS.news, DEFAULT_NEWS),
+        loadPortalItems<ArchivedNewsItem>(PORTAL_KEYS.newsArchive, []),
+        loadPortalItems<HiyariItem>(PORTAL_KEYS.hiyari, []),
+        loadPortalItems<ThankyouItem>(PORTAL_KEYS.thankyou, []),
+        loadPortalItems<PolicyItem>(PORTAL_KEYS.policy, [DEFAULT_POLICY]),
+        loadTodayWord(DEFAULT_TODAY_WORD),
+        loadCharacterSettings(),
+        loadPortalItems<HomeSectionConfig>(
+          PORTAL_KEYS.homeLayout,
+          DEFAULT_HOME_LAYOUT
+        ),
+      ]);
 
       setSectionOrder(visibleHomeSectionKeys(layout));
 
       // 期限切れ（noticeUntil超過 or createdAt+newsNoticeDays超過）は表示しない。
-      // read-only（トップ側では portal_news への書き込みは行わない）。
       const days =
         charSettings.newsNoticeDays ?? DEFAULT_CHARACTER_SETTINGS.newsNoticeDays;
+      setNoticeDays(days);
       setNews(
         newsList
           .filter((n) => n.isActive && !isNewsExpired(n, days))
           .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
           .slice(0, 5)
       );
+      // 🙌 今月の共有: 掲載中＋アーカイブの全投稿から今月分を集計
+      setMonthlyTop(monthlyTopContributors([...newsList, ...newsArchiveList]));
       setHiyariItems(
         [...hiyariList]
           .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
@@ -315,6 +423,72 @@ export default function PortalHome() {
       })
       .catch(() => {});
   }, []);
+
+  // お知らせ投稿フォームを開く（通知期限の既定値をセット）
+  const openNewsForm = () => {
+    setNfNoticeUntil(defaultNoticeLocal(noticeDays));
+    setShowNewsForm(true);
+  };
+
+  // お知らせ投稿（管理画面の追加と同じデータ形式で portal_news へ保存）
+  const handleNewsSubmit = async () => {
+    const author = nfAuthor.trim();
+    const title = nfTitle.trim();
+    if (!author || !title) return;
+    setSubmitting(true);
+    try {
+      const current = await loadPortalItems<NewsItem>(PORTAL_KEYS.news, []);
+      const item: NewsItem = {
+        id: `news_${Date.now()}`,
+        title,
+        category: nfCategory,
+        urgency: nfUrgency,
+        author,
+        content: nfContent.trim(),
+        createdAt: new Date().toISOString(),
+        isActive: true,
+        noticeUntil: datetimeLocalToIso(nfNoticeUntil),
+        character: nfCharacter || undefined,
+      };
+      const ok = await savePortalItems(PORTAL_KEYS.news, [item, ...current]);
+      if (!ok) {
+        alert("保存に失敗しました");
+        return;
+      }
+      // 操作ログ（失敗しても投稿自体は成立させる）
+      await appendNewsLog({
+        action: "create",
+        newsId: item.id,
+        newsTitle: item.title,
+        actor: author,
+        source: "top",
+      }).catch(() => {});
+      try {
+        localStorage.setItem(NEWS_AUTHOR_LS_KEY, author);
+      } catch {
+        // 記憶できない環境では次回も手入力
+      }
+      // 画面へ即時反映（新着一覧・通知アニメ・今月の共有）
+      setNews((prev) => [item, ...prev].slice(0, 5));
+      setMonthlyTop((prev) => {
+        const next = prev.map((t) =>
+          t.author === author ? { ...t, count: t.count + 1 } : t
+        );
+        if (!next.some((t) => t.author === author)) {
+          next.push({ author, count: 1 });
+        }
+        return next.sort((a, b) => b.count - a.count).slice(0, 3);
+      });
+      setNfTitle("");
+      setNfContent("");
+      setNfCategory("notice");
+      setNfUrgency("normal");
+      setNfCharacter("");
+      setShowNewsForm(false);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   // 気づきシェア投稿
   const handleHiyariSubmit = async () => {
@@ -407,9 +581,18 @@ export default function PortalHome() {
           <h2 className="text-xs font-medium text-gray-800 uppercase tracking-wider">
             新着情報
           </h2>
-          <span className="text-xs text-gray-600">
-            {news.length}件表示中
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-600">
+              {news.length}件表示中
+            </span>
+            <button
+              type="button"
+              onClick={openNewsForm}
+              className="text-xs px-2.5 py-1 rounded-full bg-teal-600 text-white hover:bg-teal-700 transition-colors"
+            >
+              ＋ お知らせを共有
+            </button>
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -431,7 +614,7 @@ export default function PortalHome() {
                   {item.title}
                 </p>
                 <p className="text-xs text-gray-600 mt-1">
-                  {formatDate(item.createdAt)} · {item.author}
+                  {formatDate(item.createdAt)} · 👤 {item.author}
                 </p>
               </div>
               <div className="flex flex-col items-end gap-1 flex-shrink-0">
@@ -459,6 +642,21 @@ export default function PortalHome() {
             </p>
           )}
         </div>
+
+        {/* 🙌 今月の共有（称賛表示。競争を煽らず名前と件数のみ・0件の月は非表示） */}
+        {monthlyTop.length > 0 && (
+          <div className="mt-3 p-3 bg-gray-50 border border-gray-100 rounded-xl">
+            <p className="text-xs font-medium text-gray-700 mb-1">
+              🙌 今月の共有
+            </p>
+            <p className="text-xs text-gray-600">
+              {monthlyTop
+                .map((t) => `${t.author}さん ${t.count}件`)
+                .join("・")}
+              　ありがとうございます
+            </p>
+          </div>
+        )}
       </section>
     ),
     quick_access: (
@@ -878,11 +1076,161 @@ export default function PortalHome() {
               {selectedNews.title}
             </h3>
             <p className="text-xs text-gray-600 mb-4">
-              {formatDate(selectedNews.createdAt)} · {selectedNews.author}
+              {formatDate(selectedNews.createdAt)} · 👤 {selectedNews.author}
             </p>
             <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
               {selectedNews.content}
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* お知らせ投稿モーダル（トップから誰でも投稿・画面中央配置） */}
+      {showNewsForm && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50"
+          onClick={() => setShowNewsForm(false)}
+        >
+          <div
+            className="relative w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl shadow-xl bg-white p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-4">
+              <h3 className="text-base font-medium text-gray-900">
+                📢 お知らせを共有
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowNewsForm(false)}
+                className="text-gray-400 text-xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  発信者名 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={nfAuthor}
+                  onChange={(e) => setNfAuthor(e.target.value)}
+                  placeholder="例：山田 花子"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  タイトル <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={nfTitle}
+                  onChange={(e) => setNfTitle(e.target.value)}
+                  placeholder="例：新しい物品の置き場所について"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    カテゴリ
+                  </label>
+                  <select
+                    value={nfCategory}
+                    onChange={(e) =>
+                      setNfCategory(e.target.value as NewsCategory)
+                    }
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white"
+                  >
+                    {NEWS_CATEGORY_CHOICES.map((c) => (
+                      <option key={c.value} value={c.value}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    緊急度
+                  </label>
+                  <select
+                    value={nfUrgency}
+                    onChange={(e) => setNfUrgency(e.target.value as Urgency)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white"
+                  >
+                    {URGENCY_OPTIONS.map((u) => (
+                      <option key={u.value} value={u.value}>
+                        {u.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  本文（任意）
+                </label>
+                <textarea
+                  rows={4}
+                  value={nfContent}
+                  onChange={(e) => setNfContent(e.target.value)}
+                  placeholder="詳しい内容があれば記入してください"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    通知期限
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={nfNoticeUntil}
+                    onChange={(e) => setNfNoticeUntil(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    通知キャラクター
+                  </label>
+                  <select
+                    value={nfCharacter}
+                    onChange={(e) =>
+                      setNfCharacter(e.target.value as CharacterSvgType | "")
+                    }
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white"
+                  >
+                    <option value="">おまかせ</option>
+                    {NEWS_CHARACTER_CHOICES.map((c) => (
+                      <option key={c.value} value={c.value}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowNewsForm(false)}
+                  className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNewsSubmit}
+                  disabled={submitting || !nfAuthor.trim() || !nfTitle.trim()}
+                  className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50"
+                >
+                  {submitting ? "共有中..." : "共有する"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

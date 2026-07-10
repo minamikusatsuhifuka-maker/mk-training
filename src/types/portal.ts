@@ -92,6 +92,31 @@ export function isNewsExpired(
 /** portal_news_archive に保存する形（元の全フィールド＋archivedAt） */
 export type ArchivedNewsItem = NewsItem & { archivedAt: string };
 
+// ─── お知らせ操作ログ（content_store `portal_news_log`・配列保存） ───
+export type NewsLogAction = "create" | "update" | "delete" | "archive" | "restore";
+
+export type NewsLogEntry = {
+  id: string;
+  /** 操作日時（ISO） */
+  at: string;
+  action: NewsLogAction;
+  newsId: string;
+  newsTitle: string;
+  /** トップ投稿=発信者名／管理画面=ログイン中ならプロフィール名・未ログインなら「管理者」 */
+  actor: string;
+  source: "top" | "admin";
+  /** update時の変更点要約など */
+  detail?: string;
+};
+
+/** appendNewsLog に渡す形（id/at はストア側で採番） */
+export type NewsLogInput = Omit<NewsLogEntry, "id" | "at">;
+
+export const NEWS_LOG_KEY = "portal_news_log";
+
+/** ログの保持上限（超過分は古いものから削除） */
+export const NEWS_LOG_MAX = 1000;
+
 export type HiyariType = "hiyari" | "good";
 
 export type HiyariItem = {

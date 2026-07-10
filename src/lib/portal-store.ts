@@ -3,10 +3,19 @@
 // （単一オブジェクト型は { ...data } の直書き）
 
 import { supabase } from "./supabase";
-import type { ArchivedNewsItem, CharacterSettings, NewsItem, TodayWord } from "@/types/portal";
+import type {
+  ArchivedNewsItem,
+  CharacterSettings,
+  NewsItem,
+  NewsLogEntry,
+  NewsLogInput,
+  TodayWord,
+} from "@/types/portal";
 import {
   CHARACTER_SETTINGS_KEY,
   DEFAULT_CHARACTER_SETTINGS,
+  NEWS_LOG_KEY,
+  NEWS_LOG_MAX,
   PORTAL_KEYS,
   isNewsExpired,
 } from "@/types/portal";
@@ -125,6 +134,32 @@ export async function saveCharacterSettings(
   return savePortalObject<CharacterSettings>(CHARACTER_SETTINGS_KEY, settings);
 }
 
+// ─── お知らせ操作ログ（portal_news_log） ───
+// 作成/更新/削除/アーカイブ/復元のすべての導線から呼ぶ（指示書36）。
+// 最新が先頭。NEWS_LOG_MAX 件で切り詰め（古いものから削除）。
+// ログ失敗はお知らせ本体の保存を妨げない（呼び出し側で catch する）。
+export async function appendNewsLog(
+  input: NewsLogInput | NewsLogInput[]
+): Promise<boolean> {
+  const inputs = Array.isArray(input) ? input : [input];
+  if (inputs.length === 0) return true;
+  const now = Date.now();
+  const entries: NewsLogEntry[] = inputs.map((e, i) => ({
+    ...e,
+    id: `nlog_${now}_${i}`,
+    at: new Date().toISOString(),
+  }));
+  const current = await loadPortalItems<NewsLogEntry>(NEWS_LOG_KEY, []);
+  return savePortalItems(
+    NEWS_LOG_KEY,
+    [...entries, ...current].slice(0, NEWS_LOG_MAX)
+  );
+}
+
+export async function loadNewsLog(): Promise<NewsLogEntry[]> {
+  return loadPortalItems<NewsLogEntry>(NEWS_LOG_KEY, []);
+}
+
 // ─── 期限切れお知らせのアーカイブ化 ───
 // portal_news の期限切れ項目を portal_news_archive へ移動し、portal_news から除去する。
 // 既にアーカイブ済みのIDは二重追加しない（冪等）。管理画面の読み込み時にのみ呼ぶこと。
@@ -152,5 +187,16 @@ export async function archiveExpiredNews(): Promise<number> {
       ? savePortalItems(PORTAL_KEYS.newsArchive, [...archive, ...newlyArchived])
       : Promise.resolve(true),
   ]);
+  if (okNews && okArchive && newlyArchived.length > 0) {
+    await appendNewsLog(
+      newlyArchived.map((n) => ({
+        action: "archive" as const,
+        newsId: n.id,
+        newsTitle: n.title,
+        actor: "自動（期限切れ）",
+        source: "admin" as const,
+      }))
+    ).catch(() => {});
+  }
   return okNews && okArchive ? newlyArchived.length : 0;
 }

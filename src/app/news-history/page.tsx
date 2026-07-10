@@ -162,7 +162,7 @@ export default function NewsHistoryPage() {
                       {item.title}
                     </p>
                     <p className="text-xs text-gray-600 mt-1">
-                      {formatDateTime(item.createdAt)} · {item.author}
+                      {formatDateTime(item.createdAt)} · 👤 {item.author}
                     </p>
                   </div>
                   <div className="flex flex-col items-end gap-1 flex-shrink-0">
@@ -242,7 +242,7 @@ export default function NewsHistoryPage() {
               {selected.title}
             </h3>
             <p className="text-xs text-gray-600 mb-4">
-              {formatDateTime(selected.createdAt)} · {selected.author}
+              {formatDateTime(selected.createdAt)} · 👤 {selected.author}
             </p>
             <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
               {selected.content}
