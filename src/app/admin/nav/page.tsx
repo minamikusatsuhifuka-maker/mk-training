@@ -80,17 +80,28 @@ function masterHref(key: string): string {
   return MASTER_ITEM_BY_KEY.get(key)?.href ?? key;
 }
 
+// ドラッグ中の対象（項目 or カテゴリ）
+type DragPayload =
+  | { type: "item"; key: string; fromCat: string }
+  | { type: "cat"; id: string };
+
 export default function AdminNavPage() {
   const [state, setState] = useState<EditState>(() => configToEdit(null));
   const [connected, setConnected] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  // カスタム構成が保存済みか（既定構成の変更が自動反映されない旨の注意表示に使う）
+  const [hasSavedConfig, setHasSavedConfig] = useState(false);
+  // グループの折りたたみ（項目数が多いため既定は折りたたみ）
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const loaded = useRef(false);
+  const dragRef = useRef<DragPayload | null>(null);
 
   useEffect(() => {
     getContentObject<NavConfig>(NAV_CONFIG_KEY)
       .then((cfg) => {
         setState(configToEdit(cfg));
+        setHasSavedConfig(!!cfg);
         setConnected(true);
       })
       .catch(() => {})
@@ -108,6 +119,7 @@ export default function AdminNavPage() {
     setSaving(true);
     const ok = await saveContentObject(NAV_CONFIG_KEY, editToConfig(next));
     setConnected(ok);
+    if (ok) setHasSavedConfig(true);
     flash(ok ? "保存しました（スタッフ側はリロードで反映されます）" : "ローカルに保存しました（Supabase接続エラー）");
     setSaving(false);
   };
@@ -201,6 +213,36 @@ export default function AdminNavPage() {
     setState(next); // persist on blur
   };
 
+  // --- drag & drop ---
+  // 項目: 行をドラッグ→別の行（前に挿入）またはカテゴリ枠（末尾に追加）へドロップ。
+  // カテゴリ: ヘッダの ⠿ をドラッグ→別カテゴリ枠へドロップで並び替え。
+  const dropItemAt = (toCat: string, toIdx: number | null) => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (!d) return;
+    if (d.type === "item") {
+      const next = clone(state);
+      const from = next.itemsByCat[d.fromCat] ?? [];
+      const fromIdx = from.indexOf(d.key);
+      if (fromIdx < 0) return;
+      from.splice(fromIdx, 1);
+      const to = (next.itemsByCat[toCat] = next.itemsByCat[toCat] ?? []);
+      let insertAt = toIdx === null ? to.length : toIdx;
+      if (d.fromCat === toCat && toIdx !== null && fromIdx < toIdx) insertAt -= 1;
+      to.splice(Math.max(0, Math.min(insertAt, to.length)), 0, d.key);
+      update(next);
+      return;
+    }
+    // カテゴリのドロップ → toCat の位置へ移動
+    const next = clone(state);
+    const fromIdx = next.categories.findIndex((c) => c.id === d.id);
+    const toCatIdx = next.categories.findIndex((c) => c.id === toCat);
+    if (fromIdx < 0 || toCatIdx < 0 || fromIdx === toCatIdx) return;
+    const [moved] = next.categories.splice(fromIdx, 1);
+    next.categories.splice(toCatIdx, 0, moved);
+    update(next);
+  };
+
   // --- global ops ---
   const importCurrent = () => {
     const next = configToEdit(buildDefaultConfig());
@@ -212,8 +254,31 @@ export default function AdminNavPage() {
     setSaving(true);
     await deleteContent(NAV_CONFIG_KEY);
     setState(configToEdit(null));
+    setHasSavedConfig(false);
     setSaving(false);
     flash("既定の構成に戻しました");
+  };
+  // 既定の配置（グループ・並び順）を反映しつつ、非表示・表示名の上書き・グループ名変更は維持する。
+  // 「既定構成が更新されたがカスタム保存が優先されて反映されない」ケースの救済用。
+  const applyDefaultPlacement = () => {
+    if (
+      !confirm(
+        "メニューの配置（所属グループ・並び順）を最新の既定に合わせますか？\n（非表示設定・表示名の上書き・グループ名の変更は維持されます）"
+      )
+    ) {
+      return;
+    }
+    const base = configToEdit(buildDefaultConfig());
+    const next: EditState = {
+      categories: base.categories.map((c) => {
+        const cur = state.categories.find((x) => x.id === c.id);
+        return cur ? { ...c, label: cur.label, hidden: cur.hidden } : c;
+      }),
+      itemsByCat: base.itemsByCat,
+      itemMeta: { ...base.itemMeta, ...state.itemMeta },
+    };
+    update(next);
+    flash("既定の配置を反映しました（表示/名前の設定は維持）");
   };
 
   return (
@@ -240,19 +305,57 @@ export default function AdminNavPage() {
         </div>
       </div>
 
+      {hasSavedConfig && (
+        <div className="rounded-md bg-amber-50 border border-amber-200 px-4 py-2.5 text-xs text-amber-800">
+          ⚠️
+          カスタム構成を保存済みです。アプリ更新による既定構成の変更（新しい既定の並びなど）は自動では反映されません。最新の既定を反映するには「既定の配置を反映」または「既定に戻す」を使うか、手動で調整してください（新しく追加されたページ自体は自動で既定グループ末尾に表示されます）。
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" onClick={importCurrent}>現在の構成を初期値として取り込む</Button>
+        <Button variant="outline" size="sm" onClick={applyDefaultPlacement}>⟲ 既定の配置を反映（表示/名前設定は維持）</Button>
         <Button variant="outline" size="sm" onClick={resetToDefault}>既定に戻す</Button>
         <Button variant="outline" size="sm" onClick={addCategory}>+ カテゴリを追加</Button>
+        <Button size="sm" onClick={() => persist(state)} disabled={saving}>💾 保存</Button>
       </div>
+
+      <p className="text-xs text-muted-foreground">
+        並び替えはドラッグ&ドロップ（項目の行・カテゴリの ⠿）でも、↑↓ボタンでもできます。変更は自動保存されます。
+      </p>
 
       <div className="space-y-4">
         {state.categories.map((cat, cIdx) => (
           <div
             key={cat.id}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              dropItemAt(cat.id, null);
+            }}
             className={`rounded-lg border bg-white p-4 space-y-3 ${cat.hidden ? "opacity-60" : ""}`}
           >
             <div className="flex flex-wrap items-center gap-2">
+              <span
+                draggable
+                onDragStart={() => {
+                  dragRef.current = { type: "cat", id: cat.id };
+                }}
+                className="cursor-grab select-none text-slate-400 px-1"
+                title="ドラッグでカテゴリを並び替え"
+              >
+                ⠿
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setCollapsed((c) => ({ ...c, [cat.id]: !c[cat.id] }))
+                }
+                className="text-sm text-slate-500 w-6"
+                title={collapsed[cat.id] ? "展開" : "折りたたむ"}
+              >
+                {collapsed[cat.id] ? "▸" : "▾"}
+              </button>
               <Input
                 value={cat.label}
                 onChange={(e) => renameCategory(cIdx, e.target.value)}
@@ -262,6 +365,13 @@ export default function AdminNavPage() {
               <span className="text-xs text-muted-foreground">
                 ({(state.itemsByCat[cat.id] ?? []).length}項目)
               </span>
+              {collapsed[cat.id] && (
+                <span className="text-[11px] text-muted-foreground truncate max-w-[380px]">
+                  {(state.itemsByCat[cat.id] ?? [])
+                    .map((key) => state.itemMeta[key]?.labelOverride?.trim() || masterLabel(key))
+                    .join(" / ")}
+                </span>
+              )}
               <div className="ml-auto flex gap-1">
                 <Button variant="outline" size="sm" onClick={() => moveCategory(cIdx, -1)} disabled={cIdx === 0}>↑</Button>
                 <Button variant="outline" size="sm" onClick={() => moveCategory(cIdx, 1)} disabled={cIdx === state.categories.length - 1}>↓</Button>
@@ -272,6 +382,7 @@ export default function AdminNavPage() {
               </div>
             </div>
 
+            {!collapsed[cat.id] && (
             <ul className="space-y-2">
               {(state.itemsByCat[cat.id] ?? []).map((key, iIdx) => {
                 const meta = state.itemMeta[key] ?? { hidden: false, labelOverride: "" };
@@ -279,7 +390,17 @@ export default function AdminNavPage() {
                 return (
                   <li
                     key={key}
-                    className={`rounded-md border p-2 space-y-2 ${meta.hidden ? "bg-slate-50 opacity-70" : ""}`}
+                    draggable
+                    onDragStart={() => {
+                      dragRef.current = { type: "item", key, fromCat: cat.id };
+                    }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      dropItemAt(cat.id, iIdx);
+                    }}
+                    className={`rounded-md border p-2 space-y-2 cursor-grab ${meta.hidden ? "bg-slate-50 opacity-70" : ""}`}
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-medium text-slate-700">{masterLabel(key)}</span>
@@ -319,9 +440,12 @@ export default function AdminNavPage() {
                 );
               })}
               {(state.itemsByCat[cat.id] ?? []).length === 0 && (
-                <li className="text-xs text-muted-foreground px-1">このカテゴリに項目はありません</li>
+                <li className="text-xs text-muted-foreground px-1">
+                  このカテゴリに項目はありません（ここに項目をドラッグで移動できます）
+                </li>
               )}
             </ul>
+            )}
           </div>
         ))}
       </div>
