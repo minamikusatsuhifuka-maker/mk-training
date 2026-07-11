@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { medicalFees as initialData, billingTips, type MedicalFee, type FeeCategory } from "@/data/medical_fees";
+import { medicalFees as initialData, billingTips, feeStatusOf, type MedicalFee, type FeeCategory } from "@/data/medical_fees";
 import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -38,7 +38,9 @@ export default function MedicalFeesPage() {
       </div>
 
       <div className="rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
-        点数は2024年度改定版を基準としています。定期的に改定があるため最新の点数表で確認してください。
+        ※
+        点数は目安です（2024年度改定版基準）。実際の算定は院内レセコン・最新の告示・審査基準に従ってください。
+        <span className="font-medium">⚠マークの項目はレセコン照合前です。</span>
       </div>
 
       {/* Quick reference cards */}
@@ -90,6 +92,11 @@ export default function MedicalFeesPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="outline" className="text-[10px] bg-slate-100">{f.code}</Badge>
                   <span className="font-medium text-sm">{f.name}</span>
+                  {feeStatusOf(f) === "needs_check" && (
+                    <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200">
+                      ⚠ 要確認
+                    </Badge>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">{f.description}</p>
                 {f.notes && <p className="text-xs text-amber-700 mt-1">{f.notes}</p>}
@@ -120,7 +127,12 @@ export default function MedicalFeesPage() {
               {filtered.map((f) => (
                 <tr key={f.id} className="hover:bg-muted/50">
                   <td className="px-2 py-1.5 border-b align-top text-xs font-mono">{f.code}</td>
-                  <td className="px-2 py-1.5 border-b align-top font-medium text-sm">{f.name}</td>
+                  <td className="px-2 py-1.5 border-b align-top font-medium text-sm">
+                    {f.name}
+                    {feeStatusOf(f) === "needs_check" && (
+                      <span className="ml-1 text-[10px] text-amber-700 whitespace-nowrap" title="レセコン照合前">⚠ 要確認</span>
+                    )}
+                  </td>
                   <td className="px-2 py-1.5 border-b align-top text-right">
                     <span className="text-lg font-bold text-teal">{f.points}</span>
                     <span className="text-[10px] text-muted-foreground block">{f.points * 3}円(3割)</span>
@@ -158,8 +170,8 @@ export default function MedicalFeesPage() {
         <CardContent className="p-0 space-y-3">
           {[
             {q:"外来管理加算は処置と同日に算定できる？",a:"✕ 処置・検査・注射等を行った場合は算定不可"},
-            {q:"液体窒素の最短算定間隔は？",a:"2週間以上"},
-            {q:"院外処方の処方箋料は何点？",a:"68点"},
+            {q:"いぼ等冷凍凝固法（液体窒素・J056）の点数は？",a:"3箇所以下210点／4箇所以上270点（箇所数で変わる）"},
+            {q:"院外処方の処方箋料は何点？",a:"60点（令和6年改定で68点→60点）"},
           ].map((item, i) => (
             <QuizItem key={i} question={item.q} answer={item.a} />
           ))}

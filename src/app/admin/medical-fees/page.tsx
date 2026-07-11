@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { medicalFees as initialData, type MedicalFee, type FeeCategory } from "@/data/medical_fees";
+import { medicalFees as initialData, feeStatusOf, type MedicalFee, type FeeCategory } from "@/data/medical_fees";
 import { getContent, saveContent, CONTENT_KEYS } from "@/lib/content-store";
 import { AdminBanner } from "@/components/AdminBanner";
 import { Button } from "@/components/ui/button";
@@ -65,6 +65,7 @@ function emptyItem(): MedicalFee {
     description: "",
     notes: "",
     frequency: "",
+    status: "needs_check",
   };
 }
 
@@ -97,6 +98,22 @@ export default function AdminMedicalFeesPage() {
     setSaveMsg(ok ? "保存しました（全スタッフに反映されます）" : "ローカルに保存しました（Supabase接続エラー）");
     setTimeout(() => setSaveMsg(null), 3000);
     setSaving(false);
+  };
+
+  // 照合状態の切替（⚠要確認 ⇔ ✓照合済み）。レセコン照合が済んだらフラグを外す運用。
+  const toggleStatus = async (id: string) => {
+    const updated = data.map((d) =>
+      d.id === id
+        ? {
+            ...d,
+            status: (feeStatusOf(d) === "verified"
+              ? "needs_check"
+              : "verified") as MedicalFee["status"],
+          }
+        : d
+    );
+    setData(updated);
+    await persistData(updated);
   };
 
   const filtered = data.filter((d) => {
@@ -207,7 +224,12 @@ export default function AdminMedicalFeesPage() {
             <TableRow key={d.id}>
               <TableCell className="px-2"><input type="checkbox" checked={selectedIds.has(d.id)} onChange={() => toggleSelect(d.id)} onClick={(e) => e.stopPropagation()} className="rounded" /></TableCell>
               <TableCell className="font-mono text-xs">{d.code}</TableCell>
-              <TableCell className="font-medium">{d.name}</TableCell>
+              <TableCell className="font-medium">
+                {d.name}
+                {feeStatusOf(d) === "needs_check" && (
+                  <span className="ml-1 text-[10px] text-amber-700 whitespace-nowrap">⚠ 要確認</span>
+                )}
+              </TableCell>
               <TableCell className="text-sm">{d.points}</TableCell>
               <TableCell className="hidden sm:table-cell">
                 <span className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
@@ -218,6 +240,15 @@ export default function AdminMedicalFeesPage() {
                 <div className="flex gap-1">
                   <Button variant="outline" size="sm" onClick={() => openEdit(d)}>
                     編集
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => toggleStatus(d.id)}
+                    title={feeStatusOf(d) === "verified" ? "照合前（⚠）に戻す" : "レセコン照合済みにする"}
+                    className={feeStatusOf(d) === "verified" ? "text-emerald-700" : "text-amber-700"}
+                  >
+                    {feeStatusOf(d) === "verified" ? "✓済" : "⚠→✓"}
                   </Button>
                   <GeminiVerifyButton contentType="medical_fee" itemName={d.name} currentData={d} />
                   <Button variant="destructive" size="sm" onClick={() => setDeleteId(d.id)}>
@@ -312,6 +343,23 @@ export default function AdminMedicalFeesPage() {
                   value={editItem.frequency ?? ""}
                   onChange={(e) => setEditItem({ ...editItem, frequency: e.target.value })}
                 />
+              </label>
+              <label className="space-y-1 block">
+                <Label className="text-xs font-medium">照合状態</Label>
+                <Select
+                  value={feeStatusOf(editItem)}
+                  onValueChange={(v) =>
+                    setEditItem({ ...editItem, status: v as MedicalFee["status"] })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="verified">✓ 照合済み（点数表・レセコンで確認済み）</SelectItem>
+                    <SelectItem value="needs_check">⚠ 要確認（レセコン照合前）</SelectItem>
+                  </SelectContent>
+                </Select>
               </label>
             </div>
           )}

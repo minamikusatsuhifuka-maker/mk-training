@@ -1,4 +1,4 @@
-import { medicalFees, billingTips } from "@/data/medical_fees";
+import { medicalFees, billingTips, feeStatusOf } from "@/data/medical_fees";
 
 export default function PrintMedicalFeesPage() {
   const today = new Date().toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" });
@@ -26,7 +26,10 @@ export default function PrintMedicalFeesPage() {
           {medicalFees.map((f) => (
             <tr key={f.id} className="no-page-break">
               <td className="px-1 py-0.5 font-mono text-[8pt]">{f.code}</td>
-              <td className="px-1 py-0.5 font-medium">{f.name}</td>
+              <td className="px-1 py-0.5 font-medium">
+                {f.name}
+                {feeStatusOf(f) === "needs_check" && <span className="text-[8pt]">（⚠要確認）</span>}
+              </td>
               <td className="px-1 py-0.5 text-right font-bold">{f.points}</td>
               <td className="px-1 py-0.5 text-right">{f.points * 3}</td>
               <td className="px-1 py-0.5 text-gray-600">{f.notes || "—"}</td>
@@ -34,6 +37,10 @@ export default function PrintMedicalFeesPage() {
           ))}
         </tbody>
       </table>
+
+      <p className="mt-2 text-[8pt] text-gray-600">
+        ※ 点数は目安です。実際の算定は院内レセコン・最新の告示・審査基準に従ってください。⚠は照合前の項目です。
+      </p>
 
       <div className="mt-6 border-2 border-gray-300 rounded p-3">
         <h3 className="font-bold text-sm mb-2">算定のポイント（注意事項）</h3>
