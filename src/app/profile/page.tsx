@@ -123,6 +123,7 @@ export default function ProfilePage() {
         message: profile.message,
         photoCaptions: captions,
         customFields: profile.customFields,
+        showEmail: profile.showEmail === true,
       }),
     });
     setSaving(false);
@@ -335,6 +336,13 @@ export default function ProfilePage() {
               onChange={(e) => set("name", e.target.value)}
               placeholder="例：山田 花子"
             />
+            {profile.name.includes("@") && (
+              <p className="text-xs text-amber-700">
+                ⚠️
+                表示名がメールアドレスになっています。お名前（例: 楠葉
+                展大）を設定しましょう。
+              </p>
+            )}
           </div>
           <div className="space-y-1">
             <Label htmlFor="p-kana">ふりがな</Label>
@@ -390,6 +398,24 @@ export default function ProfilePage() {
             onChange={(e) => set("hobbies", e.target.value)}
             placeholder="例：カフェ巡り、写真、韓国ドラマ"
           />
+        </div>
+
+        {/* メールアドレスの表示希望（既定OFF・詳細ダイアログのみに表示される） */}
+        <div className="space-y-1 pt-1">
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={profile.showEmail === true}
+              onChange={(e) => set("showEmail", e.target.checked)}
+              className="mt-0.5 rounded"
+            />
+            <span>
+              ✉ メールアドレスをメンバー紹介に表示する
+              <span className="block text-xs text-muted-foreground mt-0.5">
+                ONにすると、メンバー紹介であなたの詳細を開いた人にメールアドレスが表示されます（一覧カードには表示されません）。
+              </span>
+            </span>
+          </label>
         </div>
       </div>
 

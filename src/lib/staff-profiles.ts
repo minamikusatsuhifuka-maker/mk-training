@@ -50,6 +50,11 @@ export type StaffProfile = {
   // カスタム項目の回答（キー = profile_field_config の fieldId）。
   // 設定から消えた fieldId の値も保持する（非表示になるだけで消さない）。
   customFields: Record<string, string>;
+  // メールアドレスの表示希望（指示書44・既定OFF）。
+  // email はサーバー側でセッションから確定して保存する（クライアント値は受け取らない）。
+  // 表示は「詳細ダイアログのみ・showEmail=true の人のみ」。一覧カード/indexには載せない。
+  showEmail?: boolean;
+  email?: string;
   updatedAt: string;
 };
 
@@ -75,6 +80,8 @@ export function emptyProfile(userId: string, name = ""): StaffProfile {
     avatarUrl: "",
     photos: [],
     customFields: {},
+    showEmail: false,
+    email: "",
     updatedAt: "",
   };
 }

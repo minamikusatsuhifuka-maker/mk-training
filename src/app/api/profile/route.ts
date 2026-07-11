@@ -20,7 +20,11 @@ export async function GET() {
     return NextResponse.json({ error: "ログインが必要です" }, { status: 401 });
   }
   const profile = await loadProfileServer(db, user.id);
-  if (!profile.name) profile.name = displayNameOf(user);
+  if (!profile.name) {
+    // 初期名の候補。メールアドレスがそのまま名前にならないよう @ 前のローカル部にする（指示書44）
+    const dn = displayNameOf(user);
+    profile.name = dn.includes("@") ? dn.split("@")[0] : dn;
+  }
   return NextResponse.json({ profile, email: user.email ?? "" });
 }
 
@@ -116,6 +120,9 @@ export async function PUT(req: NextRequest) {
     message: cleanText(body.message, "message"),
     photos,
     customFields,
+    // メール表示の希望（既定OFF）。email はセッションから確定（クライアント値は使わない＝なりすまし防止）
+    showEmail: body.showEmail === true,
+    email: user.email ?? "",
   };
 
   try {

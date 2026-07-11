@@ -79,6 +79,12 @@ function roleColorOf(role?: string): RoleColor {
   return (role && ROLE_COLORS[role]) || ROLE_COLORS["その他"];
 }
 
+// name がメールアドレスのままのユーザー対策: 画面上は @ 前のローカル部のみ表示する
+// （データ自体の修正は本人の /profile 編集に委ねる。メールを意図的に表示する要素は置かない）
+function displayName(name: string): string {
+  return name.includes("@") ? name.split("@")[0] : name;
+}
+
 // fieldId→ラベル用アイコン（未知の項目は Sparkles）
 const FIELD_ICONS: Record<string, LucideIcon> = {
   nickname: Tag,
@@ -127,7 +133,7 @@ function Avatar({
     <div
       className={`${cls} rounded-full ${c.bg} ${c.text} text-2xl font-medium flex items-center justify-center shrink-0`}
     >
-      {name ? name.charAt(0) : "👤"}
+      {name ? displayName(name).charAt(0) : "👤"}
     </div>
   );
 }
@@ -264,7 +270,7 @@ export default function MembersPage() {
                       <p className="text-xs text-gray-400 truncate">{m.kana}</p>
                     )}
                     <p className="text-lg font-medium text-gray-900 truncate">
-                      {m.name}
+                      {displayName(m.name)}
                     </p>
                     {cardConfig.showRole && m.role && (
                       <span
@@ -338,7 +344,7 @@ export default function MembersPage() {
                     <p className="text-xs text-gray-400">{selected.kana}</p>
                   )}
                   <p className="text-lg font-medium text-gray-900">
-                    {selected.name}
+                    {displayName(selected.name)}
                   </p>
                   {selected.role && (
                     <span
@@ -346,6 +352,18 @@ export default function MembersPage() {
                     >
                       {selected.role}
                     </span>
+                  )}
+                  {/* メールは本人が希望した場合のみ・詳細でだけ表示（指示書44） */}
+                  {selected.showEmail === true && selected.email && (
+                    <p className="mt-1 text-xs text-gray-400">
+                      ✉{" "}
+                      <a
+                        href={`mailto:${selected.email}`}
+                        className="hover:underline underline-offset-2"
+                      >
+                        {selected.email}
+                      </a>
+                    </p>
                   )}
                 </div>
               </div>
