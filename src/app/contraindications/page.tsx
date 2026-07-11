@@ -47,7 +47,7 @@ export default function ContraindicationsPage() {
   });
 
   return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6">
+    <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
       <PageHeader
         title="禁忌事項"
         description="薬剤・施術の禁忌・注意事項を確認できます（絶対禁忌 / 要注意 / 参考 の3段階）"

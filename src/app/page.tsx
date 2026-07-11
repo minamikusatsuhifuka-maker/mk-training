@@ -579,7 +579,7 @@ export default function PortalHome() {
 
         <div className="mt-4 p-4 bg-teal-50 rounded-xl border border-teal-100">
           <p className="text-xs font-medium text-teal-600 mb-2">今日の一言</p>
-          <p className="text-sm text-teal-900 leading-relaxed">
+          <p className="text-sm text-teal-900 leading-relaxed max-w-prose">
             {todayWord.text}
           </p>
           <p className="text-xs text-teal-600 mt-2">— {todayWord.author}</p>
@@ -683,7 +683,7 @@ export default function PortalHome() {
         <h2 className="text-xs font-medium text-gray-800 uppercase tracking-wider mb-3">
           クイックアクセス
         </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
           {quickLinks.map((link) => {
             const cardClass = link.highlight
               ? "p-4 bg-teal-50 border border-teal-200 rounded-xl cursor-pointer hover:bg-teal-100 transition-colors text-center min-h-[100px] flex flex-col justify-center"
@@ -976,10 +976,10 @@ export default function PortalHome() {
             <p className="text-xs font-medium text-purple-600 mb-2">
               {activePolicy.year}年度
             </p>
-            <p className="text-sm font-medium text-purple-900 leading-snug">
+            <p className="text-sm font-medium text-purple-900 leading-snug max-w-prose">
               {activePolicy.purpose}
             </p>
-            <div className="grid grid-cols-2 gap-2 mt-3">
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 mt-3">
               {[
                 { label: "パーパス", value: activePolicy.purpose },
                 { label: "ミッション", value: activePolicy.mission },
@@ -1002,7 +1002,7 @@ export default function PortalHome() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto -m-3 md:-m-6 bg-white min-h-screen">
+    <div className="max-w-[1536px] mx-auto -m-3 md:-m-6 bg-white min-h-screen">
       {/* キャラクター通知（投稿から一定期間内は毎回再生／クリックで中央モーダル） */}
       <CharacterNotification news={news} onOpenNews={setSelectedNews} />
 

@@ -98,7 +98,7 @@ export default function ExpertPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-[1536px] mx-auto space-y-6">
       <div>
         <h1 className="text-xl md:text-2xl font-bold text-teal">
           ⭐ エキスパートに求められる働き方

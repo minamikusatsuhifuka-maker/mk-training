@@ -292,7 +292,7 @@ export default function TasksPage() {
 
   if (!loaded || !now) {
     return (
-      <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
+      <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
         <PageHeader
           title="📋 みんなのタスク"
           description="クリニック全体のタスクを「誰が・何を・いつまで」で見える化"
@@ -540,7 +540,7 @@ export default function TasksPage() {
   };
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
       <PageHeader
         title="📋 みんなのタスク"
         description="クリニック全体のタスクを「誰が・何を・いつまで」で見える化"

@@ -44,7 +44,7 @@ export default function PregnancyPage() {
   const isContraindicated = tab === "contraindicated";
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-[1536px] mx-auto space-y-6">
       <div className="flex items-start justify-between gap-4">
         <PageHeader
           title="妊娠・授乳中の薬剤安全性"

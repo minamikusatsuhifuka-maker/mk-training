@@ -27,7 +27,7 @@ export default function MedicalFeesPage() {
   });
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-[1536px] mx-auto space-y-6">
       <div className="flex items-start justify-between gap-4">
         <PageHeader
           title="保険診療算定項目・点数表"

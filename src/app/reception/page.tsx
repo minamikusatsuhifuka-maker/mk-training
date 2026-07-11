@@ -16,7 +16,7 @@ export default function ReceptionPage() {
   const totalItems = sections.reduce((sum, s) => sum + s.items.length, 0);
 
   return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6">
+    <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
       <PageHeader
         title="受付対応"
         description="来院から会計までの流れと注意点"

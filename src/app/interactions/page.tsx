@@ -78,7 +78,7 @@ export default function InteractionsPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-[1536px] mx-auto space-y-6">
       <PageHeader
         title="薬剤相互作用チェック"
         description="2つの薬剤を選択して相互作用を確認できます"

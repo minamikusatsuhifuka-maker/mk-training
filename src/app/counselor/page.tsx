@@ -16,7 +16,7 @@ export default function CounselorPage() {
   const totalItems = sections.reduce((sum, s) => sum + s.items.length, 0);
 
   return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6">
+    <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
       <PageHeader
         title="カウンセラー基礎スキル"
         description="美容施術カウンセリングの基本と接遇"

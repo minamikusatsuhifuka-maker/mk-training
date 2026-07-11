@@ -68,7 +68,7 @@ export default function SkincarePage() {
   };
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
       <PageHeader
         title="スキンケア・美容内服製品"
         description="当院で取り扱うスキンケア製品・美容内服の一覧です"

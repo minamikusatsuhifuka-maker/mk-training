@@ -56,7 +56,7 @@ export default function CosmeticPage() {
   };
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
       <PageHeader
         title="当院の美容施術・機器"
         description="美容皮膚科で提供している施術・機器の一覧です"

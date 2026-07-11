@@ -32,7 +32,7 @@ export default function OperationsPage() {
   }, []);
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
       <PageHeader
         title="業務チェックリスト"
         description="各役職ごとの業務内容・接遇チェックリストです"

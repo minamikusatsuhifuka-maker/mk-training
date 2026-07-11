@@ -98,7 +98,7 @@ export default function ProgressPage() {
 
   if (totalAttempts === 0) {
     return (
-      <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6">
+      <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
         <PageHeader title="学習進捗" description="クイズの結果を記録・分析します" />
         <Card className="p-8 text-center space-y-4">
           <p className="text-muted-foreground">まだクイズに挑戦していません。クイズに挑戦して学習の記録を始めましょう！</p>
@@ -111,7 +111,7 @@ export default function ProgressPage() {
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6">
+    <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
       <div className="flex items-start justify-between gap-4">
         <PageHeader title="学習進捗" description="クイズの結果を記録・分析します" />
         <Button variant="outline" size="sm" onClick={() => setConfirmReset(true)}>記録をリセット</Button>

@@ -86,7 +86,7 @@ export default function BiologicsPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-[1536px] mx-auto space-y-6">
       {/* ヘッダー */}
       <PageHeader
         title="生物学的製剤 投与スケジュール"

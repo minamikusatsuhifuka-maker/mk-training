@@ -95,7 +95,7 @@ export default function NewsHistoryPage() {
   );
 
   return (
-    <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-5">
+    <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-5">
       <PageHeader
         title="📜 お知らせ履歴"
         description="これまでのお知らせ（掲載中・期限切れ）を検索・グループ分けして振り返れます"
@@ -107,7 +107,7 @@ export default function NewsHistoryPage() {
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           placeholder="🔍 キーワード検索（タイトル・本文、空白区切りでAND検索）"
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+          className="w-full max-w-2xl border border-gray-200 rounded-lg px-3 py-2 text-sm"
         />
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-gray-600">表示：</span>
