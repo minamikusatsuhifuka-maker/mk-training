@@ -15,6 +15,7 @@ import {
   ServiceRoleMissingError,
 } from "@/lib/supabase-admin";
 import { getSessionUser } from "@/lib/staff-profiles-server";
+import { isAdminUser, countAdmins } from "@/lib/admin-role";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -70,10 +71,21 @@ export async function POST(req: NextRequest) {
     if (listed.error) throw new Error(listed.error.message);
     const users = listed.data.users;
 
-    // 認可: ログイン必須。例外は「まだ誰も一度もログインしていない」場合のみ。
+    // 認可（指示書39で厳格化）:
+    // - 管理者が存在する場合は管理者のみ。
+    // - 管理者0人の間はログイン済みユーザーに許可（初期セットアップの橋）。
+    // - 未ログインは「管理者0人かつ誰も一度もログインしていない」場合のみ許可。
+    const adminCount = countAdmins(users);
     const nobodySignedIn =
       users.length > 0 && users.every((u) => !u.last_sign_in_at);
-    if (!sessionUser && !nobodySignedIn) {
+    if (sessionUser) {
+      if (adminCount > 0 && !isAdminUser(sessionUser)) {
+        return NextResponse.json(
+          { error: "この操作には管理者権限が必要です" },
+          { status: 403 }
+        );
+      }
+    } else if (!(adminCount === 0 && nobodySignedIn)) {
       return NextResponse.json(
         { error: "この操作にはログインが必要です" },
         { status: 401 }

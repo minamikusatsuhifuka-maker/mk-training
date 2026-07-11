@@ -15,6 +15,7 @@ import {
   ServiceRoleMissingError,
 } from "@/lib/supabase-admin";
 import { getSessionUser } from "@/lib/staff-profiles-server";
+import { isAdminUser, countAdmins } from "@/lib/admin-role";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -27,6 +28,7 @@ type AccountSummary = {
   lastSignInAt: string | null;
   invitedAt: string | null;
   banned: boolean;
+  isAdmin: boolean;
 };
 
 function toSummary(u: User): AccountSummary {
@@ -42,6 +44,7 @@ function toSummary(u: User): AccountSummary {
     lastSignInAt: u.last_sign_in_at ?? null,
     invitedAt: u.invited_at ?? null,
     banned: !!banned_until && new Date(banned_until).getTime() > Date.now(),
+    isAdmin: isAdminUser(u),
   };
 }
 
@@ -80,15 +83,17 @@ export async function GET() {
       listAllUsers(admin),
     ]);
 
+    const adminCount = countAdmins(users);
+
     if (!user) {
       // 初回（ユーザー0人）だけは招待画面を使えるようにする
       if (users.length === 0) {
         return NextResponse.json({ users: [], bootstrap: true });
       }
-      // ユーザーは存在するがまだ誰も一度もログインしていない場合は、
+      // ユーザーは存在するが「まだ誰も一度もログインしておらず、管理者も0人」の場合は、
       // 初期セットアップ救済として一覧の閲覧（＝仮パスワード発行の入口）を許可する。
-      // 誰か1人でもログイン履歴がつけば、以後はログイン必須に戻る。
-      if (users.every((u) => !u.last_sign_in_at)) {
+      // 管理者が1人でもできたら（またはログイン履歴がつけば）以後はログイン必須に戻る。
+      if (adminCount === 0 && users.every((u) => !u.last_sign_in_at)) {
         return NextResponse.json({
           users: users.map(toSummary),
           bootstrap: false,
@@ -101,10 +106,19 @@ export async function GET() {
       );
     }
 
+    // 管理者が存在する場合、一覧の閲覧は管理者のみ
+    if (adminCount > 0 && !isAdminUser(user)) {
+      return NextResponse.json(
+        { error: "この操作には管理者権限が必要です" },
+        { status: 403 }
+      );
+    }
+
     return NextResponse.json({
       users: users.map(toSummary),
       bootstrap: false,
       me: user.id,
+      adminCount,
     });
   } catch (e) {
     return errorResponse(e);
@@ -127,13 +141,49 @@ export async function POST(req: NextRequest) {
       listAllUsers(admin),
     ]);
 
-    // 認可: ログイン必須。例外は「ユーザー0人での初回招待」のみ。
+    const adminCount = countAdmins(users);
+
+    // 自分を管理者にする（ブートストラップ・一度きりの橋）:
+    // 管理者が0人の場合に限り、ログイン中の本人を管理者化できる。
+    if (action === "bootstrap-admin") {
+      if (!sessionUser) {
+        return NextResponse.json(
+          { error: "この操作にはログインが必要です" },
+          { status: 401 }
+        );
+      }
+      if (adminCount > 0) {
+        return NextResponse.json(
+          { error: "すでに管理者が存在します。管理者に操作を依頼してください" },
+          { status: 403 }
+        );
+      }
+      const { error } = await admin.auth.admin.updateUserById(sessionUser.id, {
+        user_metadata: {
+          ...((sessionUser.user_metadata ?? {}) as Record<string, unknown>),
+          role: "admin",
+        },
+      });
+      if (error) throw new Error(error.message);
+      return NextResponse.json({ ok: true });
+    }
+
+    // 認可: 原則ログイン必須。管理者が存在する場合は管理者のみ。
+    // 例外は「ユーザー0人での初回招待」と「管理者0人の間のログイン済み操作（初期セットアップの橋）」。
     const isBootstrapInvite = users.length === 0 && action === "invite";
-    if (!sessionUser && !isBootstrapInvite) {
-      return NextResponse.json(
-        { error: "この操作にはログインが必要です" },
-        { status: 401 }
-      );
+    if (!isBootstrapInvite) {
+      if (!sessionUser) {
+        return NextResponse.json(
+          { error: "この操作にはログインが必要です" },
+          { status: 401 }
+        );
+      }
+      if (adminCount > 0 && !isAdminUser(sessionUser)) {
+        return NextResponse.json(
+          { error: "この操作には管理者権限が必要です" },
+          { status: 403 }
+        );
+      }
     }
 
     const redirectTo = `${siteOrigin(req)}/reset-password`;
@@ -192,6 +242,33 @@ export async function POST(req: NextRequest) {
         target.email ?? "",
         { data: { display_name: name }, redirectTo }
       );
+      if (error) throw new Error(error.message);
+      return NextResponse.json({ ok: true });
+    }
+
+    // 管理者にする／解除（操作は管理者のみ・最後の1人は解除不可）
+    if (action === "promote" || action === "demote") {
+      if (!sessionUser || !isAdminUser(sessionUser)) {
+        return NextResponse.json(
+          { error: "この操作には管理者権限が必要です" },
+          { status: 403 }
+        );
+      }
+      if (action === "demote" && isAdminUser(target) && adminCount <= 1) {
+        return NextResponse.json(
+          {
+            error:
+              "最後の管理者は解除できません（先に別の管理者を指定してください）",
+          },
+          { status: 400 }
+        );
+      }
+      const { error } = await admin.auth.admin.updateUserById(target.id, {
+        user_metadata: {
+          ...((target.user_metadata ?? {}) as Record<string, unknown>),
+          role: action === "promote" ? "admin" : null,
+        },
+      });
       if (error) throw new Error(error.message);
       return NextResponse.json({ ok: true });
     }

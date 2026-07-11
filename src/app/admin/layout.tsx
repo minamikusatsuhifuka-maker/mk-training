@@ -1,112 +1,102 @@
-"use client";
+// 管理画面レイアウト（指示書39: サーバー側で管理者検証）
+// - 未ログイン → ログイン誘導
+// - 非管理者 → 「権限がありません」（ただし管理者0人なら自己管理者化のブートストラップ導線）
+// - 管理者 → AdminShell（従来のヘッダー＋サイドナビ）
+// クライアント判定に頼らず、cookieセッションの getUser() ＋ user_metadata.role で判定する。
 
-import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { getSessionUser } from "@/lib/staff-profiles-server";
+import { isAdminUser, countAdmins } from "@/lib/admin-role";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { AdminShell } from "@/components/admin/AdminShell";
+import { BootstrapAdminCard } from "@/components/admin/BootstrapAdminCard";
 
-const adminNav = [
-  { label: "📊 ダッシュボード", href: "/admin" },
-  { label: "🏠 ポータル管理", href: "/admin/portal" },
-  { label: "🧭 サイドバー構成", href: "/admin/nav" },
-  { label: "🏛️ 組織知識ベース管理", href: "/admin/knowledge-system" },
-  { label: "🧭 背景情報・理念管理", href: "/admin/ai-background" },
-  { label: "📚 知識ベース管理", href: "/admin/knowledge" },
-  { label: "🦠 疾患管理", href: "/admin/diseases" },
-  { label: "💊 薬剤管理", href: "/admin/drugs" },
-  { label: "❓ クイズ管理", href: "/admin/quiz" },
-  { label: "⚠️ 禁忌管理", href: "/admin/contraindications" },
-  { label: "💬 カウンセリング管理", href: "/admin/counseling" },
-  { label: "✨ 美容施術管理", href: "/admin/cosmetic" },
-  { label: "🧴 スキンケア管理", href: "/admin/skincare" },
-  { label: "🤰 妊娠授乳管理", href: "/admin/pregnancy" },
-  { label: "⚡ 相互作用管理", href: "/admin/interactions" },
-  { label: "💴 算定点数管理", href: "/admin/medical-fees" },
-  { label: "📋 業務チェック管理", href: "/admin/operations" },
-  { label: "👥 スタッフ名簿", href: "/admin/staff-members" },
-  { label: "👤 アカウント招待", href: "/admin/staff-accounts" },
-  { label: "🪪 プロフィール項目管理", href: "/admin/profile-fields" },
-  { label: "💉 生物学的製剤管理", href: "/admin/biologics" },
-  { label: "⭐ エキスパート要件管理", href: "/admin/expert" },
-  { label: "🔬 ディープリサーチ", href: "/admin/deep-research" },
-  { label: "📝 更新履歴", href: "/admin/changelog" },
-  { label: "⚙️ AI設定", href: "/admin/settings" },
-];
+// セッション（cookie）依存のため常に動的レンダリング
+export const dynamic = "force-dynamic";
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const [menuOpen, setMenuOpen] = useState(false);
-
+function GateScreen({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="bg-slate-800 text-white px-4 md:px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="md:hidden text-xl"
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-6 space-y-3">
+        <h1 className="text-lg font-bold text-slate-800">{title}</h1>
+        {children}
+        <p className="pt-1">
+          <Link
+            href="/"
+            className="text-sm text-teal-700 underline underline-offset-2"
           >
-            ☰
-          </button>
-          <span className="text-base md:text-lg font-bold">南草津皮フ科 管理画面</span>
-        </div>
-        <Link
-          href="/"
-          className="text-xs md:text-sm text-slate-300 hover:text-white transition-colors"
-        >
-          ← スタッフ画面
-        </Link>
-      </header>
-
-      {/* Mobile nav dropdown */}
-      {menuOpen && (
-        <div className="md:hidden bg-slate-700 px-4 py-2 space-y-1">
-          {adminNav.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMenuOpen(false)}
-                className={`block rounded-md px-3 py-2 text-sm transition-colors ${
-                  isActive
-                    ? "bg-slate-500 text-white font-medium"
-                    : "text-slate-300 hover:bg-slate-600 hover:text-white"
-                }`}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="flex">
-        {/* Desktop Sidebar */}
-        <aside className="hidden md:block w-[200px] shrink-0 bg-slate-800 min-h-[calc(100vh-52px)] px-3 py-4">
-          <nav className="space-y-1">
-            {adminNav.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`block rounded-md px-3 py-2 text-sm transition-colors ${
-                    isActive
-                      ? "bg-slate-600 text-white font-medium"
-                      : "text-slate-300 hover:bg-slate-700 hover:text-white"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-        </aside>
-
-        {/* Content */}
-        <main className="flex-1 p-3 md:p-6 overflow-y-auto">{children}</main>
+            ← スタッフポータルへ戻る
+          </Link>
+        </p>
       </div>
     </div>
+  );
+}
+
+export default async function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { user } = await getSessionUser();
+
+  if (!user) {
+    return (
+      <GateScreen title="🔒 管理画面">
+        <p className="text-sm text-slate-600">
+          管理画面を開くには、スタッフアカウントでのログインが必要です。
+        </p>
+        <p>
+          <Link
+            href="/login?next=/admin"
+            className="inline-block px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700"
+          >
+            ログインページへ
+          </Link>
+        </p>
+      </GateScreen>
+    );
+  }
+
+  if (isAdminUser(user)) {
+    return <AdminShell>{children}</AdminShell>;
+  }
+
+  // 非管理者: 管理者が0人なら初回セットアップの自己管理者化を案内
+  let adminCount = -1;
+  try {
+    const admin = createSupabaseAdminClient();
+    const { data, error } = await admin.auth.admin.listUsers({
+      page: 1,
+      perPage: 500,
+    });
+    if (!error) adminCount = countAdmins(data.users);
+  } catch {
+    adminCount = -1; // service-role未設定などは判定不能 → 権限なし表示
+  }
+
+  if (adminCount === 0) {
+    return (
+      <GateScreen title="👑 初回セットアップ">
+        <p className="text-sm text-slate-600">
+          まだ管理者が設定されていません。最初にログインしたあなたを管理者に設定すると、管理画面が使えるようになります（この操作は管理者が0人のときだけ実行できます）。
+        </p>
+        <BootstrapAdminCard />
+      </GateScreen>
+    );
+  }
+
+  return (
+    <GateScreen title="⛔ 権限がありません">
+      <p className="text-sm text-slate-600">
+        管理画面は管理者のみ利用できます。必要な場合は管理者（院長）に権限の付与を依頼してください。
+      </p>
+    </GateScreen>
   );
 }

@@ -29,6 +29,7 @@ import {
   addManual,
 } from "@/lib/deep-research/store";
 import type { ResearchPerspective } from "@/lib/deep-research/types";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -62,6 +63,9 @@ type DiseaseUpdate = {
 };
 
 export async function POST(request: Request) {
+  // 管理者のみ（指示書39）
+  const auth = await requireAdmin();
+  if (auth.response) return auth.response;
   try {
     const body = await request.json();
     const diseaseName: string = body.diseaseName || "";

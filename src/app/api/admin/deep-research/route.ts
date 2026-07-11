@@ -9,11 +9,15 @@ import {
 } from "@/lib/deep-research/gemini-research";
 import { buildResearchPrompt } from "@/lib/deep-research/prompts";
 import type { ResearchRequest } from "@/lib/deep-research/types";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // 5 分
 
 export async function POST(req: NextRequest) {
+  // 管理者のみ（指示書39）
+  const auth = await requireAdmin();
+  if (auth.response) return auth.response;
   try {
     const body = (await req.json()) as ResearchRequest;
     const { topic, mode, perspective, additionalContext } = body;

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Sidebar } from "@/components/sidebar";
 import { useResolvedNav } from "@/lib/use-nav";
 import { UserMenu } from "@/components/UserMenu";
+import { AdminOnly } from "@/components/AdminOnly";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -70,11 +71,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="px-3 py-2 border-t">
                 <UserMenu onNavigate={() => setMenuOpen(false)} />
               </div>
-              <div className="px-3 py-3 border-t">
-                <Link href="/admin" onClick={() => setMenuOpen(false)} className="flex items-center gap-1.5 px-2 py-2 text-xs text-muted-foreground hover:text-foreground">
-                  <span>⚙</span><span>管理画面</span>
-                </Link>
-              </div>
+              <AdminOnly>
+                <div className="px-3 py-3 border-t">
+                  <Link href="/admin" onClick={() => setMenuOpen(false)} className="flex items-center gap-1.5 px-2 py-2 text-xs text-muted-foreground hover:text-foreground">
+                    <span>⚙</span><span>管理画面</span>
+                  </Link>
+                </div>
+              </AdminOnly>
             </div>
             <div className="flex-1 bg-black/30" onClick={() => setMenuOpen(false)} />
           </div>

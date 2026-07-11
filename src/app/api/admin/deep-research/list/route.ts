@@ -11,10 +11,14 @@ import {
   getResearch,
   deleteResearch,
 } from "@/lib/deep-research/store";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
+  // 管理者のみ（指示書39）
+  const auth = await requireAdmin();
+  if (auth.response) return auth.response;
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
@@ -40,6 +44,9 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  // 管理者のみ（指示書39）
+  const auth = await requireAdmin();
+  if (auth.response) return auth.response;
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");

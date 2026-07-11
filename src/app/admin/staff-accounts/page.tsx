@@ -17,6 +17,7 @@ type AccountSummary = {
   lastSignInAt: string | null;
   invitedAt: string | null;
   banned: boolean;
+  isAdmin: boolean;
 };
 
 function fmt(iso: string | null): string {
@@ -327,6 +328,11 @@ export default function StaffAccountsAdminPage() {
                           自分
                         </span>
                       )}
+                      {u.isAdmin && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
+                          👑 管理者
+                        </span>
+                      )}
                       {u.banned ? (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700">
                           無効
@@ -355,6 +361,49 @@ export default function StaffAccountsAdminPage() {
                         >
                           🔑 仮パスワード発行
                         </button>
+                      )}
+                      {!preLogin && !u.banned && (
+                        u.isAdmin ? (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => {
+                              if (
+                                confirm(
+                                  `${u.email} の管理者権限を解除しますか？`
+                                )
+                              ) {
+                                post(
+                                  { action: "demote", userId: u.id },
+                                  `👤 ${u.email} の管理者権限を解除しました`
+                                );
+                              }
+                            }}
+                            className="text-xs px-2 py-1 border border-amber-200 text-amber-700 rounded hover:bg-amber-50 disabled:opacity-50"
+                          >
+                            👑 管理者を解除
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => {
+                              if (
+                                confirm(
+                                  `${u.email} を管理者にしますか？（管理画面のすべての操作ができるようになります）`
+                                )
+                              ) {
+                                post(
+                                  { action: "promote", userId: u.id },
+                                  `👑 ${u.email} を管理者にしました`
+                                );
+                              }
+                            }}
+                            className="text-xs px-2 py-1 border border-slate-200 text-slate-600 rounded hover:bg-white disabled:opacity-50"
+                          >
+                            👑 管理者にする
+                          </button>
+                        )
                       )}
                       {!preLogin && !u.lastSignInAt && !u.banned && (
                         <button

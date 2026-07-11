@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { generateText, parseJsonLoose } from "@/lib/deep-research/gemini-research";
 import { getToOrgKnowledgePrompt } from "@/lib/deep-research/prompts";
 import { addOrgKnowledge } from "@/lib/deep-research/store";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -20,6 +21,9 @@ type ParsedKnowledge = {
 };
 
 export async function POST(request: Request) {
+  // 管理者のみ（指示書39）
+  const auth = await requireAdmin();
+  if (auth.response) return auth.response;
   try {
     const { topic, content } = await request.json();
     if (!topic || !content) {
