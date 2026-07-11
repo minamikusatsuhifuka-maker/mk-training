@@ -21,6 +21,11 @@ import {
   ReactionBar,
   ReactionSummary,
 } from "@/components/NewsReactions";
+import {
+  useNewsColumns,
+  NewsColumnsSelector,
+  NewsGrid,
+} from "@/components/NewsColumns";
 
 const GROUP_AXES: { value: NewsHistoryGroupAxis; label: string }[] = [
   { value: "flat", label: "新しい順" },
@@ -53,6 +58,9 @@ export default function NewsHistoryPage() {
 
   // お知らせリアクション（👍✅❤️🙏🎉・匿名OK）
   const reactions = useNewsReactions();
+
+  // 一覧カードの列数（既定2列・1〜4列・localStorage保持。ホームと共用）
+  const { columns, effectiveCols, changeColumns } = useNewsColumns();
 
   useEffect(() => {
     getNewsHistory()
@@ -117,6 +125,8 @@ export default function NewsHistoryPage() {
               {a.label}
             </button>
           ))}
+          <span className="text-xs text-gray-600 ml-2">列数：</span>
+          <NewsColumnsSelector columns={columns} onChange={changeColumns} />
         </div>
         <p className="text-xs text-gray-600">
           表示中 {filtered.length}件 ／ 全{history.length}件
@@ -152,53 +162,58 @@ export default function NewsHistoryPage() {
                 {g.items.length}件
               </span>
             </h2>
-            {g.items.map((item) => {
-              const cat = newsCategoryMeta(item.category);
-              return (
-                <div
-                  key={`${item.status}_${item.id}`}
-                  onClick={() => setSelected(item)}
-                  className={`flex items-start gap-3 p-4 rounded-xl cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors ${
-                    urgencyCardClass(item) || "bg-white border border-gray-100"
-                  }`}
-                >
+            <NewsGrid cols={effectiveCols}>
+              {g.items.map((item) => {
+                const cat = newsCategoryMeta(item.category);
+                return (
                   <div
-                    className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${cat.dot}`}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900 leading-snug">
-                      {item.title}
-                    </p>
-                    <p className="text-xs text-gray-600 mt-1">
+                    key={`${item.status}_${item.id}`}
+                    onClick={() => setSelected(item)}
+                    className={`p-4 rounded-xl cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors ${
+                      urgencyCardClass(item) || "bg-white border border-gray-100"
+                    }`}
+                  >
+                    {/* 上段: ドット＋タイトル（2行省略） */}
+                    <div className="flex items-start gap-2">
+                      <div
+                        className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${cat.dot}`}
+                      />
+                      <p className="flex-1 min-w-0 text-sm text-gray-900 leading-snug line-clamp-2">
+                        {item.title}
+                      </p>
+                    </div>
+                    {/* 中段: 日時・発信者・リアクション */}
+                    <p className="text-xs text-gray-600 mt-1 pl-4">
                       {formatDateTime(item.createdAt)} · 👤 {item.author}{" "}
                       <ReactionSummary map={reactions.map} newsId={item.id} />
                     </p>
+                    {/* 下段: バッジ（折り返し） */}
+                    <div className="flex flex-wrap gap-1 mt-2 pl-4">
+                      <span
+                        className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
+                          URGENCY_META[urgencyOf(item)].badge
+                        }`}
+                      >
+                        {URGENCY_META[urgencyOf(item)].emoji}{" "}
+                        {URGENCY_META[urgencyOf(item)].label}
+                      </span>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full font-medium ${cat.badge}`}
+                      >
+                        {cat.label}
+                      </span>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full ${
+                          HISTORY_STATUS_META[item.status].badge
+                        }`}
+                      >
+                        {HISTORY_STATUS_META[item.status].label}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                    <span
-                      className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
-                        URGENCY_META[urgencyOf(item)].badge
-                      }`}
-                    >
-                      {URGENCY_META[urgencyOf(item)].emoji}{" "}
-                      {URGENCY_META[urgencyOf(item)].label}
-                    </span>
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${cat.badge}`}
-                    >
-                      {cat.label}
-                    </span>
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded-full ${
-                        HISTORY_STATUS_META[item.status].badge
-                      }`}
-                    >
-                      {HISTORY_STATUS_META[item.status].label}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </NewsGrid>
           </section>
         ))}
 

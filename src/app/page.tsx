@@ -17,6 +17,11 @@ import {
   ReactionBar,
   ReactionSummary,
 } from "@/components/NewsReactions";
+import {
+  useNewsColumns,
+  NewsColumnsSelector,
+  NewsGrid,
+} from "@/components/NewsColumns";
 import { NEWS_AUTHOR_LS_KEY } from "@/lib/news-reactions";
 import {
   PORTAL_KEYS,
@@ -293,6 +298,9 @@ export default function PortalHome() {
 
   // お知らせリアクション（👍✅❤️🙏🎉・匿名OK）
   const reactions = useNewsReactions();
+
+  // 新着情報カードの列数（既定2列・1〜4列・localStorage保持）
+  const { columns, effectiveCols, changeColumns } = useNewsColumns();
 
   // 気づきシェア投稿フォーム
   const [showHiyariForm, setShowHiyariForm] = useState(false);
@@ -591,6 +599,7 @@ export default function PortalHome() {
             <span className="text-xs text-gray-600">
               {news.length}件表示中
             </span>
+            <NewsColumnsSelector columns={columns} onChange={changeColumns} />
             <button
               type="button"
               onClick={openNewsForm}
@@ -601,30 +610,33 @@ export default function PortalHome() {
           </div>
         </div>
 
-        <div className="space-y-2">
+        <NewsGrid cols={effectiveCols}>
           {news.map((item) => (
             <div
               key={item.id}
               onClick={() => setSelectedNews(item)}
-              className={`flex items-start gap-3 p-4 rounded-xl cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors min-h-[60px] ${
+              className={`p-4 rounded-xl cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors ${
                 urgencyCardClass(item) || "bg-white border border-gray-100"
               }`}
             >
-              <div
-                className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${dotColor(
-                  item.category
-                )}`}
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-base text-gray-900 leading-snug">
+              {/* 上段: 未読ドット＋タイトル（2行省略） */}
+              <div className="flex items-start gap-2">
+                <div
+                  className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${dotColor(
+                    item.category
+                  )}`}
+                />
+                <p className="flex-1 min-w-0 text-base text-gray-900 leading-snug line-clamp-2">
                   {item.title}
                 </p>
-                <p className="text-xs text-gray-600 mt-1">
-                  {formatDate(item.createdAt)} · 👤 {item.author}{" "}
-                  <ReactionSummary map={reactions.map} newsId={item.id} />
-                </p>
               </div>
-              <div className="flex flex-col items-end gap-1 flex-shrink-0">
+              {/* 中段: 日付・発信者・リアクション */}
+              <p className="text-xs text-gray-600 mt-1 pl-4">
+                {formatDate(item.createdAt)} · 👤 {item.author}{" "}
+                <ReactionSummary map={reactions.map} newsId={item.id} />
+              </p>
+              {/* 下段: バッジ（折り返し） */}
+              <div className="flex flex-wrap gap-1 mt-2 pl-4">
                 <span
                   className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
                     URGENCY_META[urgencyOf(item)].badge
@@ -643,12 +655,12 @@ export default function PortalHome() {
               </div>
             </div>
           ))}
-          {news.length === 0 && (
-            <p className="text-xs text-gray-600 py-4 text-center">
-              新着情報はありません
-            </p>
-          )}
-        </div>
+        </NewsGrid>
+        {news.length === 0 && (
+          <p className="text-xs text-gray-600 py-4 text-center">
+            新着情報はありません
+          </p>
+        )}
 
         {/* 🙌 今月の共有（称賛表示。競争を煽らず名前と件数のみ・0件の月は非表示） */}
         {monthlyTop.length > 0 && (
