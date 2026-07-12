@@ -1,13 +1,17 @@
-// 今週の質問（指示書46-A/47）
+// 今週の質問（指示書46-A/47、46Rでプール自動ローテーション追加）
 // content_store `weekly_questions` に単一オブジェクトで保存:
 //   {
 //     question: string,                                  // 現在の質問文
 //     answers: { [weekKey]: [{ id, name, text, at }] },  // id = ログインuserId / 匿名ID
 //     questionByWeek: { [weekKey]: string },             // 週→質問文（アーカイブ復元用）
-//     reactions: { [weekKey]: { [answerId]: { like|thanks: Reactor[] } } }
+//     reactions: { [weekKey]: { [answerId]: { like|thanks: Reactor[] } } },
+//     pool: string[],                                    // 質問プール（管理画面で編集）
+//     currentIndex: number                               // プール内の現在位置
 //   }
 // weekKey = その週の月曜日のJST日付（"YYYY-MM-DD"）。
 // identity（userId/匿名ID/名前）は news-reactions の getReactorIdentity を共用する。
+// 週切替: questionByWeek[今週] が未記録ならプールを1つ進めて記録（withWeeklyRotation）。
+// 管理者の手動上書き（✏️質問を編集）は questionByWeek[今週] を書くので、その週はそれが優先。
 
 import { loadPortalObject, savePortalObject } from "./portal-store";
 import type { Reactor } from "./news-reactions";
@@ -39,10 +43,33 @@ export type WeeklyQuestionsData = {
   answers: Record<string, WeeklyAnswer[]>;
   questionByWeek: Record<string, string>;
   reactions: Record<string, Record<string, WeeklyAnswerReactions>>;
+  pool: string[];
+  currentIndex: number;
 };
 
+// 初期プール10問（指示書46R）。管理画面「⚙ 機能」タブで編集可能。
+export const DEFAULT_QUESTION_POOL: string[] = [
+  "最近のプチ幸せは？",
+  "子どもの頃の夢は？",
+  "おすすめのお店・スポットは？",
+  "今ハマっている食べ物は？",
+  "休日の理想の過ごし方は？",
+  "最近ちょっと頑張ったことは？",
+  "好きな季節とその理由は？",
+  "学生時代の部活・習い事は？",
+  "行ってみたい場所は？",
+  "最近観た/読んだおすすめは？",
+];
+
 export function emptyWeeklyQuestions(): WeeklyQuestionsData {
-  return { question: "", answers: {}, questionByWeek: {}, reactions: {} };
+  return {
+    question: "",
+    answers: {},
+    questionByWeek: {},
+    reactions: {},
+    pool: [...DEFAULT_QUESTION_POOL],
+    currentIndex: 0,
+  };
 }
 
 // ─── 週キー ───
@@ -109,11 +136,27 @@ export function normalizeWeeklyQuestions(raw: unknown): WeeklyQuestionsData {
       ? (o.reactions as WeeklyQuestionsData["reactions"])
       : {};
 
+  // pool: 未保存（46R以前のデータ）は既定10問。保存済みなら空配列でも尊重（自動ローテ停止の意思）。
+  const pool = Array.isArray(o.pool)
+    ? o.pool
+        .filter((q): q is string => typeof q === "string" && !!q.trim())
+        .map((q) => q.trim())
+    : [...DEFAULT_QUESTION_POOL];
+
+  const currentIndex =
+    typeof o.currentIndex === "number" &&
+    Number.isFinite(o.currentIndex) &&
+    o.currentIndex >= 0
+      ? Math.floor(o.currentIndex)
+      : 0;
+
   return {
     question: typeof o.question === "string" ? o.question : "",
     answers,
     questionByWeek,
     reactions,
+    pool,
+    currentIndex,
   };
 }
 
@@ -130,16 +173,36 @@ export async function saveWeeklyQuestions(
 
 // ─── 純関数（履歴・回答・リアクション） ───
 
-// 今週の質問文を questionByWeek に記録した新データを返す（記録不要なら null）。
-// 表示のたびに呼ばれても差分がある時だけ保存されるようにする（指示書47 ■0）。
-export function withQuestionRecorded(
+// 週次ローテーション＋今週の質問の確定（指示書46R。変更不要なら null）。
+// ホーム表示のたびに呼ばれても差分がある時だけ保存される（冪等）。
+// - questionByWeek[今週] が記録済み → その質問が正（手動上書き含む）。question フィールドだけ同期。
+// - 未記録＋プールあり → currentIndex を循環で進めて今週の質問を確定・記録。
+// - 未記録＋プール空 → 現行 question をそのまま記録（47までの挙動）。
+export function withWeeklyRotation(
   data: WeeklyQuestionsData,
   weekKey: string = currentWeekKey()
 ): WeeklyQuestionsData | null {
-  const q = data.question.trim();
-  if (!q || data.questionByWeek[weekKey] === q) return null;
+  const recorded = data.questionByWeek[weekKey]?.trim();
+  if (recorded) {
+    if (data.question !== recorded) return { ...data, question: recorded };
+    return null;
+  }
+  if (data.pool.length === 0) {
+    const q = data.question.trim();
+    if (!q) return null;
+    return {
+      ...data,
+      questionByWeek: { ...data.questionByWeek, [weekKey]: q },
+    };
+  }
+  // 過去に一度でも週が確定していれば1つ進め、初回は現在位置から開始する
+  const advance = Object.keys(data.questionByWeek).length > 0 ? 1 : 0;
+  const idx = (data.currentIndex + advance) % data.pool.length;
+  const q = data.pool[idx];
   return {
     ...data,
+    question: q,
+    currentIndex: idx,
     questionByWeek: { ...data.questionByWeek, [weekKey]: q },
   };
 }

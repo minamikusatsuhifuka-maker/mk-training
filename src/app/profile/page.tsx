@@ -28,6 +28,15 @@ import {
   visibleProfileFields,
   type ProfileFieldDef,
 } from "@/lib/profile-fields";
+import { loadPortalItems } from "@/lib/portal-store";
+import { loadPortalFeatures } from "@/lib/portal-features";
+import { PORTAL_KEYS, type ThankyouItem } from "@/types/portal";
+
+// 宛先名とプロフィール名の紐付け用の正規化（空白除去・末尾「さん」除去・メールは@前）
+function normalizeName(s: string): string {
+  const base = s.includes("@") ? s.split("@")[0] : s;
+  return base.replace(/[\s　]+/g, "").replace(/さん$/u, "");
+}
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -45,6 +54,9 @@ export default function ProfilePage() {
   const [newPassword, setNewPassword] = useState("");
   const [newPassword2, setNewPassword2] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
+
+  // 📮 今月あなたに届いたありがとう（46R-B。thanksShowcase OFF・0件なら非表示）
+  const [myThanks, setMyThanks] = useState<ThankyouItem[]>([]);
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const photosInputRef = useRef<HTMLInputElement>(null);
@@ -95,6 +107,31 @@ export default function ProfilePage() {
           json.profile.photos.map((p) => [p.url, p.caption ?? ""])
         )
       );
+      // 今月自分宛のありがとうカード（宛先名とプロフィール名の一致で紐付け。46R-B）
+      loadPortalFeatures()
+        .then(async (f) => {
+          if (!f.thanksShowcase) return;
+          const me = normalizeName(json.profile.name);
+          if (!me) return;
+          const all = await loadPortalItems<ThankyouItem>(
+            PORTAL_KEYS.thankyou,
+            []
+          );
+          const now = new Date();
+          setMyThanks(
+            all
+              .filter((t) => {
+                const d = new Date(t.createdAt);
+                return (
+                  normalizeName(t.toName) === me &&
+                  d.getFullYear() === now.getFullYear() &&
+                  d.getMonth() === now.getMonth()
+                );
+              })
+              .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+          );
+        })
+        .catch(() => {});
     };
     init().catch(() => fail("読み込みに失敗しました"));
   }, [router]);
@@ -276,6 +313,31 @@ export default function ProfilePage() {
         >
           {error || message}
         </p>
+      )}
+
+      {/* 📮 今月あなたに届いたありがとう（0件なら非表示）46R-B */}
+      {myThanks.length > 0 && (
+        <div className="rounded-lg border border-pink-200 bg-pink-50/50 p-4 space-y-3">
+          <h2 className="text-sm font-semibold text-pink-800">
+            📮 今月あなたに届いたありがとう（{myThanks.length}件）
+          </h2>
+          <div className="space-y-2">
+            {myThanks.map((t) => (
+              <div
+                key={t.id}
+                className="p-3 bg-white border border-pink-100 rounded-xl"
+              >
+                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                  {t.message}
+                </p>
+                <p className="text-xs text-gray-500 mt-1.5">
+                  {t.fromName} より ·{" "}
+                  {new Date(t.createdAt).toLocaleDateString("ja-JP")}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* アバター */}

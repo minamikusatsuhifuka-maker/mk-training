@@ -1,7 +1,8 @@
 "use client";
 
-// ホーム「今週の質問」セクション（指示書46-A/47）
-// - 質問の表示・回答の投稿/編集/削除（1人=週1件、id=userId/匿名IDで判定）
+// ホーム「今週の質問」セクション（指示書46-A/47、46Rでプール自動ローテ＋実名必須）
+// - 質問はプールから週次自動ローテーション（withWeeklyRotation。手動上書き週はそれが優先）
+// - 回答の投稿/編集/削除（1人=週1件、id=userId/匿名IDで判定）。回答は名前必須（46R）
 // - 回答への 👍🙏 リアクション（トグル）
 // - 管理者は質問文をこの場で編集（保存時に questionByWeek へも記録）
 // - portal_features.weeklyQuestion が OFF なら丸ごと非表示
@@ -26,7 +27,7 @@ import {
   upsertWeeklyAnswer,
   weeklyReactionCount,
   weekRangeLabel,
-  withQuestionRecorded,
+  withWeeklyRotation,
   WEEKLY_REACTION_META,
   type WeeklyQuestionsData,
 } from "@/lib/weekly-questions";
@@ -44,9 +45,12 @@ export function WeeklyQuestionSection() {
   const [loggedIn, setLoggedIn] = useState(false);
 
   const [text, setText] = useState("");
-  const [authorName, setAuthorName] = useState(""); // 匿名時のみ編集可
+  const [authorName, setAuthorName] = useState(""); // 未ログイン時のみ編集可
   const [editing, setEditing] = useState(false); // 自分の回答の編集中
   const [saving, setSaving] = useState(false);
+  // 実名必須（46R）: 未ログイン＆名前未設定のまま投稿しようとしたら名前設定モーダルを出す
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
 
   const [editingQuestion, setEditingQuestion] = useState(false);
   const [questionDraft, setQuestionDraft] = useState("");
@@ -63,11 +67,11 @@ export function WeeklyQuestionSection() {
         loadWeeklyQuestions()
           .then((d) => {
             setData(d);
-            // 今週の質問文をアーカイブ用に記録（差分がある時だけ保存）
-            const recorded = withQuestionRecorded(d);
-            if (recorded) {
-              saveWeeklyQuestions(recorded)
-                .then((ok) => ok && setData(recorded))
+            // 週が変わっていればプールから次の質問へ進め、questionByWeek に記録（差分がある時だけ保存）
+            const rotated = withWeeklyRotation(d);
+            if (rotated) {
+              saveWeeklyQuestions(rotated)
+                .then((ok) => ok && setData(rotated))
                 .catch(() => {});
             }
           })
@@ -111,17 +115,21 @@ export function WeeklyQuestionSection() {
 
   const submitAnswer = async () => {
     if (!reactor || !text.trim() || saving) return;
-    setSaving(true);
-    const name = loggedIn
-      ? (reactor.name ?? "")
-      : authorName.trim();
+    const name = loggedIn ? (reactor.name ?? "") : authorName.trim();
+    // 回答は名前必須（46R）。未設定なら名前設定モーダルを出してから投稿してもらう
+    if (!name) {
+      setNameDraft("");
+      setShowNameModal(true);
+      return;
+    }
     if (!loggedIn) {
       try {
-        if (name) localStorage.setItem(NEWS_AUTHOR_LS_KEY, name);
+        localStorage.setItem(NEWS_AUTHOR_LS_KEY, name);
       } catch {
         /* ignore */
       }
     }
+    setSaving(true);
     const ok = await applyAndSave((fresh) =>
       upsertWeeklyAnswer(fresh, weekKey, {
         id: reactor.id,
@@ -135,6 +143,36 @@ export function WeeklyQuestionSection() {
       setText("");
       setEditing(false);
     }
+  };
+
+  // 名前設定モーダルの確定 → 名前を保存してそのまま投稿
+  const confirmNameAndSubmit = () => {
+    const name = nameDraft.trim();
+    if (!name) return;
+    setAuthorName(name);
+    try {
+      localStorage.setItem(NEWS_AUTHOR_LS_KEY, name);
+    } catch {
+      /* ignore */
+    }
+    setShowNameModal(false);
+    if (!reactor || !text.trim() || saving) return;
+    setSaving(true);
+    applyAndSave((fresh) =>
+      upsertWeeklyAnswer(fresh, weekKey, {
+        id: reactor.id,
+        name,
+        text: text.trim(),
+        at: new Date().toISOString(),
+      })
+    )
+      .then((ok) => {
+        if (ok) {
+          setText("");
+          setEditing(false);
+        }
+      })
+      .finally(() => setSaving(false));
   };
 
   const deleteMyAnswer = async () => {
@@ -319,7 +357,7 @@ export function WeeklyQuestionSection() {
             <input
               value={authorName}
               onChange={(e) => setAuthorName(e.target.value)}
-              placeholder="名前（空欄=匿名）"
+              placeholder="名前（必須）"
               className="w-full max-w-[240px] h-8 rounded-md border border-gray-200 bg-white px-2.5 text-xs"
             />
           )}
@@ -356,6 +394,56 @@ export function WeeklyQuestionSection() {
             >
               {saving ? "送信中..." : editing ? "保存" : "回答する"}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 名前設定モーダル（実名必須・46R。名前を保存してそのまま投稿する） */}
+      {showNameModal && (
+        <div
+          className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+          onClick={() => setShowNameModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-sm p-6 space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-medium text-gray-900">
+              名前を設定してください
+            </h3>
+            <p className="text-xs text-gray-500">
+              今週の質問への回答は名前の設定が必要です（回答と一緒に表示されます）。
+            </p>
+            <input
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              placeholder="例：山田"
+              autoFocus
+              className="w-full h-9 rounded-md border border-gray-200 bg-white px-3 text-sm"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  confirmNameAndSubmit();
+                }
+              }}
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowNameModal(false)}
+                className="text-xs px-3 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={confirmNameAndSubmit}
+                disabled={!nameDraft.trim()}
+                className="text-xs px-3 py-1.5 rounded-md bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50"
+              >
+                設定して投稿
+              </button>
+            </div>
           </div>
         </div>
       )}

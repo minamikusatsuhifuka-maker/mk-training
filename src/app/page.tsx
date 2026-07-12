@@ -25,6 +25,11 @@ import {
 import { NEWS_AUTHOR_LS_KEY } from "@/lib/news-reactions";
 import { WeeklyQuestionSection } from "@/components/WeeklyQuestionSection";
 import {
+  DEFAULT_PORTAL_FEATURES,
+  loadPortalFeatures,
+  type PortalFeatures,
+} from "@/lib/portal-features";
+import {
   PORTAL_KEYS,
   URGENCY_META,
   URGENCY_OPTIONS,
@@ -269,6 +274,14 @@ export default function PortalHome() {
   const [sectionOrder, setSectionOrder] = useState<HomeSectionKey[]>(
     DEFAULT_HOME_LAYOUT.map((s) => s.key)
   );
+
+  // 機能スイッチ（46R。thanksShowcase=ありがとうの常時表示）
+  const [features, setFeatures] = useState<PortalFeatures>(
+    DEFAULT_PORTAL_FEATURES
+  );
+  useEffect(() => {
+    loadPortalFeatures().then(setFeatures).catch(() => {});
+  }, []);
 
   // タスクの期限切れ・今日件数（バッジ用）
   const [taskAlert, setTaskAlert] = useState<{
@@ -871,32 +884,35 @@ export default function PortalHome() {
           </button>
         </div>
 
-        <div className="space-y-2">
-          {thankyouItems.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-start gap-3 p-3 bg-white border border-gray-100 rounded-xl"
-            >
-              <div className="w-8 h-8 rounded-full bg-pink-50 flex items-center justify-center text-xs font-medium text-pink-700 flex-shrink-0">
-                {item.toName.slice(0, 1)}
+        {/* 最新カードの常時表示（46R-B: thanksShowcase OFF時は非表示・投稿は従来どおり） */}
+        {features.thanksShowcase && (
+          <div className="space-y-2">
+            {thankyouItems.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-start gap-3 p-3 bg-white border border-gray-100 rounded-xl"
+              >
+                <div className="w-8 h-8 rounded-full bg-pink-50 flex items-center justify-center text-xs font-medium text-pink-700 flex-shrink-0">
+                  {item.toName.slice(0, 1)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-800 leading-relaxed">
+                    {item.message}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1.5">
+                    {item.fromName} → {item.toName} · {formatDate(item.createdAt)}
+                  </p>
+                </div>
+                <span className="text-pink-400 flex-shrink-0 text-base">♥</span>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-800 leading-relaxed">
-                  {item.message}
-                </p>
-                <p className="text-xs text-gray-600 mt-1.5">
-                  {item.fromName} → {item.toName} · {formatDate(item.createdAt)}
-                </p>
-              </div>
-              <span className="text-pink-400 flex-shrink-0 text-base">♥</span>
-            </div>
-          ))}
-          {thankyouItems.length === 0 && (
-            <p className="text-xs text-gray-600 py-4 text-center">
-              まだ投稿がありません。同僚に感謝を伝えましょう。
-            </p>
-          )}
-        </div>
+            ))}
+            {thankyouItems.length === 0 && (
+              <p className="text-xs text-gray-600 py-4 text-center">
+                まだ投稿がありません。同僚に感謝を伝えましょう。
+              </p>
+            )}
+          </div>
+        )}
 
         {showThankyouForm && (
           <div

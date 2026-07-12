@@ -48,7 +48,13 @@ import {
   type MembersCardConfig,
 } from "@/lib/members-card";
 import { useEffectiveColumns } from "@/lib/use-effective-columns";
-import { loadPortalFeatures } from "@/lib/portal-features";
+import {
+  DEFAULT_PORTAL_FEATURES,
+  loadPortalFeatures,
+  type PortalFeatures,
+} from "@/lib/portal-features";
+import { computeCommonPoints } from "@/lib/common-points";
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
   collectMemberAnswers,
   loadWeeklyQuestions,
@@ -162,6 +168,11 @@ export default function MembersPage() {
   // 今週の質問の回答履歴（指示書47。機能スイッチOFF時はnullのまま＝非表示）
   const [weeklyData, setWeeklyData] = useState<WeeklyQuestionsData | null>(null);
   const [showAllHistory, setShowAllHistory] = useState(false);
+  // 共通点バッジ（指示書46R-C。ログイン中＋自分のプロフィールがある場合のみ）
+  const [features, setFeatures] = useState<PortalFeatures>(
+    DEFAULT_PORTAL_FEATURES
+  );
+  const [myUserId, setMyUserId] = useState<string | null>(null);
 
   useEffect(() => {
     loadProfilesIndex()
@@ -186,13 +197,19 @@ export default function MembersPage() {
         );
       })
       .catch(() => {});
-    // 今週の質問の回答履歴（スイッチONのときだけ読み込む）
+    // 機能スイッチ＋今週の質問の回答履歴（スイッチONのときだけ読み込む）
     loadPortalFeatures()
       .then((f) => {
+        setFeatures(f);
         if (f.weeklyQuestion) {
           loadWeeklyQuestions().then(setWeeklyData).catch(() => {});
         }
       })
+      .catch(() => {});
+    // ログイン中ユーザー（共通点バッジの基準。未ログインなら非表示）
+    getSupabaseBrowserClient()
+      .auth.getUser()
+      .then(({ data }) => setMyUserId(data.user?.id ?? null))
       .catch(() => {});
   }, []);
 
@@ -251,6 +268,16 @@ export default function MembersPage() {
       ? collectMemberAnswers(weeklyData, selected.userId, selected.name)
       : [];
 
+  // 共通点（46R-C）: 自分のプロフィールがある場合のみ。他人カード・詳細で使用
+  const myProfile =
+    features.commonPoints && myUserId ? profiles[myUserId] : undefined;
+  const labelOf = (id: string) => fieldDefs.find((f) => f.id === id)?.label;
+  const commonPointsWith = (userId: string) => {
+    if (!myProfile || userId === myUserId) return [];
+    const other = profiles[userId];
+    return other ? computeCommonPoints(myProfile, other, labelOf) : [];
+  };
+
   return (
     <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
       <PageHeader
@@ -286,6 +313,7 @@ export default function MembersPage() {
         >
           {members.map((m) => {
             const values = cardValuesOf(m.userId);
+            const common = commonPointsWith(m.userId);
             const c = roleColorOf(m.role);
             return (
               <button
@@ -314,6 +342,21 @@ export default function MembersPage() {
                     )}
                   </div>
                 </div>
+
+                {/* あなたとの共通点バッジ（最大2個・ログイン中のみ）46R-C */}
+                {common.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {common.slice(0, 2).map((cp) => (
+                      <span
+                        key={cp.key}
+                        title={cp.values.join("、")}
+                        className="inline-flex items-center text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200"
+                      >
+                        🤝 共通点: {cp.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
 
                 {/* ひとこと（引用風） */}
                 {cardConfig.showMessage && m.message && (
@@ -408,6 +451,27 @@ export default function MembersPage() {
                   {selected.message}
                 </p>
               )}
+
+              {/* あなたとの共通点（何が一致したか。ログイン中＋一致ありのみ）46R-C */}
+              {(() => {
+                const common = commonPointsWith(selected.userId);
+                if (common.length === 0) return null;
+                return (
+                  <div className="rounded-xl bg-amber-50 border border-amber-100 p-3">
+                    <h3 className="text-[13px] text-amber-700 font-medium mb-1.5">
+                      🤝 あなたとの共通点
+                    </h3>
+                    <ul className="space-y-1">
+                      {common.map((cp) => (
+                        <li key={cp.key} className="text-[13px] text-gray-800">
+                          <span className="text-gray-500">{cp.label}:</span>{" "}
+                          {cp.values.join("、")}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })()}
 
               {selected.bio && (
                 <div className="border-t border-gray-100 pt-3">

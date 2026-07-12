@@ -55,10 +55,15 @@ import { CharacterSVG } from "@/components/CharacterNotification";
 import { SectionLayoutEditor } from "@/components/admin/SectionLayoutEditor";
 import {
   DEFAULT_PORTAL_FEATURES,
+  PORTAL_FEATURE_META,
   loadPortalFeatures,
   savePortalFeatures,
   type PortalFeatures,
 } from "@/lib/portal-features";
+import {
+  loadWeeklyQuestions,
+  saveWeeklyQuestions,
+} from "@/lib/weekly-questions";
 import {
   TASKS_PAGE_LAYOUT_KEY,
   TASKS_SECTION_LABELS,
@@ -87,7 +92,8 @@ type TabKey =
   | "policy"
   | "word"
   | "character"
-  | "layout";
+  | "layout"
+  | "features";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "news", label: "📢 新着情報" },
@@ -100,6 +106,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "word", label: "💬 今日の一言" },
   { key: "character", label: "🐾 キャラクター" },
   { key: "layout", label: "🧩 レイアウト" },
+  { key: "features", label: "⚙ 機能" },
 ];
 
 const CHARACTER_EMOJIS = [
@@ -269,20 +276,33 @@ export default function AdminPortalPage() {
     useState<TasksSectionConfig[]>(DEFAULT_TASKS_LAYOUT);
   const [savingTasksLayout, setSavingTasksLayout] = useState(false);
 
-  // 機能スイッチ（portal_features。指示書47）
+  // 機能スイッチ（portal_features。指示書47・46Rで「⚙ 機能」タブに3トグル集約）
   const [features, setFeatures] = useState<PortalFeatures>(
     DEFAULT_PORTAL_FEATURES
   );
   const [savingFeatures, setSavingFeatures] = useState(false);
 
+  // 今週の質問の質問プール（weekly_questions.pool。「⚙ 機能」タブで編集）
+  const [pool, setPool] = useState<string[]>([]);
+  const [poolLoaded, setPoolLoaded] = useState(false);
+  const [newPoolQuestion, setNewPoolQuestion] = useState("");
+  const [savingPool, setSavingPool] = useState(false);
+
   useEffect(() => {
     loadPortalFeatures().then(setFeatures).catch(() => {});
+    loadWeeklyQuestions()
+      .then((d) => setPool(d.pool))
+      .catch(() => {})
+      .finally(() => setPoolLoaded(true));
   }, []);
 
-  const handleToggleWeeklyQuestion = async (on: boolean) => {
+  const handleToggleFeature = async (
+    key: keyof PortalFeatures,
+    on: boolean
+  ) => {
     if (savingFeatures) return;
     const prev = features;
-    const next = { ...features, weeklyQuestion: on };
+    const next = { ...features, [key]: on };
     setFeatures(next);
     setSavingFeatures(true);
     const ok = await savePortalFeatures(next);
@@ -292,7 +312,56 @@ export default function AdminPortalPage() {
       flash("⚠ 機能スイッチの保存に失敗しました");
       return;
     }
-    flash(on ? "💾 今週の質問をONにしました" : "💾 今週の質問をOFFにしました");
+    const label =
+      PORTAL_FEATURE_META.find((m) => m.key === key)?.label ?? String(key);
+    flash(on ? `💾 ${label} をONにしました` : `💾 ${label} をOFFにしました`);
+  };
+
+  const movePoolItem = (index: number, dir: -1 | 1) =>
+    setPool((ps) => {
+      const to = index + dir;
+      if (to < 0 || to >= ps.length) return ps;
+      const next = [...ps];
+      [next[index], next[to]] = [next[to], next[index]];
+      return next;
+    });
+
+  const addPoolItem = () => {
+    const q = newPoolQuestion.trim();
+    if (!q) return;
+    setPool((ps) => [...ps, q]);
+    setNewPoolQuestion("");
+  };
+
+  const removePoolItem = (index: number) =>
+    setPool((ps) => ps.filter((_, i) => i !== index));
+
+  // プール保存: 最新の weekly_questions を読み直し、pool だけ差し替える
+  // （回答・questionByWeek 等は触らない。currentIndex は範囲内にクランプ）
+  const handleSavePool = async () => {
+    if (savingPool) return;
+    setSavingPool(true);
+    const fresh = await loadWeeklyQuestions().catch(() => null);
+    if (!fresh) {
+      setSavingPool(false);
+      flash("⚠ 質問プールの保存に失敗しました（読み込みエラー）");
+      return;
+    }
+    const cleaned = pool.map((q) => q.trim()).filter(Boolean);
+    const next = {
+      ...fresh,
+      pool: cleaned,
+      currentIndex:
+        cleaned.length > 0 ? fresh.currentIndex % cleaned.length : 0,
+    };
+    const ok = await saveWeeklyQuestions(next);
+    setSavingPool(false);
+    if (!ok) {
+      flash("⚠ 質問プールの保存に失敗しました");
+      return;
+    }
+    setPool(cleaned);
+    flash("💾 質問プールを保存しました");
   };
 
   useEffect(() => {
@@ -2217,24 +2286,136 @@ export default function AdminPortalPage() {
               previewTitle="プレビュー（/tasks での表示順）"
             />
           </section>
+        </div>
+      )}
 
-          {/* 機能スイッチ（指示書47） */}
+      {/* ⚙ 機能（46R: 機能スイッチの集約＋質問プール編集） */}
+      {tab === "features" && (
+        <div className="space-y-8">
+          <section className="space-y-4">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">
+                ⚙ 機能スイッチ
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                OFFにした機能は該当UIが非表示になります（データは保持され、ONに戻すと再表示されます）。
+              </p>
+            </div>
+            <div className="space-y-3">
+              {PORTAL_FEATURE_META.map((m) => (
+                <div
+                  key={m.key}
+                  className="rounded-xl border border-gray-200 bg-white p-4 space-y-1.5"
+                >
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-800">
+                    <input
+                      type="checkbox"
+                      checked={features[m.key]}
+                      disabled={savingFeatures}
+                      onChange={(e) =>
+                        handleToggleFeature(m.key, e.target.checked)
+                      }
+                    />
+                    {m.label}
+                  </label>
+                  <p className="text-xs text-gray-500 pl-6">{m.description}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 質問プール（週次自動ローテーション） */}
           <section className="space-y-3 border-t border-gray-200 pt-6">
-            <h2 className="text-sm font-semibold text-gray-800">
-              ❓ 今週の質問（機能スイッチ）
-            </h2>
-            <label className="flex items-center gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={features.weeklyQuestion}
-                disabled={savingFeatures}
-                onChange={(e) => handleToggleWeeklyQuestion(e.target.checked)}
-              />
-              今週の質問を有効にする
-            </label>
-            <p className="text-xs text-gray-500">
-              OFFにするとホームの「今週の質問」セクション・メンバー紹介の回答履歴・アーカイブページが非表示になります（回答データは保持され、ONに戻すと再表示されます）。質問文の設定はホームのセクション内「✏️ 質問を編集」（管理者のみ表示）から行います。
-            </p>
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">
+                ❓ 今週の質問 — 質問プール
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                週が変わるとこのプールから上から順（循環）に自動で出題されます。ホームの「✏️
+                質問を編集」（管理者のみ）で手動上書きした週はそれが優先され、翌週からまた自動に戻ります。プールを空にすると自動出題は止まります。
+              </p>
+            </div>
+            {!poolLoaded ? (
+              <p className="text-xs text-gray-500">読み込み中...</p>
+            ) : (
+              <>
+                {pool.length === 0 ? (
+                  <p className="text-xs text-gray-500">
+                    プールが空です（自動出題は停止中）。下から質問を追加できます。
+                  </p>
+                ) : (
+                  <ul className="space-y-1">
+                    {pool.map((q, i) => (
+                      <li
+                        key={`${i}_${q}`}
+                        className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-1.5"
+                      >
+                        <span className="text-xs text-gray-400 tabular-nums w-5 shrink-0">
+                          {i + 1}.
+                        </span>
+                        <span className="text-sm flex-1 min-w-0 truncate">
+                          {q}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => movePoolItem(i, -1)}
+                          disabled={i === 0}
+                          className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-white disabled:opacity-30"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => movePoolItem(i, 1)}
+                          disabled={i === pool.length - 1}
+                          className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-white disabled:opacity-30"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removePoolItem(i)}
+                          className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50"
+                        >
+                          削除
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    value={newPoolQuestion}
+                    onChange={(e) => setNewPoolQuestion(e.target.value)}
+                    placeholder="質問を追加（例：座右の銘は？）"
+                    className="flex-1 h-8 rounded border border-gray-200 bg-white px-2.5 text-sm"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                        e.preventDefault();
+                        addPoolItem();
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={addPoolItem}
+                    className="text-xs px-3 rounded bg-teal-600 text-white hover:bg-teal-700"
+                  >
+                    追加
+                  </button>
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSavePool}
+                    disabled={savingPool}
+                    className="text-sm px-4 py-2 rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50"
+                  >
+                    {savingPool ? "保存中..." : "💾 質問プールを保存"}
+                  </button>
+                </div>
+              </>
+            )}
           </section>
         </div>
       )}
