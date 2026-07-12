@@ -6,6 +6,7 @@
 // ホーム（新着情報）と /news-history で共用する（localStorageキーも共用）。
 
 import { useEffect, useState, type ReactNode } from "react";
+import { useEffectiveColumns } from "@/lib/use-effective-columns";
 
 export type NewsColumnCount = 1 | 2 | 3 | 4;
 
@@ -18,9 +19,8 @@ export function useNewsColumns(): {
 } {
   // 既定は2列
   const [columns, setColumns] = useState<NewsColumnCount>(2);
-  const [winW, setWinW] = useState(0);
 
-  // 列数設定の読み込み＋画面幅の追従（SSRハイドレーション安全：mount後のみ）
+  // 列数設定の読み込み（SSRハイドレーション安全：mount後のみ）
   useEffect(() => {
     try {
       const saved = localStorage.getItem(NEWS_COLUMNS_LS_KEY);
@@ -30,10 +30,6 @@ export function useNewsColumns(): {
     } catch {
       /* ignore */
     }
-    const onResize = () => setWinW(window.innerWidth);
-    onResize();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   const changeColumns = (c: NewsColumnCount) => {
@@ -45,15 +41,8 @@ export function useNewsColumns(): {
     }
   };
 
-  // 選択列数は「広い画面での最大列数」。狭い画面では自動で減らす。
-  const effectiveCols =
-    winW === 0 || winW < 768
-      ? 1
-      : winW < 1024
-        ? Math.min(columns, 2)
-        : winW < 1440
-          ? Math.min(columns, 3)
-          : columns;
+  // 選択列数は「広い画面での最大列数」。狭い画面では自動で減らす（指示書45で共通化）。
+  const effectiveCols = useEffectiveColumns(columns);
 
   return { columns, effectiveCols, changeColumns };
 }

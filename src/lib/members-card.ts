@@ -1,6 +1,6 @@
-// メンバー紹介カードの表示項目設定（指示書32、38で上限撤廃）
+// メンバー紹介カードの表示項目設定（指示書32、38で上限撤廃、45で列数追加）
 // content_store `members_card_config` に保存:
-//   { fieldIds: string[](順序付き・上限なし), showKana, showRole, showMessage }
+//   { fieldIds: string[](順序付き・上限なし), showKana, showRole, showMessage, columns(2〜4) }
 // fieldIds には基本項目（bio/hobbies）と profile_field_config のカスタム項目 id が入る。
 // 設定が未保存なら「全カスタム項目＋自己紹介・趣味特技」（書いたものは全部出る）が既定。
 // 値が入っている項目はすべてカードに表示する（指示書38・表示数上限なし）。
@@ -9,11 +9,15 @@ import { loadPortalObject, savePortalObject } from "./portal-store";
 
 export const MEMBERS_CARD_CONFIG_KEY = "members_card_config";
 
+// カードの列数（広い画面での最大値。狭い画面ではクランプで自動減）
+export type MembersCardColumns = 2 | 3 | 4;
+
 export type MembersCardConfig = {
   fieldIds: string[];
   showKana: boolean;
   showRole: boolean;
   showMessage: boolean;
+  columns: MembersCardColumns;
 };
 
 // fieldIds に使える基本項目（StaffProfile の固定フィールド）
@@ -27,6 +31,7 @@ export const DEFAULT_MEMBERS_CARD_CONFIG: MembersCardConfig = {
   showKana: true,
   showRole: true,
   showMessage: true,
+  columns: 2,
 };
 
 // 未保存時の既定 fieldIds:「全カスタム項目＋自己紹介・趣味特技」（書いたものは全部出る）
@@ -56,6 +61,10 @@ export function normalizeMembersCardConfig(raw: unknown): MembersCardConfig {
       typeof o.showMessage === "boolean"
         ? o.showMessage
         : DEFAULT_MEMBERS_CARD_CONFIG.showMessage,
+    columns:
+      o.columns === 2 || o.columns === 3 || o.columns === 4
+        ? o.columns
+        : DEFAULT_MEMBERS_CARD_CONFIG.columns,
   };
 }
 

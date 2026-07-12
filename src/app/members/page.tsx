@@ -47,6 +47,7 @@ import {
   loadMembersCardConfigOrNull,
   type MembersCardConfig,
 } from "@/lib/members-card";
+import { useEffectiveColumns } from "@/lib/use-effective-columns";
 
 // 役職→ロールカラー（淡背景＋濃文字。Tailwindリテラルクラスで定義しpurge回避・動的組み立て禁止）
 type RoleColor = { bg: string; text: string; border: string };
@@ -149,6 +150,8 @@ export default function MembersPage() {
   const [cardConfig, setCardConfig] = useState<MembersCardConfig>(
     DEFAULT_MEMBERS_CARD_CONFIG
   );
+  // 管理画面設定の列数を広い画面での最大値とし、狭い画面では自動で減らす（指示書45）
+  const effectiveCols = useEffectiveColumns(cardConfig.columns);
 
   useEffect(() => {
     loadProfilesIndex()
@@ -250,7 +253,12 @@ export default function MembersPage() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-4 items-start">
+        <div
+          className="grid gap-4 items-start"
+          style={{
+            gridTemplateColumns: `repeat(${effectiveCols}, minmax(0, 1fr))`,
+          }}
+        >
           {members.map((m) => {
             const values = cardValuesOf(m.userId);
             const c = roleColorOf(m.role);

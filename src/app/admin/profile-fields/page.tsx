@@ -391,6 +391,29 @@ export default function ProfileFieldsAdminPage() {
               ))}
             </div>
 
+            {/* カードの列数（指示書45） */}
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-slate-600">カードの列数</p>
+              <select
+                value={cardConfig.columns}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setCardConfig((c) => ({
+                    ...c,
+                    columns: v === 3 || v === 4 ? v : 2,
+                  }));
+                }}
+                className="h-8 rounded border border-slate-200 bg-white px-2 text-xs"
+              >
+                <option value={2}>2列</option>
+                <option value={3}>3列</option>
+                <option value={4}>4列</option>
+              </select>
+              <p className="text-xs text-slate-500">
+                メンバー紹介ページのカード列数（広い画面での最大値）。狭い画面では自動で減ります。
+              </p>
+            </div>
+
             {/* 選択中（順序つき） */}
             <div className="space-y-1.5">
               <p className="text-xs font-semibold text-slate-600">
