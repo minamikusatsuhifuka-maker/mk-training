@@ -54,6 +54,12 @@ import {
 import { CharacterSVG } from "@/components/CharacterNotification";
 import { SectionLayoutEditor } from "@/components/admin/SectionLayoutEditor";
 import {
+  DEFAULT_PORTAL_FEATURES,
+  loadPortalFeatures,
+  savePortalFeatures,
+  type PortalFeatures,
+} from "@/lib/portal-features";
+import {
   TASKS_PAGE_LAYOUT_KEY,
   TASKS_SECTION_LABELS,
   DEFAULT_TASKS_LAYOUT,
@@ -262,6 +268,32 @@ export default function AdminPortalPage() {
   const [tasksLayout, setTasksLayout] =
     useState<TasksSectionConfig[]>(DEFAULT_TASKS_LAYOUT);
   const [savingTasksLayout, setSavingTasksLayout] = useState(false);
+
+  // 機能スイッチ（portal_features。指示書47）
+  const [features, setFeatures] = useState<PortalFeatures>(
+    DEFAULT_PORTAL_FEATURES
+  );
+  const [savingFeatures, setSavingFeatures] = useState(false);
+
+  useEffect(() => {
+    loadPortalFeatures().then(setFeatures).catch(() => {});
+  }, []);
+
+  const handleToggleWeeklyQuestion = async (on: boolean) => {
+    if (savingFeatures) return;
+    const prev = features;
+    const next = { ...features, weeklyQuestion: on };
+    setFeatures(next);
+    setSavingFeatures(true);
+    const ok = await savePortalFeatures(next);
+    setSavingFeatures(false);
+    if (!ok) {
+      setFeatures(prev);
+      flash("⚠ 機能スイッチの保存に失敗しました");
+      return;
+    }
+    flash(on ? "💾 今週の質問をONにしました" : "💾 今週の質問をOFFにしました");
+  };
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -2184,6 +2216,25 @@ export default function AdminPortalPage() {
               description="スタッフ側「みんなのタスク」（/tasks）のセクション表示順を編集します。保存するとスタッフ側は次回表示（リロード）から反映されます。ページタイトルは常に先頭固定です。"
               previewTitle="プレビュー（/tasks での表示順）"
             />
+          </section>
+
+          {/* 機能スイッチ（指示書47） */}
+          <section className="space-y-3 border-t border-gray-200 pt-6">
+            <h2 className="text-sm font-semibold text-gray-800">
+              ❓ 今週の質問（機能スイッチ）
+            </h2>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={features.weeklyQuestion}
+                disabled={savingFeatures}
+                onChange={(e) => handleToggleWeeklyQuestion(e.target.checked)}
+              />
+              今週の質問を有効にする
+            </label>
+            <p className="text-xs text-gray-500">
+              OFFにするとホームの「今週の質問」セクション・メンバー紹介の回答履歴・アーカイブページが非表示になります（回答データは保持され、ONに戻すと再表示されます）。質問文の設定はホームのセクション内「✏️ 質問を編集」（管理者のみ表示）から行います。
+            </p>
           </section>
         </div>
       )}

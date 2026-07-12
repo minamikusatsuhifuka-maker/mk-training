@@ -48,6 +48,13 @@ import {
   type MembersCardConfig,
 } from "@/lib/members-card";
 import { useEffectiveColumns } from "@/lib/use-effective-columns";
+import { loadPortalFeatures } from "@/lib/portal-features";
+import {
+  collectMemberAnswers,
+  loadWeeklyQuestions,
+  weekRangeLabel,
+  type WeeklyQuestionsData,
+} from "@/lib/weekly-questions";
 
 // 役職→ロールカラー（淡背景＋濃文字。Tailwindリテラルクラスで定義しpurge回避・動的組み立て禁止）
 type RoleColor = { bg: string; text: string; border: string };
@@ -152,6 +159,9 @@ export default function MembersPage() {
   );
   // 管理画面設定の列数を広い画面での最大値とし、狭い画面では自動で減らす（指示書45）
   const effectiveCols = useEffectiveColumns(cardConfig.columns);
+  // 今週の質問の回答履歴（指示書47。機能スイッチOFF時はnullのまま＝非表示）
+  const [weeklyData, setWeeklyData] = useState<WeeklyQuestionsData | null>(null);
+  const [showAllHistory, setShowAllHistory] = useState(false);
 
   useEffect(() => {
     loadProfilesIndex()
@@ -176,9 +186,18 @@ export default function MembersPage() {
         );
       })
       .catch(() => {});
+    // 今週の質問の回答履歴（スイッチONのときだけ読み込む）
+    loadPortalFeatures()
+      .then((f) => {
+        if (f.weeklyQuestion) {
+          loadWeeklyQuestions().then(setWeeklyData).catch(() => {});
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const openDetail = async (entry: StaffProfileIndexEntry) => {
+    setShowAllHistory(false);
     // 一括取得済みならそれを使い、無ければ従来どおり個別取得
     const cached = profiles[entry.userId];
     if (cached) {
@@ -225,6 +244,12 @@ export default function MembersPage() {
     }
     return values;
   };
+
+  // 今週の質問の回答履歴（id=userId優先、無ければname一致。新しい順）。指示書47
+  const weeklyHistory =
+    selected && weeklyData
+      ? collectMemberAnswers(weeklyData, selected.userId, selected.name)
+      : [];
 
   return (
     <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
@@ -425,6 +450,43 @@ export default function MembersPage() {
                     </div>
                   );
                 })}
+
+              {/* これまでの回答（今週の質問。0件なら非表示・最新5件＋もっと見る）指示書47 */}
+              {weeklyHistory.length > 0 && (
+                <div className="border-t border-gray-100 pt-3">
+                  <h3 className="flex items-center gap-1.5 text-[13px] text-gray-400 mb-2">
+                    <MessageCircle className="h-3.5 w-3.5 shrink-0" />
+                    💬 これまでの回答（今週の質問）
+                  </h3>
+                  <ul className="space-y-2.5">
+                    {(showAllHistory
+                      ? weeklyHistory
+                      : weeklyHistory.slice(0, 5)
+                    ).map((h) => (
+                      <li key={`${h.weekKey}_${h.at}`}>
+                        <p className="text-xs text-gray-400">
+                          {h.question ?? "（当時の質問）"}
+                        </p>
+                        <p className="text-sm text-gray-800 whitespace-pre-wrap">
+                          {h.text}
+                        </p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          {weekRangeLabel(h.weekKey)}の週
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                  {weeklyHistory.length > 5 && !showAllHistory && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllHistory(true)}
+                      className="mt-2 text-xs text-teal-700 underline underline-offset-2"
+                    >
+                      もっと見る（あと{weeklyHistory.length - 5}件）
+                    </button>
+                  )}
+                </div>
+              )}
 
               {selected.photos.length > 0 && (
                 <div className="border-t border-gray-100 pt-3">
