@@ -30,13 +30,12 @@ import {
 } from "@/lib/profile-fields";
 import { loadPortalItems } from "@/lib/portal-store";
 import { loadPortalFeatures } from "@/lib/portal-features";
-import { PORTAL_KEYS, type ThankyouItem } from "@/types/portal";
-
-// 宛先名とプロフィール名の紐付け用の正規化（空白除去・末尾「さん」除去・メールは@前）
-function normalizeName(s: string): string {
-  const base = s.includes("@") ? s.split("@")[0] : s;
-  return base.replace(/[\s　]+/g, "").replace(/さん$/u, "");
-}
+import {
+  PORTAL_KEYS,
+  thankyouToNames,
+  normalizeThankyouName as normalizeName,
+  type ThankyouItem,
+} from "@/types/portal";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -122,8 +121,11 @@ export default function ProfilePage() {
             all
               .filter((t) => {
                 const d = new Date(t.createdAt);
+                // 宛先が複数（配列）の場合は自分の名前が含まれていれば「自分宛」
                 return (
-                  normalizeName(t.toName) === me &&
+                  thankyouToNames(t).some(
+                    (name) => normalizeName(name) === me
+                  ) &&
                   d.getFullYear() === now.getFullYear() &&
                   d.getMonth() === now.getMonth()
                 );

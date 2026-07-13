@@ -131,10 +131,33 @@ export type HiyariItem = {
 export type ThankyouItem = {
   id: string;
   fromName: string;
-  toName: string;
+  /** 宛先。旧データ=単一文字列 / 新データ=複数名の配列（指示書49）。読み取りは thankyouToNames() を使う */
+  toName: string | string[];
   message: string;
   createdAt: string;
 };
+
+/** 宛先を常に配列で取り出す（旧データの単一文字列と新データの配列の両対応） */
+export function thankyouToNames(t: Pick<ThankyouItem, "toName">): string[] {
+  if (Array.isArray(t.toName)) {
+    return t.toName.filter((s) => typeof s === "string" && s.trim() !== "");
+  }
+  return typeof t.toName === "string" && t.toName.trim() !== ""
+    ? [t.toName]
+    : [];
+}
+
+/** 宛先の表示用文字列（複数名は「Aさん・Bさん」のように「・」で連結） */
+export function formatThankyouTo(t: Pick<ThankyouItem, "toName">): string {
+  return thankyouToNames(t).join("・");
+}
+
+/** 宛先名の同一判定用の正規化（空白除去・末尾「さん」除去・メールは@前）。
+ *  /profile の「今月あなたに届いたありがとう」の紐付けと候補の重複除去で共用。 */
+export function normalizeThankyouName(s: string): string {
+  const base = s.includes("@") ? s.split("@")[0] : s;
+  return base.replace(/[\s　]+/g, "").replace(/さん$/u, "");
+}
 
 export type PolicyItem = {
   id: string;
@@ -163,7 +186,15 @@ export type CharacterSvgType =
   | "sakura"
   | "sprout"
   | "star"
-  | "moon";
+  | "moon"
+  | "shiba"
+  | "panda"
+  | "penguin"
+  | "hedgehog"
+  | "rainbow"
+  | "note"
+  | "clover"
+  | "butterfly";
 
 export type CharacterSettings = {
   enabled: boolean;

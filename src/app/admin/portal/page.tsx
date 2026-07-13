@@ -36,6 +36,7 @@ import {
   urgencyOf,
   urgencyCardClass,
   isNewsExpired,
+  formatThankyouTo,
   type NewsItem,
   type ArchivedNewsItem,
   type NewsCategory,
@@ -138,6 +139,14 @@ const CHARACTER_SVGS: { type: CharacterSvgType; label: string }[] = [
   { type: "sprout", label: "ふたば" },
   { type: "star", label: "ほし" },
   { type: "moon", label: "つき" },
+  { type: "shiba", label: "しばいぬ" },
+  { type: "panda", label: "ぱんだ" },
+  { type: "penguin", label: "ぺんぎん" },
+  { type: "hedgehog", label: "はりねずみ" },
+  { type: "rainbow", label: "にじ" },
+  { type: "note", label: "おんぷ" },
+  { type: "clover", label: "クローバー" },
+  { type: "butterfly", label: "ちょうちょ" },
 ];
 
 const NEWS_CATEGORIES: { value: NewsCategory; label: string }[] = [
@@ -1760,7 +1769,8 @@ export default function AdminPortalPage() {
                 </button>
               </div>
               <p className="text-xs text-gray-600 mt-2">
-                {t.fromName} → {t.toName} · {formatDateTime(t.createdAt)}
+                {t.fromName} → {formatThankyouTo(t)} ·{" "}
+                {formatDateTime(t.createdAt)}
               </p>
             </div>
           ))}

@@ -10,7 +10,8 @@ import {
   appendNewsLog,
 } from "@/lib/portal-store";
 import CharacterNotification from "@/components/CharacterNotification";
-import { loadTasks, taskCounts } from "@/lib/staff-tasks";
+import { loadTasks, taskCounts, loadStaffMembers } from "@/lib/staff-tasks";
+import { loadProfilesIndex } from "@/lib/staff-profiles";
 import { getCurrentActorName, monthlyTopContributors } from "@/lib/news-log";
 import {
   useNewsReactions,
@@ -39,6 +40,9 @@ import {
   DEFAULT_CHARACTER_SETTINGS,
   DEFAULT_HOME_LAYOUT,
   visibleHomeSectionKeys,
+  thankyouToNames,
+  formatThankyouTo,
+  normalizeThankyouName,
   type ArchivedNewsItem,
   type NewsItem,
   type NewsCategory,
@@ -71,6 +75,14 @@ const NEWS_CHARACTER_CHOICES: { value: CharacterSvgType; label: string }[] = [
   { value: "sprout", label: "ふたば" },
   { value: "star", label: "ほし" },
   { value: "moon", label: "つき" },
+  { value: "shiba", label: "しばいぬ" },
+  { value: "panda", label: "ぱんだ" },
+  { value: "penguin", label: "ぺんぎん" },
+  { value: "hedgehog", label: "はりねずみ" },
+  { value: "rainbow", label: "にじ" },
+  { value: "note", label: "おんぷ" },
+  { value: "clover", label: "クローバー" },
+  { value: "butterfly", label: "ちょうちょ" },
 ];
 
 // ─── 初期データ（Supabaseが空のときのフォールバック） ───
@@ -323,11 +335,62 @@ export default function PortalHome() {
   const [hiyariRole, setHiyariRole] = useState("マルチタスク医療事務");
   const [isAnonymous, setIsAnonymous] = useState(true);
 
-  // ありがとうカード投稿フォーム
+  // ありがとうカード投稿フォーム（指示書49: 宛先は候補からの複数選択＋自由入力フォールバック）
   const [showThankyouForm, setShowThankyouForm] = useState(false);
-  const [tyTo, setTyTo] = useState("");
+  const [tyToList, setTyToList] = useState<string[]>([]);
+  const [tyToInput, setTyToInput] = useState("");
+  const [tyCandidates, setTyCandidates] = useState<string[]>([]);
   const [tyFrom, setTyFrom] = useState("");
   const [tyMessage, setTyMessage] = useState("");
+
+  // 宛先候補 = メンバー紹介のプロフィール名（五十音順） ∪ スタッフ名簿（登録順）。
+  // 正規化名で重複除去。モーダルを開いた時に読み込む。
+  useEffect(() => {
+    if (!showThankyouForm) return;
+    (async () => {
+      const [profiles, members] = await Promise.all([
+        loadProfilesIndex().catch(() => []),
+        loadStaffMembers().catch(() => []),
+      ]);
+      const seen = new Set<string>();
+      const names: string[] = [];
+      for (const raw of [...profiles.map((p) => p.name), ...members]) {
+        const name = (raw ?? "").trim();
+        const key = normalizeThankyouName(name);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        names.push(name);
+      }
+      setTyCandidates(names);
+    })().catch(() => {});
+    // あなたの名前: ログイン中ならプロフィール名でプリフィル（未入力時のみ）
+    getCurrentActorName()
+      .then((name) => {
+        if (name) setTyFrom((prev) => prev || name);
+      })
+      .catch(() => {});
+  }, [showThankyouForm]);
+
+  // 宛先チップの追加/解除（正規化名で同一判定）
+  const toggleTyTo = (name: string) => {
+    const key = normalizeThankyouName(name);
+    setTyToList((prev) =>
+      prev.some((n) => normalizeThankyouName(n) === key)
+        ? prev.filter((n) => normalizeThankyouName(n) !== key)
+        : [...prev, name]
+    );
+  };
+
+  // 自由入力 → Enter/追加ボタンでチップ化（候補に無い名前のフォールバック）
+  const addTyToFromInput = () => {
+    const name = tyToInput.trim();
+    if (!name) return;
+    const key = normalizeThankyouName(name);
+    setTyToList((prev) =>
+      prev.some((n) => normalizeThankyouName(n) === key) ? prev : [...prev, name]
+    );
+    setTyToInput("");
+  };
 
   const [submitting, setSubmitting] = useState(false);
 
@@ -548,9 +611,9 @@ export default function PortalHome() {
     }
   };
 
-  // ありがとうカード投稿
+  // ありがとうカード投稿（新規は toName を配列で保存。旧データの単一文字列は読み取り側で両対応）
   const handleThankyouSubmit = async () => {
-    if (!tyTo.trim() || !tyMessage.trim()) return;
+    if (tyToList.length === 0 || !tyMessage.trim()) return;
     setSubmitting(true);
     try {
       const current = await loadPortalItems<ThankyouItem>(
@@ -560,7 +623,7 @@ export default function PortalHome() {
       const newItem: ThankyouItem = {
         id: `ty_${Date.now()}`,
         fromName: tyFrom.trim() || "匿名",
-        toName: tyTo.trim(),
+        toName: tyToList,
         message: tyMessage.trim(),
         createdAt: new Date().toISOString(),
       };
@@ -571,7 +634,8 @@ export default function PortalHome() {
         return;
       }
       setThankyouItems(next.slice(0, 3));
-      setTyTo("");
+      setTyToList([]);
+      setTyToInput("");
       setTyFrom("");
       setTyMessage("");
       setShowThankyouForm(false);
@@ -893,14 +957,15 @@ export default function PortalHome() {
                 className="flex items-start gap-3 p-3 bg-white border border-gray-100 rounded-xl"
               >
                 <div className="w-8 h-8 rounded-full bg-pink-50 flex items-center justify-center text-xs font-medium text-pink-700 flex-shrink-0">
-                  {item.toName.slice(0, 1)}
+                  {(thankyouToNames(item)[0] ?? "?").slice(0, 1)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-gray-800 leading-relaxed">
                     {item.message}
                   </p>
                   <p className="text-xs text-gray-600 mt-1.5">
-                    {item.fromName} → {item.toName} · {formatDate(item.createdAt)}
+                    {item.fromName} → {formatThankyouTo(item)} ·{" "}
+                    {formatDate(item.createdAt)}
                   </p>
                 </div>
                 <span className="text-pink-400 flex-shrink-0 text-base">♥</span>
@@ -937,14 +1002,78 @@ export default function PortalHome() {
               </div>
               <div>
                 <label className="text-xs text-gray-800 mb-1 block">
-                  宛先（誰に感謝しますか？）
+                  宛先（誰に感謝しますか？・複数選択できます）
                 </label>
-                <input
-                  value={tyTo}
-                  onChange={(e) => setTyTo(e.target.value)}
-                  placeholder="〇〇さん"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"
-                />
+                {/* 選択済みチップ（×で解除） */}
+                {tyToList.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {tyToList.map((name) => (
+                      <span
+                        key={name}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-pink-100 text-pink-800 rounded-full text-xs"
+                      >
+                        {name}
+                        <button
+                          type="button"
+                          onClick={() => toggleTyTo(name)}
+                          className="text-pink-500 hover:text-pink-700 leading-none"
+                          aria-label={`${name} を宛先から外す`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {/* 候補（タップで追加/解除） */}
+                {tyCandidates.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2 max-h-28 overflow-y-auto">
+                    {tyCandidates.map((name) => {
+                      const selected = tyToList.some(
+                        (n) =>
+                          normalizeThankyouName(n) ===
+                          normalizeThankyouName(name)
+                      );
+                      return (
+                        <button
+                          type="button"
+                          key={name}
+                          onClick={() => toggleTyTo(name)}
+                          className={`px-2.5 py-1 rounded-full text-xs border ${
+                            selected
+                              ? "bg-pink-500 border-pink-500 text-white"
+                              : "bg-white border-gray-200 text-gray-700 hover:bg-pink-50"
+                          }`}
+                        >
+                          {name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {/* 候補に無い名前の自由入力フォールバック（Enter/追加でチップ化） */}
+                <div className="flex gap-2">
+                  <input
+                    value={tyToInput}
+                    onChange={(e) => setTyToInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                        e.preventDefault();
+                        addTyToFromInput();
+                      }
+                    }}
+                    placeholder="候補に無い名前はここに入力してEnter"
+                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={addTyToFromInput}
+                    disabled={!tyToInput.trim()}
+                    className="px-3 py-2 text-sm bg-pink-50 text-pink-700 border border-pink-200 rounded-xl hover:bg-pink-100 disabled:opacity-50"
+                  >
+                    追加
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="text-xs text-gray-800 mb-1 block">
@@ -972,7 +1101,9 @@ export default function PortalHome() {
               <button
                 type="button"
                 onClick={handleThankyouSubmit}
-                disabled={!tyTo.trim() || !tyMessage.trim() || submitting}
+                disabled={
+                  tyToList.length === 0 || !tyMessage.trim() || submitting
+                }
                 className="w-full py-3 bg-pink-500 text-white rounded-xl text-base font-medium hover:bg-pink-600 disabled:opacity-50"
               >
                 ♥ 送る

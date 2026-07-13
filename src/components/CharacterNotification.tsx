@@ -43,6 +43,14 @@ const SVG_POOL: CharacterSvgType[] = [
   "sprout",
   "star",
   "moon",
+  "shiba",
+  "panda",
+  "penguin",
+  "hedgehog",
+  "rainbow",
+  "note",
+  "clover",
+  "butterfly",
 ];
 
 // オーバーラップ再生の係数。INTERVAL = 横切り時間D × この値。
@@ -406,6 +414,221 @@ export function CharacterSVG({
         <path
           d="M77 28 l1.8 4.6 4.6 1.8 -4.6 1.8 -1.8 4.6 -1.8 -4.6 -4.6 -1.8 4.6 -1.8 z"
           fill="#ffe08a"
+        />
+      </svg>
+    ),
+    shiba: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <path d="M25 22 L20 46 L40 36 Z" fill="#d99a4e" />
+        <path d="M75 22 L80 46 L60 36 Z" fill="#d99a4e" />
+        <path d="M28 27 L25 42 L37 36 Z" fill="#f3e0c8" />
+        <path d="M72 27 L75 42 L63 36 Z" fill="#f3e0c8" />
+        <circle cx="50" cy="56" r="30" fill="#d99a4e" />
+        <path
+          d="M50 44 C36 44 27 55 27 66 C27 77 37 86 50 86 C63 86 73 77 73 66 C73 55 64 44 50 44 Z"
+          fill="#f7ecd9"
+        />
+        <circle cx="39" cy="52" r="3.8" fill="#2c2119" />
+        <circle cx="61" cy="52" r="3.8" fill="#2c2119" />
+        <circle cx="40.2" cy="50.8" r="1" fill="#fff" />
+        <circle cx="62.2" cy="50.8" r="1" fill="#fff" />
+        <ellipse cx="50" cy="63" rx="4.6" ry="3.4" fill="#2c2119" />
+        <path
+          d="M50 66 L50 70 M50 70 C46.5 73 44 72 43 70 M50 70 C53.5 73 56 72 57 70"
+          stroke="#8a6238"
+          strokeWidth="1.6"
+          fill="none"
+          strokeLinecap="round"
+        />
+      </svg>
+    ),
+    panda: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <circle cx="28" cy="30" r="12" fill="#2c2c2c" />
+        <circle cx="72" cy="30" r="12" fill="#2c2c2c" />
+        <circle cx="50" cy="56" r="30" fill="#fbfbf8" />
+        <ellipse
+          cx="38"
+          cy="52"
+          rx="8"
+          ry="10"
+          transform="rotate(-18 38 52)"
+          fill="#2c2c2c"
+        />
+        <ellipse
+          cx="62"
+          cy="52"
+          rx="8"
+          ry="10"
+          transform="rotate(18 62 52)"
+          fill="#2c2c2c"
+        />
+        <circle cx="39.5" cy="52" r="3" fill="#fff" />
+        <circle cx="60.5" cy="52" r="3" fill="#fff" />
+        <circle cx="40" cy="52.5" r="1.6" fill="#1a1a1a" />
+        <circle cx="60" cy="52.5" r="1.6" fill="#1a1a1a" />
+        <ellipse cx="50" cy="66" rx="4.4" ry="3.2" fill="#2c2c2c" />
+        <path
+          d="M46 74 C48 76 52 76 54 74"
+          stroke="#2c2c2c"
+          strokeWidth="1.8"
+          fill="none"
+          strokeLinecap="round"
+        />
+      </svg>
+    ),
+    penguin: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <ellipse cx="50" cy="55" rx="27" ry="33" fill="#37474f" />
+        <ellipse cx="50" cy="63" rx="18" ry="23" fill="#fbfbf8" />
+        <path
+          d="M23 48 C18 58 20 70 26 76 C29 68 28 56 27 50 Z"
+          fill="#37474f"
+        />
+        <path
+          d="M77 48 C82 58 80 70 74 76 C71 68 72 56 73 50 Z"
+          fill="#37474f"
+        />
+        <circle cx="42" cy="42" r="3.4" fill="#0f1a1f" />
+        <circle cx="58" cy="42" r="3.4" fill="#0f1a1f" />
+        <circle cx="43" cy="41" r="0.9" fill="#fff" />
+        <circle cx="59" cy="41" r="0.9" fill="#fff" />
+        <path d="M50 46 L45 52 L55 52 Z" fill="#f6a13c" />
+        <ellipse cx="42" cy="86" rx="6" ry="3" fill="#f6a13c" />
+        <ellipse cx="58" cy="86" rx="6" ry="3" fill="#f6a13c" />
+      </svg>
+    ),
+    hedgehog: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <path
+          d="M50 18 L58 30 L70 24 L72 38 L86 38 L80 50 L90 58 L76 62 L80 76 L66 72 L60 84 L50 74 L40 84 L34 72 L20 76 L24 62 L10 58 L20 50 L14 38 L28 38 L30 24 L42 30 Z"
+          fill="#8d6e63"
+        />
+        <circle cx="50" cy="58" r="24" fill="#a1887f" />
+        <path
+          d="M50 46 C39 46 31 55 31 64 C31 73 39 80 50 80 C61 80 69 73 69 64 C69 55 61 46 50 46 Z"
+          fill="#f3e5dc"
+        />
+        <circle cx="42" cy="58" r="3.2" fill="#3e2723" />
+        <circle cx="58" cy="58" r="3.2" fill="#3e2723" />
+        <ellipse cx="50" cy="67" rx="3.8" ry="3" fill="#3e2723" />
+        <path
+          d="M45 73 C47 75 53 75 55 73"
+          stroke="#6d4c41"
+          strokeWidth="1.5"
+          fill="none"
+          strokeLinecap="round"
+        />
+      </svg>
+    ),
+    rainbow: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <path
+          d="M14 78 A36 36 0 0 1 86 78 L76 78 A26 26 0 0 0 24 78 Z"
+          fill="#ef6c6c"
+        />
+        <path
+          d="M24 78 A26 26 0 0 1 76 78 L68 78 A18 18 0 0 0 32 78 Z"
+          fill="#f6b04e"
+        />
+        <path
+          d="M32 78 A18 18 0 0 1 68 78 L60 78 A10 10 0 0 0 40 78 Z"
+          fill="#5cc06f"
+        />
+        <path
+          d="M40 78 A10 10 0 0 1 60 78 L52 78 A2 2 0 0 0 48 78 Z"
+          fill="#5b9bd5"
+        />
+        <circle cx="18" cy="76" r="7" fill="#eef2f5" />
+        <circle cx="26" cy="79" r="6" fill="#f7f9fa" />
+        <circle cx="82" cy="76" r="7" fill="#eef2f5" />
+        <circle cx="74" cy="79" r="6" fill="#f7f9fa" />
+      </svg>
+    ),
+    note: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <path
+          d="M62 18 L62 66 M62 18 C70 22 76 26 76 34"
+          stroke="#5e60ce"
+          strokeWidth="6"
+          fill="none"
+          strokeLinecap="round"
+        />
+        <ellipse
+          cx="52"
+          cy="68"
+          rx="12"
+          ry="9"
+          transform="rotate(-20 52 68)"
+          fill="#5e60ce"
+        />
+        <path
+          d="M28 40 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2 z"
+          fill="#9fa8ff"
+        />
+        <path
+          d="M80 54 l1.5 4 4 1.5 -4 1.5 -1.5 4 -1.5 -4 -4 -1.5 4 -1.5 z"
+          fill="#9fa8ff"
+        />
+      </svg>
+    ),
+    clover: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <g fill="#4caf6d">
+          <path
+            d="M50 52 C42 44 30 44 26 36 C22 28 30 20 38 24 C40 16 52 16 54 24 C62 20 70 28 66 36 C62 44 58 44 50 52 Z"
+            transform="rotate(0 50 50)"
+          />
+          <path
+            d="M50 52 C42 44 30 44 26 36 C22 28 30 20 38 24 C40 16 52 16 54 24 C62 20 70 28 66 36 C62 44 58 44 50 52 Z"
+            transform="rotate(90 50 50)"
+          />
+          <path
+            d="M50 52 C42 44 30 44 26 36 C22 28 30 20 38 24 C40 16 52 16 54 24 C62 20 70 28 66 36 C62 44 58 44 50 52 Z"
+            transform="rotate(180 50 50)"
+          />
+          <path
+            d="M50 52 C42 44 30 44 26 36 C22 28 30 20 38 24 C40 16 52 16 54 24 C62 20 70 28 66 36 C62 44 58 44 50 52 Z"
+            transform="rotate(270 50 50)"
+          />
+        </g>
+        <path
+          d="M50 54 C52 66 56 76 62 84"
+          stroke="#388e54"
+          strokeWidth="3.5"
+          fill="none"
+          strokeLinecap="round"
+        />
+        <circle cx="50" cy="50" r="4" fill="#7bd096" />
+      </svg>
+    ),
+    butterfly: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <path
+          d="M50 50 C36 30 18 26 14 40 C11 52 28 60 46 56 Z"
+          fill="#f48fb1"
+        />
+        <path
+          d="M50 50 C64 30 82 26 86 40 C89 52 72 60 54 56 Z"
+          fill="#f48fb1"
+        />
+        <path
+          d="M50 54 C40 66 26 70 22 62 C19 55 32 50 46 54 Z"
+          fill="#f8bbd0"
+        />
+        <path
+          d="M50 54 C60 66 74 70 78 62 C81 55 68 50 54 54 Z"
+          fill="#f8bbd0"
+        />
+        <circle cx="42" cy="42" r="3" fill="#fce4ec" />
+        <circle cx="58" cy="42" r="3" fill="#fce4ec" />
+        <ellipse cx="50" cy="52" rx="4" ry="12" fill="#7b4a63" />
+        <path
+          d="M47 40 C44 34 40 32 38 30 M53 40 C56 34 60 32 62 30"
+          stroke="#7b4a63"
+          strokeWidth="1.6"
+          fill="none"
+          strokeLinecap="round"
         />
       </svg>
     ),
