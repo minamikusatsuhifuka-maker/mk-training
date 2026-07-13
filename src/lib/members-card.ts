@@ -17,6 +17,9 @@ export type MembersCardConfig = {
   showKana: boolean;
   showRole: boolean;
   showMessage: boolean;
+  /** 「今週の質問」の回答履歴（最新2件）をカードに表示（指示書50・既定ON）。
+   *  portal_features.weeklyQuestion OFF 時は設定に関わらず非表示。 */
+  showWeeklyAnswers: boolean;
   columns: MembersCardColumns;
 };
 
@@ -31,6 +34,7 @@ export const DEFAULT_MEMBERS_CARD_CONFIG: MembersCardConfig = {
   showKana: true,
   showRole: true,
   showMessage: true,
+  showWeeklyAnswers: true,
   columns: 2,
 };
 
@@ -61,6 +65,10 @@ export function normalizeMembersCardConfig(raw: unknown): MembersCardConfig {
       typeof o.showMessage === "boolean"
         ? o.showMessage
         : DEFAULT_MEMBERS_CARD_CONFIG.showMessage,
+    showWeeklyAnswers:
+      typeof o.showWeeklyAnswers === "boolean"
+        ? o.showWeeklyAnswers
+        : DEFAULT_MEMBERS_CARD_CONFIG.showWeeklyAnswers,
     columns:
       o.columns === 2 || o.columns === 3 || o.columns === 4
         ? o.columns

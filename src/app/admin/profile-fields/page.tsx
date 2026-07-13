@@ -370,6 +370,10 @@ export default function ProfileFieldsAdminPage() {
                   { key: "showKana", label: "ふりがな" },
                   { key: "showRole", label: "役職" },
                   { key: "showMessage", label: "ひとこと" },
+                  {
+                    key: "showWeeklyAnswers",
+                    label: "💬 今週の質問の回答（最新2件）を表示",
+                  },
                 ] as const
               ).map((opt) => (
                 <label

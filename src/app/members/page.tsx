@@ -3,7 +3,7 @@
 // メンバー紹介（閲覧は誰でも可・ログイン不要）
 // 一覧: staff_profiles_index ／ 詳細: staff_profile:<userId>（クリックで読み込み）
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   BookOpen,
@@ -59,6 +59,7 @@ import {
   collectMemberAnswers,
   loadWeeklyQuestions,
   weekRangeLabel,
+  type WeeklyHistoryItem,
   type WeeklyQuestionsData,
 } from "@/lib/weekly-questions";
 
@@ -268,6 +269,18 @@ export default function MembersPage() {
       ? collectMemberAnswers(weeklyData, selected.userId, selected.name)
       : [];
 
+  // カード表示用: 全メンバーの回答履歴を一括算出（指示書50。weekly_questions の
+  // 読み込みは上の1回のみで、収集ロジックは詳細ダイアログと同じ collectMemberAnswers を共用）
+  const weeklyAnswersByMember = useMemo(() => {
+    const map: Record<string, WeeklyHistoryItem[]> = {};
+    if (!weeklyData || !cardConfig.showWeeklyAnswers) return map;
+    for (const m of members) {
+      const items = collectMemberAnswers(weeklyData, m.userId, m.name);
+      if (items.length > 0) map[m.userId] = items;
+    }
+    return map;
+  }, [weeklyData, members, cardConfig.showWeeklyAnswers]);
+
   // 共通点（46R-C）: 自分のプロフィールがある場合のみ。他人カード・詳細で使用
   const myProfile =
     features.commonPoints && myUserId ? profiles[myUserId] : undefined;
@@ -314,6 +327,7 @@ export default function MembersPage() {
           {members.map((m) => {
             const values = cardValuesOf(m.userId);
             const common = commonPointsWith(m.userId);
+            const weeklyAnswers = weeklyAnswersByMember[m.userId] ?? [];
             const c = roleColorOf(m.role);
             return (
               <button
@@ -391,6 +405,33 @@ export default function MembersPage() {
                       );
                     })}
                   </dl>
+                )}
+
+                {/* 💬 今週の質問より（最新2件・0件の人は非表示）指示書50。
+                    weeklyData は weeklyQuestion ON のときだけ読み込まれるため機能スイッチと連動。
+                    カード全体が詳細ダイアログへのボタンなので添え書きもクリックで詳細が開く。 */}
+                {weeklyAnswers.length > 0 && (
+                  <div className="w-full min-w-0 border-t border-gray-100 pt-3 space-y-1.5">
+                    <p className="flex items-center gap-1.5 text-[13px] text-gray-400">
+                      <MessageCircle className="h-3.5 w-3.5 shrink-0" />
+                      💬 今週の質問より
+                    </p>
+                    {weeklyAnswers.slice(0, 2).map((h) => (
+                      <div key={`${h.weekKey}_${h.at}`} className="min-w-0">
+                        <p className="text-xs text-gray-400 truncate">
+                          {h.question ?? "（当時の質問）"}
+                        </p>
+                        <p className="text-[13px] text-gray-800 line-clamp-1">
+                          {h.text}
+                        </p>
+                      </div>
+                    ))}
+                    {weeklyAnswers.length > 2 && (
+                      <p className="text-[11px] text-gray-400">
+                        他{weeklyAnswers.length - 2}件は詳細で
+                      </p>
+                    )}
+                  </div>
                 )}
               </button>
             );
