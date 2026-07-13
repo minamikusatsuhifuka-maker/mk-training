@@ -10,11 +10,14 @@ import {
   STATUS_ORDER,
   type StaffTask,
   type TaskStatus,
+  type TaskCategoryDef,
   type ParsedTask,
 } from "@/lib/staff-tasks";
 
 type Props = {
   knownMembers: string[];
+  /** カテゴリ選択肢（visibleTaskCategories 済みのもの） */
+  categories: TaskCategoryDef[];
   onImport: (tasks: StaffTask[]) => void;
 };
 
@@ -31,7 +34,12 @@ type ReviewRow = {
   id: string;
   include: boolean;
   title: string;
-  assignee: string;
+  /** 複数担当（チップ編集・指示書53） */
+  assignees: string[];
+  /** 行ごとの担当者追加入力欄 */
+  assigneeInput: string;
+  /** カテゴリid（"" = 未分類） */
+  category: string;
   due: string; // YYYY-MM-DD or ""
   status: TaskStatus;
   note: string;
@@ -122,7 +130,7 @@ function imageToBase64(
   });
 }
 
-export function FileImport({ knownMembers, onImport }: Props) {
+export function FileImport({ knownMembers, categories, onImport }: Props) {
   const [files, setFiles] = useState<PendingFile[]>([]);
   const [parsing, setParsing] = useState(false);
   const [rows, setRows] = useState<ReviewRow[] | null>(null);
@@ -192,7 +200,11 @@ export function FileImport({ knownMembers, onImport }: Props) {
       const res = await fetch("/api/tasks/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items, members: knownMembers }),
+        body: JSON.stringify({
+          items,
+          members: knownMembers,
+          categories: categories.map((c) => c.label),
+        }),
       });
       const data = (await res.json()) as {
         tasks?: ParsedTask[];
@@ -211,15 +223,23 @@ export function FileImport({ knownMembers, onImport }: Props) {
       }
 
       setRows(
-        tasks.map((t, i) => ({
-          id: `row-${i}`,
-          include: true,
-          title: t.title,
-          assignee: t.assignee,
-          due: t.due ?? "",
-          status: t.status,
-          note: t.note,
-        }))
+        tasks.map((t, i) => {
+          // AIが返すカテゴリ（ラベル想定）を定義の id に解決。一致しなければ未分類
+          const cat = categories.find(
+            (c) => c.label === t.category || c.id === t.category
+          );
+          return {
+            id: `row-${i}`,
+            include: true,
+            title: t.title,
+            assignees: t.assignees,
+            assigneeInput: "",
+            category: cat?.id ?? "",
+            due: t.due ?? "",
+            status: t.status,
+            note: t.note,
+          };
+        })
       );
     } catch {
       setRows([]);
@@ -234,6 +254,45 @@ export function FileImport({ knownMembers, onImport }: Props) {
       rs ? rs.map((r) => (r.id === id ? { ...r, ...patch } : r)) : rs
     );
 
+  // 行の担当者チップ操作（追加/解除・自由入力チップ化）
+  const toggleRowAssignee = (rowId: string, name: string) => {
+    const n = name.trim();
+    if (!n) return;
+    setRows((rs) =>
+      rs
+        ? rs.map((r) =>
+            r.id === rowId
+              ? {
+                  ...r,
+                  assignees: r.assignees.includes(n)
+                    ? r.assignees.filter((x) => x !== n)
+                    : [...r.assignees, n],
+                }
+              : r
+          )
+        : rs
+    );
+  };
+
+  const addRowAssigneeFromInput = (rowId: string) => {
+    setRows((rs) =>
+      rs
+        ? rs.map((r) => {
+            if (r.id !== rowId) return r;
+            const n = r.assigneeInput.trim();
+            if (!n) return r;
+            return {
+              ...r,
+              assignees: r.assignees.includes(n)
+                ? r.assignees
+                : [...r.assignees, n],
+              assigneeInput: "",
+            };
+          })
+        : rs
+    );
+  };
+
   const selectedCount = rows?.filter((r) => r.include && r.title.trim()).length ?? 0;
 
   const handleAddSelected = () => {
@@ -241,16 +300,21 @@ export function FileImport({ knownMembers, onImport }: Props) {
     const nowIso = new Date().toISOString();
     const newTasks: StaffTask[] = rows
       .filter((r) => r.include && r.title.trim())
-      .map((r) => ({
-        id: newTaskId(),
-        title: r.title.trim(),
-        assignee: r.assignee.trim(),
-        due: dateOnlyToIso(r.due || null),
-        status: r.status,
-        note: r.note.trim() || undefined,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-      }));
+      .map((r) => {
+        const list = r.assignees.map((a) => a.trim()).filter(Boolean);
+        return {
+          id: newTaskId(),
+          title: r.title.trim(),
+          assignee: list[0] ?? "",
+          assignees: list,
+          category: r.category || undefined,
+          due: dateOnlyToIso(r.due || null),
+          status: r.status,
+          note: r.note.trim() || undefined,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+      });
     if (newTasks.length === 0) return;
     onImport(newTasks);
     // リセット
@@ -375,18 +439,26 @@ export function FileImport({ knownMembers, onImport }: Props) {
                   />
                   <div className="flex-1 grid grid-cols-1 sm:grid-cols-12 gap-2">
                     <Input
-                      className="sm:col-span-5 h-8 text-sm"
+                      className="sm:col-span-6 h-8 text-sm"
                       value={r.title}
                       onChange={(e) => updateRow(r.id, { title: e.target.value })}
                       placeholder="内容"
                     />
-                    <Input
-                      className="sm:col-span-3 h-8 text-sm"
-                      list="import-assignee-list"
-                      value={r.assignee}
-                      onChange={(e) => updateRow(r.id, { assignee: e.target.value })}
-                      placeholder="担当者"
-                    />
+                    <select
+                      value={r.category}
+                      onChange={(e) =>
+                        updateRow(r.id, { category: e.target.value })
+                      }
+                      className="sm:col-span-2 h-8 rounded-md border border-input bg-transparent px-2 text-xs"
+                      title="カテゴリ"
+                    >
+                      <option value="">未分類</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
                     <Input
                       type="date"
                       className="sm:col-span-2 h-8 text-sm"
@@ -406,6 +478,40 @@ export function FileImport({ knownMembers, onImport }: Props) {
                         </option>
                       ))}
                     </select>
+                    {/* 担当者チップ（複数・×で解除、入力+Enterで追加） */}
+                    <div className="sm:col-span-12 flex flex-wrap items-center gap-1.5">
+                      {r.assignees.map((a) => (
+                        <span
+                          key={a}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-teal-light text-teal rounded-full text-xs"
+                        >
+                          {a}
+                          <button
+                            type="button"
+                            onClick={() => toggleRowAssignee(r.id, a)}
+                            className="opacity-60 hover:opacity-100 leading-none"
+                            aria-label={`${a} を担当から外す`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                      <Input
+                        className="h-7 w-44 text-xs"
+                        list="import-assignee-list"
+                        value={r.assigneeInput}
+                        onChange={(e) =>
+                          updateRow(r.id, { assigneeInput: e.target.value })
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                            e.preventDefault();
+                            addRowAssigneeFromInput(r.id);
+                          }
+                        }}
+                        placeholder="担当者を追加（Enter）"
+                      />
+                    </div>
                     <Input
                       className="sm:col-span-12 h-8 text-sm"
                       value={r.note}

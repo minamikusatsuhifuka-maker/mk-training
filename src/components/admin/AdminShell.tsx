@@ -26,6 +26,7 @@ const adminNav = [
   { label: "💴 算定点数管理", href: "/admin/medical-fees" },
   { label: "📋 業務チェック管理", href: "/admin/operations" },
   { label: "👥 スタッフ名簿", href: "/admin/staff-members" },
+  { label: "🏷️ タスクカテゴリ管理", href: "/admin/task-categories" },
   { label: "👤 アカウント招待", href: "/admin/staff-accounts" },
   { label: "🪪 プロフィール項目管理", href: "/admin/profile-fields" },
   { label: "💉 生物学的製剤管理", href: "/admin/biologics" },

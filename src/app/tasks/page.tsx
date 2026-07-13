@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
 import { FileImport } from "@/components/tasks/FileImport";
 import { loadPortalItems } from "@/lib/portal-store";
@@ -49,6 +50,18 @@ import {
   hasSampleTasks,
   mergeMembers,
   isSampleTask,
+  assigneesOf,
+  isTeamTask,
+  formatAssignees,
+  loadTaskCategories,
+  visibleTaskCategories,
+  taskCategoryLabel,
+  loadTaskArchive,
+  saveTaskArchive,
+  splitArchivableTasks,
+  ARCHIVE_AFTER_DAYS,
+  type ArchivedTask,
+  type TaskCategoryDef,
   type StaffTask,
   type TaskStatus,
 } from "@/lib/staff-tasks";
@@ -69,7 +82,10 @@ export default function TasksPage() {
 
   const [view, setView] = useState<ViewKey>("due");
   const [filterAssignee, setFilterAssignee] = useState<string>("");
+  const [filterCategory, setFilterCategory] = useState<string>("");
   const [hideDone, setHideDone] = useState(false);
+  // カテゴリ定義（管理画面 /admin/task-categories で編集）
+  const [categories, setCategories] = useState<TaskCategoryDef[]>([]);
   // 件数サマリーから切り替える期限フィルタ
   const [dueFilter, setDueFilter] = useState<"none" | "overdue" | "today">(
     "none"
@@ -79,9 +95,11 @@ export default function TasksPage() {
   const [columns, setColumns] = useState<1 | 2 | 3>(3);
   const [winW, setWinW] = useState(1280);
 
-  // 追加フォーム
+  // 追加フォーム（担当者はチップ式複数選択・指示書53）
   const [title, setTitle] = useState("");
-  const [assignee, setAssignee] = useState("");
+  const [assignees, setAssignees] = useState<string[]>([]);
+  const [assigneeInput, setAssigneeInput] = useState("");
+  const [category, setCategory] = useState("");
   const [dueLocal, setDueLocal] = useState("");
   const [status, setStatus] = useState<TaskStatus>("todo");
   const [note, setNote] = useState("");
@@ -96,19 +114,44 @@ export default function TasksPage() {
   );
 
   useEffect(() => {
-    setNow(new Date());
+    const current = new Date();
+    setNow(current);
     Promise.all([
       loadTasks(),
       loadStaffMembers(),
+      loadTaskCategories(),
       loadPortalItems<TasksSectionConfig>(
         TASKS_PAGE_LAYOUT_KEY,
         DEFAULT_TASKS_LAYOUT
       ),
     ])
-      .then(([t, m, layout]) => {
-        setTasks(t);
+      .then(async ([t, m, cats, layout]) => {
         setMembers(m);
+        setCategories(cats);
         setSectionOrder(visibleTasksSectionKeys(layout));
+
+        // 完了から一定期間（7日）経過したタスクをアーカイブへ冪等移動（指示書53）。
+        // サンプル（sample-）は移動しない。移動保存に失敗したら元のまま表示する。
+        const { keep, toArchive } = splitArchivableTasks(t, current);
+        if (toArchive.length > 0) {
+          try {
+            const archive = await loadTaskArchive();
+            const archivedAt = current.toISOString();
+            const existing = new Set(archive.map((a) => a.id));
+            const additions: ArchivedTask[] = toArchive
+              .filter((x) => !existing.has(x.id))
+              .map((x) => ({ ...x, archivedAt }));
+            const okArchive = await saveTaskArchive([...additions, ...archive]);
+            if (okArchive) {
+              const okTasks = await saveTasks(keep);
+              setTasks(okTasks ? keep : t);
+              return;
+            }
+          } catch {
+            /* 失敗時は移動せず全件表示 */
+          }
+        }
+        setTasks(t);
       })
       .catch(() => {})
       .finally(() => setLoaded(true));
@@ -149,19 +192,41 @@ export default function TasksPage() {
     await saveTasks(next);
   };
 
-  // 担当者候補（既存タスク ∪ staff_members）
+  // 担当者候補（既存タスクの全担当 ∪ staff_members）
   const assigneeOptions = useMemo(() => {
     const set = new Set<string>();
     members.forEach((m) => m && set.add(m));
-    tasks.forEach((t) => t.assignee && set.add(t.assignee));
+    tasks.forEach((t) => assigneesOf(t).forEach((a) => set.add(a)));
     return Array.from(set).sort((a, b) => a.localeCompare(b, "ja"));
   }, [members, tasks]);
 
-  // 担当者フィルタのみ適用した母集団（件数サマリーの集計用＝完了を隠すの影響を受けない）
+  // カテゴリフィルタの選択肢（表示中の定義 ∪ タスクで使用中のカテゴリ）
+  const categoryOptions = useMemo(() => {
+    const visible = visibleTaskCategories(categories);
+    const known = new Set(visible.map((c) => c.id));
+    const extra: { id: string; label: string }[] = [];
+    tasks.forEach((t) => {
+      const v = (t.category ?? "").trim();
+      if (v && !known.has(v) && !extra.some((e) => e.id === v)) {
+        extra.push({ id: v, label: taskCategoryLabel(categories, v) });
+      }
+    });
+    return [
+      ...visible.map((c) => ({ id: c.id, label: c.label })),
+      ...extra,
+    ];
+  }, [categories, tasks]);
+
+  // 担当者・カテゴリフィルタのみ適用した母集団（件数サマリーの集計用＝完了を隠すの影響を受けない）
+  // 担当者は assigneesOf に含まれれば一致（チームタスク対応・指示書53）
   const assigneeFilteredTasks = useMemo(() => {
-    if (!filterAssignee) return tasks;
-    return tasks.filter((t) => t.assignee === filterAssignee);
-  }, [tasks, filterAssignee]);
+    return tasks.filter((t) => {
+      if (filterAssignee && !assigneesOf(t).includes(filterAssignee))
+        return false;
+      if (filterCategory && (t.category ?? "") !== filterCategory) return false;
+      return true;
+    });
+  }, [tasks, filterAssignee, filterCategory]);
 
   // 件数サマリー（常に実数）
   const counts = useMemo(
@@ -181,15 +246,35 @@ export default function TasksPage() {
     });
   }, [assigneeFilteredTasks, hideDone, dueFilter, now]);
 
+  // ─── 追加フォームの担当者チップ操作（49のありがとうカードと同パターン） ───
+  const toggleAssignee = (name: string) => {
+    const n = name.trim();
+    if (!n) return;
+    setAssignees((prev) =>
+      prev.includes(n) ? prev.filter((x) => x !== n) : [...prev, n]
+    );
+  };
+
+  const addAssigneeFromInput = () => {
+    const n = assigneeInput.trim();
+    if (!n) return;
+    setAssignees((prev) => (prev.includes(n) ? prev : [...prev, n]));
+    setAssigneeInput("");
+  };
+
   // ─── 操作 ───
   const handleAdd = async () => {
     if (!title.trim()) return;
     setSaving(true);
     const nowIso = new Date().toISOString();
+    // 新規保存は assignees 配列。assignee には先頭を入れて旧読み取りとの互換を保つ
+    const list = assignees.map((a) => a.trim()).filter(Boolean);
     const task: StaffTask = {
       id: newTaskId(),
       title: title.trim(),
-      assignee: assignee.trim(),
+      assignee: list[0] ?? "",
+      assignees: list,
+      category: category || undefined,
       due: localInputToIso(dueLocal),
       status,
       note: note.trim() || undefined,
@@ -197,9 +282,17 @@ export default function TasksPage() {
       updatedAt: nowIso,
     };
     await persist([task, ...tasks]);
+    // 担当者を名簿へマージ
+    const nextMembers = mergeMembers(members, list);
+    if (nextMembers.length !== members.length) {
+      setMembers(nextMembers);
+      await saveStaffMembers(nextMembers);
+    }
     // フォームをリセット
     setTitle("");
-    setAssignee("");
+    setAssignees([]);
+    setAssigneeInput("");
+    setCategory("");
     setDueLocal("");
     setStatus("todo");
     setNote("");
@@ -267,7 +360,7 @@ export default function TasksPage() {
   // ファイルAI解析からの取り込み（新規IDで追加・担当者はstaff_membersにマージ）
   const handleImport = async (newTasks: StaffTask[]) => {
     await persist([...newTasks, ...tasks]);
-    const names = newTasks.map((t) => t.assignee).filter(Boolean);
+    const names = newTasks.flatMap((t) => assigneesOf(t));
     const nextMembers = mergeMembers(members, names);
     if (nextMembers.length !== members.length) {
       setMembers(nextMembers);
@@ -318,20 +411,89 @@ export default function TasksPage() {
               placeholder="例：在庫の発注、ポスター差し替え など"
             />
           </div>
+          <div className="sm:col-span-2 space-y-1">
+            <Label htmlFor="t-assignee-input">
+              担当者（複数選択可・0名=未割当もOK）
+            </Label>
+            {/* 選択済みチップ */}
+            {assignees.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pb-1">
+                {assignees.map((a) => (
+                  <span
+                    key={a}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-teal-light text-teal rounded-full text-xs"
+                  >
+                    {a}
+                    <button
+                      type="button"
+                      onClick={() => toggleAssignee(a)}
+                      className="opacity-60 hover:opacity-100 leading-none"
+                      aria-label={`${a} を担当から外す`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {/* 候補（タップで追加/解除） */}
+            {assigneeOptions.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pb-1 max-h-24 overflow-y-auto">
+                {assigneeOptions.map((a) => (
+                  <button
+                    key={a}
+                    type="button"
+                    onClick={() => toggleAssignee(a)}
+                    className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                      assignees.includes(a)
+                        ? "bg-teal border-teal text-teal-foreground"
+                        : "bg-card border-border text-foreground/70 hover:bg-accent"
+                    }`}
+                  >
+                    {a}
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* 候補に無い名前の自由入力（Enter/追加でチップ化） */}
+            <div className="flex gap-2">
+              <Input
+                id="t-assignee-input"
+                value={assigneeInput}
+                onChange={(e) => setAssigneeInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    addAssigneeFromInput();
+                  }
+                }}
+                placeholder="候補に無い名前はここに入力してEnter"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addAssigneeFromInput}
+                disabled={!assigneeInput.trim()}
+              >
+                追加
+              </Button>
+            </div>
+          </div>
           <div className="space-y-1">
-            <Label htmlFor="t-assignee">担当者</Label>
-            <Input
-              id="t-assignee"
-              list="assignee-list"
-              value={assignee}
-              onChange={(e) => setAssignee(e.target.value)}
-              placeholder="名前を入力 / 選択"
-            />
-            <datalist id="assignee-list">
-              {assigneeOptions.map((a) => (
-                <option key={a} value={a} />
+            <Label htmlFor="t-category">カテゴリ</Label>
+            <select
+              id="t-category"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+            >
+              <option value="">未分類</option>
+              {visibleTaskCategories(categories).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
               ))}
-            </datalist>
+            </select>
           </div>
           <div className="space-y-1">
             <Label htmlFor="t-due">期限</Label>
@@ -377,7 +539,11 @@ export default function TasksPage() {
 
     // ファイルからAIでタスク化
     ai_import: (
-      <FileImport knownMembers={assigneeOptions} onImport={handleImport} />
+      <FileImport
+        knownMembers={assigneeOptions}
+        categories={visibleTaskCategories(categories)}
+        onImport={handleImport}
+      />
     ),
 
     // 件数サマリー
@@ -447,6 +613,18 @@ export default function TasksPage() {
               </option>
             ))}
           </select>
+          <select
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value)}
+            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+          >
+            <option value="">カテゴリ：すべて</option>
+            {categoryOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </select>
           <label className="flex items-center gap-1.5 text-sm cursor-pointer select-none">
             <input
               type="checkbox"
@@ -455,6 +633,13 @@ export default function TasksPage() {
             />
             完了を隠す
           </label>
+          <Link
+            href="/tasks/history"
+            className="text-xs text-foreground/60 hover:text-foreground underline underline-offset-2"
+            title={`完了から${ARCHIVE_AFTER_DAYS}日たったタスクは自動で履歴へ移動します`}
+          >
+            🗄 タスク履歴
+          </Link>
           {/* 列数セレクタ（状態別は元々列構成のため非表示） */}
           {view !== "status" && (
             <div className="flex gap-0.5 rounded-md border border-border bg-card p-0.5">
@@ -487,6 +672,13 @@ export default function TasksPage() {
         </div>
       </div>
 
+      {/* 完了を隠すトグルと履歴の関係の説明（指示書53） */}
+      <p className="text-[11px] text-muted-foreground">
+        完了タスクは直近{ARCHIVE_AFTER_DAYS}
+        日ぶんがボードに残り、それより古いものは「🗄
+        タスク履歴」へ自動で移動します。
+      </p>
+
       {/* 確認用サンプル投入 */}
       {canSeed && (
         <div className="flex justify-center">
@@ -510,6 +702,7 @@ export default function TasksPage() {
           tasks={visibleTasks}
           cols={effectiveCols}
           now={now}
+          categories={categories}
           onStatus={handleStatusChange}
           onToggleDone={handleToggleDone}
           onEdit={setEditing}
@@ -520,6 +713,7 @@ export default function TasksPage() {
           tasks={visibleTasks}
           cols={effectiveCols}
           now={now}
+          categories={categories}
           onStatus={handleStatusChange}
           onToggleDone={handleToggleDone}
           onEdit={setEditing}
@@ -529,6 +723,7 @@ export default function TasksPage() {
         <StatusView
           tasks={visibleTasks}
           now={now}
+          categories={categories}
           onStatus={handleStatusChange}
           onToggleDone={handleToggleDone}
           onEdit={setEditing}
@@ -557,6 +752,7 @@ export default function TasksPage() {
         <EditDialog
           task={editing}
           assigneeOptions={assigneeOptions}
+          categories={categories}
           onClose={() => setEditing(null)}
           onSave={handleEditSave}
         />
@@ -568,6 +764,7 @@ export default function TasksPage() {
 // ─── 行コンポーネント ───
 type RowHandlers = {
   now: Date;
+  categories: TaskCategoryDef[];
   onStatus: (id: string, s: TaskStatus) => void;
   onToggleDone: (id: string) => void;
   onEdit: (t: StaffTask) => void;
@@ -577,6 +774,7 @@ type RowHandlers = {
 function TaskCard({
   task,
   now,
+  categories,
   onStatus,
   onToggleDone,
   onEdit,
@@ -586,6 +784,8 @@ function TaskCard({
   const kind = dueColor(task.due, task.status, now);
   const bucket = bucketOf(task, now);
   const isDone = task.status === "done";
+  const team = isTeamTask(task);
+  const categoryLabel = taskCategoryLabel(categories, task.category);
   return (
     <div
       className={`flex h-full flex-col gap-2 rounded-md border border-l-4 border-border bg-card px-3 py-2 ${DUE_BUCKET_BORDER[bucket]}`}
@@ -621,11 +821,31 @@ function TaskCard({
         </div>
       </div>
 
-      {/* 下段：担当者／期限／状態／操作（狭くても折り返す） */}
+      {/* 下段：担当者／カテゴリ／期限／状態／操作（狭くても折り返す） */}
       <div className="mt-auto flex flex-wrap items-center gap-2">
-        {showAssignee && (
-          <span className="text-xs text-foreground/70 truncate max-w-[120px]">
-            {task.assignee || "—"}
+        {showAssignee ? (
+          <span
+            className="text-xs text-foreground/70 truncate max-w-[160px]"
+            title={assigneesOf(task).join("・") || undefined}
+          >
+            {team && <span title="チームタスク">👥 </span>}
+            {formatAssignees(task)}
+          </span>
+        ) : (
+          // 担当者別ビューでもチームタスクは👥マークで分かるようにする（指示書53）
+          team && (
+            <span
+              className="text-xs"
+              title={`チームタスク: ${assigneesOf(task).join("・")}`}
+            >
+              👥
+            </span>
+          )
+        )}
+
+        {categoryLabel && (
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 whitespace-nowrap">
+            {categoryLabel}
           </span>
         )}
 
@@ -731,6 +951,7 @@ function DueView({
 }
 
 // ─── 担当者別ビュー ───
+// 複数担当のタスクは担当者それぞれのグループに表示する（未完了件数も各担当者に計上）。指示書53
 function AssigneeView({
   tasks,
   cols,
@@ -738,9 +959,12 @@ function AssigneeView({
 }: RowHandlers & { tasks: StaffTask[]; cols: number }) {
   const groups = new Map<string, StaffTask[]>();
   tasks.forEach((t) => {
-    const key = t.assignee || "（未割当）";
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(t);
+    const names = assigneesOf(t);
+    const keys = names.length > 0 ? names : ["（未割当）"];
+    for (const key of keys) {
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(t);
+    }
   });
   const entries = Array.from(groups.entries()).sort((a, b) =>
     a[0].localeCompare(b[0], "ja")
@@ -805,30 +1029,59 @@ function StatusView({
   );
 }
 
-// ─── 編集ダイアログ ───
+// ─── 編集ダイアログ（担当者チップ・カテゴリ対応。指示書53） ───
 function EditDialog({
   task,
   assigneeOptions,
+  categories,
   onClose,
   onSave,
 }: {
   task: StaffTask;
   assigneeOptions: string[];
+  categories: TaskCategoryDef[];
   onClose: () => void;
   onSave: (t: StaffTask) => void;
 }) {
   const [title, setTitle] = useState(task.title);
-  const [assignee, setAssignee] = useState(task.assignee);
+  const [assignees, setAssignees] = useState<string[]>(assigneesOf(task));
+  const [assigneeInput, setAssigneeInput] = useState("");
+  const [category, setCategory] = useState(task.category ?? "");
   const [dueLocal, setDueLocal] = useState(isoToLocalInput(task.due));
   const [status, setStatus] = useState<TaskStatus>(task.status);
   const [note, setNote] = useState(task.note ?? "");
 
+  const toggle = (name: string) => {
+    const n = name.trim();
+    if (!n) return;
+    setAssignees((prev) =>
+      prev.includes(n) ? prev.filter((x) => x !== n) : [...prev, n]
+    );
+  };
+
+  const addFromInput = () => {
+    const n = assigneeInput.trim();
+    if (!n) return;
+    setAssignees((prev) => (prev.includes(n) ? prev : [...prev, n]));
+    setAssigneeInput("");
+  };
+
+  // 現在のカテゴリが非表示/未知でも選択肢に残す（値のサイレント消失防止）
+  const catOptions = visibleTaskCategories(categories);
+  const extraCat =
+    category && !catOptions.some((c) => c.id === category)
+      ? { id: category, label: taskCategoryLabel(categories, category) }
+      : null;
+
   const save = () => {
     if (!title.trim()) return;
+    const list = assignees.map((a) => a.trim()).filter(Boolean);
     onSave({
       ...task,
       title: title.trim(),
-      assignee: assignee.trim(),
+      assignee: list[0] ?? "",
+      assignees: list,
+      category: category || undefined,
       due: localInputToIso(dueLocal),
       status,
       note: note.trim() || undefined,
@@ -850,20 +1103,88 @@ function EditDialog({
               onChange={(e) => setTitle(e.target.value)}
             />
           </div>
+          <div className="space-y-1">
+            <Label htmlFor="e-assignee-input">担当者（複数選択可）</Label>
+            {assignees.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pb-1">
+                {assignees.map((a) => (
+                  <span
+                    key={a}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-teal-light text-teal rounded-full text-xs"
+                  >
+                    {a}
+                    <button
+                      type="button"
+                      onClick={() => toggle(a)}
+                      className="opacity-60 hover:opacity-100 leading-none"
+                      aria-label={`${a} を担当から外す`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {assigneeOptions.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pb-1 max-h-24 overflow-y-auto">
+                {assigneeOptions.map((a) => (
+                  <button
+                    key={a}
+                    type="button"
+                    onClick={() => toggle(a)}
+                    className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                      assignees.includes(a)
+                        ? "bg-teal border-teal text-teal-foreground"
+                        : "bg-card border-border text-foreground/70 hover:bg-accent"
+                    }`}
+                  >
+                    {a}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Input
+                id="e-assignee-input"
+                value={assigneeInput}
+                onChange={(e) => setAssigneeInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    addFromInput();
+                  }
+                }}
+                placeholder="候補に無い名前はここに入力してEnter"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addFromInput}
+                disabled={!assigneeInput.trim()}
+              >
+                追加
+              </Button>
+            </div>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label htmlFor="e-assignee">担当者</Label>
-              <Input
-                id="e-assignee"
-                list="edit-assignee-list"
-                value={assignee}
-                onChange={(e) => setAssignee(e.target.value)}
-              />
-              <datalist id="edit-assignee-list">
-                {assigneeOptions.map((a) => (
-                  <option key={a} value={a} />
+              <Label htmlFor="e-category">カテゴリ</Label>
+              <select
+                id="e-category"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+              >
+                <option value="">未分類</option>
+                {catOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
                 ))}
-              </datalist>
+                {extraCat && (
+                  <option value={extraCat.id}>{extraCat.label}</option>
+                )}
+              </select>
             </div>
             <div className="space-y-1">
               <Label htmlFor="e-status">状態</Label>

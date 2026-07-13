@@ -98,9 +98,13 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as {
       items?: InItem[];
       members?: string[];
+      categories?: string[];
     };
     const items = Array.isArray(body.items) ? body.items : [];
     const members = Array.isArray(body.members) ? body.members : [];
+    const categories = Array.isArray(body.categories)
+      ? body.categories.filter((c): c is string => typeof c === "string" && !!c)
+      : [];
 
     if (items.length === 0)
       return NextResponse.json({ tasks: [] });
@@ -122,6 +126,11 @@ export async function POST(req: NextRequest) {
         ? `既知の担当者候補（氏名表記はできるだけこの中の表記に合わせる）: ${members.join("、")}`
         : "既知の担当者候補は未登録。";
 
+    const categoryHint =
+      categories.length > 0
+        ? `カテゴリ候補（この中から推定できれば入れる。判断できなければ空文字）: ${categories.join("、")}`
+        : "カテゴリ候補は未登録（category は常に空文字でよい）。";
+
     // テキスト系をまとめる
     const textBlocks = items
       .filter((it) => it.kind !== "image" && it.text)
@@ -132,14 +141,16 @@ export async function POST(req: NextRequest) {
 アップロードされた内容（表・テキスト・画像/スクリーンショット/手書きメモ）から、クリニックの業務タスクを抽出してください。
 今日の日付（Asia/Tokyo）: ${today}
 ${memberHint}
+${categoryHint}
 
 各タスクを次のJSONオブジェクトで表し、JSON配列のみを返してください:
-{"title": "簡潔な内容", "assignee": "担当者氏名（不明なら空文字）", "due": "YYYY-MM-DD または null", "status": "todo|doing|done", "note": "補足（なければ空文字）"}
+{"title": "簡潔な内容", "assignees": ["担当者氏名", ...], "category": "カテゴリ（候補から推定・不明なら空文字）", "due": "YYYY-MM-DD または null", "status": "todo|doing|done", "note": "補足（なければ空文字）"}
 
 ルール:
 - due は ISO日付(YYYY-MM-DD) または null。「明日」「今週中」「来週月曜」等の相対表現は今日(${today})を基準に解決する。期限が読み取れなければ null。
 - status は 'todo'|'doing'|'done' のいずれか。既定は 'todo'。完了済みと読めるものは 'done'。
-- assignee は分かれば氏名、不明なら空文字。既知の担当者候補に近い表記があればそれに合わせる。
+- assignees は担当者氏名の配列。担当が複数ならすべて入れる（「山本・佐藤」「田中,鈴木」のような連名は分割して配列に）。不明なら空配列 []。既知の担当者候補に近い表記があればそれに合わせる。
+- category はカテゴリ候補の中から推定できれば入れる。判断できなければ空文字。
 - title は簡潔に。補足は note に入れる。
 - タスクが読み取れない場合は空配列 [] を返す。
 - 出力は JSON配列のみ。前後の文章・説明・コードフェンス(\`\`\`)を付けない。JSONは必ず完結させる。

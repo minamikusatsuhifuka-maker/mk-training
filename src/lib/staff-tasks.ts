@@ -7,6 +7,8 @@ import { getContent, saveContent } from "./content-store";
 // ─── キー ───
 export const STAFF_TASKS_KEY = "staff_tasks";
 export const STAFF_MEMBERS_KEY = "staff_members";
+export const STAFF_TASKS_ARCHIVE_KEY = "staff_tasks_archive";
+export const TASK_CATEGORY_CONFIG_KEY = "task_category_config";
 
 // ─── 型 ───
 export type TaskStatus = "todo" | "doing" | "done";
@@ -14,13 +16,44 @@ export type TaskStatus = "todo" | "doing" | "done";
 export type StaffTask = {
   id: string;
   title: string;
+  /** 旧・単一担当（互換維持のため残置。読み取りは assigneesOf() を使う） */
   assignee: string;
+  /** 複数担当（指示書53）。新規保存はこちらの配列で行う */
+  assignees?: string[];
+  /** カテゴリid（task_category_config の id。未分類は undefined） */
+  category?: string;
   due?: string; // ISO文字列（任意）
   status: TaskStatus;
   note?: string;
   createdAt: string;
   updatedAt: string;
 };
+
+// 担当者を常に配列で取り出す（旧データの単一 assignee と新データの assignees の両対応）
+export function assigneesOf(t: Pick<StaffTask, "assignee" | "assignees">): string[] {
+  if (Array.isArray(t.assignees)) {
+    const list = t.assignees.filter(
+      (s) => typeof s === "string" && s.trim() !== ""
+    );
+    if (list.length > 0) return list;
+  }
+  return t.assignee?.trim() ? [t.assignee.trim()] : [];
+}
+
+// チームタスク（担当2名以上）か
+export function isTeamTask(t: Pick<StaffTask, "assignee" | "assignees">): boolean {
+  return assigneesOf(t).length >= 2;
+}
+
+// 担当者の表示用連結（3名までは全員、4名以上は「A・B +N」）
+export function formatAssignees(
+  t: Pick<StaffTask, "assignee" | "assignees">
+): string {
+  const names = assigneesOf(t);
+  if (names.length === 0) return "—";
+  if (names.length <= 3) return names.join("・");
+  return `${names.slice(0, 2).join("・")} +${names.length - 2}`;
+}
 
 // 状態ラベル
 export const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -46,6 +79,115 @@ export async function loadStaffMembers(): Promise<string[]> {
 
 export async function saveStaffMembers(members: string[]): Promise<boolean> {
   return saveContent<string>(STAFF_MEMBERS_KEY, members);
+}
+
+// ─── タスクカテゴリ（指示書53。content_store `task_category_config` 配列保存） ───
+export type TaskCategoryDef = {
+  id: string;
+  label: string;
+  order: number;
+  hidden?: boolean;
+};
+
+// 既定セット（idは既定ラベルのまま＝表示解決が素直。新規追加は tc_xxx 自動生成）
+export const DEFAULT_TASK_CATEGORIES: TaskCategoryDef[] = [
+  { id: "接遇", label: "接遇", order: 1 },
+  { id: "在庫・発注", label: "在庫・発注", order: 2 },
+  { id: "事務", label: "事務", order: 3 },
+  { id: "研修", label: "研修", order: 4 },
+  { id: "院内整備", label: "院内整備", order: 5 },
+  { id: "その他", label: "その他", order: 6 },
+];
+
+// 保存データを検証（不正・空なら既定セットにフォールバック）
+export function normalizeTaskCategories(raw: unknown): TaskCategoryDef[] {
+  const cats: TaskCategoryDef[] = [];
+  if (Array.isArray(raw)) {
+    for (const c of raw) {
+      if (!c || typeof c !== "object") continue;
+      const o = c as Record<string, unknown>;
+      if (typeof o.id !== "string" || !o.id.trim()) continue;
+      if (typeof o.label !== "string" || !o.label.trim()) continue;
+      cats.push({
+        id: o.id.trim(),
+        label: o.label.trim(),
+        order: typeof o.order === "number" ? o.order : cats.length + 1,
+        hidden: o.hidden === true ? true : undefined,
+      });
+    }
+  }
+  return cats.length > 0
+    ? cats
+    : DEFAULT_TASK_CATEGORIES.map((c) => ({ ...c }));
+}
+
+export async function loadTaskCategories(): Promise<TaskCategoryDef[]> {
+  const rows = await getContent<unknown>(TASK_CATEGORY_CONFIG_KEY, []);
+  const cats = normalizeTaskCategories(rows);
+  return [...cats].sort((a, b) => a.order - b.order);
+}
+
+export async function saveTaskCategories(
+  cats: TaskCategoryDef[]
+): Promise<boolean> {
+  const body = cats.map((c, i) => ({ ...c, order: i + 1 }));
+  return saveContent<TaskCategoryDef>(TASK_CATEGORY_CONFIG_KEY, body);
+}
+
+// 選択肢に出すカテゴリ（hidden除外・order昇順）
+export function visibleTaskCategories(
+  cats: TaskCategoryDef[]
+): TaskCategoryDef[] {
+  return cats.filter((c) => !c.hidden).sort((a, b) => a.order - b.order);
+}
+
+// カテゴリid→表示ラベル（hidden・未知でも壊れない: 定義が無ければ値そのまま）
+export function taskCategoryLabel(
+  cats: TaskCategoryDef[],
+  categoryId: string | undefined
+): string {
+  const v = (categoryId ?? "").trim();
+  if (!v) return "";
+  return cats.find((c) => c.id === v)?.label ?? v;
+}
+
+// ─── 完了タスクのアーカイブ（指示書53） ───
+export type ArchivedTask = StaffTask & { archivedAt: string };
+
+// done になってからこの日数（updatedAt基準）を過ぎたらアーカイブへ移動
+export const ARCHIVE_AFTER_DAYS = 7;
+
+export async function loadTaskArchive(): Promise<ArchivedTask[]> {
+  return getContent<ArchivedTask>(STAFF_TASKS_ARCHIVE_KEY, []);
+}
+
+export async function saveTaskArchive(items: ArchivedTask[]): Promise<boolean> {
+  return saveContent<ArchivedTask>(STAFF_TASKS_ARCHIVE_KEY, items);
+}
+
+// アーカイブ対象を分離する（冪等: /tasks 読み込み時に呼ぶ）。
+// done かつ updatedAt が7日以上前。サンプル（sample-）は移動せず「サンプルを消す」の削除対象のまま。
+export function splitArchivableTasks(
+  tasks: StaffTask[],
+  now: Date
+): { keep: StaffTask[]; toArchive: StaffTask[] } {
+  const threshold = now.getTime() - ARCHIVE_AFTER_DAYS * 86400000;
+  const keep: StaffTask[] = [];
+  const toArchive: StaffTask[] = [];
+  for (const t of tasks) {
+    const updated = new Date(t.updatedAt).getTime();
+    if (
+      t.status === "done" &&
+      !isSampleTask(t) &&
+      !isNaN(updated) &&
+      updated < threshold
+    ) {
+      toArchive.push(t);
+    } else {
+      keep.push(t);
+    }
+  }
+  return { keep, toArchive };
 }
 
 // ─── ID生成（SSR非依存・クライアントで利用） ───
@@ -309,16 +451,18 @@ export function mergeMembers(existing: string[], add: string[]): string[] {
 }
 
 // ─── AI解析（ファイル取り込み）用 ───
-// AIが返すタスク候補（dueは YYYY-MM-DD または null）
+// AIが返すタスク候補（dueは YYYY-MM-DD または null。担当は複数可・指示書53）
 export type ParsedTask = {
   title: string;
-  assignee: string;
+  assignees: string[];
+  category: string;
   due: string | null;
   status: TaskStatus;
   note: string;
 };
 
-// AIの生オブジェクトを ParsedTask に正規化（不正な行は null）
+// AIの生オブジェクトを ParsedTask に正規化（不正な行は null）。
+// 担当は assignees(配列) 優先、無ければ assignee(文字列・カンマ/読点区切り可) を分割。
 export function normalizeParsedTask(raw: unknown): ParsedTask | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
@@ -336,9 +480,24 @@ export function normalizeParsedTask(raw: unknown): ParsedTask | null {
     if (m) due = m[0];
   }
 
+  let assignees: string[] = [];
+  if (Array.isArray(o.assignees)) {
+    assignees = o.assignees
+      .map((a) => String(a ?? "").trim())
+      .filter(Boolean);
+  } else if (typeof o.assignee === "string") {
+    assignees = o.assignee
+      .split(/[、,，・\/]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  // 重複除去（表記そのまま）
+  assignees = Array.from(new Set(assignees));
+
   return {
     title,
-    assignee: String(o.assignee ?? "").trim(),
+    assignees,
+    category: String(o.category ?? "").trim(),
     due,
     status,
     note: String(o.note ?? "").trim(),
