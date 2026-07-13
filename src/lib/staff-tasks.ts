@@ -45,14 +45,14 @@ export function isTeamTask(t: Pick<StaffTask, "assignee" | "assignees">): boolea
   return assigneesOf(t).length >= 2;
 }
 
-// 担当者の表示用連結（3名までは全員、4名以上は「A・B +N」）
+// 担当者の表示用連結。常に全員を「・」でつなぐ（指示書54で「+N」省略を撤廃。
+// 長い場合の折り返しは表示側の flex-wrap / break-words で対応する）
 export function formatAssignees(
   t: Pick<StaffTask, "assignee" | "assignees">
 ): string {
   const names = assigneesOf(t);
   if (names.length === 0) return "—";
-  if (names.length <= 3) return names.join("・");
-  return `${names.slice(0, 2).join("・")} +${names.length - 2}`;
+  return names.join("・");
 }
 
 // 状態ラベル

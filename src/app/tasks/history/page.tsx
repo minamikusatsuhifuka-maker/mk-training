@@ -279,10 +279,8 @@ export default function TaskHistoryPage() {
                         </p>
                       )}
                       <div className="flex flex-wrap items-center gap-2 mt-1">
-                        <span
-                          className="text-xs text-foreground/70"
-                          title={assigneesOf(t).join("・") || undefined}
-                        >
+                        {/* 全員表示（54）: truncateせず折り返す */}
+                        <span className="text-xs text-foreground/70 min-w-0 break-words whitespace-normal">
                           {isTeamTask(t) && (
                             <span title="チームタスク">👥 </span>
                           )}

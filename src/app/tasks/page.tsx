@@ -1,6 +1,13 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
 import { FileImport } from "@/components/tasks/FileImport";
@@ -66,7 +73,7 @@ import {
   type TaskStatus,
 } from "@/lib/staff-tasks";
 
-type ViewKey = "due" | "assignee" | "status";
+type ViewKey = "due" | "assignee" | "status" | "team";
 
 const STATUS_SELECT_CLASS: Record<TaskStatus, string> = {
   todo: "bg-slate-100 text-slate-700 border-slate-200",
@@ -101,6 +108,9 @@ export default function TasksPage() {
   const [assigneeInput, setAssigneeInput] = useState("");
   const [category, setCategory] = useState("");
   const [dueLocal, setDueLocal] = useState("");
+  // 期限の「決定」= ピッカーを閉じて確定表示を出す補助（押さなくても入力値は保存される。指示書54）
+  const [dueConfirmed, setDueConfirmed] = useState(false);
+  const dueInputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<TaskStatus>("todo");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -294,6 +304,7 @@ export default function TasksPage() {
     setAssigneeInput("");
     setCategory("");
     setDueLocal("");
+    setDueConfirmed(false);
     setStatus("todo");
     setNote("");
     setSaving(false);
@@ -497,12 +508,52 @@ export default function TasksPage() {
           </div>
           <div className="space-y-1">
             <Label htmlFor="t-due">期限</Label>
-            <Input
-              id="t-due"
-              type="datetime-local"
-              value={dueLocal}
-              onChange={(e) => setDueLocal(e.target.value)}
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                ref={dueInputRef}
+                id="t-due"
+                type="datetime-local"
+                value={dueLocal}
+                onChange={(e) => {
+                  setDueLocal(e.target.value);
+                  setDueConfirmed(false);
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!dueLocal}
+                onClick={() => {
+                  dueInputRef.current?.blur();
+                  setDueConfirmed(true);
+                }}
+                title="ピッカーを閉じて期限を確認する"
+              >
+                決定
+              </Button>
+              {dueLocal && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDueLocal("");
+                    setDueConfirmed(false);
+                  }}
+                  className="text-xs text-foreground/50 hover:text-red-600 underline underline-offset-2 shrink-0"
+                >
+                  クリア
+                </button>
+              )}
+            </div>
+            {dueConfirmed && dueLocal ? (
+              <p className="text-xs text-emerald-700">
+                ✓ {formatDue(localInputToIso(dueLocal))} に設定
+              </p>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                決定を押さなくても、入力した期限はそのまま保存されます
+              </p>
+            )}
           </div>
           <div className="space-y-1">
             <Label htmlFor="t-status">状態</Label>
@@ -595,10 +646,11 @@ export default function TasksPage() {
       <>
       {/* ビュー切替 + フィルタ */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-1 rounded-lg border border-border bg-card p-1">
+        <div className="flex flex-wrap gap-1 rounded-lg border border-border bg-card p-1">
           {tabBtn("due", "期限順")}
           {tabBtn("assignee", "担当者別")}
           {tabBtn("status", "状態別")}
+          {tabBtn("team", "👥 チームタスク")}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <select
@@ -693,7 +745,25 @@ export default function TasksPage() {
       )}
 
       {/* 本体 */}
-      {visibleTasks.length === 0 ? (
+      {view === "team" ? (
+        // 👥 チームタスク（担当2名以上のみ・期限順ビューと同じ表示。指示書54）
+        visibleTasks.filter(isTeamTask).length === 0 ? (
+          <p className="text-sm text-muted-foreground py-8 text-center">
+            チームタスクはまだありません。担当者を2名以上選んで登録するとここに表示されます。
+          </p>
+        ) : (
+          <DueView
+            tasks={visibleTasks.filter(isTeamTask)}
+            cols={effectiveCols}
+            now={now}
+            categories={categories}
+            onStatus={handleStatusChange}
+            onToggleDone={handleToggleDone}
+            onEdit={setEditing}
+            onDelete={handleDelete}
+          />
+        )
+      ) : visibleTasks.length === 0 ? (
         <p className="text-sm text-muted-foreground py-8 text-center">
           表示できるタスクがありません。
         </p>
@@ -824,10 +894,8 @@ function TaskCard({
       {/* 下段：担当者／カテゴリ／期限／状態／操作（狭くても折り返す） */}
       <div className="mt-auto flex flex-wrap items-center gap-2">
         {showAssignee ? (
-          <span
-            className="text-xs text-foreground/70 truncate max-w-[160px]"
-            title={assigneesOf(task).join("・") || undefined}
-          >
+          // 全員表示（54）: truncateで切らず折り返す。名前が全員見えることを優先
+          <span className="text-xs text-foreground/70 min-w-0 break-words whitespace-normal">
             {team && <span title="チームタスク">👥 </span>}
             {formatAssignees(task)}
           </span>
@@ -1048,6 +1116,9 @@ function EditDialog({
   const [assigneeInput, setAssigneeInput] = useState("");
   const [category, setCategory] = useState(task.category ?? "");
   const [dueLocal, setDueLocal] = useState(isoToLocalInput(task.due));
+  // 期限の「決定」（追加フォームと同じ補助。押さなくても入力値は保存される）
+  const [dueConfirmed, setDueConfirmed] = useState(false);
+  const dueInputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<TaskStatus>(task.status);
   const [note, setNote] = useState(task.note ?? "");
 
@@ -1204,12 +1275,52 @@ function EditDialog({
           </div>
           <div className="space-y-1">
             <Label htmlFor="e-due">期限</Label>
-            <Input
-              id="e-due"
-              type="datetime-local"
-              value={dueLocal}
-              onChange={(e) => setDueLocal(e.target.value)}
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                ref={dueInputRef}
+                id="e-due"
+                type="datetime-local"
+                value={dueLocal}
+                onChange={(e) => {
+                  setDueLocal(e.target.value);
+                  setDueConfirmed(false);
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!dueLocal}
+                onClick={() => {
+                  dueInputRef.current?.blur();
+                  setDueConfirmed(true);
+                }}
+                title="ピッカーを閉じて期限を確認する"
+              >
+                決定
+              </Button>
+              {dueLocal && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDueLocal("");
+                    setDueConfirmed(false);
+                  }}
+                  className="text-xs text-foreground/50 hover:text-red-600 underline underline-offset-2 shrink-0"
+                >
+                  クリア
+                </button>
+              )}
+            </div>
+            {dueConfirmed && dueLocal ? (
+              <p className="text-xs text-emerald-700">
+                ✓ {formatDue(localInputToIso(dueLocal))} に設定
+              </p>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                決定を押さなくても、入力した期限はそのまま保存されます
+              </p>
+            )}
           </div>
           <div className="space-y-1">
             <Label htmlFor="e-note">メモ</Label>
