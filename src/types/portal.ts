@@ -23,10 +23,26 @@ export type NewsItem = {
 
 // ─── 緊急度の表示メタ（色・ラベル・アイコン） ───
 // border/bg はカード枠の色付け用（normalは空文字＝既存の枠を変更しない）。
+// bubble/bubbleTail/bubbleIcon/bubblePulse はキャラクター通知の吹き出し用（指示書48）。
 // Tailwind purge回避のためリテラルクラスで定義。
 export const URGENCY_META: Record<
   Urgency,
-  { label: string; emoji: string; badge: string; dot: string; border: string; bg: string }
+  {
+    label: string;
+    emoji: string;
+    badge: string;
+    dot: string;
+    border: string;
+    bg: string;
+    /** 吹き出し本体の背景・文字色 */
+    bubble: string;
+    /** 吹き出しの三角（しっぽ）の背景色。bubble と同色 */
+    bubbleTail: string;
+    /** 吹き出し先頭のアイコン */
+    bubbleIcon: string;
+    /** 緊急のみ控えめな点滅（他は空文字＝アニメなし） */
+    bubblePulse: string;
+  }
 > = {
   emergency: {
     label: "緊急",
@@ -35,6 +51,10 @@ export const URGENCY_META: Record<
     dot: "bg-red-500",
     border: "border-2 border-red-300",
     bg: "bg-red-50",
+    bubble: "bg-red-600 text-white",
+    bubbleTail: "bg-red-600",
+    bubbleIcon: "🚨",
+    bubblePulse: "animate-pulse",
   },
   semi: {
     label: "準緊急",
@@ -43,6 +63,10 @@ export const URGENCY_META: Record<
     dot: "bg-amber-500",
     border: "border-2 border-amber-300",
     bg: "bg-amber-50",
+    bubble: "bg-amber-500 text-white",
+    bubbleTail: "bg-amber-500",
+    bubbleIcon: "⚠️",
+    bubblePulse: "",
   },
   normal: {
     label: "通常",
@@ -51,6 +75,10 @@ export const URGENCY_META: Record<
     dot: "bg-green-500",
     border: "",
     bg: "",
+    bubble: "bg-teal-600 text-white",
+    bubbleTail: "bg-teal-600",
+    bubbleIcon: "📢",
+    bubblePulse: "",
   },
 };
 

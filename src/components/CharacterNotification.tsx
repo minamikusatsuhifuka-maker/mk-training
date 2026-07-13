@@ -5,6 +5,8 @@ import { loadCharacterSettings } from "@/lib/portal-store";
 import {
   DEFAULT_CHARACTER_SETTINGS,
   isNewsExpired,
+  URGENCY_META,
+  urgencyOf,
   type CharacterSettings,
   type CharacterSvgType,
   type NewsItem,
@@ -190,6 +192,8 @@ export default function CharacterNotification({ news, onOpenNews }: Props) {
         const emojiChar = isSingle
           ? settings.emoji
           : CHARACTER_POOL[i % CHARACTER_POOL.length];
+        // 吹き出しの色・アイコンはお知らせの緊急度に連動（指示書48。カード枠と同じ色体系）
+        const urgency = URGENCY_META[urgencyOf(item)];
 
         return (
           <div
@@ -206,15 +210,23 @@ export default function CharacterNotification({ news, onOpenNews }: Props) {
             }}
           >
             <div className="relative">
-              {/* 吹き出し（キャラの上・新着タイトルを表示／文字切れ防止のパディング） */}
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 -translate-y-full">
-                <div className="bg-teal-600 text-white text-xs leading-none py-2 px-4 rounded-full shadow-lg animate-bounce flex items-center gap-1 max-w-[220px]">
-                  <span className="shrink-0">📢</span>
+              {/* 吹き出し（キャラの上・新着タイトルを表示／文字切れ防止のパディング）
+                  色・アイコンは緊急度連動: 緊急=赤🚨+点滅 / 準緊急=アンバー⚠️ / 通常=緑📢。
+                  点滅(animate-pulse)はラッパー側に付けて本体のanimate-bounceと共存させる */}
+              <div
+                className={`absolute -top-3 left-1/2 -translate-x-1/2 -translate-y-full ${urgency.bubblePulse}`}
+              >
+                <div
+                  className={`${urgency.bubble} text-xs leading-none py-2 px-4 rounded-full shadow-lg animate-bounce flex items-center gap-1 max-w-[220px]`}
+                >
+                  <span className="shrink-0">{urgency.bubbleIcon}</span>
                   <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
                     {item.title}
                   </span>
                 </div>
-                <div className="w-2 h-2 bg-teal-600 rotate-45 mx-auto -mt-1" />
+                <div
+                  className={`w-2 h-2 ${urgency.bubbleTail} rotate-45 mx-auto -mt-1`}
+                />
               </div>
 
               {/* キャラクター本体 */}
