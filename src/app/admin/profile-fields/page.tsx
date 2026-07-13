@@ -210,7 +210,7 @@ export default function ProfileFieldsAdminPage() {
   const addRole = () => {
     const label = newRoleLabel.trim();
     if (!label) {
-      setError("役職のラベルを入力してください");
+      setError("役割（職種）のラベルを入力してください");
       return;
     }
     setRoles((rs) => [
@@ -230,7 +230,7 @@ export default function ProfileFieldsAdminPage() {
   const resetRolesToDefault = () => {
     if (
       !confirm(
-        "役職を既定セット（6役職）に戻しますか？\n（追加した役職は一覧から消えますが、メンバーの役職データは残ります。保存ボタンを押すまで確定しません）"
+        "役割（職種）を既定セット（6件）に戻しますか？\n（追加した役割は一覧から消えますが、メンバーの役割データは残ります。保存ボタンを押すまで確定しません）"
       )
     ) {
       return;
@@ -240,7 +240,7 @@ export default function ProfileFieldsAdminPage() {
 
   const handleSaveRoles = async () => {
     if (roles.some((r) => !r.label.trim())) {
-      setError("ラベルが空の役職があります");
+      setError("ラベルが空の役割（職種）があります");
       return;
     }
     setRoleSaving(true);
@@ -248,10 +248,10 @@ export default function ProfileFieldsAdminPage() {
     const ok = await saveProfileRoleConfig(roles);
     setRoleSaving(false);
     if (!ok) {
-      setError("役職の選択肢の保存に失敗しました");
+      setError("役割（職種）の選択肢の保存に失敗しました");
       return;
     }
-    flash("💾 役職の選択肢を保存しました（/profile と /members に反映されます）");
+    flash("💾 役割（職種）の選択肢を保存しました（/profile と /members に反映されます）");
   };
 
   const handleSave = async () => {
@@ -453,7 +453,7 @@ export default function ProfileFieldsAdminPage() {
               {(
                 [
                   { key: "showKana", label: "ふりがな" },
-                  { key: "showRole", label: "役職" },
+                  { key: "showRole", label: "役割（職種）" },
                   { key: "showMessage", label: "ひとこと" },
                   {
                     key: "showWeeklyAnswers",
@@ -588,11 +588,11 @@ export default function ProfileFieldsAdminPage() {
           <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
             <div>
               <h2 className="text-sm font-semibold text-slate-800">
-                👔 役職の選択肢
+                👔 役割（職種）の選択肢
               </h2>
               <p className="text-xs text-slate-500 mt-1">
                 /profile
-                の役職セレクトの選択肢と、メンバー紹介カードのロールカラーを編集します。使用中の役職は非表示にすると選択肢から消えますが、既存メンバーの表示は維持されます。
+                の役割（職種）セレクトの選択肢と、メンバー紹介カードのロールカラーを編集します。使用中の役割は非表示にすると選択肢から消えますが、既存メンバーの表示は維持されます。
               </p>
             </div>
 
@@ -664,7 +664,7 @@ export default function ProfileFieldsAdminPage() {
               <Input
                 value={newRoleLabel}
                 onChange={(e) => setNewRoleLabel(e.target.value)}
-                placeholder="新しい役職名（例：管理栄養士）"
+                placeholder="新しい役割名（例：マルチタスク医療事務・医師）"
                 className="h-8 text-sm flex-1 min-w-[180px]"
               />
               <select
@@ -690,14 +690,14 @@ export default function ProfileFieldsAdminPage() {
 
             <div className="flex flex-wrap items-center justify-between gap-2">
               <Button type="button" variant="outline" onClick={resetRolesToDefault}>
-                既定の6役職に戻す
+                既定の6件に戻す
               </Button>
               <Button
                 type="button"
                 onClick={handleSaveRoles}
                 disabled={roleSaving}
               >
-                {roleSaving ? "保存中..." : "💾 役職の選択肢を保存"}
+                {roleSaving ? "保存中..." : "💾 役割（職種）の選択肢を保存"}
               </Button>
             </div>
           </div>

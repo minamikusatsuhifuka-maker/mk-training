@@ -40,6 +40,8 @@ export function tokenize(text: string): Set<string> {
 
 function fieldValue(p: StaffProfile, id: string): string {
   if (id === "hobbies") return p.hobbies ?? "";
+  // 🔒（private）のカスタム項目は共通点の判定対象からも除外する（指示書52）
+  if (p.customFieldsPrivacy?.[id] === "private") return "";
   return p.customFields?.[id] ?? "";
 }
 
@@ -78,9 +80,9 @@ export function computeCommonPoints(
     }
   }
 
-  // 役職（同じ職種）
+  // 役割（同じ職種）
   if (mine.role && other.role && mine.role === other.role) {
-    points.push({ key: "role", label: "役職", values: [mine.role] });
+    points.push({ key: "role", label: "役割（職種）", values: [mine.role] });
   }
 
   return points;

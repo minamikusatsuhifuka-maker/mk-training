@@ -32,6 +32,7 @@ import {
   loadProfilesIndex,
   loadStaffProfile,
   loadAllStaffProfiles,
+  isFieldPrivate,
   type StaffProfile,
   type StaffProfileIndexEntry,
 } from "@/lib/staff-profiles";
@@ -231,6 +232,7 @@ export default function MembersPage() {
     .filter((f): f is CardField => f !== null);
 
   // 1人分のカードに載せる項目値（値が空のものは出さない・入力済みはすべて表示）
+  // 🔒（customFieldsPrivacy=private）のカスタム項目は値があっても出さない（指示書52）。
   const cardValuesOf = (
     userId: string
   ): { id: string; label: string; value: string; long: boolean }[] => {
@@ -239,6 +241,8 @@ export default function MembersPage() {
     const values: { id: string; label: string; value: string; long: boolean }[] =
       [];
     for (const f of cardFields) {
+      if (f.id !== "bio" && f.id !== "hobbies" && isFieldPrivate(p, f.id))
+        continue;
       const v =
         f.id === "bio"
           ? p.bio
@@ -533,9 +537,13 @@ export default function MembersPage() {
                 </div>
               )}
 
-              {/* カスタム項目（値が入っているものだけ表示） */}
+              {/* カスタム項目（値が入っているものだけ表示。🔒=privateは出さない・指示書52） */}
               {fieldDefs
-                .filter((f) => (selected.customFields?.[f.id] ?? "").trim())
+                .filter(
+                  (f) =>
+                    !isFieldPrivate(selected, f.id) &&
+                    (selected.customFields?.[f.id] ?? "").trim()
+                )
                 .map((f) => {
                   const Icon = fieldIconOf(f.id);
                   return (

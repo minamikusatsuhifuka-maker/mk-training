@@ -122,6 +122,29 @@ export async function PUT(req: NextRequest) {
     }
   }
 
+  // 開示設定（指示書52）: customFields と同じマージ方式（送られたキーのみ更新）。
+  // 'public' は既定値なのでエントリを削除して保存データを増やさない。
+  const currentPrivacy =
+    current.customFieldsPrivacy && typeof current.customFieldsPrivacy === "object"
+      ? current.customFieldsPrivacy
+      : {};
+  const customFieldsPrivacy: Record<string, "public" | "private"> = {
+    ...currentPrivacy,
+  };
+  if (body.customFieldsPrivacy && typeof body.customFieldsPrivacy === "object") {
+    for (const [key, value] of Object.entries(
+      body.customFieldsPrivacy as Record<string, unknown>
+    )) {
+      const id = key.trim().slice(0, 64);
+      if (!id) continue;
+      if (value === "private") {
+        customFieldsPrivacy[id] = "private";
+      } else if (value === "public") {
+        delete customFieldsPrivacy[id];
+      }
+    }
+  }
+
   const next = {
     ...current,
     userId: user.id,
@@ -133,6 +156,7 @@ export async function PUT(req: NextRequest) {
     message: cleanText(body.message, "message"),
     photos,
     customFields,
+    customFieldsPrivacy,
     // メール表示の希望（既定OFF）。email はセッションから確定（クライアント値は使わない＝なりすまし防止）
     showEmail: body.showEmail === true,
     email: user.email ?? "",

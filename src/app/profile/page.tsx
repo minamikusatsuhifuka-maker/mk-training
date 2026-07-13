@@ -176,6 +176,7 @@ export default function ProfilePage() {
         message: profile.message,
         photoCaptions: captions,
         customFields: profile.customFields,
+        customFieldsPrivacy: profile.customFieldsPrivacy ?? {},
         showEmail: profile.showEmail === true,
       }),
     });
@@ -432,7 +433,7 @@ export default function ProfilePage() {
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="p-role">役職</Label>
+            <Label htmlFor="p-role">役割（職種）</Label>
             <select
               id="p-role"
               value={profile.role}
@@ -515,9 +516,40 @@ export default function ProfilePage() {
               書きたい項目だけでOK
             </span>
           </h2>
-          {fieldDefs.map((f) => (
+          {fieldDefs.map((f) => {
+            const value = profile.customFields[f.id] ?? "";
+            const isPrivate =
+              profile.customFieldsPrivacy?.[f.id] === "private";
+            const togglePrivacy = () =>
+              set("customFieldsPrivacy", {
+                ...(profile.customFieldsPrivacy ?? {}),
+                [f.id]: isPrivate ? "public" : "private",
+              });
+            return (
             <div key={f.id} className="space-y-1">
-              <Label htmlFor={`cf-${f.id}`}>{f.label}</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor={`cf-${f.id}`}>{f.label}</Label>
+                {/* 開示トグル（指示書52。既定=公開。空値はグレーアウトで操作不要） */}
+                <button
+                  type="button"
+                  onClick={togglePrivacy}
+                  disabled={!value.trim()}
+                  title={
+                    isPrivate
+                      ? "自分にだけ見えます（クリックで公開に）"
+                      : "メンバー紹介に表示されます（クリックで自分のみに）"
+                  }
+                  className={`text-xs px-2 py-0.5 rounded-full border shrink-0 ${
+                    !value.trim()
+                      ? "border-gray-200 text-gray-300 cursor-default"
+                      : isPrivate
+                        ? "border-amber-300 bg-amber-50 text-amber-700"
+                        : "border-teal-200 bg-teal-50 text-teal-700"
+                  }`}
+                >
+                  {isPrivate ? "🔒 自分のみ" : "🌐 公開"}
+                </button>
+              </div>
               {f.type === "textarea" ? (
                 <Textarea
                   id={`cf-${f.id}`}
@@ -545,9 +577,10 @@ export default function ProfilePage() {
                 />
               )}
             </div>
-          ))}
+            );
+          })}
           <p className="text-xs text-muted-foreground">
-            入力内容は「💾 保存」ボタンで保存されます。
+            入力内容は「💾 保存」ボタンで保存されます。🔒にした項目は自分にだけ見え、メンバー紹介には表示されません。
           </p>
         </div>
       )}

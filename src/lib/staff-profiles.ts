@@ -39,6 +39,9 @@ export type StaffProfile = {
   // カスタム項目の回答（キー = profile_field_config の fieldId）。
   // 設定から消えた fieldId の値も保持する（非表示になるだけで消さない）。
   customFields: Record<string, string>;
+  // カスタム項目の開示設定（指示書52）。未設定のキーは 'public'（従来どおり公開）。
+  // 'private' の項目は /members のカード・詳細で非表示（本人の /profile では見える）。
+  customFieldsPrivacy?: Record<string, "public" | "private">;
   // メールアドレスの表示希望（指示書44・既定OFF）。
   // email はサーバー側でセッションから確定して保存する（クライアント値は受け取らない）。
   // 表示は「詳細ダイアログのみ・showEmail=true の人のみ」。一覧カード/indexには載せない。
@@ -69,10 +72,19 @@ export function emptyProfile(userId: string, name = ""): StaffProfile {
     avatarUrl: "",
     photos: [],
     customFields: {},
+    customFieldsPrivacy: {},
     showEmail: false,
     email: "",
     updatedAt: "",
   };
+}
+
+// カスタム項目が「🔒 自分のみ」か（指示書52。未設定は公開）
+export function isFieldPrivate(
+  p: Pick<StaffProfile, "customFieldsPrivacy">,
+  fieldId: string
+): boolean {
+  return p.customFieldsPrivacy?.[fieldId] === "private";
 }
 
 // ─── クライアント読み取り（閲覧は誰でも可） ───
