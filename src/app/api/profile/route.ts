@@ -10,7 +10,10 @@ import {
   loadProfileServer,
   saveProfileServer,
 } from "@/lib/staff-profiles-server";
-import { PROFILE_ROLES } from "@/lib/staff-profiles";
+import {
+  normalizeProfileRoles,
+  PROFILE_ROLE_CONFIG_KEY,
+} from "@/lib/profile-roles";
 
 export const runtime = "nodejs";
 
@@ -67,10 +70,20 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "名前は必須です" }, { status: 400 });
   }
 
+  // 役職は profile_role_config に存在する id のみ許可（指示書51）。
+  // hidden の役職も許可する（使用中メンバーが他項目を保存しても役職が消えないように）。
+  const { data: roleCfg } = await db
+    .from("content_store")
+    .select("data")
+    .eq("id", PROFILE_ROLE_CONFIG_KEY)
+    .maybeSingle();
+  const roleDefs = normalizeProfileRoles(
+    (roleCfg?.data as { roles?: unknown } | null)?.roles
+  );
+  const requestedRole = typeof body.role === "string" ? body.role.trim() : "";
   const role =
-    typeof body.role === "string" &&
-    (PROFILE_ROLES as readonly string[]).includes(body.role)
-      ? body.role
+    requestedRole && roleDefs.some((r) => r.id === requestedRole)
+      ? requestedRole
       : "";
 
   const current = await loadProfileServer(db, user.id);

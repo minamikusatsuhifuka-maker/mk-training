@@ -54,6 +54,13 @@ import {
   type PortalFeatures,
 } from "@/lib/portal-features";
 import { computeCommonPoints } from "@/lib/common-points";
+import {
+  DEFAULT_PROFILE_ROLES,
+  loadProfileRoleConfig,
+  resolveRole,
+  type ProfileRoleDef,
+  type RoleColorClasses,
+} from "@/lib/profile-roles";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
   collectMemberAnswers,
@@ -63,36 +70,8 @@ import {
   type WeeklyQuestionsData,
 } from "@/lib/weekly-questions";
 
-// 役職→ロールカラー（淡背景＋濃文字。Tailwindリテラルクラスで定義しpurge回避・動的組み立て禁止）
-type RoleColor = { bg: string; text: string; border: string };
-const ROLE_COLORS: Record<string, RoleColor> = {
-  受付: { bg: "bg-sky-100", text: "text-sky-700", border: "border-sky-300" },
-  クラーク: {
-    bg: "bg-violet-100",
-    text: "text-violet-700",
-    border: "border-violet-300",
-  },
-  医療クラーク: {
-    bg: "bg-indigo-100",
-    text: "text-indigo-700",
-    border: "border-indigo-300",
-  },
-  看護師: {
-    bg: "bg-emerald-100",
-    text: "text-emerald-700",
-    border: "border-emerald-300",
-  },
-  カウンセラー: {
-    bg: "bg-rose-100",
-    text: "text-rose-700",
-    border: "border-rose-300",
-  },
-  その他: { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-300" },
-};
-
-function roleColorOf(role?: string): RoleColor {
-  return (role && ROLE_COLORS[role]) || ROLE_COLORS["その他"];
-}
+// 役職→ロールカラー・ラベルは profile_role_config（lib/profile-roles.ts）から解決する（指示書51）。
+// 色クラスは ROLE_COLOR_CLASSES にリテラル定義（purge回避・動的組み立て禁止）。
 
 // name がメールアドレスのままのユーザー対策: 画面上は @ 前のローカル部のみ表示する
 // （データ自体の修正は本人の /profile 編集に委ねる。メールを意図的に表示する要素は置かない）
@@ -123,12 +102,13 @@ function fieldIconOf(id: string): LucideIcon {
 function Avatar({
   url,
   name,
-  role,
+  colors,
   size,
 }: {
   url?: string;
   name: string;
-  role?: string;
+  /** 役職のロールカラー（resolveRole で解決済みのものを渡す） */
+  colors: RoleColorClasses;
   size: "card" | "lg";
 }) {
   // card=72px（一覧カード）／lg=80px（詳細ダイアログ）
@@ -143,7 +123,7 @@ function Avatar({
       />
     );
   }
-  const c = roleColorOf(role);
+  const c = colors;
   return (
     <div
       className={`${cls} rounded-full ${c.bg} ${c.text} text-2xl font-medium flex items-center justify-center shrink-0`}
@@ -174,6 +154,10 @@ export default function MembersPage() {
     DEFAULT_PORTAL_FEATURES
   );
   const [myUserId, setMyUserId] = useState<string | null>(null);
+  // 役職の選択肢定義（ラベル・色の解決用。指示書51。失敗時は既定6役職）
+  const [roleDefs, setRoleDefs] = useState<ProfileRoleDef[]>(
+    DEFAULT_PROFILE_ROLES
+  );
 
   useEffect(() => {
     loadProfilesIndex()
@@ -206,6 +190,10 @@ export default function MembersPage() {
           loadWeeklyQuestions().then(setWeeklyData).catch(() => {});
         }
       })
+      .catch(() => {});
+    // 役職定義（ロールカラー・ラベル解決。指示書51）
+    loadProfileRoleConfig()
+      .then(setRoleDefs)
       .catch(() => {});
     // ログイン中ユーザー（共通点バッジの基準。未ログインなら非表示）
     getSupabaseBrowserClient()
@@ -288,7 +276,13 @@ export default function MembersPage() {
   const commonPointsWith = (userId: string) => {
     if (!myProfile || userId === myUserId) return [];
     const other = profiles[userId];
-    return other ? computeCommonPoints(myProfile, other, labelOf) : [];
+    if (!other) return [];
+    // 役職の一致判定は role の id 一致のまま（46R）。表示値だけラベルに解決する
+    return computeCommonPoints(myProfile, other, labelOf).map((p) =>
+      p.key === "role"
+        ? { ...p, values: p.values.map((v) => resolveRole(roleDefs, v).label) }
+        : p
+    );
   };
 
   return (
@@ -328,7 +322,8 @@ export default function MembersPage() {
             const values = cardValuesOf(m.userId);
             const common = commonPointsWith(m.userId);
             const weeklyAnswers = weeklyAnswersByMember[m.userId] ?? [];
-            const c = roleColorOf(m.role);
+            const roleMeta = resolveRole(roleDefs, m.role);
+            const c = roleMeta.colors;
             return (
               <button
                 key={m.userId}
@@ -339,7 +334,7 @@ export default function MembersPage() {
               >
                 {/* ヘッダー: アバター＋名前ブロック */}
                 <div className="flex items-center gap-3.5">
-                  <Avatar url={m.avatarUrl} name={m.name} role={m.role} size="card" />
+                  <Avatar url={m.avatarUrl} name={m.name} colors={c} size="card" />
                   <div className="min-w-0">
                     {cardConfig.showKana && m.kana && (
                       <p className="text-xs text-gray-400 truncate">{m.kana}</p>
@@ -351,7 +346,7 @@ export default function MembersPage() {
                       <span
                         className={`inline-block mt-1 text-xs px-2.5 py-0.5 rounded-full ${c.bg} ${c.text}`}
                       >
-                        {m.role}
+                        {roleMeta.label}
                       </span>
                     )}
                   </div>
@@ -453,7 +448,7 @@ export default function MembersPage() {
                 <Avatar
                   url={selected.avatarUrl}
                   name={selected.name}
-                  role={selected.role}
+                  colors={resolveRole(roleDefs, selected.role).colors}
                   size="lg"
                 />
                 <div className="min-w-0">
@@ -465,9 +460,9 @@ export default function MembersPage() {
                   </p>
                   {selected.role && (
                     <span
-                      className={`inline-block mt-1 text-xs px-2.5 py-0.5 rounded-full ${roleColorOf(selected.role).bg} ${roleColorOf(selected.role).text}`}
+                      className={`inline-block mt-1 text-xs px-2.5 py-0.5 rounded-full ${resolveRole(roleDefs, selected.role).colors.bg} ${resolveRole(roleDefs, selected.role).colors.text}`}
                     >
-                      {selected.role}
+                      {resolveRole(roleDefs, selected.role).label}
                     </span>
                   )}
                   {/* メールは本人が希望した場合のみ・詳細でだけ表示（指示書44） */}
@@ -487,7 +482,7 @@ export default function MembersPage() {
 
               {selected.message && (
                 <p
-                  className={`text-sm text-gray-500 border-l-2 ${roleColorOf(selected.role).border} rounded-none pl-3`}
+                  className={`text-sm text-gray-500 border-l-2 ${resolveRole(roleDefs, selected.role).colors.border} rounded-none pl-3`}
                 >
                   {selected.message}
                 </p>

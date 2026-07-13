@@ -18,11 +18,17 @@ import {
   PHOTO_MAX_EDGE,
 } from "@/lib/image-resize";
 import {
-  PROFILE_ROLES,
   MAX_SHARED_PHOTOS,
   emptyProfile,
   type StaffProfile,
 } from "@/lib/staff-profiles";
+import {
+  DEFAULT_PROFILE_ROLES,
+  loadProfileRoleConfig,
+  resolveRole,
+  visibleProfileRoles,
+  type ProfileRoleDef,
+} from "@/lib/profile-roles";
 import {
   loadProfileFieldConfig,
   visibleProfileFields,
@@ -42,6 +48,10 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<StaffProfile | null>(null);
   const [email, setEmail] = useState("");
   const [fieldDefs, setFieldDefs] = useState<ProfileFieldDef[]>([]);
+  // 役職の選択肢（管理画面で編集可・指示書51）。読み込み失敗時は既定6役職
+  const [roleDefs, setRoleDefs] = useState<ProfileRoleDef[]>(
+    DEFAULT_PROFILE_ROLES
+  );
   const [captions, setCaptions] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -84,6 +94,10 @@ export default function ProfilePage() {
       // カスタム項目の定義を読み込む（失敗しても既定セットにフォールバック）
       loadProfileFieldConfig()
         .then((defs) => setFieldDefs(visibleProfileFields(defs)))
+        .catch(() => {});
+      // 役職の選択肢（指示書51。失敗しても既定6役職）
+      loadProfileRoleConfig()
+        .then(setRoleDefs)
         .catch(() => {});
       const res = await fetch("/api/profile");
       if (res.status === 401) {
@@ -426,11 +440,20 @@ export default function ProfilePage() {
               className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
             >
               <option value="">未設定</option>
-              {PROFILE_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {r}
+              {visibleProfileRoles(roleDefs).map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.label}
                 </option>
               ))}
+              {/* 現在の役職が非表示化・削除済みの場合も値が消えないよう選択肢として残す */}
+              {profile.role &&
+                !visibleProfileRoles(roleDefs).some(
+                  (r) => r.id === profile.role
+                ) && (
+                  <option value={profile.role}>
+                    {resolveRole(roleDefs, profile.role).label}
+                  </option>
+                )}
             </select>
           </div>
           <div className="space-y-1">

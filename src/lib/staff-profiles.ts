@@ -20,17 +20,6 @@ export const STAFF_PHOTOS_BUCKET = "staff-photos";
 // 1人あたりの共有写真の上限
 export const MAX_SHARED_PHOTOS = 20;
 
-export const PROFILE_ROLES = [
-  "受付",
-  "クラーク",
-  "医療クラーク",
-  "看護師",
-  "カウンセラー",
-  "その他",
-] as const;
-
-export type ProfileRole = (typeof PROFILE_ROLES)[number];
-
 export type ProfilePhoto = {
   url: string;
   caption?: string;
@@ -41,7 +30,7 @@ export type StaffProfile = {
   userId: string;
   name: string;
   kana: string;
-  role: string; // PROFILE_ROLES のいずれか（自由入力は許可しない）
+  role: string; // profile_role_config（lib/profile-roles.ts）の役職id（自由入力は許可しない）
   bio: string; // 自己紹介
   hobbies: string; // 趣味・特技
   message: string; // ひとこと

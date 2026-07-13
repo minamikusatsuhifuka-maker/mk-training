@@ -25,10 +25,24 @@ import {
   saveMembersCardConfig,
   type MembersCardConfig,
 } from "@/lib/members-card";
+import {
+  DEFAULT_PROFILE_ROLES,
+  ROLE_COLOR_CLASSES,
+  ROLE_COLOR_OPTIONS,
+  loadProfileRoleConfig,
+  saveProfileRoleConfig,
+  type ProfileRoleDef,
+  type RoleColorName,
+} from "@/lib/profile-roles";
 
 // 追加項目のid自動生成（既定項目のidとは衝突しない接頭辞つき）
 function generateFieldId(): string {
   return `f_${crypto.randomUUID().replace(/-/g, "").slice(0, 10)}`;
+}
+
+// 追加役職のid自動生成（既定役職のid=ラベル文字列とは衝突しない接頭辞つき）
+function generateRoleId(): string {
+  return `r_${crypto.randomUUID().replace(/-/g, "").slice(0, 10)}`;
 }
 
 export default function ProfileFieldsAdminPage() {
@@ -48,10 +62,20 @@ export default function ProfileFieldsAdminPage() {
   );
   const [cardSaving, setCardSaving] = useState(false);
 
+  // 役職の選択肢設定（指示書51）
+  const [roles, setRoles] = useState<ProfileRoleDef[]>(DEFAULT_PROFILE_ROLES);
+  const [roleSaving, setRoleSaving] = useState(false);
+  const [newRoleLabel, setNewRoleLabel] = useState("");
+  const [newRoleColor, setNewRoleColor] = useState<RoleColorName>("amber");
+
   useEffect(() => {
     // カード設定が未保存なら「全カスタム項目＋自己紹介・趣味特技」を既定として編集開始
-    Promise.all([loadProfileFieldConfig(), loadMembersCardConfigOrNull()])
-      .then(([defs, cfg]) => {
+    Promise.all([
+      loadProfileFieldConfig(),
+      loadMembersCardConfigOrNull(),
+      loadProfileRoleConfig(),
+    ])
+      .then(([defs, cfg, roleDefs]) => {
         setFields(defs);
         setCardConfig(
           cfg ?? {
@@ -61,6 +85,7 @@ export default function ProfileFieldsAdminPage() {
             ),
           }
         );
+        setRoles(roleDefs);
       })
       .catch(() => setFields(DEFAULT_PROFILE_FIELDS))
       .finally(() => setLoaded(true));
@@ -167,6 +192,66 @@ export default function ProfileFieldsAdminPage() {
       return;
     }
     flash("💾 メンバー紹介カードの表示項目を保存しました");
+  };
+
+  // ─── 役職の選択肢（指示書51） ───
+  const updateRole = (id: string, patch: Partial<ProfileRoleDef>) =>
+    setRoles((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+
+  const moveRole = (index: number, dir: -1 | 1) =>
+    setRoles((rs) => {
+      const to = index + dir;
+      if (to < 0 || to >= rs.length) return rs;
+      const next = [...rs];
+      [next[index], next[to]] = [next[to], next[index]];
+      return next;
+    });
+
+  const addRole = () => {
+    const label = newRoleLabel.trim();
+    if (!label) {
+      setError("役職のラベルを入力してください");
+      return;
+    }
+    setRoles((rs) => [
+      ...rs,
+      {
+        id: generateRoleId(),
+        label,
+        color: newRoleColor,
+        order: rs.length + 1,
+      },
+    ]);
+    setNewRoleLabel("");
+    setNewRoleColor("amber");
+    setError("");
+  };
+
+  const resetRolesToDefault = () => {
+    if (
+      !confirm(
+        "役職を既定セット（6役職）に戻しますか？\n（追加した役職は一覧から消えますが、メンバーの役職データは残ります。保存ボタンを押すまで確定しません）"
+      )
+    ) {
+      return;
+    }
+    setRoles(DEFAULT_PROFILE_ROLES.map((r) => ({ ...r })));
+  };
+
+  const handleSaveRoles = async () => {
+    if (roles.some((r) => !r.label.trim())) {
+      setError("ラベルが空の役職があります");
+      return;
+    }
+    setRoleSaving(true);
+    setError("");
+    const ok = await saveProfileRoleConfig(roles);
+    setRoleSaving(false);
+    if (!ok) {
+      setError("役職の選択肢の保存に失敗しました");
+      return;
+    }
+    flash("💾 役職の選択肢を保存しました（/profile と /members に反映されます）");
   };
 
   const handleSave = async () => {
@@ -495,6 +580,124 @@ export default function ProfileFieldsAdminPage() {
                 disabled={cardSaving}
               >
                 {cardSaving ? "保存中..." : "💾 カード表示設定を保存"}
+              </Button>
+            </div>
+          </div>
+
+          {/* 役職の選択肢（指示書51） */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-800">
+                👔 役職の選択肢
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">
+                /profile
+                の役職セレクトの選択肢と、メンバー紹介カードのロールカラーを編集します。使用中の役職は非表示にすると選択肢から消えますが、既存メンバーの表示は維持されます。
+              </p>
+            </div>
+
+            <ul className="space-y-1">
+              {roles.map((r, i) => (
+                <li
+                  key={r.id}
+                  className={`flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 px-3 py-1.5 ${
+                    r.hidden ? "bg-slate-100 opacity-60" : "bg-slate-50"
+                  }`}
+                >
+                  <span
+                    className={`h-4 w-4 rounded-full shrink-0 ${ROLE_COLOR_CLASSES[r.color].swatch}`}
+                    title={r.color}
+                  />
+                  <Input
+                    value={r.label}
+                    onChange={(e) => updateRole(r.id, { label: e.target.value })}
+                    className="h-8 text-sm flex-1 min-w-[140px]"
+                  />
+                  <select
+                    value={r.color}
+                    onChange={(e) =>
+                      updateRole(r.id, {
+                        color: e.target.value as RoleColorName,
+                      })
+                    }
+                    className="h-8 rounded border border-slate-200 bg-white px-2 text-xs"
+                  >
+                    {ROLE_COLOR_OPTIONS.map((c) => (
+                      <option key={c.value} value={c.value}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => moveRole(i, -1)}
+                    disabled={i === 0}
+                    className="text-xs px-2 py-1 border border-slate-200 rounded hover:bg-white disabled:opacity-30"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveRole(i, 1)}
+                    disabled={i === roles.length - 1}
+                    className="text-xs px-2 py-1 border border-slate-200 rounded hover:bg-white disabled:opacity-30"
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateRole(r.id, { hidden: !r.hidden || undefined })}
+                    className={`text-xs px-2 py-1 border rounded ${
+                      r.hidden
+                        ? "border-teal-200 text-teal-700 hover:bg-teal-50"
+                        : "border-slate-200 text-slate-600 hover:bg-white"
+                    }`}
+                  >
+                    {r.hidden ? "表示に戻す" : "非表示"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            {/* 追加 */}
+            <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+              <Input
+                value={newRoleLabel}
+                onChange={(e) => setNewRoleLabel(e.target.value)}
+                placeholder="新しい役職名（例：管理栄養士）"
+                className="h-8 text-sm flex-1 min-w-[180px]"
+              />
+              <select
+                value={newRoleColor}
+                onChange={(e) =>
+                  setNewRoleColor(e.target.value as RoleColorName)
+                }
+                className="h-8 rounded border border-slate-200 bg-white px-2 text-xs"
+              >
+                {ROLE_COLOR_OPTIONS.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+              <span
+                className={`h-4 w-4 rounded-full shrink-0 ${ROLE_COLOR_CLASSES[newRoleColor].swatch}`}
+              />
+              <Button type="button" variant="outline" onClick={addRole}>
+                ＋ 追加
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Button type="button" variant="outline" onClick={resetRolesToDefault}>
+                既定の6役職に戻す
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSaveRoles}
+                disabled={roleSaving}
+              >
+                {roleSaving ? "保存中..." : "💾 役職の選択肢を保存"}
               </Button>
             </div>
           </div>
