@@ -66,7 +66,6 @@ import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
   NEED_LABELS,
   NEED_DETAIL_ITEMS,
-  DETAIL_VALUE_LABELS,
   hasSurveyContent,
   isPdfAsset,
   radarValuesOf,
@@ -623,20 +622,16 @@ export default function MembersPage() {
                           詳細15項目を見る
                         </summary>
                         <div className="overflow-x-auto mt-2">
+                          {/* 「項目／欲求」の2列のみ（指示書61。注力・現況は表示しない） */}
                           <table className="w-full text-xs">
                             <thead>
                               <tr className="text-gray-400 border-b border-gray-100">
                                 <th className="text-left py-1 pr-2 font-medium">
                                   項目
                                 </th>
-                                {DETAIL_VALUE_LABELS.map((c) => (
-                                  <th
-                                    key={c.key}
-                                    className="text-right py-1 px-2 font-medium"
-                                  >
-                                    {c.label}
-                                  </th>
-                                ))}
+                                <th className="text-right py-1 px-2 font-medium">
+                                  欲求
+                                </th>
                               </tr>
                             </thead>
                             <tbody>
@@ -657,14 +652,9 @@ export default function MembersPage() {
                                       </span>
                                       {item.label}
                                     </td>
-                                    {DETAIL_VALUE_LABELS.map((c) => (
-                                      <td
-                                        key={c.key}
-                                        className="py-1 px-2 text-right text-gray-700 tabular-nums"
-                                      >
-                                        {row?.[c.key] ?? "—"}
-                                      </td>
-                                    ))}
+                                    <td className="py-1 px-2 text-right text-gray-700 tabular-nums">
+                                      {row?.desire ?? "—"}
+                                    </td>
                                   </tr>
                                 );
                               })}

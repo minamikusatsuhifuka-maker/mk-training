@@ -147,7 +147,7 @@ export async function PUT(req: NextRequest) {
     }
   }
 
-  // 5つの基本的欲求サーベイ（指示書58）: 数値・開示は送られた場合のみ更新。
+  // 5つの基本的欲求サーベイ（指示書58）: 数値・開示・aiParsed(61)は送られた場合のみ更新。
   // imageUrl はアップロードAPIでのみ変更する（クライアント値を信用しない）。
   let needsSurvey: NeedsSurvey | undefined = current.needsSurvey;
   if (body.needsSurvey && typeof body.needsSurvey === "object") {
@@ -157,6 +157,7 @@ export async function PUT(req: NextRequest) {
       values: n.values,
       details: n.details,
       visibility: n.visibility,
+      aiParsed: n.aiParsed,
       updatedAt: new Date().toISOString(),
     };
   }

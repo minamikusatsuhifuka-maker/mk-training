@@ -198,10 +198,12 @@ export async function DELETE(req: NextRequest) {
 
     const profile = await loadProfileServer(db, user.id);
     if (isSurvey) {
+      // サーベイ削除はファイル＋読み取り値をまるごとクリア（指示書61のリセット導線。
+      // aiParsed=false に戻り、/profile のスライダーが再表示され手入力できる）。開示設定は維持。
       if (profile.needsSurvey) {
         profile.needsSurvey = {
-          ...profile.needsSurvey,
-          imageUrl: undefined,
+          visibility: profile.needsSurvey.visibility,
+          aiParsed: false,
           updatedAt: new Date().toISOString(),
         };
       }

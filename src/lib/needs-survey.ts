@@ -70,6 +70,9 @@ export type NeedsSurvey = {
   details?: Record<string, NeedDetailValues>;
   /** 既定 private（自分のみ）。public でメンバー紹介に公開 */
   visibility: "private" | "public";
+  /** AI読み取り由来で確定済みか（指示書61・既定false）。
+   *  true の間は /profile の5欲求スライダーを出さない（修正は削除→再読み取りで） */
+  aiParsed?: boolean;
   updatedAt: string;
 };
 
@@ -85,6 +88,7 @@ export function normalizeNeedsSurvey(raw: unknown): {
   values: Partial<Record<NeedKey, number>>;
   details: Record<string, NeedDetailValues>;
   visibility: "private" | "public";
+  aiParsed: boolean;
 } {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<
     string,
@@ -117,6 +121,7 @@ export function normalizeNeedsSurvey(raw: unknown): {
     values,
     details,
     visibility: o.visibility === "public" ? "public" : "private",
+    aiParsed: o.aiParsed === true,
   };
 }
 

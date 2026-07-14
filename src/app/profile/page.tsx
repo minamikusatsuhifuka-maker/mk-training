@@ -46,7 +46,6 @@ import {
   NEED_KEYS,
   NEED_LABELS,
   NEED_DETAIL_ITEMS,
-  DETAIL_VALUE_LABELS,
   clampNeedValue,
   isPdfAsset,
   type NeedKey,
@@ -88,6 +87,8 @@ export default function ProfilePage() {
   const [surveyVisibility, setSurveyVisibility] = useState<
     "private" | "public"
   >("private");
+  // AI読み取り由来で確定済みか（指示書61。trueの間はスライダー非表示・修正は削除→再読み取り）
+  const [surveyAiParsed, setSurveyAiParsed] = useState(false);
   const [surveyParsing, setSurveyParsing] = useState(false);
   const [showSurveyDetails, setShowSurveyDetails] = useState(false);
 
@@ -149,6 +150,7 @@ export default function ProfilePage() {
       setSurveyValues(json.profile.needsSurvey?.values ?? {});
       setSurveyDetails(json.profile.needsSurvey?.details ?? {});
       setSurveyVisibility(json.profile.needsSurvey?.visibility ?? "private");
+      setSurveyAiParsed(json.profile.needsSurvey?.aiParsed === true);
       // 今月自分宛のありがとうカード（宛先名とプロフィール名の一致で紐付け。46R-B）
       loadPortalFeatures()
         .then(async (f) => {
@@ -210,6 +212,7 @@ export default function ProfilePage() {
           values: surveyValues,
           details: surveyDetails,
           visibility: surveyVisibility,
+          aiParsed: surveyAiParsed,
         },
         showEmail: profile.showEmail === true,
       }),
@@ -350,10 +353,16 @@ export default function ProfilePage() {
     }
   };
 
+  // 削除＝ファイル＋読み取り値をクリアするリセット導線（指示書61）。
+  // aiParsed=false に戻り、スライダーが再表示され手入力できる（開示設定は維持）。
   const handleDeleteSurveyImage = async () => {
     const url = profile?.needsSurvey?.imageUrl;
     if (!url) return;
-    if (!confirm("サーベイファイルを削除しますか？（入力済みの数値は残ります）"))
+    if (
+      !confirm(
+        "サーベイのファイルと読み取り値を削除しますか？\n（削除後は手入力、または再アップロード→再読み取りができます）"
+      )
+    )
       return;
     const res = await fetch("/api/profile/photos", {
       method: "DELETE",
@@ -367,10 +376,20 @@ export default function ProfilePage() {
     }
     setProfile((p) =>
       p && p.needsSurvey
-        ? { ...p, needsSurvey: { ...p.needsSurvey, imageUrl: undefined } }
+        ? {
+            ...p,
+            needsSurvey: {
+              visibility: p.needsSurvey.visibility,
+              aiParsed: false,
+              updatedAt: new Date().toISOString(),
+            },
+          }
         : p
     );
-    flash("🗑️ サーベイ画像を削除しました");
+    setSurveyValues({});
+    setSurveyDetails({});
+    setSurveyAiParsed(false);
+    flash("🗑️ サーベイを削除しました（手入力・再アップロードができます）");
   };
 
   // アップロード済みファイルURL→base64（AI抽出用。Storageはpublic・CORS許可あり。
@@ -433,9 +452,12 @@ export default function ProfilePage() {
       }
       setSurveyValues(values);
       setSurveyDetails(details);
+      // AI読み取り由来として確定（指示書61）。スライダーは非表示になり、
+      // 修正したい場合は削除→再アップロード／再読み取りで対応する
+      setSurveyAiParsed(true);
       if (Object.keys(details).length > 0) setShowSurveyDetails(true);
       flash(
-        "🤖 AIが読み取りました（下書き）。数値を確認・修正して「💾 保存」で確定してください"
+        "🤖 AIが読み取りました。レーダーチャートを確認して「💾 保存」で確定してください"
       );
     } catch (e) {
       fail(e instanceof Error ? e.message : "AI読み取りに失敗しました");
@@ -991,34 +1013,41 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* 5欲求の入力（スライダー＋数値） */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
-          {NEED_KEYS.map((k) => (
-            <div key={k} className="flex items-center gap-2">
-              <span className="text-xs text-foreground/70 w-16 shrink-0">
-                {NEED_LABELS[k]}
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={surveyValues[k] ?? 0}
-                onChange={(e) => setSurveyValue(k, e.target.value)}
-                className="flex-1"
-              />
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                value={surveyValues[k] ?? ""}
-                onChange={(e) => setSurveyValue(k, e.target.value)}
-                className="h-8 w-20 text-sm"
-                placeholder="—"
-              />
-            </div>
-          ))}
-        </div>
+        {/* 5欲求の入力（スライダー＋数値）。AI読み取り後は非表示＝値はレーダーの
+            ラベルで確認する（指示書61。修正は削除→再アップロード／再読み取り） */}
+        {surveyAiParsed ? (
+          <p className="text-[11px] text-muted-foreground">
+            5欲求のスコアはAI読み取り結果で確定しています（レーダーチャートのラベルで確認できます）。数値を修正したい場合は🗑削除して再アップロード／再読み取りしてください。
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+            {NEED_KEYS.map((k) => (
+              <div key={k} className="flex items-center gap-2">
+                <span className="text-xs text-foreground/70 w-16 shrink-0">
+                  {NEED_LABELS[k]}
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={surveyValues[k] ?? 0}
+                  onChange={(e) => setSurveyValue(k, e.target.value)}
+                  className="flex-1"
+                />
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={surveyValues[k] ?? ""}
+                  onChange={(e) => setSurveyValue(k, e.target.value)}
+                  className="h-8 w-20 text-sm"
+                  placeholder="—"
+                />
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* 詳細15項目（折りたたみ表） */}
         <div>
@@ -1029,19 +1058,18 @@ export default function ProfilePage() {
           >
             {showSurveyDetails
               ? "▼ 詳細15項目を閉じる"
-              : "▶ 詳細15項目（欲求・注力・現況）を入力する"}
+              : "▶ 詳細15項目（欲求）を見る・入力する"}
           </button>
           {showSurveyDetails && (
             <div className="overflow-x-auto mt-2">
+              {/* 表示は「項目／欲求」の2列のみ（指示書61。注力・現況はデータ保持のみで非表示） */}
               <table className="w-full text-xs">
                 <thead>
                   <tr className="text-muted-foreground border-b border-border">
                     <th className="text-left py-1.5 pr-2 font-medium">項目</th>
-                    {DETAIL_VALUE_LABELS.map((c) => (
-                      <th key={c.key} className="text-center py-1.5 px-1 font-medium">
-                        {c.label}
-                      </th>
-                    ))}
+                    <th className="text-center py-1.5 px-1 font-medium">
+                      欲求
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1053,21 +1081,26 @@ export default function ProfilePage() {
                         </span>
                         {item.label}
                       </td>
-                      {DETAIL_VALUE_LABELS.map((c) => (
-                        <td key={c.key} className="py-1 px-1 text-center">
+                      <td className="py-1 px-1 text-center">
+                        {surveyAiParsed ? (
+                          // AI読み取り後は表示専用（指示書61）
+                          <span className="tabular-nums">
+                            {surveyDetails[item.key]?.desire ?? "—"}
+                          </span>
+                        ) : (
                           <Input
                             type="number"
                             min={0}
                             max={100}
-                            value={surveyDetails[item.key]?.[c.key] ?? ""}
+                            value={surveyDetails[item.key]?.desire ?? ""}
                             onChange={(e) =>
-                              setSurveyDetail(item.key, c.key, e.target.value)
+                              setSurveyDetail(item.key, "desire", e.target.value)
                             }
                             className="h-7 w-16 text-xs mx-auto"
                             placeholder="—"
                           />
-                        </td>
-                      ))}
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
