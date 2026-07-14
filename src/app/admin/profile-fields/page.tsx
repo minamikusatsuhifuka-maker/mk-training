@@ -230,7 +230,7 @@ export default function ProfileFieldsAdminPage() {
   const resetRolesToDefault = () => {
     if (
       !confirm(
-        "役割（職種）を既定セット（6件）に戻しますか？\n（追加した役割は一覧から消えますが、メンバーの役割データは残ります。保存ボタンを押すまで確定しません）"
+        `役割（職種）を既定セット（${DEFAULT_PROFILE_ROLES.length}件）に戻しますか？\n（追加した役割は一覧から消えますが、メンバーの役割データは残ります。保存ボタンを押すまで確定しません）`
       )
     ) {
       return;
@@ -690,7 +690,7 @@ export default function ProfileFieldsAdminPage() {
 
             <div className="flex flex-wrap items-center justify-between gap-2">
               <Button type="button" variant="outline" onClick={resetRolesToDefault}>
-                既定の6件に戻す
+                既定の{DEFAULT_PROFILE_ROLES.length}件に戻す
               </Button>
               <Button
                 type="button"

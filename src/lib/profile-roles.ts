@@ -1,7 +1,7 @@
 // プロフィールの役職選択肢（指示書51）
 // 定義は content_store `profile_role_config` に { roles: [...] } で保存し、
 // スタッフの役職値は従来どおり staff_profile:<userId> の role に「役職の id」で保存する。
-// 既定6役職は id を現行のラベル文字列のまま維持（既存プロフィールの role 値との互換）。
+// 既定役職は id = ラベル文字列（既存プロフィールの role 値との互換）。
 // 新規追加の役職は id = r_xxxx（自動生成）。
 // 削除は置かず「非表示」で運用: hidden の役職は選択肢から消えるが、
 // 使用中メンバーの表示（ラベル・色）は resolveRole で解決され壊れない。
@@ -33,7 +33,7 @@ export type RoleColorClasses = {
 };
 
 // Tailwind purge回避のためリテラルクラスで定義（動的組み立て禁止）。
-// 既定6役職ぶんは /members の旧 ROLE_COLORS（指示書33）と同一クラス。
+// クラス定義は /members の旧 ROLE_COLORS（指示書33）と同一トーン。
 export const ROLE_COLOR_CLASSES: Record<RoleColorName, RoleColorClasses> = {
   sky: {
     bg: "bg-sky-100",
@@ -106,14 +106,20 @@ export type ProfileRoleDef = {
   hidden?: boolean;
 };
 
-// 既定セット = 現行6役職（idは現行のラベル値のまま・色は指示書33の現行どおり）
+// 既定セット = 4役職（指示書64。id=ラベル値で既存role値と互換）。
+// 保存済み config がある環境では自動置換しない（normalize が config に無い既定 id を
+// 末尾補完するため「マルチタスク医療事務」「医師」は末尾に自動追加される）。
+// 4件へ完全に切り替えるには /admin/profile-fields の「既定に戻す」→保存を実行する。
 export const DEFAULT_PROFILE_ROLES: ProfileRoleDef[] = [
-  { id: "受付", label: "受付", color: "sky", order: 1 },
-  { id: "クラーク", label: "クラーク", color: "violet", order: 2 },
-  { id: "医療クラーク", label: "医療クラーク", color: "indigo", order: 3 },
-  { id: "看護師", label: "看護師", color: "emerald", order: 4 },
-  { id: "カウンセラー", label: "カウンセラー", color: "rose", order: 5 },
-  { id: "その他", label: "その他", color: "slate", order: 6 },
+  {
+    id: "マルチタスク医療事務",
+    label: "マルチタスク医療事務",
+    color: "sky",
+    order: 1,
+  },
+  { id: "看護師", label: "看護師", color: "emerald", order: 2 },
+  { id: "医師", label: "医師", color: "amber", order: 3 },
+  { id: "その他", label: "その他", color: "slate", order: 4 },
 ];
 
 function isRoleColorName(v: unknown): v is RoleColorName {

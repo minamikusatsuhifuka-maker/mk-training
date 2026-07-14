@@ -59,7 +59,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<StaffProfile | null>(null);
   const [email, setEmail] = useState("");
   const [fieldDefs, setFieldDefs] = useState<ProfileFieldDef[]>([]);
-  // 役職の選択肢（管理画面で編集可・指示書51）。読み込み失敗時は既定6役職
+  // 役職の選択肢（管理画面で編集可・指示書51）。読み込み失敗時は既定セット（64で4件）
   const [roleDefs, setRoleDefs] = useState<ProfileRoleDef[]>(
     DEFAULT_PROFILE_ROLES
   );
@@ -122,7 +122,7 @@ export default function ProfilePage() {
       loadProfileFieldConfig()
         .then((defs) => setFieldDefs(visibleProfileFields(defs)))
         .catch(() => {});
-      // 役職の選択肢（指示書51。失敗しても既定6役職）
+      // 役職の選択肢（指示書51。失敗しても既定セット）
       loadProfileRoleConfig()
         .then(setRoleDefs)
         .catch(() => {});

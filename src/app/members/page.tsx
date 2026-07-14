@@ -163,7 +163,7 @@ export default function MembersPage() {
     DEFAULT_PORTAL_FEATURES
   );
   const [myUserId, setMyUserId] = useState<string | null>(null);
-  // 役職の選択肢定義（ラベル・色の解決用。指示書51。失敗時は既定6役職）
+  // 役職の選択肢定義（ラベル・色の解決用。指示書51。失敗時は既定セット・64で4件）
   const [roleDefs, setRoleDefs] = useState<ProfileRoleDef[]>(
     DEFAULT_PROFILE_ROLES
   );
