@@ -25,6 +25,8 @@ export type StaffTask = {
   due?: string; // ISO文字列（任意）
   status: TaskStatus;
   note?: string;
+  /** 登録した人（指示書56。identity由来・匿名なら"匿名"。既存タスクは未設定=「—」表示） */
+  createdBy?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -149,6 +151,113 @@ export function taskCategoryLabel(
   const v = (categoryId ?? "").trim();
   if (!v) return "";
   return cats.find((c) => c.id === v)?.label ?? v;
+}
+
+// ─── タスク操作ログ（指示書56。portal_news_log と同じパターン） ───
+// 作成/変更/完了/削除/アーカイブ/復元を記録し、管理画面で閲覧する。
+// 権限制限はしない＝「誰が何をしたか」の可視化による統制。
+export const STAFF_TASKS_LOG_KEY = "staff_tasks_log";
+
+/** ログの保持上限（超過分は古いものから削除） */
+export const TASK_LOG_MAX = 1000;
+
+export type TaskLogAction =
+  | "create"
+  | "update"
+  | "status"
+  | "delete"
+  | "archive"
+  | "restore";
+
+export type TaskLogEntry = {
+  id: string;
+  /** 操作日時（ISO） */
+  at: string;
+  action: TaskLogAction;
+  taskId: string;
+  taskTitle: string;
+  /** 操作者（ログイン中=プロフィール名／未ログイン=保存済みの名前／未設定=「匿名」） */
+  actor: string;
+  /** 変更点の要約など */
+  detail?: string;
+};
+
+/** appendTaskLog に渡す形（id/at は採番） */
+export type TaskLogInput = Omit<TaskLogEntry, "id" | "at">;
+
+// 管理画面のバッジ表示用（リテラルクラス）
+export const TASK_LOG_ACTION_META: Record<
+  TaskLogAction,
+  { label: string; badge: string }
+> = {
+  create: { label: "作成", badge: "bg-emerald-100 text-emerald-700" },
+  update: { label: "変更", badge: "bg-blue-100 text-blue-700" },
+  status: { label: "状態変更", badge: "bg-violet-100 text-violet-700" },
+  delete: { label: "削除", badge: "bg-red-100 text-red-700" },
+  archive: { label: "アーカイブ", badge: "bg-slate-200 text-slate-600" },
+  restore: { label: "復元", badge: "bg-teal-100 text-teal-700" },
+};
+
+// ログ追記（最新が先頭・TASK_LOG_MAX件で切り詰め）。
+// 失敗してもタスク本体の保存を妨げない（false を返すだけ。呼び出し側も catch する）。
+export async function appendTaskLog(
+  input: TaskLogInput | TaskLogInput[]
+): Promise<boolean> {
+  try {
+    const inputs = Array.isArray(input) ? input : [input];
+    if (inputs.length === 0) return true;
+    const now = Date.now();
+    const entries: TaskLogEntry[] = inputs.map((e, i) => ({
+      ...e,
+      id: `tlog_${now}_${i}`,
+      at: new Date().toISOString(),
+    }));
+    const current = await getContent<TaskLogEntry>(STAFF_TASKS_LOG_KEY, []);
+    return saveContent<TaskLogEntry>(
+      STAFF_TASKS_LOG_KEY,
+      [...entries, ...current].slice(0, TASK_LOG_MAX)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export async function loadTaskLog(): Promise<TaskLogEntry[]> {
+  return getContent<TaskLogEntry>(STAFF_TASKS_LOG_KEY, []);
+}
+
+// update ログ用の主要変更の要約（厳密diffは不要。変更なしなら空文字）
+export function buildTaskUpdateDetail(
+  before: StaffTask,
+  after: StaffTask,
+  cats: TaskCategoryDef[]
+): string {
+  const parts: string[] = [];
+  if (before.title !== after.title) {
+    parts.push(`内容: ${before.title}→${after.title}`);
+  }
+  const beforeAssignees = assigneesOf(before).join("・") || "未割当";
+  const afterAssignees = assigneesOf(after).join("・") || "未割当";
+  if (beforeAssignees !== afterAssignees) {
+    parts.push(`担当: ${beforeAssignees}→${afterAssignees}`);
+  }
+  if ((before.category ?? "") !== (after.category ?? "")) {
+    const b = taskCategoryLabel(cats, before.category) || "未分類";
+    const a = taskCategoryLabel(cats, after.category) || "未分類";
+    parts.push(`カテゴリ: ${b}→${a}`);
+  }
+  if ((before.due ?? "") !== (after.due ?? "")) {
+    parts.push(`期限: ${formatDue(before.due)}→${formatDue(after.due)}`);
+  }
+  if (before.status !== after.status) {
+    parts.push(
+      `状態: ${STATUS_LABELS[before.status]}→${STATUS_LABELS[after.status]}`
+    );
+  }
+  if ((before.note ?? "") !== (after.note ?? "")) {
+    parts.push("メモ変更");
+  }
+  return parts.join(" / ");
 }
 
 // ─── 完了タスクのアーカイブ（指示書53） ───

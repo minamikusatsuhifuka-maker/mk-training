@@ -4,7 +4,7 @@
 // 完了から一定期間（7日）経過して staff_tasks_archive へ移動したタスクの
 // 検索・振り返り・復元・完全削除。移動は /tasks 読み込み時に冪等実行される。
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
 import { Input } from "@/components/ui/input";
@@ -20,9 +20,11 @@ import {
   formatAssignees,
   formatDue,
   ARCHIVE_AFTER_DAYS,
+  appendTaskLog,
   type ArchivedTask,
   type TaskCategoryDef,
 } from "@/lib/staff-tasks";
+import { resolveTaskActor } from "@/lib/task-actor";
 
 // 完了日（updatedAt=doneにした日時）を YYYY/M/D で表示
 function formatDoneDate(iso: string): string {
@@ -52,7 +54,15 @@ export default function TaskHistoryPage() {
   const [fromDate, setFromDate] = useState(""); // 完了日の期間（YYYY-MM-DD）
   const [toDate, setToDate] = useState("");
 
+  // 操作ログの操作者名（指示書56）
+  const actorRef = useRef("匿名");
+
   useEffect(() => {
+    resolveTaskActor()
+      .then((n) => {
+        actorRef.current = n;
+      })
+      .catch(() => {});
     Promise.all([loadTaskArchive(), loadTaskCategories()])
       .then(([a, cats]) => {
         setArchive(a);
@@ -143,6 +153,13 @@ export default function TaskHistoryPage() {
       const next = archive.filter((x) => x.id !== t.id);
       await saveTaskArchive(next);
       setArchive(next);
+      appendTaskLog({
+        action: "restore",
+        taskId: t.id,
+        taskTitle: t.title,
+        actor: actorRef.current,
+        detail: "履歴からボードへ復元",
+      }).catch(() => {});
       flash(`「${t.title}」をボードに戻しました（完了のまま）`);
     } finally {
       setBusy(false);
@@ -153,7 +170,7 @@ export default function TaskHistoryPage() {
   const handleDelete = async (t: ArchivedTask) => {
     if (
       !confirm(
-        `「${t.title}」を完全に削除しますか？\nこの操作は取り消せません。`
+        `「${t.title}」を完全に削除しますか？\nこの操作は取り消せません。削除は記録されます。`
       )
     ) {
       return;
@@ -167,6 +184,13 @@ export default function TaskHistoryPage() {
         return;
       }
       setArchive(next);
+      appendTaskLog({
+        action: "delete",
+        taskId: t.id,
+        taskTitle: t.title,
+        actor: actorRef.current,
+        detail: "履歴から完全削除",
+      }).catch(() => {});
       flash("削除しました");
     } finally {
       setBusy(false);
@@ -296,6 +320,9 @@ export default function TaskHistoryPage() {
                         </span>
                         <span className="text-[11px] text-muted-foreground">
                           期限: {formatDue(t.due)}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          登録: {t.createdBy || "—"}
                         </span>
                       </div>
                     </div>

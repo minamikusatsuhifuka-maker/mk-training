@@ -73,6 +73,13 @@ import {
   type TasksSectionConfig,
 } from "@/lib/section-layout";
 import {
+  loadTaskLog,
+  TASK_LOG_ACTION_META,
+  TASK_LOG_MAX,
+  type TaskLogAction,
+  type TaskLogEntry,
+} from "@/lib/staff-tasks";
+import {
   buildNewsHistory,
   filterNewsHistory,
   groupNewsHistory,
@@ -262,6 +269,14 @@ export default function AdminPortalPage() {
   const [logActor, setLogActor] = useState<string>("all");
   const [logKeyword, setLogKeyword] = useState("");
 
+  // タスク操作ログ（指示書56）
+  const [taskLog, setTaskLog] = useState<TaskLogEntry[]>([]);
+  const [taskLogAction, setTaskLogAction] = useState<TaskLogAction | "all">(
+    "all"
+  );
+  const [taskLogActor, setTaskLogActor] = useState<string>("all");
+  const [taskLogKeyword, setTaskLogKeyword] = useState("");
+
   // 共有履歴タブ（検索・グループ切替・フィルタ）
   const [historyKeyword, setHistoryKeyword] = useState("");
   const [historyAxis, setHistoryAxis] = useState<NewsHistoryGroupAxis>("flat");
@@ -377,7 +392,7 @@ export default function AdminPortalPage() {
     const fetchAll = async () => {
       // 管理画面を開くたびに期限切れの新着をアーカイブへ移動（冪等）
       await archiveExpiredNews().catch(() => {});
-      const [n, na, h, t, p, w, c, layout, tLayout, nlog, rx] =
+      const [n, na, h, t, p, w, c, layout, tLayout, nlog, rx, tlog] =
         await Promise.all([
         loadPortalItems<NewsItem>(PORTAL_KEYS.news, []),
         loadPortalItems<ArchivedNewsItem>(PORTAL_KEYS.newsArchive, []),
@@ -400,6 +415,7 @@ export default function AdminPortalPage() {
         ),
         loadNewsLog(),
         loadNewsReactions(),
+        loadTaskLog(),
       ]);
       setNews(n);
       setNewsArchive(na);
@@ -412,6 +428,7 @@ export default function AdminPortalPage() {
       setTasksLayout(resolveTasksLayout(tLayout));
       setNewsLog(nlog);
       setNewsReactions(rx);
+      setTaskLog(tlog);
       setLoading(false);
     };
     fetchAll().catch(() => setLoading(false));
@@ -448,6 +465,27 @@ export default function AdminPortalPage() {
       if (
         kw &&
         !`${l.newsTitle} ${l.actor} ${l.detail ?? ""}`
+          .toLowerCase()
+          .includes(kw)
+      ) {
+        return false;
+      }
+      return true;
+    })
+    .sort((a, b) => (a.at < b.at ? 1 : -1));
+
+  // タスク操作ログの派生データ（指示書56。ニュースの操作ログと同じパターン）
+  const taskLogActors = [...new Set(taskLog.map((l) => l.actor))].sort((a, b) =>
+    a.localeCompare(b, "ja")
+  );
+  const filteredTaskLog = taskLog
+    .filter((l) => {
+      if (taskLogAction !== "all" && l.action !== taskLogAction) return false;
+      if (taskLogActor !== "all" && l.actor !== taskLogActor) return false;
+      const kw = taskLogKeyword.trim().toLowerCase();
+      if (
+        kw &&
+        !`${l.taskTitle} ${l.actor} ${l.detail ?? ""}`
           .toLowerCase()
           .includes(kw)
       ) {
@@ -1686,6 +1724,83 @@ export default function AdminPortalPage() {
                     <span className="text-gray-400">
                       {l.source === "top" ? "トップ投稿" : "管理画面"}
                     </span>
+                    {l.detail && (
+                      <span className="text-gray-500">｜{l.detail}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 📋 タスク操作ログ（指示書56） */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 className="text-sm font-bold text-gray-800">
+              📋 タスク操作ログ（最新{TASK_LOG_MAX}件まで保持）
+            </h2>
+            <p className="text-xs text-gray-500 mt-1 mb-3">
+              操作の記録です。編集・削除は全員が自由に行えます（記録は原因究明と安心のためのものです）。
+            </p>
+            <div className="flex flex-wrap gap-2 mb-3">
+              <select
+                value={taskLogAction}
+                onChange={(e) =>
+                  setTaskLogAction(e.target.value as TaskLogAction | "all")
+                }
+                className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white"
+              >
+                <option value="all">すべての操作</option>
+                {(
+                  Object.keys(TASK_LOG_ACTION_META) as TaskLogAction[]
+                ).map((a) => (
+                  <option key={a} value={a}>
+                    {TASK_LOG_ACTION_META[a].label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={taskLogActor}
+                onChange={(e) => setTaskLogActor(e.target.value)}
+                className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white"
+              >
+                <option value="all">すべての操作者</option>
+                {taskLogActors.map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={taskLogKeyword}
+                onChange={(e) => setTaskLogKeyword(e.target.value)}
+                placeholder="キーワード検索（タスク名・操作者・詳細）"
+                className="flex-1 min-w-[180px] px-3 py-1.5 text-xs border border-gray-200 rounded-lg"
+              />
+            </div>
+            {filteredTaskLog.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                該当するログがありません。
+              </p>
+            ) : (
+              <div className="space-y-1.5 max-h-[520px] overflow-y-auto">
+                {filteredTaskLog.map((l) => (
+                  <div
+                    key={l.id}
+                    className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-xs"
+                  >
+                    <span className="text-gray-500 tabular-nums">
+                      {formatDateTime(l.at)}
+                    </span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full font-medium ${TASK_LOG_ACTION_META[l.action]?.badge ?? "bg-gray-200 text-gray-600"}`}
+                    >
+                      {TASK_LOG_ACTION_META[l.action]?.label ?? l.action}
+                    </span>
+                    <span className="font-medium text-gray-800 truncate max-w-[240px]">
+                      {l.taskTitle || "（無題）"}
+                    </span>
+                    <span className="text-gray-600">👤 {l.actor}</span>
                     {l.detail && (
                       <span className="text-gray-500">｜{l.detail}</span>
                     )}

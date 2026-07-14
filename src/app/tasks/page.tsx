@@ -67,11 +67,14 @@ import {
   saveTaskArchive,
   splitArchivableTasks,
   ARCHIVE_AFTER_DAYS,
+  appendTaskLog,
+  buildTaskUpdateDetail,
   type ArchivedTask,
   type TaskCategoryDef,
   type StaffTask,
   type TaskStatus,
 } from "@/lib/staff-tasks";
+import { resolveTaskActor } from "@/lib/task-actor";
 
 type ViewKey = "due" | "assignee" | "status" | "team";
 
@@ -118,6 +121,16 @@ export default function TasksPage() {
   // 編集ダイアログ
   const [editing, setEditing] = useState<StaffTask | null>(null);
 
+  // 操作ログの操作者名（指示書56。ログイン中=プロフィール名/未ログイン=保存名/匿名）
+  const actorRef = useRef("匿名");
+  useEffect(() => {
+    resolveTaskActor()
+      .then((n) => {
+        actorRef.current = n;
+      })
+      .catch(() => {});
+  }, []);
+
   // セクション並び順（content_store: tasks_page_layout。未設定/不正なら既定順）
   const [sectionOrder, setSectionOrder] = useState<TasksSectionKey[]>(() =>
     visibleTasksSectionKeys(null)
@@ -155,6 +168,17 @@ export default function TasksPage() {
             if (okArchive) {
               const okTasks = await saveTasks(keep);
               setTasks(okTasks ? keep : t);
+              // 操作ログ（失敗しても移動自体は成立させる。指示書56）
+              if (okTasks && additions.length > 0) {
+                appendTaskLog(
+                  additions.map((x) => ({
+                    action: "archive" as const,
+                    taskId: x.id,
+                    taskTitle: x.title,
+                    actor: "自動（完了7日超）",
+                  }))
+                ).catch(() => {});
+              }
               return;
             }
           } catch {
@@ -288,10 +312,17 @@ export default function TasksPage() {
       due: localInputToIso(dueLocal),
       status,
       note: note.trim() || undefined,
+      createdBy: actorRef.current,
       createdAt: nowIso,
       updatedAt: nowIso,
     };
     await persist([task, ...tasks]);
+    appendTaskLog({
+      action: "create",
+      taskId: task.id,
+      taskTitle: task.title,
+      actor: actorRef.current,
+    }).catch(() => {});
     // 担当者を名簿へマージ
     const nextMembers = mergeMembers(members, list);
     if (nextMembers.length !== members.length) {
@@ -310,36 +341,64 @@ export default function TasksPage() {
     setSaving(false);
   };
 
+  // 状態変更ログ（サンプルはノイズ回避のため記録しない）
+  const logStatusChange = (target: StaffTask, next: TaskStatus) => {
+    if (isSampleTask(target) || target.status === next) return;
+    appendTaskLog({
+      action: "status",
+      taskId: target.id,
+      taskTitle: target.title,
+      actor: actorRef.current,
+      detail: `${STATUS_LABELS[target.status]}→${STATUS_LABELS[next]}`,
+    }).catch(() => {});
+  };
+
   const handleStatusChange = (id: string, next: TaskStatus) => {
+    const target = tasks.find((t) => t.id === id);
     const updated = tasks.map((t) =>
       t.id === id
         ? { ...t, status: next, updatedAt: new Date().toISOString() }
         : t
     );
     persist(updated);
+    if (target) logStatusChange(target, next);
   };
 
   // ワンタップ完了/解除（未完了→done、done→todo）
   const handleToggleDone = (id: string) => {
+    const target = tasks.find((t) => t.id === id);
+    const next: TaskStatus = target?.status === "done" ? "todo" : "done";
     const updated = tasks.map((t) =>
       t.id === id
-        ? {
-            ...t,
-            status: (t.status === "done" ? "todo" : "done") as TaskStatus,
-            updatedAt: new Date().toISOString(),
-          }
+        ? { ...t, status: next, updatedAt: new Date().toISOString() }
         : t
     );
     persist(updated);
+    if (target) logStatusChange(target, next);
   };
 
   const handleDelete = (id: string) => {
     const target = tasks.find((t) => t.id === id);
-    if (!confirm(`「${target?.title ?? "このタスク"}」を削除しますか？`)) return;
+    if (
+      !confirm(
+        `このタスクを削除しますか？\n「${target?.title ?? "このタスク"}」\n削除は記録されます。`
+      )
+    ) {
+      return;
+    }
     persist(tasks.filter((t) => t.id !== id));
+    if (target && !isSampleTask(target)) {
+      appendTaskLog({
+        action: "delete",
+        taskId: target.id,
+        taskTitle: target.title,
+        actor: actorRef.current,
+      }).catch(() => {});
+    }
   };
 
   const handleEditSave = (updated: StaffTask) => {
+    const before = tasks.find((t) => t.id === updated.id);
     const next = tasks.map((t) =>
       t.id === updated.id
         ? { ...updated, updatedAt: new Date().toISOString() }
@@ -347,6 +406,19 @@ export default function TasksPage() {
     );
     persist(next);
     setEditing(null);
+    // 変更点があった場合のみ記録（サンプルは記録しない）
+    if (before && !isSampleTask(before)) {
+      const detail = buildTaskUpdateDetail(before, updated, categories);
+      if (detail) {
+        appendTaskLog({
+          action: "update",
+          taskId: updated.id,
+          taskTitle: updated.title,
+          actor: actorRef.current,
+          detail,
+        }).catch(() => {});
+      }
+    }
   };
 
   // ─── 確認用サンプル ───
@@ -369,8 +441,22 @@ export default function TasksPage() {
   };
 
   // ファイルAI解析からの取り込み（新規IDで追加・担当者はstaff_membersにマージ）
-  const handleImport = async (newTasks: StaffTask[]) => {
+  const handleImport = async (imported: StaffTask[]) => {
+    // 登録者を記録（指示書56）
+    const newTasks = imported.map((t) => ({
+      ...t,
+      createdBy: actorRef.current,
+    }));
     await persist([...newTasks, ...tasks]);
+    appendTaskLog(
+      newTasks.map((t) => ({
+        action: "create" as const,
+        taskId: t.id,
+        taskTitle: t.title,
+        actor: actorRef.current,
+        detail: "AI取り込み",
+      }))
+    ).catch(() => {});
     const names = newTasks.flatMap((t) => assigneesOf(t));
     const nextMembers = mergeMembers(members, names);
     if (nextMembers.length !== members.length) {
@@ -1331,6 +1417,17 @@ function EditDialog({
               rows={3}
             />
           </div>
+          {/* 登録者・登録日時（指示書56。既存タスクは登録者未記録=「—」） */}
+          <p className="text-[11px] text-muted-foreground">
+            登録: {task.createdBy || "—"} ・{" "}
+            {new Date(task.createdAt).toLocaleString("ja-JP", {
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </p>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
