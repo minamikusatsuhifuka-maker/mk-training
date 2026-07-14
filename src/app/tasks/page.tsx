@@ -69,12 +69,17 @@ import {
   ARCHIVE_AFTER_DAYS,
   appendTaskLog,
   buildTaskUpdateDetail,
+  cleanTaskRoles,
+  roleOf,
+  TASK_ROLE_STYLE,
+  type TaskMemberRole,
   type ArchivedTask,
   type TaskCategoryDef,
   type StaffTask,
   type TaskStatus,
 } from "@/lib/staff-tasks";
 import { resolveTaskActor } from "@/lib/task-actor";
+import { AssigneeNames } from "@/components/tasks/AssigneeNames";
 
 type ViewKey = "due" | "assignee" | "status" | "team";
 
@@ -105,9 +110,12 @@ export default function TasksPage() {
   const [columns, setColumns] = useState<1 | 2 | 3>(3);
   const [winW, setWinW] = useState(1280);
 
-  // 追加フォーム（担当者はチップ式複数選択・指示書53）
+  // 追加フォーム（担当者はチップ式複数選択・指示書53。役割=リーダー/サブは57）
   const [title, setTitle] = useState("");
   const [assignees, setAssignees] = useState<string[]>([]);
+  const [assigneeRoles, setAssigneeRoles] = useState<
+    Record<string, "leader" | "sub">
+  >({});
   const [assigneeInput, setAssigneeInput] = useState("");
   const [category, setCategory] = useState("");
   const [dueLocal, setDueLocal] = useState("");
@@ -284,9 +292,42 @@ export default function TasksPage() {
   const toggleAssignee = (name: string) => {
     const n = name.trim();
     if (!n) return;
-    setAssignees((prev) =>
-      prev.includes(n) ? prev.filter((x) => x !== n) : [...prev, n]
-    );
+    setAssignees((prev) => {
+      if (prev.includes(n)) {
+        // 担当から外したら役割もクリア（指示書57）
+        setAssigneeRoles((r) => {
+          if (!(n in r)) return r;
+          const next = { ...r };
+          delete next[n];
+          return next;
+        });
+        return prev.filter((x) => x !== n);
+      }
+      return [...prev, n];
+    });
+  };
+
+  // 役割の循環切替: メンバー → 👑リーダー → ⭐サブ → メンバー。
+  // リーダーは最大1名（2人目を👑にしたら前のリーダーはメンバーに戻す）。指示書57
+  const cycleRole = (
+    roles: Record<string, "leader" | "sub">,
+    name: string
+  ): Record<string, "leader" | "sub"> => {
+    // Recordのインデックスはundefinedを含まない型になるため明示キャスト
+    const cur: TaskMemberRole =
+      (roles[name] as "leader" | "sub" | undefined) ?? "member";
+    const next = { ...roles };
+    if (cur === "member") {
+      for (const k of Object.keys(next)) {
+        if (next[k] === "leader") delete next[k];
+      }
+      next[name] = "leader";
+    } else if (cur === "leader") {
+      next[name] = "sub";
+    } else {
+      delete next[name];
+    }
+    return next;
   };
 
   const addAssigneeFromInput = () => {
@@ -308,6 +349,7 @@ export default function TasksPage() {
       title: title.trim(),
       assignee: list[0] ?? "",
       assignees: list,
+      taskRoles: cleanTaskRoles(list, assigneeRoles),
       category: category || undefined,
       due: localInputToIso(dueLocal),
       status,
@@ -332,6 +374,7 @@ export default function TasksPage() {
     // フォームをリセット
     setTitle("");
     setAssignees([]);
+    setAssigneeRoles({});
     setAssigneeInput("");
     setCategory("");
     setDueLocal("");
@@ -512,26 +555,49 @@ export default function TasksPage() {
             <Label htmlFor="t-assignee-input">
               担当者（複数選択可・0名=未割当もOK）
             </Label>
-            {/* 選択済みチップ */}
+            {/* 選択済みチップ（チーム=2名以上のとき名前クリックで役割を循環。指示書57） */}
             {assignees.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pb-1">
-                {assignees.map((a) => (
-                  <span
-                    key={a}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-teal-light text-teal rounded-full text-xs"
-                  >
-                    {a}
-                    <button
-                      type="button"
-                      onClick={() => toggleAssignee(a)}
-                      className="opacity-60 hover:opacity-100 leading-none"
-                      aria-label={`${a} を担当から外す`}
+                {assignees.map((a) => {
+                  const isTeam = assignees.length >= 2;
+                  const role = isTeam ? (assigneeRoles[a] ?? "member") : "member";
+                  const s = TASK_ROLE_STYLE[role];
+                  return (
+                    <span
+                      key={a}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border ${s.chip}`}
                     >
-                      ×
-                    </button>
-                  </span>
-                ))}
+                      {isTeam ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setAssigneeRoles((r) => cycleRole(r, a))
+                          }
+                          title="クリックで役割を切替（メンバー→👑リーダー→⭐サブ）"
+                        >
+                          {s.icon}
+                          {a}
+                        </button>
+                      ) : (
+                        <>{a}</>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => toggleAssignee(a)}
+                        className="opacity-60 hover:opacity-100 leading-none"
+                        aria-label={`${a} を担当から外す`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  );
+                })}
               </div>
+            )}
+            {assignees.length >= 2 && (
+              <p className="text-[11px] text-muted-foreground">
+                名前をクリックすると リーダー👑 / サブ⭐ を設定できます（×で担当から外す）
+              </p>
             )}
             {/* 候補（タップで追加/解除） */}
             {assigneeOptions.length > 0 && (
@@ -936,7 +1002,13 @@ function TaskCard({
   onEdit,
   onDelete,
   showAssignee = true,
-}: RowHandlers & { task: StaffTask; showAssignee?: boolean }) {
+  roleFor,
+}: RowHandlers & {
+  task: StaffTask;
+  showAssignee?: boolean;
+  /** 担当者別ビューのグループ人物名（その人の役割アイコン👑/⭐を出す。指示書57） */
+  roleFor?: string;
+}) {
   const kind = dueColor(task.due, task.status, now);
   const bucket = bucketOf(task, now);
   const isDone = task.status === "done";
@@ -980,19 +1052,22 @@ function TaskCard({
       {/* 下段：担当者／カテゴリ／期限／状態／操作（狭くても折り返す） */}
       <div className="mt-auto flex flex-wrap items-center gap-2">
         {showAssignee ? (
-          // 全員表示（54）: truncateで切らず折り返す。名前が全員見えることを優先
+          // 全員表示（54）: truncateで切らず折り返す。役割色付き（57）
           <span className="text-xs text-foreground/70 min-w-0 break-words whitespace-normal">
             {team && <span title="チームタスク">👥 </span>}
-            {formatAssignees(task)}
+            <AssigneeNames task={task} />
           </span>
         ) : (
-          // 担当者別ビューでもチームタスクは👥マークで分かるようにする（指示書53）
+          // 担当者別ビューでもチームタスクは👥マークで分かるようにする（指示書53）。
+          // グループ人物の役割（リーダー👑/サブ⭐）も添える（57）
           team && (
             <span
               className="text-xs"
-              title={`チームタスク: ${assigneesOf(task).join("・")}`}
+              title={`チームタスク: ${formatAssignees(task)}`}
             >
               👥
+              {roleFor && roleOf(task, roleFor) === "leader" && "👑"}
+              {roleFor && roleOf(task, roleFor) === "sub" && "⭐"}
             </span>
           )
         )}
@@ -1138,7 +1213,13 @@ function AssigneeView({
             </h3>
             <TaskGrid cols={cols}>
               {sorted.map((t) => (
-                <TaskCard key={t.id} task={t} {...h} showAssignee={false} />
+                <TaskCard
+                  key={t.id}
+                  task={t}
+                  {...h}
+                  showAssignee={false}
+                  roleFor={name}
+                />
               ))}
             </TaskGrid>
           </div>
@@ -1199,6 +1280,9 @@ function EditDialog({
 }) {
   const [title, setTitle] = useState(task.title);
   const [assignees, setAssignees] = useState<string[]>(assigneesOf(task));
+  const [roles, setRoles] = useState<Record<string, "leader" | "sub">>(
+    task.taskRoles ?? {}
+  );
   const [assigneeInput, setAssigneeInput] = useState("");
   const [category, setCategory] = useState(task.category ?? "");
   const [dueLocal, setDueLocal] = useState(isoToLocalInput(task.due));
@@ -1211,10 +1295,40 @@ function EditDialog({
   const toggle = (name: string) => {
     const n = name.trim();
     if (!n) return;
-    setAssignees((prev) =>
-      prev.includes(n) ? prev.filter((x) => x !== n) : [...prev, n]
-    );
+    setAssignees((prev) => {
+      if (prev.includes(n)) {
+        // 担当から外したら役割もクリア（指示書57）
+        setRoles((r) => {
+          if (!(n in r)) return r;
+          const next = { ...r };
+          delete next[n];
+          return next;
+        });
+        return prev.filter((x) => x !== n);
+      }
+      return [...prev, n];
+    });
   };
+
+  // 役割の循環切替（メンバー→👑リーダー→⭐サブ→メンバー。リーダーは最大1名）
+  const cycleRoleOf = (name: string) =>
+    setRoles((prev) => {
+      // Recordのインデックスはundefinedを含まない型になるため明示キャスト
+      const cur: TaskMemberRole =
+        (prev[name] as "leader" | "sub" | undefined) ?? "member";
+      const next = { ...prev };
+      if (cur === "member") {
+        for (const k of Object.keys(next)) {
+          if (next[k] === "leader") delete next[k];
+        }
+        next[name] = "leader";
+      } else if (cur === "leader") {
+        next[name] = "sub";
+      } else {
+        delete next[name];
+      }
+      return next;
+    });
 
   const addFromInput = () => {
     const n = assigneeInput.trim();
@@ -1238,6 +1352,7 @@ function EditDialog({
       title: title.trim(),
       assignee: list[0] ?? "",
       assignees: list,
+      taskRoles: cleanTaskRoles(list, roles),
       category: category || undefined,
       due: localInputToIso(dueLocal),
       status,
@@ -1264,23 +1379,44 @@ function EditDialog({
             <Label htmlFor="e-assignee-input">担当者（複数選択可）</Label>
             {assignees.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pb-1">
-                {assignees.map((a) => (
-                  <span
-                    key={a}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-teal-light text-teal rounded-full text-xs"
-                  >
-                    {a}
-                    <button
-                      type="button"
-                      onClick={() => toggle(a)}
-                      className="opacity-60 hover:opacity-100 leading-none"
-                      aria-label={`${a} を担当から外す`}
+                {assignees.map((a) => {
+                  const isTeam = assignees.length >= 2;
+                  const role = isTeam ? (roles[a] ?? "member") : "member";
+                  const s = TASK_ROLE_STYLE[role];
+                  return (
+                    <span
+                      key={a}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border ${s.chip}`}
                     >
-                      ×
-                    </button>
-                  </span>
-                ))}
+                      {isTeam ? (
+                        <button
+                          type="button"
+                          onClick={() => cycleRoleOf(a)}
+                          title="クリックで役割を切替（メンバー→👑リーダー→⭐サブ）"
+                        >
+                          {s.icon}
+                          {a}
+                        </button>
+                      ) : (
+                        <>{a}</>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => toggle(a)}
+                        className="opacity-60 hover:opacity-100 leading-none"
+                        aria-label={`${a} を担当から外す`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  );
+                })}
               </div>
+            )}
+            {assignees.length >= 2 && (
+              <p className="text-[11px] text-muted-foreground">
+                名前をクリックすると リーダー👑 / サブ⭐ を設定できます（×で担当から外す）
+              </p>
             )}
             {assigneeOptions.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pb-1 max-h-24 overflow-y-auto">

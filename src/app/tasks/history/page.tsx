@@ -25,6 +25,7 @@ import {
   type TaskCategoryDef,
 } from "@/lib/staff-tasks";
 import { resolveTaskActor } from "@/lib/task-actor";
+import { AssigneeNames } from "@/components/tasks/AssigneeNames";
 
 // 完了日（updatedAt=doneにした日時）を YYYY/M/D で表示
 function formatDoneDate(iso: string): string {
@@ -303,12 +304,12 @@ export default function TaskHistoryPage() {
                         </p>
                       )}
                       <div className="flex flex-wrap items-center gap-2 mt-1">
-                        {/* 全員表示（54）: truncateせず折り返す */}
+                        {/* 全員表示（54）: truncateせず折り返す。役割色付き（57） */}
                         <span className="text-xs text-foreground/70 min-w-0 break-words whitespace-normal">
                           {isTeamTask(t) && (
                             <span title="チームタスク">👥 </span>
                           )}
-                          {formatAssignees(t)}
+                          <AssigneeNames task={t} />
                         </span>
                         {t.category && (
                           <span className="text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">

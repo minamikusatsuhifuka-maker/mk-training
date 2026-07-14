@@ -20,6 +20,9 @@ export type StaffTask = {
   assignee: string;
   /** 複数担当（指示書53）。新規保存はこちらの配列で行う */
   assignees?: string[];
+  /** チームタスクの役割（指示書57）。担当名→リーダー/サブ。未設定=全員メンバー扱い。
+   *  チーム（2名以上）でのみ有効。担当から外れた名前は保存時にクリーンアップする */
+  taskRoles?: Record<string, "leader" | "sub">;
   /** カテゴリid（task_category_config の id。未分類は undefined） */
   category?: string;
   due?: string; // ISO文字列（任意）
@@ -48,13 +51,90 @@ export function isTeamTask(t: Pick<StaffTask, "assignee" | "assignees">): boolea
 }
 
 // 担当者の表示用連結。常に全員を「・」でつなぐ（指示書54で「+N」省略を撤廃。
-// 長い場合の折り返しは表示側の flex-wrap / break-words で対応する）
+// 長い場合の折り返しは表示側の flex-wrap / break-words で対応する）。
+// チーム（2名以上）で役割があれば 👑/⭐ を名前の前に付ける（指示書57）。
+// 色付き表示は components/tasks/AssigneeNames.tsx（JSX版）を使う。
 export function formatAssignees(
-  t: Pick<StaffTask, "assignee" | "assignees">
+  t: Pick<StaffTask, "assignee" | "assignees" | "taskRoles">
 ): string {
   const names = assigneesOf(t);
   if (names.length === 0) return "—";
-  return names.join("・");
+  const team = names.length >= 2;
+  return names
+    .map((n) => {
+      if (!team) return n;
+      const r = t.taskRoles?.[n];
+      return r === "leader" ? `👑${n}` : r === "sub" ? `⭐${n}` : n;
+    })
+    .join("・");
+}
+
+// ─── チームタスクの役割（指示書57） ───
+export type TaskMemberRole = "leader" | "sub" | "member";
+
+// 役割の色・アイコンの一元管理（リテラルクラス・動的組み立て禁止）。
+// chip=選択済みチップ（memberは従来の緑系）、text=名前表示の文字色。
+export const TASK_ROLE_STYLE: Record<
+  TaskMemberRole,
+  { icon: string; label: string; chip: string; text: string }
+> = {
+  leader: {
+    icon: "👑",
+    label: "リーダー",
+    chip: "bg-amber-100 text-amber-800 border-amber-300",
+    text: "text-amber-700 font-semibold",
+  },
+  sub: {
+    icon: "⭐",
+    label: "サブ",
+    chip: "bg-blue-100 text-blue-800 border-blue-300",
+    text: "text-blue-700",
+  },
+  member: {
+    icon: "",
+    label: "",
+    chip: "bg-teal-light text-teal border-transparent",
+    text: "",
+  },
+};
+
+// その人の役割（チームでないタスクは常に member）
+export function roleOf(
+  t: Pick<StaffTask, "assignee" | "assignees" | "taskRoles">,
+  name: string
+): TaskMemberRole {
+  if (!isTeamTask(t)) return "member";
+  return t.taskRoles?.[name] ?? "member";
+}
+
+export function leaderName(
+  t: Pick<StaffTask, "assignee" | "assignees" | "taskRoles">
+): string | null {
+  if (!isTeamTask(t)) return null;
+  const names = assigneesOf(t);
+  return names.find((n) => t.taskRoles?.[n] === "leader") ?? null;
+}
+
+export function subNames(
+  t: Pick<StaffTask, "assignee" | "assignees" | "taskRoles">
+): string[] {
+  if (!isTeamTask(t)) return [];
+  return assigneesOf(t).filter((n) => t.taskRoles?.[n] === "sub");
+}
+
+// 保存用クリーンアップ: 担当に残っている名前の役割のみ保持。
+// チームでない（担当2名未満）場合や空になった場合は undefined（役割なし）。
+export function cleanTaskRoles(
+  assignees: string[],
+  roles: Record<string, "leader" | "sub"> | undefined
+): Record<string, "leader" | "sub"> | undefined {
+  if (!roles || assignees.length < 2) return undefined;
+  const out: Record<string, "leader" | "sub"> = {};
+  for (const n of assignees) {
+    const r = roles[n];
+    if (r === "leader" || r === "sub") out[n] = r;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 // 状態ラベル
@@ -240,6 +320,17 @@ export function buildTaskUpdateDetail(
   const afterAssignees = assigneesOf(after).join("・") || "未割当";
   if (beforeAssignees !== afterAssignees) {
     parts.push(`担当: ${beforeAssignees}→${afterAssignees}`);
+  }
+  // 役割変更（指示書57。厳密diffは不要）
+  const bLeader = leaderName(before) ?? "なし";
+  const aLeader = leaderName(after) ?? "なし";
+  if (bLeader !== aLeader) {
+    parts.push(`リーダー: ${bLeader}→${aLeader}`);
+  }
+  const bSubs = subNames(before).join("・") || "なし";
+  const aSubs = subNames(after).join("・") || "なし";
+  if (bSubs !== aSubs) {
+    parts.push(`サブ: ${bSubs}→${aSubs}`);
   }
   if ((before.category ?? "") !== (after.category ?? "")) {
     const b = taskCategoryLabel(cats, before.category) || "未分類";
