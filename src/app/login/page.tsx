@@ -150,7 +150,10 @@ function LoginForm() {
         )}
 
         <p className="text-[11px] text-muted-foreground text-center">
-          アカウントは管理者からの招待制です。
+          はじめての方は
+          <Link href="/join" className="underline underline-offset-2 mx-0.5">
+            招待コードで登録 →
+          </Link>
           <br />
           ポータルの閲覧はログインなしでも
           <Link href="/" className="underline underline-offset-2 mx-0.5">

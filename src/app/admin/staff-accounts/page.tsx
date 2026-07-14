@@ -6,8 +6,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import QRCode from "qrcode";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import type { JoinConfig } from "@/lib/join-config";
 
 type AccountSummary = {
   id: string;
@@ -56,6 +58,14 @@ export default function StaffAccountsAdminPage() {
   );
   const [copied, setCopied] = useState(false);
 
+  // 📱 QR・招待コード（指示書55）
+  const [joinConfig, setJoinConfig] = useState<JoinConfig | null>(null);
+  const [joinUrl, setJoinUrl] = useState("");
+  const [qrDataUrl, setQrDataUrl] = useState("");
+  const [joinBusy, setJoinBusy] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
+  const [urlCopied, setUrlCopied] = useState(false);
+
   const reload = useCallback(async () => {
     const res = await fetch("/api/admin/staff-accounts");
     const j = (await res.json().catch(() => null)) as {
@@ -91,6 +101,95 @@ export default function StaffAccountsAdminPage() {
       .then(reload)
       .catch(() => setLoaded(true));
   }, [reload]);
+
+  // 登録URLとQR・招待コード設定の読み込み（管理者のみ成功する。失敗時はセクション非表示）
+  useEffect(() => {
+    const url = `${window.location.origin}/join`;
+    setJoinUrl(url);
+    QRCode.toDataURL(url, { width: 240, margin: 1 })
+      .then(setQrDataUrl)
+      .catch(() => {});
+    fetch("/api/admin/join-config")
+      .then(async (res) => {
+        if (!res.ok) return;
+        const j = (await res.json()) as { config?: JoinConfig };
+        if (j.config) setJoinConfig(j.config);
+      })
+      .catch(() => {});
+  }, []);
+
+  // 招待コード設定の更新（受付切替・再発行）
+  const updateJoinConfig = async (patch: {
+    enabled?: boolean;
+    regenerate?: boolean;
+  }) => {
+    setJoinBusy(true);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/join-config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      const j = (await res.json().catch(() => null)) as {
+        config?: JoinConfig;
+        error?: string;
+      } | null;
+      if (!res.ok || !j?.config) {
+        setError(j?.error ?? "招待コード設定の更新に失敗しました");
+        return;
+      }
+      setJoinConfig(j.config);
+    } finally {
+      setJoinBusy(false);
+    }
+  };
+
+  const copyText = async (text: string, mark: (v: boolean) => void) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      mark(true);
+      setTimeout(() => mark(false), 2000);
+    } catch {
+      setError("コピーに失敗しました。手動で選択してコピーしてください");
+    }
+  };
+
+  // 🖨 印刷用の貼り紙ビュー（QR＋URL＋手順＋コード）を別ウィンドウで開く
+  const openPrintView = () => {
+    if (!joinConfig || !qrDataUrl) return;
+    const w = window.open("", "_blank", "width=600,height=800");
+    if (!w) {
+      setError("ポップアップがブロックされました。許可してください");
+      return;
+    }
+    w.document.write(`<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><title>スタッフ登録のご案内</title>
+<style>
+  body { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif; text-align: center; padding: 32px 24px; color: #1e293b; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { font-size: 13px; color: #64748b; margin-bottom: 20px; }
+  img { width: 240px; height: 240px; }
+  .url { font-size: 13px; color: #334155; margin: 8px 0 20px; word-break: break-all; }
+  ol { text-align: left; display: inline-block; font-size: 15px; line-height: 2; margin: 0 auto; }
+  .code { font-family: monospace; font-size: 20px; letter-spacing: 4px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 2px 10px; }
+  .note { font-size: 11px; color: #94a3b8; margin-top: 24px; }
+  @media print { .noprint { display: none; } }
+</style></head><body>
+  <h1>南草津皮フ科 スタッフポータル</h1>
+  <p class="sub">スタッフアカウント登録のご案内</p>
+  <img src="${qrDataUrl}" alt="登録ページのQRコード">
+  <p class="url">${joinUrl}</p>
+  <ol>
+    <li>① QRコードを読み取る（または上のURLを開く）</li>
+    <li>② 招待コード「<span class="code">${joinConfig.code}</span>」を入力する</li>
+    <li>③ 名前・メールアドレス・パスワードを登録する</li>
+  </ol>
+  <p class="note">※ このご案内は院内のみで共有してください</p>
+  <p class="noprint" style="margin-top:24px"><button onclick="window.print()" style="font-size:14px;padding:8px 20px">🖨 印刷する</button></p>
+</body></html>`);
+    w.document.close();
+  };
 
   const post = async (body: Record<string, string>, successMsg: string) => {
     setBusy(true);
@@ -298,6 +397,135 @@ export default function StaffAccountsAdminPage() {
               </Button>
             </div>
           </form>
+          )}
+
+          {/* 📱 QR・招待コード（自己登録。指示書55） */}
+          {joinConfig && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-800">
+                  📱 QR・招待コード（スタッフの自己登録）
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  スタッフがQRコードまたはURLから登録ページ（/join）を開き、招待コード＋名前＋メール＋パスワードで自分で登録できます。招待メール・🔑仮パスワードとの併用も可能です。
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-5 items-start">
+                {/* QRコード */}
+                <div className="text-center space-y-2">
+                  {qrDataUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={qrDataUrl}
+                      alt="登録ページのQRコード"
+                      className="w-40 h-40 border border-slate-200 rounded-lg"
+                    />
+                  ) : (
+                    <div className="w-40 h-40 border border-slate-200 rounded-lg flex items-center justify-center text-xs text-slate-400">
+                      QR生成中...
+                    </div>
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={openPrintView}
+                    disabled={!qrDataUrl}
+                  >
+                    🖨 印刷用を開く
+                  </Button>
+                </div>
+
+                <div className="flex-1 min-w-[240px] space-y-3">
+                  {/* 受付状態 */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full ${
+                        joinConfig.enabled
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-slate-200 text-slate-600"
+                      }`}
+                    >
+                      {joinConfig.enabled ? "✅ 受付中" : "⏸ 停止中"}
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={joinBusy}
+                      onClick={() =>
+                        updateJoinConfig({ enabled: !joinConfig.enabled })
+                      }
+                    >
+                      {joinConfig.enabled ? "受付を停止" : "受付を再開"}
+                    </Button>
+                  </div>
+
+                  {/* 招待コード */}
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-slate-600">
+                      招待コード
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <code className="text-base font-mono tracking-[0.3em] bg-slate-50 border border-slate-200 rounded-md px-3 py-1.5 select-all">
+                        {joinConfig.code}
+                      </code>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => copyText(joinConfig.code, setCodeCopied)}
+                      >
+                        {codeCopied ? "✅ コピーしました" : "📋 コピー"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={joinBusy}
+                        onClick={() => {
+                          if (
+                            confirm(
+                              "招待コードを再発行しますか？\n（今のコードは使えなくなります。既存アカウントには影響しません）"
+                            )
+                          ) {
+                            updateJoinConfig({ regenerate: true });
+                          }
+                        }}
+                      >
+                        ♻️ 再発行
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* 登録URL */}
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-slate-600">
+                      登録URL
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <code className="text-xs bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 break-all">
+                        {joinUrl}
+                      </code>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => copyText(joinUrl, setUrlCopied)}
+                      >
+                        {urlCopied ? "✅ コピーしました" : "📋 コピー"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500">
+                    ⚠️
+                    招待コードは院内のみで共有してください。漏れた場合は再発行してください（既存アカウントには影響しません）。
+                  </p>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* 一覧 */}
