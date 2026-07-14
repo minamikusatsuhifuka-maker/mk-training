@@ -30,6 +30,21 @@ export function Sidebar() {
               </p>
               <ul className="space-y-0.5">
                 {section.items.map((item) => {
+                  // 外部リンクは別タブで開く（現在ページのハイライトは不要）。指示書59
+                  if (item.external) {
+                    return (
+                      <li key={item.href}>
+                        <a
+                          href={item.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block rounded-md px-2 py-1.5 text-sm transition-colors text-foreground hover:bg-accent"
+                        >
+                          {item.label}
+                        </a>
+                      </li>
+                    );
+                  }
                   const isActive = pathname === item.href;
                   return (
                     <li key={item.href}>

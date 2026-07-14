@@ -51,17 +51,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <ul className="space-y-0.5">
                       {section.items.map((item) => (
                         <li key={item.href}>
-                          <Link
-                            href={item.href}
-                            onClick={() => setMenuOpen(false)}
-                            className={`block rounded-md px-2 py-2 text-sm min-h-[44px] flex items-center transition-colors ${
-                              pathname === item.href
-                                ? "bg-teal-light text-teal font-medium"
-                                : "text-foreground hover:bg-accent"
-                            }`}
-                          >
-                            {item.label}
-                          </Link>
+                          {item.external ? (
+                            // 外部リンクは別タブで開く（指示書59）
+                            <a
+                              href={item.href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={() => setMenuOpen(false)}
+                              className="rounded-md px-2 py-2 text-sm min-h-[44px] flex items-center transition-colors text-foreground hover:bg-accent"
+                            >
+                              {item.label}
+                            </a>
+                          ) : (
+                            <Link
+                              href={item.href}
+                              onClick={() => setMenuOpen(false)}
+                              className={`block rounded-md px-2 py-2 text-sm min-h-[44px] flex items-center transition-colors ${
+                                pathname === item.href
+                                  ? "bg-teal-light text-teal font-medium"
+                                  : "text-foreground hover:bg-accent"
+                              }`}
+                            >
+                              {item.label}
+                            </Link>
+                          )}
                         </li>
                       ))}
                     </ul>

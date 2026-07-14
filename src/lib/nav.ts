@@ -8,7 +8,14 @@ export const UNCATEGORIZED_LABEL = "未分類";
 
 // --- マスター（既定構成） ---
 export type MasterCategory = { id: string; label: string };
-export type MasterItem = { key: string; href: string; label: string; categoryId: string };
+// external: true の項目は外部URL（別タブで開く。key はルートでなく一意ID）。指示書59
+export type MasterItem = {
+  key: string;
+  href: string;
+  label: string;
+  categoryId: string;
+  external?: true;
+};
 
 export const MASTER_CATEGORIES: MasterCategory[] = [
   { id: "home", label: "ホーム" },
@@ -23,6 +30,14 @@ export const MASTER_CATEGORIES: MasterCategory[] = [
 export const MASTER_ITEMS: MasterItem[] = [
   { key: "/", href: "/", label: "🏠 ホーム", categoryId: "home" },
   { key: "/members", href: "/members", label: "👥 メンバー紹介", categoryId: "home" },
+  // 外部リンク（別タブ）。指示書59
+  {
+    key: "ai-incho",
+    href: "https://ai-incho-git-main-minamikusatsuhifuka-makers-projects.vercel.app/",
+    label: "🤖 AI院長",
+    categoryId: "home",
+    external: true,
+  },
 
   { key: "/philosophy", href: "/philosophy", label: "🏛️ 理念・院長の想い", categoryId: "philosophy" },
 
@@ -69,7 +84,12 @@ export type NavItemConfig = {
 export type NavConfig = { categories: NavCategory[]; items: NavItemConfig[] };
 
 // --- 描画用に解決した形 ---
-export type ResolvedItem = { key: string; href: string; label: string };
+export type ResolvedItem = {
+  key: string;
+  href: string;
+  label: string;
+  external?: true;
+};
 export type ResolvedCategory = { id: string; label: string; items: ResolvedItem[] };
 
 const masterIndex = new Map(MASTER_ITEMS.map((it, i) => [it.key, i]));
@@ -154,6 +174,7 @@ function defaultResolved(): ResolvedCategory[] {
       key: it.key,
       href: it.href,
       label: it.label,
+      ...(it.external ? { external: true as const } : {}),
     })),
   }));
 }
@@ -199,6 +220,7 @@ export function resolveNav(cfg: NavConfig | null | undefined): ResolvedCategory[
         key: m.key,
         href: m.href,
         label: conf?.labelOverride?.trim() || m.label,
+        ...(m.external ? { external: true as const } : {}),
       };
 
       if (conf) {
