@@ -3,7 +3,7 @@
 // メンバー紹介（閲覧は誰でも可・ログイン不要）
 // 一覧: staff_profiles_index ／ 詳細: staff_profile:<userId>（クリックで読み込み）
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   BookOpen,
@@ -64,8 +64,8 @@ import {
 } from "@/lib/profile-roles";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
-  NEED_LABELS,
-  NEED_DETAIL_ITEMS,
+  NEEDS_GROUPS,
+  NEED_GROUP_STYLE,
   hasSurveyContent,
   isPdfAsset,
   radarValuesOf,
@@ -622,7 +622,8 @@ export default function MembersPage() {
                           詳細15項目を見る
                         </summary>
                         <div className="overflow-x-auto mt-2">
-                          {/* 「項目／欲求」の2列のみ（指示書61。注力・現況は表示しない） */}
+                          {/* 「項目／欲求」の2列のみ（指示書61）。
+                              5グループ見出し＋色＋区切り線（指示書62・/profileと同一定義） */}
                           <table className="w-full text-xs">
                             <thead>
                               <tr className="text-gray-400 border-b border-gray-100">
@@ -635,27 +636,45 @@ export default function MembersPage() {
                               </tr>
                             </thead>
                             <tbody>
-                              {NEED_DETAIL_ITEMS.filter(
-                                (item) =>
-                                  selected.needsSurvey?.details?.[item.key]
-                              ).map((item) => {
-                                const row =
-                                  selected.needsSurvey?.details?.[item.key];
+                              {NEEDS_GROUPS.map((group) => {
+                                const items = group.items.filter(
+                                  (item) =>
+                                    selected.needsSurvey?.details?.[item.key]
+                                );
+                                if (items.length === 0) return null;
+                                const s = NEED_GROUP_STYLE[group.key];
                                 return (
-                                  <tr
-                                    key={item.key}
-                                    className="border-b border-gray-50 last:border-0"
-                                  >
-                                    <td className="py-1 pr-2 text-gray-800 whitespace-nowrap">
-                                      <span className="text-gray-400">
-                                        {NEED_LABELS[item.need]}／
-                                      </span>
-                                      {item.label}
-                                    </td>
-                                    <td className="py-1 px-2 text-right text-gray-700 tabular-nums">
-                                      {row?.desire ?? "—"}
-                                    </td>
-                                  </tr>
+                                  <Fragment key={group.key}>
+                                    <tr
+                                      className={`${s.headerBg} border-t-2 border-gray-200`}
+                                    >
+                                      <td colSpan={2} className="py-1 px-2">
+                                        <span
+                                          className={`inline-block h-2 w-2 rounded-full mr-1.5 align-middle ${s.dot}`}
+                                        />
+                                        <span
+                                          className={`font-semibold ${s.text}`}
+                                        >
+                                          {group.label}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                    {items.map((item) => (
+                                      <tr
+                                        key={item.key}
+                                        className={`border-b border-gray-50 border-l-4 ${s.rowBorder}`}
+                                      >
+                                        <td className="py-1 pl-2 pr-2 text-gray-800 whitespace-nowrap">
+                                          {item.label}
+                                        </td>
+                                        <td className="py-1 px-2 text-right text-gray-700 tabular-nums">
+                                          {selected.needsSurvey?.details?.[
+                                            item.key
+                                          ]?.desire ?? "—"}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </Fragment>
                                 );
                               })}
                             </tbody>

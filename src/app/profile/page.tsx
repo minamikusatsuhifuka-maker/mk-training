@@ -4,7 +4,7 @@
 // テキスト保存: PUT /api/profile ／ 写真: POST・DELETE /api/profile/photos
 // 編集できるのは自分のプロフィールのみ（サーバー側でセッション検証）。
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -45,7 +45,8 @@ import {
 import {
   NEED_KEYS,
   NEED_LABELS,
-  NEED_DETAIL_ITEMS,
+  NEEDS_GROUPS,
+  NEED_GROUP_STYLE,
   clampNeedValue,
   isPdfAsset,
   type NeedKey,
@@ -1062,7 +1063,8 @@ export default function ProfilePage() {
           </button>
           {showSurveyDetails && (
             <div className="overflow-x-auto mt-2">
-              {/* 表示は「項目／欲求」の2列のみ（指示書61。注力・現況はデータ保持のみで非表示） */}
+              {/* 表示は「項目／欲求」の2列のみ（指示書61）。
+                  5グループごとに見出し行＋色＋区切り線でまとめる（指示書62） */}
               <table className="w-full text-xs">
                 <thead>
                   <tr className="text-muted-foreground border-b border-border">
@@ -1073,36 +1075,58 @@ export default function ProfilePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {NEED_DETAIL_ITEMS.map((item) => (
-                    <tr key={item.key} className="border-b border-border/50 last:border-0">
-                      <td className="py-1 pr-2 whitespace-nowrap">
-                        <span className="text-muted-foreground">
-                          {NEED_LABELS[item.need]}／
-                        </span>
-                        {item.label}
-                      </td>
-                      <td className="py-1 px-1 text-center">
-                        {surveyAiParsed ? (
-                          // AI読み取り後は表示専用（指示書61）
-                          <span className="tabular-nums">
-                            {surveyDetails[item.key]?.desire ?? "—"}
-                          </span>
-                        ) : (
-                          <Input
-                            type="number"
-                            min={0}
-                            max={100}
-                            value={surveyDetails[item.key]?.desire ?? ""}
-                            onChange={(e) =>
-                              setSurveyDetail(item.key, "desire", e.target.value)
-                            }
-                            className="h-7 w-16 text-xs mx-auto"
-                            placeholder="—"
-                          />
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {NEEDS_GROUPS.map((group) => {
+                    const s = NEED_GROUP_STYLE[group.key];
+                    return (
+                      <Fragment key={group.key}>
+                        {/* グループ見出し行（境界は濃いめの上ボーダーで区切る） */}
+                        <tr className={`${s.headerBg} border-t-2 border-border`}>
+                          <td colSpan={2} className="py-1.5 px-2">
+                            <span
+                              className={`inline-block h-2 w-2 rounded-full mr-1.5 align-middle ${s.dot}`}
+                            />
+                            <span className={`font-semibold ${s.text}`}>
+                              {group.label}
+                            </span>
+                          </td>
+                        </tr>
+                        {group.items.map((item) => (
+                          <tr
+                            key={item.key}
+                            className={`border-b border-border/50 border-l-4 ${s.rowBorder}`}
+                          >
+                            <td className="py-1 pl-2 pr-2 whitespace-nowrap">
+                              {item.label}
+                            </td>
+                            <td className="py-1 px-1 text-center">
+                              {surveyAiParsed ? (
+                                // AI読み取り後は表示専用（指示書61）
+                                <span className="tabular-nums">
+                                  {surveyDetails[item.key]?.desire ?? "—"}
+                                </span>
+                              ) : (
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  value={surveyDetails[item.key]?.desire ?? ""}
+                                  onChange={(e) =>
+                                    setSurveyDetail(
+                                      item.key,
+                                      "desire",
+                                      e.target.value
+                                    )
+                                  }
+                                  className="h-7 w-16 text-xs mx-auto"
+                                  placeholder="—"
+                                />
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

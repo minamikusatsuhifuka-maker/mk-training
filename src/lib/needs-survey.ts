@@ -47,6 +47,56 @@ export const NEED_DETAIL_ITEMS: NeedDetailItem[] = [
   { key: "creativity", label: "創造性", need: "fun" },
 ];
 
+// ─── 5グループの見た目（指示書62。/profile・/members で同一定義を共用） ───
+// Tailwind purge回避のためリテラルクラスで列挙（動的組み立て禁止）。
+// 落ち着いた医療系トーン: 生存=rose/愛・所属=amber/力=violet/自由=emerald/楽しみ=sky
+export const NEED_GROUP_STYLE: Record<
+  NeedKey,
+  { dot: string; headerBg: string; rowBorder: string; text: string }
+> = {
+  survival: {
+    dot: "bg-rose-400",
+    headerBg: "bg-rose-50",
+    rowBorder: "border-l-rose-300",
+    text: "text-rose-700",
+  },
+  belonging: {
+    dot: "bg-amber-400",
+    headerBg: "bg-amber-50",
+    rowBorder: "border-l-amber-300",
+    text: "text-amber-700",
+  },
+  power: {
+    dot: "bg-violet-400",
+    headerBg: "bg-violet-50",
+    rowBorder: "border-l-violet-300",
+    text: "text-violet-700",
+  },
+  freedom: {
+    dot: "bg-emerald-400",
+    headerBg: "bg-emerald-50",
+    rowBorder: "border-l-emerald-300",
+    text: "text-emerald-700",
+  },
+  fun: {
+    dot: "bg-sky-400",
+    headerBg: "bg-sky-50",
+    rowBorder: "border-l-sky-300",
+    text: "text-sky-700",
+  },
+};
+
+// グループ（順序・ラベル・サブ項目）の一括定義。表のグループ描画はこれを回す
+export const NEEDS_GROUPS: {
+  key: NeedKey;
+  label: string;
+  items: NeedDetailItem[];
+}[] = NEED_KEYS.map((k) => ({
+  key: k,
+  label: NEED_LABELS[k],
+  items: NEED_DETAIL_ITEMS.filter((i) => i.need === k),
+}));
+
 // 詳細の3値: 欲求（本来の高さ）／注力（時間・エネルギー）／現況（満たされ度）
 export type NeedDetailValues = {
   desire?: number;
