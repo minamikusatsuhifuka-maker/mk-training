@@ -68,6 +68,7 @@ import {
   NEED_DETAIL_ITEMS,
   DETAIL_VALUE_LABELS,
   hasSurveyContent,
+  isPdfAsset,
   radarValuesOf,
 } from "@/lib/needs-survey";
 import { NeedsRadarChart } from "@/components/NeedsRadarChart";
@@ -584,23 +585,35 @@ export default function MembersPage() {
                           />
                         </div>
                       )}
-                      {selected.needsSurvey.imageUrl && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setZoomPhoto(selected.needsSurvey!.imageUrl!)
-                          }
-                          className="shrink-0"
-                          title="クリックで拡大"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={selected.needsSurvey.imageUrl}
-                            alt="サーベイ結果画像"
-                            className="w-28 rounded-md border border-border object-cover hover:opacity-90"
-                          />
-                        </button>
-                      )}
+                      {selected.needsSurvey.imageUrl &&
+                        (isPdfAsset(selected.needsSurvey.imageUrl) ? (
+                          // PDFは拡大モーダルを出さず別タブリンク（指示書60）
+                          <a
+                            href={selected.needsSurvey.imageUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="shrink-0 flex flex-col items-center gap-1 rounded-md border border-border px-3 py-2 text-xs text-teal-700 hover:bg-teal-50"
+                          >
+                            <span className="text-2xl">📄</span>
+                            サーベイPDFを開く
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setZoomPhoto(selected.needsSurvey!.imageUrl!)
+                            }
+                            className="shrink-0"
+                            title="クリックで拡大"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={selected.needsSurvey.imageUrl}
+                              alt="サーベイ結果画像"
+                              className="w-28 rounded-md border border-border object-cover hover:opacity-90"
+                            />
+                          </button>
+                        ))}
                     </div>
                     {/* 詳細15項目（値がある場合のみ・折りたたみ） */}
                     {Object.keys(selected.needsSurvey.details ?? {}).length >

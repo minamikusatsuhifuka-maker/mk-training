@@ -2,8 +2,9 @@
 // POST: multipart/form-data { kind: "avatar" | "photo" | "survey", file }
 //   - avatar → staff-photos/{userId}/avatar.jpg（上書き）
 //   - photo  → staff-photos/{userId}/photos/{uuid}.jpg（上限 MAX_SHARED_PHOTOS 枚）
-//   - survey → staff-photos/{userId}/survey/{uuid}.jpg（基本的欲求サーベイ画像。指示書58・1枚のみ＝差し替え）
-// DELETE: { url } 自分の共有写真／サーベイ画像を削除（Storage＋プロフィールから除去）
+//   - survey → staff-photos/{userId}/survey/{uuid}.jpg|.pdf（基本的欲求サーベイ。指示書58/60・1ファイルのみ＝差し替え）
+//     PDF（application/pdf）はリサイズせずバイト列をそのまま保存する（指示書60）
+// DELETE: { url } 自分の共有写真／サーベイファイルを削除（Storage＋プロフィールから除去）
 // ※ バケット staff-photos はダッシュボードで作成済み前提。未作成時は分かりやすいエラーを返す。
 
 import { NextRequest, NextResponse } from "next/server";
@@ -26,6 +27,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const MAX_UPLOAD_BYTES = 4 * 1024 * 1024; // クライアントでリサイズ済み前提の安全網
+const MAX_PDF_BYTES = 10 * 1024 * 1024; // PDFはリサイズしないため別上限（指示書60）
 
 function errorResponse(e: unknown): NextResponse {
   if (e instanceof ServiceRoleMissingError) {
@@ -65,9 +67,22 @@ export async function POST(req: NextRequest) {
   ) {
     return NextResponse.json({ error: "不正なリクエストです" }, { status: 400 });
   }
-  if (file.size === 0 || file.size > MAX_UPLOAD_BYTES) {
+  // PDF は survey のみ受理（画像はリサイズ済み前提、PDFは無加工のため別上限）
+  const isPdf = file.type === "application/pdf";
+  if (isPdf && kind !== "survey") {
     return NextResponse.json(
-      { error: "画像サイズが不正です（4MBまで）" },
+      { error: "PDFはサーベイのみアップロードできます" },
+      { status: 400 }
+    );
+  }
+  const maxBytes = isPdf ? MAX_PDF_BYTES : MAX_UPLOAD_BYTES;
+  if (file.size === 0 || file.size > maxBytes) {
+    return NextResponse.json(
+      {
+        error: isPdf
+          ? "PDFサイズが不正です（10MBまで）"
+          : "画像サイズが不正です（4MBまで）",
+      },
       { status: 400 }
     );
   }
@@ -87,13 +102,16 @@ export async function POST(req: NextRequest) {
       kind === "avatar"
         ? `${user.id}/avatar.jpg`
         : kind === "survey"
-          ? `${user.id}/survey/${randomUUID()}.jpg`
+          ? `${user.id}/survey/${randomUUID()}.${isPdf ? "pdf" : "jpg"}`
           : `${user.id}/photos/${randomUUID()}.jpg`;
 
     const bytes = Buffer.from(await file.arrayBuffer());
     const { error: upError } = await admin.storage
       .from(STAFF_PHOTOS_BUCKET)
-      .upload(path, bytes, { contentType: "image/jpeg", upsert: kind === "avatar" });
+      .upload(path, bytes, {
+        contentType: isPdf ? "application/pdf" : "image/jpeg",
+        upsert: kind === "avatar",
+      });
     if (upError) throw new Error(upError.message);
 
     const { data: pub } = admin.storage

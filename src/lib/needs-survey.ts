@@ -139,6 +139,17 @@ export function radarValuesOf(
   return out;
 }
 
+// アセットがPDFか（指示書60。mimeType優先・無ければURL末尾 .pdf で判定）。
+// /profile プレビュー・/members 表示・AI抽出の分岐で共用する。
+export function isPdfAsset(
+  url: string | undefined | null,
+  mime?: string | null
+): boolean {
+  if (mime && mime.toLowerCase().includes("application/pdf")) return true;
+  if (!url) return false;
+  return url.split("?")[0].toLowerCase().endsWith(".pdf");
+}
+
 // 表示可能なサーベイか（公開設定かつ何かしら中身がある）
 export function hasSurveyContent(
   survey: NeedsSurvey | undefined | null

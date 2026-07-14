@@ -1,6 +1,7 @@
-// 基本的欲求サーベイ画像のAI数値抽出（指示書58・nodejs）
-// 画像(base64) → 5欲求代表値＋詳細15項目(desire/focus/current 0-100)のJSON下書き。
+// 基本的欲求サーベイのAI数値抽出（指示書58・PDF対応は60・nodejs）
+// 画像またはPDF(base64・inlineData直渡し) → 5欲求代表値＋詳細15項目(desire/focus/current 0-100)のJSON下書き。
 // 返却はあくまで下書き。ここでは保存しない（本人がレビュー後に /api/profile PUT で保存）。
+// Gemini 3.x は PDF を inline_data(mime_type:"application/pdf") でそのまま読める（複数ページ可）。
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -115,7 +116,7 @@ export async function POST(req: NextRequest) {
     ).join("、");
 
     const prompt = `あなたは日本のクリニックの業務アシスタントです。
-添付画像は、選択理論の「5つの基本的欲求サーベイ」の結果票です。画像から数値を読み取り、次のJSONオブジェクトのみを返してください。
+添付ファイル（画像またはPDF。PDFは全ページ）は、選択理論の「5つの基本的欲求サーベイ」の結果票です。内容から数値を読み取り、次のJSONオブジェクトのみを返してください。
 
 {
   "values": { "survival": 0-100 or null, "belonging": ..., "power": ..., "freedom": ..., "fun": ... },

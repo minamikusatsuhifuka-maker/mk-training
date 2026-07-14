@@ -48,6 +48,7 @@ import {
   NEED_DETAIL_ITEMS,
   DETAIL_VALUE_LABELS,
   clampNeedValue,
+  isPdfAsset,
   type NeedKey,
   type NeedDetailValues,
 } from "@/lib/needs-survey";
@@ -255,13 +256,17 @@ export default function ProfilePage() {
   // ─── 写真アップロード ───
   const upload = useCallback(
     async (kind: "avatar" | "photo" | "survey", file: File) => {
-      const blob = await resizeImageToJpeg(
-        file,
-        kind === "avatar" ? AVATAR_MAX_EDGE : PHOTO_MAX_EDGE
-      );
+      // PDF（サーベイのみ）はリサイズせずそのまま送る（指示書60）
+      const isPdf = kind === "survey" && file.type === "application/pdf";
+      const blob = isPdf
+        ? file
+        : await resizeImageToJpeg(
+            file,
+            kind === "avatar" ? AVATAR_MAX_EDGE : PHOTO_MAX_EDGE
+          );
       const form = new FormData();
       form.set("kind", kind);
-      form.set("file", blob, "image.jpg");
+      form.set("file", blob, isPdf ? "survey.pdf" : "image.jpg");
       const res = await fetch("/api/profile/photos", {
         method: "POST",
         body: form,
@@ -315,9 +320,11 @@ export default function ProfilePage() {
     }
   };
 
-  // ─── 🧭 サーベイ画像・AI抽出（指示書58） ───
+  // ─── 🧭 サーベイ画像・AI抽出（指示書58。PDF対応は60） ───
   const handleSurveyFiles = async (files: FileList | File[]) => {
-    const file = Array.from(files).find((f) => f.type.startsWith("image/"));
+    const file = Array.from(files).find(
+      (f) => f.type.startsWith("image/") || f.type === "application/pdf"
+    );
     if (!file) return;
     setUploading(true);
     try {
@@ -335,7 +342,7 @@ export default function ProfilePage() {
             }
           : p
       );
-      flash("🧭 サーベイ画像をアップロードしました");
+      flash("🧭 サーベイファイルをアップロードしました");
     } catch (e) {
       fail(e instanceof Error ? e.message : "アップロードに失敗しました");
     } finally {
@@ -346,7 +353,7 @@ export default function ProfilePage() {
   const handleDeleteSurveyImage = async () => {
     const url = profile?.needsSurvey?.imageUrl;
     if (!url) return;
-    if (!confirm("サーベイ画像を削除しますか？（入力済みの数値は残ります）"))
+    if (!confirm("サーベイファイルを削除しますか？（入力済みの数値は残ります）"))
       return;
     const res = await fetch("/api/profile/photos", {
       method: "DELETE",
@@ -366,28 +373,31 @@ export default function ProfilePage() {
     flash("🗑️ サーベイ画像を削除しました");
   };
 
-  // アップロード済み画像URL→base64（AI抽出用。Storageはpublic・CORS許可あり）
+  // アップロード済みファイルURL→base64（AI抽出用。Storageはpublic・CORS許可あり。
+  // PDFもそのままbase64化してGeminiのinlineDataで渡す・指示書60）
   const surveyImageToBase64 = async (
     url: string
   ): Promise<{ base64: string; mediaType: string }> => {
     const res = await fetch(url);
-    if (!res.ok) throw new Error("画像の取得に失敗しました");
+    if (!res.ok) throw new Error("ファイルの取得に失敗しました");
     const blob = await res.blob();
     const dataUrl = await new Promise<string>((resolve, reject) => {
       const r = new FileReader();
       r.onload = () => resolve(String(r.result ?? ""));
-      r.onerror = () => reject(new Error("画像の読み込みに失敗しました"));
+      r.onerror = () => reject(new Error("ファイルの読み込みに失敗しました"));
       r.readAsDataURL(blob);
     });
     const base64 = dataUrl.split(",")[1] ?? "";
-    return { base64, mediaType: blob.type || "image/jpeg" };
+    const mediaType =
+      blob.type || (isPdfAsset(url) ? "application/pdf" : "image/jpeg");
+    return { base64, mediaType };
   };
 
   // AIで数値を読み取る（下書き→レビュー表に反映。保存は本人が「💾 保存」で確定）
   const handleSurveyParse = async () => {
     const url = profile?.needsSurvey?.imageUrl;
     if (!url) {
-      fail("先にサーベイ画像をアップロードしてください");
+      fail("先にサーベイ結果（画像またはPDF）をアップロードしてください");
       return;
     }
     setSurveyParsing(true);
@@ -880,12 +890,35 @@ export default function ProfilePage() {
           <div className="space-y-2 w-full sm:w-56">
             {profile.needsSurvey?.imageUrl ? (
               <div className="space-y-1.5">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={profile.needsSurvey.imageUrl}
-                  alt="サーベイ結果画像"
-                  className="w-full rounded-lg border border-border object-contain max-h-64 bg-white"
-                />
+                {isPdfAsset(profile.needsSurvey.imageUrl) ? (
+                  // PDFは<img>にしない（指示書60）: 📄＋ファイル名＋別タブリンク
+                  <div className="rounded-lg border border-border bg-white p-4 text-center space-y-1.5">
+                    <p className="text-3xl">📄</p>
+                    <p className="text-xs text-foreground/70 break-all">
+                      {decodeURIComponent(
+                        profile.needsSurvey.imageUrl
+                          .split("?")[0]
+                          .split("/")
+                          .pop() ?? "survey.pdf"
+                      )}
+                    </p>
+                    <a
+                      href={profile.needsSurvey.imageUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block text-xs text-teal-700 underline underline-offset-2"
+                    >
+                      別タブで開く
+                    </a>
+                  </div>
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={profile.needsSurvey.imageUrl}
+                    alt="サーベイ結果画像"
+                    className="w-full rounded-lg border border-border object-contain max-h-64 bg-white"
+                  />
+                )}
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -924,13 +957,13 @@ export default function ProfilePage() {
               >
                 {uploading
                   ? "アップロード中..."
-                  : "サーベイ結果画像をドラッグ&ドロップ、またはクリックして選択"}
+                  : "サーベイ結果（画像またはPDF）をドラッグ&ドロップ、またはクリックして選択"}
               </div>
             )}
             <input
               ref={surveyInputRef}
               type="file"
-              accept="image/*"
+              accept="image/*,application/pdf"
               className="hidden"
               onChange={(e) => {
                 if (e.target.files) handleSurveyFiles(e.target.files);
