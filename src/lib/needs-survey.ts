@@ -194,6 +194,14 @@ export function radarValuesOf(
   return out;
 }
 
+// レーダーに描ける5欲求値があるか（代表値 or 詳細desire平均補完込み。指示書65）。
+// 一覧カードのミニレーダー表示条件・詳細と共用する。
+export function hasNeedsValues(
+  survey: Pick<NeedsSurvey, "values" | "details"> | undefined | null
+): boolean {
+  return Object.keys(radarValuesOf(survey ?? null)).length > 0;
+}
+
 // アセットがPDFか（指示書60。mimeType優先・無ければURL末尾 .pdf で判定）。
 // /profile プレビュー・/members 表示・AI抽出の分岐で共用する。
 export function isPdfAsset(

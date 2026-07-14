@@ -67,6 +67,7 @@ import {
   NEEDS_GROUPS,
   NEED_GROUP_STYLE,
   hasSurveyContent,
+  hasNeedsValues,
   isPdfAsset,
   radarValuesOf,
 } from "@/lib/needs-survey";
@@ -336,6 +337,13 @@ export default function MembersPage() {
             const weeklyAnswers = weeklyAnswersByMember[m.userId] ?? [];
             const roleMeta = resolveRole(roleDefs, m.role);
             const c = roleMeta.colors;
+            // 🧭 ミニレーダー（指示書65）: 公開(🌐)かつ5欲求値がある人のみ。
+            // 非公開・値なしは何も出さない（空プレースホルダも無し）
+            const survey = profiles[m.userId]?.needsSurvey;
+            const miniRadar =
+              survey?.visibility === "public" && hasNeedsValues(survey)
+                ? radarValuesOf(survey)
+                : null;
             return (
               <button
                 key={m.userId}
@@ -412,6 +420,17 @@ export default function MembersPage() {
                       );
                     })}
                   </dl>
+                )}
+
+                {/* 🧭 欲求サーベイのミニレーダー（公開者のみ・プレビュー。指示書65。
+                    数値ラベルなしのコンパクト表示。フル表示はカードクリック→詳細で） */}
+                {miniRadar && (
+                  <div className="w-full border-t border-gray-100 pt-2 flex flex-col items-center gap-0.5">
+                    <p className="text-[10px] text-gray-400 self-start">
+                      🧭 5つの基本的欲求
+                    </p>
+                    <NeedsRadarChart values={miniRadar} size={130} compact />
+                  </div>
                 )}
 
                 {/* 💬 今週の質問より（最新2件・0件の人は非表示）指示書50。

@@ -6,12 +6,14 @@ import { NEED_KEYS, NEED_LABELS, type NeedKey } from "@/lib/needs-survey";
 type Props = {
   values: Partial<Record<NeedKey, number>>;
   size?: number;
+  /** 一覧カード用のコンパクト表示（指示書65）: 数値ラベル非表示・軸名は小さく表示 */
+  compact?: boolean;
 };
 
-export function NeedsRadarChart({ values, size = 220 }: Props) {
+export function NeedsRadarChart({ values, size = 220, compact = false }: Props) {
   const cx = size / 2;
   const cy = size / 2;
-  const radius = size / 2 - 34; // ラベル余白
+  const radius = size / 2 - (compact ? 18 : 34); // ラベル余白
 
   // 各軸の座標（上から時計回り・72°刻み）
   const pointAt = (i: number, ratio: number) => {
@@ -92,11 +94,27 @@ export function NeedsRadarChart({ values, size = 220 }: Props) {
           → 名前と数値を2行に分けて幅を抑え、さらに中心xをSVG内にクランプして
           どの軸でも保存値がそのまま全桁表示されるようにする。 */}
       {NEED_KEYS.map((k, i) => {
-        const p = pointAt(i, 1.16);
+        const p = pointAt(i, compact ? 1.14 : 1.16);
         const v = values[k];
-        // 最長ラベル「愛・所属」（約48px）の半幅ぶんの余白でクランプ
-        const margin = 26;
+        // 最長ラベル「愛・所属」の半幅ぶんの余白でクランプ（見切れ防止・指示書63）
+        const margin = compact ? 18 : 26;
         const x = Math.max(margin, Math.min(size - margin, p.x));
+        if (compact) {
+          // コンパクト時は軸名のみ（数値ラベルなし・指示書65）
+          return (
+            <text
+              key={k}
+              x={x}
+              y={p.y}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize={8}
+              fill="#64748b"
+            >
+              {NEED_LABELS[k]}
+            </text>
+          );
+        }
         return (
           <text
             key={k}
