@@ -86,22 +86,33 @@ export function NeedsRadarChart({ values, size = 220 }: Props) {
           const p = pointAt(i, v / 100);
           return <circle key={k} cx={p.x} cy={p.y} r={3} fill="#0d9488" />;
         })}
-      {/* ラベル（値付き） */}
+      {/* ラベル（値付き・2行）。
+          指示書63: 右側の軸（愛・所属）は1行の「愛・所属 58」がSVG境界を超えて
+          クリップされ、末尾の桁が欠けて「5」に見えるバグがあった。
+          → 名前と数値を2行に分けて幅を抑え、さらに中心xをSVG内にクランプして
+          どの軸でも保存値がそのまま全桁表示されるようにする。 */}
       {NEED_KEYS.map((k, i) => {
-        const p = pointAt(i, 1.18);
+        const p = pointAt(i, 1.16);
         const v = values[k];
+        // 最長ラベル「愛・所属」（約48px）の半幅ぶんの余白でクランプ
+        const margin = 26;
+        const x = Math.max(margin, Math.min(size - margin, p.x));
         return (
           <text
             key={k}
-            x={p.x}
-            y={p.y}
+            x={x}
+            y={p.y - 5}
             textAnchor="middle"
             dominantBaseline="middle"
             fontSize={11}
             fill="#475569"
           >
-            {NEED_LABELS[k]}
-            {typeof v === "number" ? ` ${v}` : ""}
+            <tspan x={x}>{NEED_LABELS[k]}</tspan>
+            {typeof v === "number" && (
+              <tspan x={x} dy={12} fontWeight={600} fill="#0f766e">
+                {v}
+              </tspan>
+            )}
           </text>
         );
       })}
