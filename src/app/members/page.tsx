@@ -423,13 +423,14 @@ export default function MembersPage() {
                 )}
 
                 {/* 🧭 欲求サーベイのミニレーダー（公開者のみ・プレビュー。指示書65。
-                    数値ラベルなしのコンパクト表示。フル表示はカードクリック→詳細で） */}
+                    66で軸名＋数値表示に変更（63の2行ラベル＋xクランプで見切れ防止）。
+                    フル表示（画像/PDF・15項目表）はカードクリック→詳細で） */}
                 {miniRadar && (
                   <div className="w-full border-t border-gray-100 pt-2 flex flex-col items-center gap-0.5">
                     <p className="text-[10px] text-gray-400 self-start">
                       🧭 5つの基本的欲求
                     </p>
-                    <NeedsRadarChart values={miniRadar} size={130} compact />
+                    <NeedsRadarChart values={miniRadar} size={160} />
                   </div>
                 )}
 

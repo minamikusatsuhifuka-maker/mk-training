@@ -115,6 +115,8 @@ export function NeedsRadarChart({ values, size = 220, compact = false }: Props) 
             </text>
           );
         }
+        // 小サイズ（一覧カードのミニ表示等）は軸名をやや小さく（数値は読みやすく維持。指示書66）
+        const nameFont = size < 200 ? 10 : 11;
         return (
           <text
             key={k}
@@ -122,12 +124,12 @@ export function NeedsRadarChart({ values, size = 220, compact = false }: Props) 
             y={p.y - 5}
             textAnchor="middle"
             dominantBaseline="middle"
-            fontSize={11}
+            fontSize={nameFont}
             fill="#475569"
           >
             <tspan x={x}>{NEED_LABELS[k]}</tspan>
             {typeof v === "number" && (
-              <tspan x={x} dy={12} fontWeight={600} fill="#0f766e">
+              <tspan x={x} dy={nameFont + 1} fontSize={11} fontWeight={600} fill="#0f766e">
                 {v}
               </tspan>
             )}
