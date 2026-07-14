@@ -7,6 +7,7 @@
 
 import { loadPortalItems, loadPortalObject } from "./portal-store";
 import { supabase } from "./supabase";
+import type { NeedsSurvey } from "./needs-survey";
 
 export const STAFF_PROFILES_INDEX_KEY = "staff_profiles_index";
 
@@ -42,6 +43,9 @@ export type StaffProfile = {
   // カスタム項目の開示設定（指示書52）。未設定のキーは 'public'（従来どおり公開）。
   // 'private' の項目は /members のカード・詳細で非表示（本人の /profile では見える）。
   customFieldsPrivacy?: Record<string, "public" | "private">;
+  // 5つの基本的欲求サーベイ（指示書58）。既定 private（自分のみ）。
+  // imageUrl はアップロードAPIでのみ変更（PUT のクライアント値は使わない）。
+  needsSurvey?: NeedsSurvey;
   // メールアドレスの表示希望（指示書44・既定OFF）。
   // email はサーバー側でセッションから確定して保存する（クライアント値は受け取らない）。
   // 表示は「詳細ダイアログのみ・showEmail=true の人のみ」。一覧カード/indexには載せない。

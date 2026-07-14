@@ -64,6 +64,14 @@ import {
 } from "@/lib/profile-roles";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
+  NEED_LABELS,
+  NEED_DETAIL_ITEMS,
+  DETAIL_VALUE_LABELS,
+  hasSurveyContent,
+  radarValuesOf,
+} from "@/lib/needs-survey";
+import { NeedsRadarChart } from "@/components/NeedsRadarChart";
+import {
   collectMemberAnswers,
   loadWeeklyQuestions,
   weekRangeLabel,
@@ -558,6 +566,105 @@ export default function MembersPage() {
                     </div>
                   );
                 })}
+
+              {/* 🧭 5つの基本的欲求（公開している人のみ・指示書58） */}
+              {selected.needsSurvey?.visibility === "public" &&
+                hasSurveyContent(selected.needsSurvey) && (
+                  <div className="border-t border-gray-100 pt-3 space-y-2">
+                    <h3 className="text-[13px] text-gray-400">
+                      🧭 5つの基本的欲求
+                    </h3>
+                    <div className="flex flex-wrap items-start gap-3">
+                      {Object.keys(radarValuesOf(selected.needsSurvey))
+                        .length > 0 && (
+                        <div className="flex-1 min-w-[220px] flex justify-center">
+                          <NeedsRadarChart
+                            values={radarValuesOf(selected.needsSurvey)}
+                            size={220}
+                          />
+                        </div>
+                      )}
+                      {selected.needsSurvey.imageUrl && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setZoomPhoto(selected.needsSurvey!.imageUrl!)
+                          }
+                          className="shrink-0"
+                          title="クリックで拡大"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={selected.needsSurvey.imageUrl}
+                            alt="サーベイ結果画像"
+                            className="w-28 rounded-md border border-border object-cover hover:opacity-90"
+                          />
+                        </button>
+                      )}
+                    </div>
+                    {/* 詳細15項目（値がある場合のみ・折りたたみ） */}
+                    {Object.keys(selected.needsSurvey.details ?? {}).length >
+                      0 && (
+                      <details>
+                        <summary className="text-xs text-teal-700 cursor-pointer underline underline-offset-2">
+                          詳細15項目を見る
+                        </summary>
+                        <div className="overflow-x-auto mt-2">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="text-gray-400 border-b border-gray-100">
+                                <th className="text-left py-1 pr-2 font-medium">
+                                  項目
+                                </th>
+                                {DETAIL_VALUE_LABELS.map((c) => (
+                                  <th
+                                    key={c.key}
+                                    className="text-right py-1 px-2 font-medium"
+                                  >
+                                    {c.label}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {NEED_DETAIL_ITEMS.filter(
+                                (item) =>
+                                  selected.needsSurvey?.details?.[item.key]
+                              ).map((item) => {
+                                const row =
+                                  selected.needsSurvey?.details?.[item.key];
+                                return (
+                                  <tr
+                                    key={item.key}
+                                    className="border-b border-gray-50 last:border-0"
+                                  >
+                                    <td className="py-1 pr-2 text-gray-800 whitespace-nowrap">
+                                      <span className="text-gray-400">
+                                        {NEED_LABELS[item.need]}／
+                                      </span>
+                                      {item.label}
+                                    </td>
+                                    {DETAIL_VALUE_LABELS.map((c) => (
+                                      <td
+                                        key={c.key}
+                                        className="py-1 px-2 text-right text-gray-700 tabular-nums"
+                                      >
+                                        {row?.[c.key] ?? "—"}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </details>
+                    )}
+                    <p className="text-[10px] text-gray-400">
+                      相互理解のための共有です（評価・優劣付けには使いません）
+                    </p>
+                  </div>
+                )}
 
               {/* これまでの回答（今週の質問。0件なら非表示・最新5件＋もっと見る）指示書47 */}
               {weeklyHistory.length > 0 && (

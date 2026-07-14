@@ -42,6 +42,16 @@ import {
   normalizeThankyouName as normalizeName,
   type ThankyouItem,
 } from "@/types/portal";
+import {
+  NEED_KEYS,
+  NEED_LABELS,
+  NEED_DETAIL_ITEMS,
+  DETAIL_VALUE_LABELS,
+  clampNeedValue,
+  type NeedKey,
+  type NeedDetailValues,
+} from "@/lib/needs-survey";
+import { NeedsRadarChart } from "@/components/NeedsRadarChart";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -67,8 +77,22 @@ export default function ProfilePage() {
   // 📮 今月あなたに届いたありがとう（46R-B。thanksShowcase OFF・0件なら非表示）
   const [myThanks, setMyThanks] = useState<ThankyouItem[]>([]);
 
+  // 🧭 5つの基本的欲求サーベイ（指示書58。保存は「💾 保存」に含める）
+  const [surveyValues, setSurveyValues] = useState<
+    Partial<Record<NeedKey, number>>
+  >({});
+  const [surveyDetails, setSurveyDetails] = useState<
+    Record<string, NeedDetailValues>
+  >({});
+  const [surveyVisibility, setSurveyVisibility] = useState<
+    "private" | "public"
+  >("private");
+  const [surveyParsing, setSurveyParsing] = useState(false);
+  const [showSurveyDetails, setShowSurveyDetails] = useState(false);
+
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const photosInputRef = useRef<HTMLInputElement>(null);
+  const surveyInputRef = useRef<HTMLInputElement>(null);
 
   const flash = (msg: string) => {
     setMessage(msg);
@@ -120,6 +144,10 @@ export default function ProfilePage() {
           json.profile.photos.map((p) => [p.url, p.caption ?? ""])
         )
       );
+      // サーベイの編集stateを初期化（指示書58）
+      setSurveyValues(json.profile.needsSurvey?.values ?? {});
+      setSurveyDetails(json.profile.needsSurvey?.details ?? {});
+      setSurveyVisibility(json.profile.needsSurvey?.visibility ?? "private");
       // 今月自分宛のありがとうカード（宛先名とプロフィール名の一致で紐付け。46R-B）
       loadPortalFeatures()
         .then(async (f) => {
@@ -177,6 +205,11 @@ export default function ProfilePage() {
         photoCaptions: captions,
         customFields: profile.customFields,
         customFieldsPrivacy: profile.customFieldsPrivacy ?? {},
+        needsSurvey: {
+          values: surveyValues,
+          details: surveyDetails,
+          visibility: surveyVisibility,
+        },
         showEmail: profile.showEmail === true,
       }),
     });
@@ -221,7 +254,7 @@ export default function ProfilePage() {
 
   // ─── 写真アップロード ───
   const upload = useCallback(
-    async (kind: "avatar" | "photo", file: File) => {
+    async (kind: "avatar" | "photo" | "survey", file: File) => {
       const blob = await resizeImageToJpeg(
         file,
         kind === "avatar" ? AVATAR_MAX_EDGE : PHOTO_MAX_EDGE
@@ -280,6 +313,152 @@ export default function ProfilePage() {
     } finally {
       setUploading(false);
     }
+  };
+
+  // ─── 🧭 サーベイ画像・AI抽出（指示書58） ───
+  const handleSurveyFiles = async (files: FileList | File[]) => {
+    const file = Array.from(files).find((f) => f.type.startsWith("image/"));
+    if (!file) return;
+    setUploading(true);
+    try {
+      const url = await upload("survey", file);
+      setProfile((p) =>
+        p
+          ? {
+              ...p,
+              needsSurvey: {
+                visibility: surveyVisibility,
+                ...(p.needsSurvey ?? {}),
+                imageUrl: url,
+                updatedAt: new Date().toISOString(),
+              },
+            }
+          : p
+      );
+      flash("🧭 サーベイ画像をアップロードしました");
+    } catch (e) {
+      fail(e instanceof Error ? e.message : "アップロードに失敗しました");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeleteSurveyImage = async () => {
+    const url = profile?.needsSurvey?.imageUrl;
+    if (!url) return;
+    if (!confirm("サーベイ画像を削除しますか？（入力済みの数値は残ります）"))
+      return;
+    const res = await fetch("/api/profile/photos", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => null);
+      fail(j?.error ?? "削除に失敗しました");
+      return;
+    }
+    setProfile((p) =>
+      p && p.needsSurvey
+        ? { ...p, needsSurvey: { ...p.needsSurvey, imageUrl: undefined } }
+        : p
+    );
+    flash("🗑️ サーベイ画像を削除しました");
+  };
+
+  // アップロード済み画像URL→base64（AI抽出用。Storageはpublic・CORS許可あり）
+  const surveyImageToBase64 = async (
+    url: string
+  ): Promise<{ base64: string; mediaType: string }> => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("画像の取得に失敗しました");
+    const blob = await res.blob();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result ?? ""));
+      r.onerror = () => reject(new Error("画像の読み込みに失敗しました"));
+      r.readAsDataURL(blob);
+    });
+    const base64 = dataUrl.split(",")[1] ?? "";
+    return { base64, mediaType: blob.type || "image/jpeg" };
+  };
+
+  // AIで数値を読み取る（下書き→レビュー表に反映。保存は本人が「💾 保存」で確定）
+  const handleSurveyParse = async () => {
+    const url = profile?.needsSurvey?.imageUrl;
+    if (!url) {
+      fail("先にサーベイ画像をアップロードしてください");
+      return;
+    }
+    setSurveyParsing(true);
+    setError("");
+    try {
+      const { base64, mediaType } = await surveyImageToBase64(url);
+      const res = await fetch("/api/profile/survey-parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64, mediaType }),
+      });
+      const j = (await res.json().catch(() => null)) as {
+        values?: Partial<Record<NeedKey, number>>;
+        details?: Record<string, NeedDetailValues>;
+        error?: string;
+      } | null;
+      if (!res.ok) {
+        fail(
+          j?.error
+            ? `AI読み取りに失敗しました: ${j.error}`
+            : "AI読み取りに失敗しました。手入力してください"
+        );
+        return;
+      }
+      const values = j?.values ?? {};
+      const details = j?.details ?? {};
+      if (
+        Object.keys(values).length === 0 &&
+        Object.keys(details).length === 0
+      ) {
+        fail("数値を読み取れませんでした。手入力してください");
+        return;
+      }
+      setSurveyValues(values);
+      setSurveyDetails(details);
+      if (Object.keys(details).length > 0) setShowSurveyDetails(true);
+      flash(
+        "🤖 AIが読み取りました（下書き）。数値を確認・修正して「💾 保存」で確定してください"
+      );
+    } catch (e) {
+      fail(e instanceof Error ? e.message : "AI読み取りに失敗しました");
+    } finally {
+      setSurveyParsing(false);
+    }
+  };
+
+  const setSurveyValue = (k: NeedKey, raw: string) => {
+    const v = clampNeedValue(raw);
+    setSurveyValues((prev) => {
+      const next = { ...prev };
+      if (v === undefined) delete next[k];
+      else next[k] = v;
+      return next;
+    });
+  };
+
+  const setSurveyDetail = (
+    itemKey: string,
+    field: keyof NeedDetailValues,
+    raw: string
+  ) => {
+    const v = clampNeedValue(raw);
+    setSurveyDetails((prev) => {
+      const row = { ...(prev[itemKey] ?? {}) };
+      if (v === undefined) delete row[field];
+      else row[field] = v;
+      const next = { ...prev };
+      if (Object.keys(row).length === 0) delete next[itemKey];
+      else next[itemKey] = row;
+      return next;
+    });
   };
 
   const handleDeletePhoto = async (url: string) => {
@@ -664,6 +843,207 @@ export default function ProfilePage() {
         )}
         <p className="text-xs text-muted-foreground">
           キャプションは「保存」ボタンで反映されます。
+        </p>
+      </div>
+
+      {/* 🧭 5つの基本的欲求サーベイ（指示書58） */}
+      <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">
+            🧭 5つの基本的欲求サーベイ
+          </h2>
+          {/* 開示トグル（既定🔒） */}
+          <button
+            type="button"
+            onClick={() =>
+              setSurveyVisibility((v) =>
+                v === "public" ? "private" : "public"
+              )
+            }
+            className={`text-xs px-2.5 py-1 rounded-full border ${
+              surveyVisibility === "public"
+                ? "border-teal-200 bg-teal-50 text-teal-700"
+                : "border-amber-300 bg-amber-50 text-amber-700"
+            }`}
+          >
+            {surveyVisibility === "public"
+              ? "🌐 メンバー紹介に公開"
+              : "🔒 自分のみ"}
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          選択理論の「5つの基本的欲求」サーベイ結果を共有できます。公開すると、あなたのレーダーチャートと画像が他の人に見えます（既定は🔒自分のみ）。数値は相互理解のためのもので、評価や優劣付けには使いません。
+        </p>
+
+        {/* 画像アップロード＋プレビュー */}
+        <div className="flex flex-wrap gap-4 items-start">
+          <div className="space-y-2 w-full sm:w-56">
+            {profile.needsSurvey?.imageUrl ? (
+              <div className="space-y-1.5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={profile.needsSurvey.imageUrl}
+                  alt="サーベイ結果画像"
+                  className="w-full rounded-lg border border-border object-contain max-h-64 bg-white"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => surveyInputRef.current?.click()}
+                    className="text-xs text-foreground/60 hover:text-foreground underline underline-offset-2"
+                  >
+                    差し替え
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteSurveyImage}
+                    className="text-xs text-foreground/60 hover:text-red-600 underline underline-offset-2"
+                  >
+                    🗑️ 削除
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  handleSurveyFiles(e.dataTransfer.files);
+                }}
+                onClick={() => surveyInputRef.current?.click()}
+                className={`rounded-lg border-2 border-dashed p-6 text-center text-xs cursor-pointer transition-colors ${
+                  dragOver
+                    ? "border-teal bg-teal-light/40"
+                    : "border-border text-muted-foreground hover:bg-accent"
+                }`}
+              >
+                {uploading
+                  ? "アップロード中..."
+                  : "サーベイ結果画像をドラッグ&ドロップ、またはクリックして選択"}
+              </div>
+            )}
+            <input
+              ref={surveyInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files) handleSurveyFiles(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleSurveyParse}
+              disabled={surveyParsing || uploading || !profile.needsSurvey?.imageUrl}
+              className="w-full"
+            >
+              {surveyParsing ? "読み取り中..." : "🤖 AIで数値を読み取る"}
+            </Button>
+            <p className="text-[11px] text-muted-foreground">
+              AIの読み取りは目安（下書き）です。必ず数値を確認・修正してから保存してください。
+            </p>
+          </div>
+
+          {/* レーダーチャート即時プレビュー */}
+          <div className="flex-1 min-w-[240px] flex justify-center">
+            <NeedsRadarChart values={surveyValues} size={240} />
+          </div>
+        </div>
+
+        {/* 5欲求の入力（スライダー＋数値） */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+          {NEED_KEYS.map((k) => (
+            <div key={k} className="flex items-center gap-2">
+              <span className="text-xs text-foreground/70 w-16 shrink-0">
+                {NEED_LABELS[k]}
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={surveyValues[k] ?? 0}
+                onChange={(e) => setSurveyValue(k, e.target.value)}
+                className="flex-1"
+              />
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={surveyValues[k] ?? ""}
+                onChange={(e) => setSurveyValue(k, e.target.value)}
+                className="h-8 w-20 text-sm"
+                placeholder="—"
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* 詳細15項目（折りたたみ表） */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowSurveyDetails((s) => !s)}
+            className="text-xs text-teal-700 underline underline-offset-2"
+          >
+            {showSurveyDetails
+              ? "▼ 詳細15項目を閉じる"
+              : "▶ 詳細15項目（欲求・注力・現況）を入力する"}
+          </button>
+          {showSurveyDetails && (
+            <div className="overflow-x-auto mt-2">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-muted-foreground border-b border-border">
+                    <th className="text-left py-1.5 pr-2 font-medium">項目</th>
+                    {DETAIL_VALUE_LABELS.map((c) => (
+                      <th key={c.key} className="text-center py-1.5 px-1 font-medium">
+                        {c.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {NEED_DETAIL_ITEMS.map((item) => (
+                    <tr key={item.key} className="border-b border-border/50 last:border-0">
+                      <td className="py-1 pr-2 whitespace-nowrap">
+                        <span className="text-muted-foreground">
+                          {NEED_LABELS[item.need]}／
+                        </span>
+                        {item.label}
+                      </td>
+                      {DETAIL_VALUE_LABELS.map((c) => (
+                        <td key={c.key} className="py-1 px-1 text-center">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={surveyDetails[item.key]?.[c.key] ?? ""}
+                            onChange={(e) =>
+                              setSurveyDetail(item.key, c.key, e.target.value)
+                            }
+                            className="h-7 w-16 text-xs mx-auto"
+                            placeholder="—"
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          数値・開示設定は「💾 保存」ボタンで確定します。
         </p>
       </div>
 

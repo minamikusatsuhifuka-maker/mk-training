@@ -14,6 +14,8 @@ import {
   normalizeProfileRoles,
   PROFILE_ROLE_CONFIG_KEY,
 } from "@/lib/profile-roles";
+import { normalizeNeedsSurvey } from "@/lib/needs-survey";
+import type { NeedsSurvey } from "@/lib/needs-survey";
 
 export const runtime = "nodejs";
 
@@ -145,6 +147,20 @@ export async function PUT(req: NextRequest) {
     }
   }
 
+  // 5つの基本的欲求サーベイ（指示書58）: 数値・開示は送られた場合のみ更新。
+  // imageUrl はアップロードAPIでのみ変更する（クライアント値を信用しない）。
+  let needsSurvey: NeedsSurvey | undefined = current.needsSurvey;
+  if (body.needsSurvey && typeof body.needsSurvey === "object") {
+    const n = normalizeNeedsSurvey(body.needsSurvey);
+    needsSurvey = {
+      imageUrl: current.needsSurvey?.imageUrl,
+      values: n.values,
+      details: n.details,
+      visibility: n.visibility,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
   const next = {
     ...current,
     userId: user.id,
@@ -157,6 +173,7 @@ export async function PUT(req: NextRequest) {
     photos,
     customFields,
     customFieldsPrivacy,
+    needsSurvey,
     // メール表示の希望（既定OFF）。email はセッションから確定（クライアント値は使わない＝なりすまし防止）
     showEmail: body.showEmail === true,
     email: user.email ?? "",

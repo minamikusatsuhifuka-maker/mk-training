@@ -1,8 +1,9 @@
 // プロフィール写真 API（要ログイン・本人のみ）
-// POST: multipart/form-data { kind: "avatar" | "photo", file }
+// POST: multipart/form-data { kind: "avatar" | "photo" | "survey", file }
 //   - avatar → staff-photos/{userId}/avatar.jpg（上書き）
 //   - photo  → staff-photos/{userId}/photos/{uuid}.jpg（上限 MAX_SHARED_PHOTOS 枚）
-// DELETE: { url } 自分の共有写真を削除（Storage＋プロフィールから除去）
+//   - survey → staff-photos/{userId}/survey/{uuid}.jpg（基本的欲求サーベイ画像。指示書58・1枚のみ＝差し替え）
+// DELETE: { url } 自分の共有写真／サーベイ画像を削除（Storage＋プロフィールから除去）
 // ※ バケット staff-photos はダッシュボードで作成済み前提。未作成時は分かりやすいエラーを返す。
 
 import { NextRequest, NextResponse } from "next/server";
@@ -58,7 +59,10 @@ export async function POST(req: NextRequest) {
 
   const kind = form.get("kind");
   const file = form.get("file");
-  if ((kind !== "avatar" && kind !== "photo") || !(file instanceof Blob)) {
+  if (
+    (kind !== "avatar" && kind !== "photo" && kind !== "survey") ||
+    !(file instanceof Blob)
+  ) {
     return NextResponse.json({ error: "不正なリクエストです" }, { status: 400 });
   }
   if (file.size === 0 || file.size > MAX_UPLOAD_BYTES) {
@@ -82,7 +86,9 @@ export async function POST(req: NextRequest) {
     const path =
       kind === "avatar"
         ? `${user.id}/avatar.jpg`
-        : `${user.id}/photos/${randomUUID()}.jpg`;
+        : kind === "survey"
+          ? `${user.id}/survey/${randomUUID()}.jpg`
+          : `${user.id}/photos/${randomUUID()}.jpg`;
 
     const bytes = Buffer.from(await file.arrayBuffer());
     const { error: upError } = await admin.storage
@@ -99,6 +105,29 @@ export async function POST(req: NextRequest) {
 
     if (kind === "avatar") {
       profile.avatarUrl = url;
+    } else if (kind === "survey") {
+      // サーベイ画像は1枚のみ＝差し替え。旧ファイルはベストエフォートで削除
+      const oldUrl = profile.needsSurvey?.imageUrl ?? "";
+      const marker = `/storage/v1/object/public/${STAFF_PHOTOS_BUCKET}/`;
+      const oldIdx = oldUrl.indexOf(marker);
+      const oldPath =
+        oldIdx >= 0
+          ? decodeURIComponent(
+              oldUrl.slice(oldIdx + marker.length).split("?")[0]
+            )
+          : "";
+      if (oldPath.startsWith(`${user.id}/survey/`)) {
+        await admin.storage
+          .from(STAFF_PHOTOS_BUCKET)
+          .remove([oldPath])
+          .catch(() => {});
+      }
+      profile.needsSurvey = {
+        visibility: "private",
+        ...(profile.needsSurvey ?? {}),
+        imageUrl: url,
+        updatedAt: new Date().toISOString(),
+      };
     } else {
       profile.photos = [
         ...profile.photos,
@@ -129,10 +158,13 @@ export async function DELETE(req: NextRequest) {
   const url = typeof body.url === "string" ? body.url : "";
 
   // URL から Storage パスを取り出し、本人のフォルダ配下であることを検証
+  // （共有写真 {uid}/photos/ またはサーベイ画像 {uid}/survey/ のみ削除可）
   const marker = `/storage/v1/object/public/${STAFF_PHOTOS_BUCKET}/`;
   const idx = url.indexOf(marker);
   const path = idx >= 0 ? decodeURIComponent(url.slice(idx + marker.length).split("?")[0]) : "";
-  if (!path || !path.startsWith(`${user.id}/photos/`)) {
+  const isPhoto = path.startsWith(`${user.id}/photos/`);
+  const isSurvey = path.startsWith(`${user.id}/survey/`);
+  if (!path || (!isPhoto && !isSurvey)) {
     return NextResponse.json(
       { error: "自分の共有写真のみ削除できます" },
       { status: 403 }
@@ -147,7 +179,17 @@ export async function DELETE(req: NextRequest) {
     if (rmError) throw new Error(rmError.message);
 
     const profile = await loadProfileServer(db, user.id);
-    profile.photos = profile.photos.filter((p) => p.url !== url);
+    if (isSurvey) {
+      if (profile.needsSurvey) {
+        profile.needsSurvey = {
+          ...profile.needsSurvey,
+          imageUrl: undefined,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+    } else {
+      profile.photos = profile.photos.filter((p) => p.url !== url);
+    }
     await saveProfileServer(db, profile);
 
     return NextResponse.json({ ok: true });
