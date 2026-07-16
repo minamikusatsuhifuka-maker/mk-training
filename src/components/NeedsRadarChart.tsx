@@ -1,7 +1,8 @@
 // 5つの基本的欲求のレーダーチャート（指示書58・軽量SVG自前描画、外部ライブラリ不使用）
-// 5軸: 生存/愛・所属/力/自由/楽しみ。値は0-100。未入力の軸は0として描く。
+// 5軸: 上から時計回りに 生存/楽しみ/自由/力/愛・所属（サーベイ原本と同じ配置・指示書67）。
+// 値は0-100。未入力の軸は0として描く。
 
-import { NEED_KEYS, NEED_LABELS, type NeedKey } from "@/lib/needs-survey";
+import { NEEDS_RADAR_ORDER, NEED_LABELS, type NeedKey } from "@/lib/needs-survey";
 
 type Props = {
   values: Partial<Record<NeedKey, number>>;
@@ -17,7 +18,7 @@ export function NeedsRadarChart({ values, size = 220, compact = false }: Props) 
 
   // 各軸の座標（上から時計回り・72°刻み）
   const pointAt = (i: number, ratio: number) => {
-    const angle = (Math.PI * 2 * i) / NEED_KEYS.length - Math.PI / 2;
+    const angle = (Math.PI * 2 * i) / NEEDS_RADAR_ORDER.length - Math.PI / 2;
     return {
       x: cx + radius * ratio * Math.cos(angle),
       y: cy + radius * ratio * Math.sin(angle),
@@ -26,18 +27,18 @@ export function NeedsRadarChart({ values, size = 220, compact = false }: Props) 
 
   const gridLevels = [0.25, 0.5, 0.75, 1];
   const gridPolygon = (ratio: number) =>
-    NEED_KEYS.map((_, i) => {
+    NEEDS_RADAR_ORDER.map((_, i) => {
       const p = pointAt(i, ratio);
       return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
     }).join(" ");
 
-  const dataPolygon = NEED_KEYS.map((k, i) => {
+  const dataPolygon = NEEDS_RADAR_ORDER.map((k, i) => {
     const v = Math.max(0, Math.min(100, values[k] ?? 0));
     const p = pointAt(i, v / 100);
     return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
   }).join(" ");
 
-  const hasAny = NEED_KEYS.some((k) => (values[k] ?? 0) > 0);
+  const hasAny = NEEDS_RADAR_ORDER.some((k) => (values[k] ?? 0) > 0);
 
   return (
     <svg
@@ -58,7 +59,7 @@ export function NeedsRadarChart({ values, size = 220, compact = false }: Props) 
         />
       ))}
       {/* 軸線 */}
-      {NEED_KEYS.map((k, i) => {
+      {NEEDS_RADAR_ORDER.map((k, i) => {
         const p = pointAt(i, 1);
         return (
           <line
@@ -83,7 +84,7 @@ export function NeedsRadarChart({ values, size = 220, compact = false }: Props) 
         />
       )}
       {hasAny &&
-        NEED_KEYS.map((k, i) => {
+        NEEDS_RADAR_ORDER.map((k, i) => {
           const v = Math.max(0, Math.min(100, values[k] ?? 0));
           const p = pointAt(i, v / 100);
           return <circle key={k} cx={p.x} cy={p.y} r={3} fill="#0d9488" />;
@@ -93,7 +94,7 @@ export function NeedsRadarChart({ values, size = 220, compact = false }: Props) 
           クリップされ、末尾の桁が欠けて「5」に見えるバグがあった。
           → 名前と数値を2行に分けて幅を抑え、さらに中心xをSVG内にクランプして
           どの軸でも保存値がそのまま全桁表示されるようにする。 */}
-      {NEED_KEYS.map((k, i) => {
+      {NEEDS_RADAR_ORDER.map((k, i) => {
         const p = pointAt(i, compact ? 1.14 : 1.16);
         const v = values[k];
         // 最長ラベル「愛・所属」の半幅ぶんの余白でクランプ（見切れ防止・指示書63）

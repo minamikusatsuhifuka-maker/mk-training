@@ -14,6 +14,16 @@ export const NEED_KEYS = [
 
 export type NeedKey = (typeof NEED_KEYS)[number];
 
+/** レーダー描画専用の軸順（Achievement Survey 原本に合わせる: 上から時計回り）
+ *  ※ NEED_KEYS（保存・normalize用）とは意図的に別物。混同しないこと。 */
+export const NEEDS_RADAR_ORDER = [
+  "survival",
+  "fun",
+  "freedom",
+  "power",
+  "belonging",
+] as const satisfies readonly NeedKey[];
+
 export const NEED_LABELS: Record<NeedKey, string> = {
   survival: "生存",
   belonging: "愛・所属",
