@@ -13,8 +13,11 @@ import Link from "next/link";
 import { AdminOnly } from "@/components/AdminOnly";
 import {
   getReactorIdentity,
+  resolveReactorName,
+  resolveReactorNameOrNull,
   NEWS_AUTHOR_LS_KEY,
   type Reactor,
+  type ReactorNameMap,
 } from "@/lib/news-reactions";
 import { loadPortalFeatures } from "@/lib/portal-features";
 import {
@@ -32,13 +35,21 @@ import {
   type WeeklyQuestionsData,
 } from "@/lib/weekly-questions";
 
-// メールアドレスのままの名前は @ 前だけ表示（/members と同じ方針）
+// メールアドレスのままの名前は @ 前だけ表示（/members と同じ方針）。
+// 指示書74以降、表示名は resolveReactorName が先に解決するのでメールはここへ来ない
+// （洗浄前の古いデータへの保険として残す）。
 function shortName(name: string | null): string {
   if (!name || !name.trim()) return "匿名";
   return name.includes("@") ? name.split("@")[0] : name;
 }
 
-export function WeeklyQuestionSection() {
+// profileNames は呼び出し側（ホーム）が useNewsReactions から渡す。
+// このセクション用に別途プロフィールを読まない（画面あたり1回・指示書71/74）。
+export function WeeklyQuestionSection({
+  profileNames = {},
+}: {
+  profileNames?: ReactorNameMap;
+}) {
   const [enabled, setEnabled] = useState<boolean | null>(null); // null=読込中
   const [data, setData] = useState<WeeklyQuestionsData | null>(null);
   const [reactor, setReactor] = useState<Reactor | null>(null);
@@ -115,7 +126,11 @@ export function WeeklyQuestionSection() {
 
   const submitAnswer = async () => {
     if (!reactor || !text.trim() || saving) return;
-    const name = loggedIn ? (reactor.name ?? "") : authorName.trim();
+    // ログイン中はプロフィール登録名を正とする（無ければアカウント表示名。
+    // メール形式は名前なし扱い）。未ログインの動線は現状維持。指示書74
+    const name = loggedIn
+      ? (resolveReactorNameOrNull(reactor, profileNames) ?? "")
+      : authorName.trim();
     // 回答は名前必須（46R）。未設定なら名前設定モーダルを出してから投稿してもらう
     if (!name) {
       setNameDraft("");
@@ -317,7 +332,7 @@ export function WeeklyQuestionSection() {
               </div>
               <div className="flex items-center gap-2 mt-1.5">
                 <span className="text-xs text-gray-500">
-                  👤 {shortName(a.name)}
+                  👤 {shortName(resolveReactorName({ id: a.id, name: a.name }, profileNames))}
                 </span>
                 <span className="flex-1" />
                 {WEEKLY_REACTION_META.map((m) => {

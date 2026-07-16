@@ -265,9 +265,10 @@ export function looksLikeEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-// 表示名を解決する。null = 「匿名」として集計する未ログインの人。
-// 優先順位: プロフィール登録名 → 保存された name → 「名前未設定」
-export function resolveReactorName(
+// 名前を解決する。解決できなければ null（フォールバックは呼び出し側が決める）。
+// 優先順位: プロフィール登録名 → 保存された name（メール形式は名前なし扱い）
+// 「今週の質問」は名前が解決できないとき名前設定モーダルに倒すため、この形が要る（指示書74）。
+export function resolveReactorNameOrNull(
   reactor: Reactor,
   profileNames: ReactorNameMap = {}
 ): string | null {
@@ -275,6 +276,17 @@ export function resolveReactorName(
   if (fromProfile) return fromProfile;
   const snapshot = reactor.name?.trim();
   if (snapshot && !looksLikeEmail(snapshot)) return snapshot;
+  return null;
+}
+
+// 表示名を解決する。null = 「匿名」として集計する未ログインの人。
+// 優先順位: プロフィール登録名 → 保存された name → 「名前未設定」
+export function resolveReactorName(
+  reactor: Reactor,
+  profileNames: ReactorNameMap = {}
+): string | null {
+  const resolved = resolveReactorNameOrNull(reactor, profileNames);
+  if (resolved) return resolved;
   // 未ログインの匿名は従来どおり「匿名 ×N」にまとめる（指示書37Rの仕様を維持）
   return isAnonymousReactorId(reactor.id) ? null : UNNAMED_REACTOR_LABEL;
 }

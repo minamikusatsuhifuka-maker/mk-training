@@ -795,7 +795,9 @@ export default function PortalHome() {
       </section>
     ),
     // 今週の質問（指示書46-A/47）: 機能スイッチOFF時はコンポーネント側でnullを返す
-    weekly_question: <WeeklyQuestionSection />,
+    weekly_question: (
+      <WeeklyQuestionSection profileNames={reactions.profileNames} />
+    ),
     kizuki: (
       <section id="hiyari" className="px-4 py-5 border-b border-gray-100">
         <div className="flex items-center justify-between mb-3">

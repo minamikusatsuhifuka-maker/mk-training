@@ -10,6 +10,11 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
 import { loadPortalFeatures } from "@/lib/portal-features";
+import { loadProfilesIndex } from "@/lib/staff-profiles";
+import {
+  resolveReactorName,
+  type ReactorNameMap,
+} from "@/lib/news-reactions";
 import {
   currentWeekKey,
   loadWeeklyQuestions,
@@ -19,9 +24,11 @@ import {
   type WeeklyQuestionsData,
 } from "@/lib/weekly-questions";
 
-// メールアドレスのままの名前は @ 前だけ表示（/members と同じ方針）
-function shortName(name: string): string {
-  if (!name.trim()) return "匿名";
+// メールアドレスのままの名前は @ 前だけ表示（/members と同じ方針）。
+// 指示書74以降、表示名は resolveReactorName が先に解決するのでメールはここへ来ない
+// （洗浄前の古いデータへの保険として残す）。null = 未ログイン匿名。
+function shortName(name: string | null): string {
+  if (!name || !name.trim()) return "匿名";
   return name.includes("@") ? name.split("@")[0] : name;
 }
 
@@ -29,6 +36,7 @@ export default function WeeklyQuestionsArchivePage() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [data, setData] = useState<WeeklyQuestionsData | null>(null);
   const [query, setQuery] = useState("");
+  const [profileNames, setProfileNames] = useState<ReactorNameMap>({});
   const [openWeeks, setOpenWeeks] = useState<Set<string>>(
     () => new Set([currentWeekKey()])
   );
@@ -39,10 +47,25 @@ export default function WeeklyQuestionsArchivePage() {
         setEnabled(f.weeklyQuestion);
         if (f.weeklyQuestion) {
           loadWeeklyQuestions().then(setData).catch(() => {});
+          // 回答者名の解決用（この画面で1回だけ・指示書74）
+          loadProfilesIndex()
+            .then((items) => {
+              const names: ReactorNameMap = {};
+              for (const p of items) {
+                const name = (p.name ?? "").trim();
+                if (p.userId && name) names[p.userId] = name;
+              }
+              setProfileNames(names);
+            })
+            .catch(() => {});
         }
       })
       .catch(() => setEnabled(false));
   }, []);
+
+  // 回答者の表示名（保存データは変えず、表示時にプロフィール登録名で解決する）
+  const answerName = (a: { id: string; name: string }) =>
+    shortName(resolveReactorName({ id: a.id, name: a.name }, profileNames));
 
   const toggleWeek = (wk: string) =>
     setOpenWeeks((prev) => {
@@ -69,7 +92,7 @@ export default function WeeklyQuestionsArchivePage() {
         const hit = all.filter(
           (a) =>
             a.text.toLowerCase().includes(q) ||
-            shortName(a.name).toLowerCase().includes(q)
+            answerName(a).toLowerCase().includes(q)
         );
         return { weekKey, question, answers: hit };
       })
@@ -145,7 +168,7 @@ export default function WeeklyQuestionsArchivePage() {
                               {a.text}
                             </p>
                             <p className="text-xs text-gray-500 mt-1">
-                              👤 {shortName(a.name)}
+                              👤 {answerName(a)}
                               {WEEKLY_REACTION_META.map((m) => {
                                 const n = weeklyReactionCount(
                                   data,
