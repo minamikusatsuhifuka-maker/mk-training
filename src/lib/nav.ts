@@ -2,6 +2,8 @@
 // マスター（ハードコードの既定）＝各メニューの安定ID(key=ルート)・ラベル・所属カテゴリ。
 // content_store(portal_nav_config) は「その上の配置情報」。設定が無い/壊れていればマスターにフォールバックする。
 
+import { AI_INCHO_URL } from "./external-links";
+
 export const NAV_CONFIG_KEY = "portal_nav_config";
 export const UNCATEGORIZED_ID = "uncategorized";
 export const UNCATEGORIZED_LABEL = "未分類";
@@ -33,7 +35,7 @@ export const MASTER_ITEMS: MasterItem[] = [
   // 外部リンク（別タブ）。指示書59
   {
     key: "ai-incho",
-    href: "https://ai-incho-git-main-minamikusatsuhifuka-makers-projects.vercel.app/",
+    href: AI_INCHO_URL,
     label: "🤖 AI院長",
     categoryId: "home",
     external: true,

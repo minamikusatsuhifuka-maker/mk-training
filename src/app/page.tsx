@@ -24,6 +24,7 @@ import {
   NewsGrid,
 } from "@/components/NewsColumns";
 import { NEWS_AUTHOR_LS_KEY } from "@/lib/news-reactions";
+import { AI_INCHO_URL } from "@/lib/external-links";
 import { WeeklyQuestionSection } from "@/components/WeeklyQuestionSection";
 import {
   DEFAULT_PORTAL_FEATURES,
@@ -266,7 +267,7 @@ const quickLinks: QuickLink[] = [
     icon: "👨‍⚕️",
     name: "AI院長",
     sub: "判断基準・理念を確認",
-    href: "https://ai-incho-git-main-minamikusatsuhifuka-makers-projects.vercel.app/",
+    href: AI_INCHO_URL,
     external: true,
     highlight: true,
   },
