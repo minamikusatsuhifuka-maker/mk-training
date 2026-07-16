@@ -35,20 +35,75 @@ export type NewsReactionsMap = Record<
   Partial<Record<ReactionKey, Reactor[]>>
 >;
 
+// ─── 正規化（1人1お知らせにつき1リアクション） ───
+
+// 保存形状にはタイムスタンプが無いため「最新」は保存順で判定する。
+// 採用ルール: 1人が同じお知らせに複数付けている場合、
+//   保存されたキー順（JSONの挿入順）で最後に現れたものを残す。
+//   setReaction は付け直すたびにそのキーを末尾へ移すため、末尾＝最後の操作になる。
+// 同一キー内の同一IDの重複も1件に畳む。
+export function normalizeNewsReactions(map: NewsReactionsMap): NewsReactionsMap {
+  const next: NewsReactionsMap = {};
+  for (const [newsId, entry] of Object.entries(map ?? {})) {
+    if (!entry || typeof entry !== "object") continue;
+    // 各IDについて「最後に現れたキー」を決める
+    const lastKeyOf = new Map<string, string>();
+    for (const [key, list] of Object.entries(entry)) {
+      for (const r of list ?? []) {
+        if (r && typeof r.id === "string") lastKeyOf.set(r.id, key);
+      }
+    }
+    const nextEntry: Partial<Record<ReactionKey, Reactor[]>> = {};
+    for (const [key, list] of Object.entries(entry)) {
+      const seen = new Set<string>();
+      const kept = (list ?? []).filter((r) => {
+        if (!r || typeof r.id !== "string") return false;
+        if (lastKeyOf.get(r.id) !== key) return false;
+        if (seen.has(r.id)) return false;
+        seen.add(r.id);
+        return true;
+      });
+      if (kept.length > 0) nextEntry[key as ReactionKey] = kept;
+    }
+    if (Object.keys(nextEntry).length > 0) next[newsId] = nextEntry;
+  }
+  return next;
+}
+
+// 正規化が必要だった「ユーザー×お知らせ」の件数（正規化スクリプト・調査用）
+export function countMultiReactionPairs(map: NewsReactionsMap): number {
+  let count = 0;
+  for (const entry of Object.values(map ?? {})) {
+    if (!entry || typeof entry !== "object") continue;
+    const keysOf = new Map<string, Set<string>>();
+    for (const [key, list] of Object.entries(entry)) {
+      for (const r of list ?? []) {
+        if (!r || typeof r.id !== "string") continue;
+        const set = keysOf.get(r.id) ?? new Set<string>();
+        set.add(key);
+        keysOf.set(r.id, set);
+      }
+    }
+    for (const set of keysOf.values()) if (set.size > 1) count++;
+  }
+  return count;
+}
+
 // ─── 保存・読込 ───
 
+// 読込・保存の両方で正規化する（表示時点で必ず1つに見え、どの書き込み経路でも複数付かない）
 export async function loadNewsReactions(): Promise<NewsReactionsMap> {
   const obj = await loadPortalObject<NewsReactionsMap | null>(
     NEWS_REACTIONS_KEY,
     null
   );
-  return obj && typeof obj === "object" ? obj : {};
+  return obj && typeof obj === "object" ? normalizeNewsReactions(obj) : {};
 }
 
 export async function saveNewsReactions(
   map: NewsReactionsMap
 ): Promise<boolean> {
-  return savePortalObject(NEWS_REACTIONS_KEY, map);
+  return savePortalObject(NEWS_REACTIONS_KEY, normalizeNewsReactions(map));
 }
 
 // ─── identity ───
@@ -104,7 +159,9 @@ export async function getReactorIdentity(): Promise<{
 
 // ─── 純関数（トグル・名前反映・集計） ───
 
-// 指定リアクションを「押した/取り消した」状態に強制設定する。
+// 指定リアクションを「押した/取り消した」状態に強制設定する（指示書70: 1人1つの排他選択）。
+// active=true のとき、同じお知らせ内のそのユーザーの他リアクションをすべて外してから付ける
+// （別のを押すと1操作で乗り換わる）。active=false は取り消し。
 // トグルの最終状態を楽観更新側で決め、保存時は最新データに同じ状態を適用する
 // （再トグルだと並行更新で反転しうるため）。
 export function setReaction(
@@ -114,13 +171,15 @@ export function setReaction(
   reactor: Reactor,
   active: boolean
 ): NewsReactionsMap {
-  const entry = { ...(map[newsId] ?? {}) };
-  const list = (entry[key] ?? []).filter((r) => r.id !== reactor.id);
-  const nextList = active ? [...list, { id: reactor.id, name: reactor.name }] : list;
-  if (nextList.length > 0) {
-    entry[key] = nextList;
-  } else {
-    delete entry[key];
+  const entry: Partial<Record<ReactionKey, Reactor[]>> = {};
+  // このユーザーの既存リアクションを全種類から外す
+  for (const [k, list] of Object.entries(map[newsId] ?? {})) {
+    const kept = (list ?? []).filter((r) => r.id !== reactor.id);
+    if (kept.length > 0) entry[k as ReactionKey] = kept;
+  }
+  // 付け直しでキーが末尾に移る＝正規化ルールの「保存順で最後＝最新」と一致する
+  if (active) {
+    entry[key] = [...(entry[key] ?? []), { id: reactor.id, name: reactor.name }];
   }
   const next = { ...map, [newsId]: entry };
   if (Object.keys(entry).length === 0) delete next[newsId];
