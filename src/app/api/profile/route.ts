@@ -16,6 +16,7 @@ import {
 } from "@/lib/profile-roles";
 import { normalizeNeedsSurvey } from "@/lib/needs-survey";
 import type { NeedsSurvey } from "@/lib/needs-survey";
+import { normalizeValueKeywords } from "@/lib/value-keywords";
 
 export const runtime = "nodejs";
 
@@ -162,6 +163,13 @@ export async function PUT(req: NextRequest) {
     };
   }
 
+  // 価値観キーワード（指示書68）: 送られた場合のみ更新。クライアント値を信用せず
+  // 必ず normalizeValueKeywords（52語ホワイトリスト・重複除去・最大5個・原本順）を通す。
+  const valueKeywords =
+    "valueKeywords" in body
+      ? normalizeValueKeywords(body.valueKeywords)
+      : current.valueKeywords;
+
   const next = {
     ...current,
     userId: user.id,
@@ -175,6 +183,7 @@ export async function PUT(req: NextRequest) {
     customFields,
     customFieldsPrivacy,
     needsSurvey,
+    valueKeywords,
     // メール表示の希望（既定OFF）。email はセッションから確定（クライアント値は使わない＝なりすまし防止）
     showEmail: body.showEmail === true,
     email: user.email ?? "",

@@ -53,6 +53,12 @@ import {
   type NeedDetailValues,
 } from "@/lib/needs-survey";
 import { NeedsRadarChart } from "@/components/NeedsRadarChart";
+import {
+  VALUE_KEYWORDS,
+  VALUE_KEYWORDS_MAX,
+  VALUE_KEYWORDS_MIN_RECOMMENDED,
+  normalizeValueKeywords,
+} from "@/lib/value-keywords";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -77,6 +83,9 @@ export default function ProfilePage() {
 
   // 📮 今月あなたに届いたありがとう（46R-B。thanksShowcase OFF・0件なら非表示）
   const [myThanks, setMyThanks] = useState<ThankyouItem[]>([]);
+
+  // 💎 大切にしている価値観（指示書68。保存は「💾 保存」に含める。常に公開）
+  const [valueKeywords, setValueKeywords] = useState<string[]>([]);
 
   // 🧭 5つの基本的欲求サーベイ（指示書58。保存は「💾 保存」に含める）
   const [surveyValues, setSurveyValues] = useState<
@@ -147,6 +156,8 @@ export default function ProfilePage() {
           json.profile.photos.map((p) => [p.url, p.caption ?? ""])
         )
       );
+      // 価値観キーワードの編集stateを初期化（指示書68）
+      setValueKeywords(normalizeValueKeywords(json.profile.valueKeywords));
       // サーベイの編集stateを初期化（指示書58）
       setSurveyValues(json.profile.needsSurvey?.values ?? {});
       setSurveyDetails(json.profile.needsSurvey?.details ?? {});
@@ -209,6 +220,7 @@ export default function ProfilePage() {
         photoCaptions: captions,
         customFields: profile.customFields,
         customFieldsPrivacy: profile.customFieldsPrivacy ?? {},
+        valueKeywords,
         needsSurvey: {
           values: surveyValues,
           details: surveyDetails,
@@ -876,6 +888,70 @@ export default function ProfilePage() {
         )}
         <p className="text-xs text-muted-foreground">
           キャプションは「保存」ボタンで反映されます。
+        </p>
+      </div>
+
+      {/* 💎 大切にしている価値観（指示書68。常に公開・🌐/🔒トグルなし） */}
+      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+        <h2 className="text-sm font-semibold">
+          💎 大切にしている価値観（3〜5個）
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          52語の中から、あなたが大切にしている価値観を3〜5個選んでください。メンバー紹介に表示されます。相互理解のための共有です（評価・優劣付けには使いません）。
+        </p>
+        <p className="text-xs">
+          {valueKeywords.length >= VALUE_KEYWORDS_MAX ? (
+            <span className="text-amber-700">
+              {valueKeywords.length}個選択中（上限です。変更するには選択中のものを解除してください）
+            </span>
+          ) : valueKeywords.length > 0 ? (
+            <span className="text-teal-700">
+              {valueKeywords.length}個選択中（あと
+              {VALUE_KEYWORDS_MAX - valueKeywords.length}個まで選べます）
+            </span>
+          ) : (
+            <span className="text-muted-foreground">未選択です</span>
+          )}
+          {valueKeywords.length > 0 &&
+            valueKeywords.length < VALUE_KEYWORDS_MIN_RECOMMENDED && (
+              <span className="text-muted-foreground">
+                {" "}
+                — あと{VALUE_KEYWORDS_MIN_RECOMMENDED - valueKeywords.length}
+                個選ぶと、より伝わりやすくなります
+              </span>
+            )}
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {VALUE_KEYWORDS.map((word) => {
+            const selected = valueKeywords.includes(word);
+            const full = valueKeywords.length >= VALUE_KEYWORDS_MAX;
+            return (
+              <button
+                key={word}
+                type="button"
+                disabled={!selected && full}
+                onClick={() =>
+                  setValueKeywords((prev) =>
+                    prev.includes(word)
+                      ? prev.filter((w) => w !== word)
+                      : normalizeValueKeywords([...prev, word])
+                  )
+                }
+                className={
+                  selected
+                    ? "rounded-full border border-teal-600 bg-teal-600 px-3 py-1 text-sm text-white"
+                    : full
+                      ? "rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-300 cursor-not-allowed"
+                      : "rounded-full border border-slate-300 bg-white px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
+                }
+              >
+                {word}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          選択は「💾 保存」ボタンで確定します。
         </p>
       </div>
 

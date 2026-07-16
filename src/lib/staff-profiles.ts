@@ -46,6 +46,9 @@ export type StaffProfile = {
   // 5つの基本的欲求サーベイ（指示書58）。既定 private（自分のみ）。
   // imageUrl はアップロードAPIでのみ変更（PUT のクライアント値は使わない）。
   needsSurvey?: NeedsSurvey;
+  // 大切にしている価値観（指示書68）: lib/value-keywords.ts の52語から最大5個。
+  // 常に公開（customFieldsPrivacy 対象外）。未設定は undefined / 空配列。
+  valueKeywords?: string[];
   // メールアドレスの表示希望（指示書44・既定OFF）。
   // email はサーバー側でセッションから確定して保存する（クライアント値は受け取らない）。
   // 表示は「詳細ダイアログのみ・showEmail=true の人のみ」。一覧カード/indexには載せない。

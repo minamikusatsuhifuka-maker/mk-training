@@ -72,6 +72,7 @@ import {
   radarValuesOf,
 } from "@/lib/needs-survey";
 import { NeedsRadarChart } from "@/components/NeedsRadarChart";
+import { normalizeValueKeywords } from "@/lib/value-keywords";
 import {
   collectMemberAnswers,
   loadWeeklyQuestions,
@@ -344,6 +345,11 @@ export default function MembersPage() {
               survey?.visibility === "public" && hasNeedsValues(survey)
                 ? radarValuesOf(survey)
                 : null;
+            // 💎 価値観キーワード（指示書68）: 常に公開＝サーベイの公開設定とは無関係に表示。
+            // 未選択の人はセクションごと非表示（空見出しを出さない）
+            const keywords = normalizeValueKeywords(
+              profiles[m.userId]?.valueKeywords
+            );
             return (
               <button
                 key={m.userId}
@@ -420,6 +426,25 @@ export default function MembersPage() {
                       );
                     })}
                   </dl>
+                )}
+
+                {/* 💎 大切にしている価値観（指示書68・ミニレーダーのすぐ上・常に公開） */}
+                {keywords.length > 0 && (
+                  <div className="w-full border-t border-gray-100 pt-2 space-y-1">
+                    <p className="text-[10px] text-gray-400">
+                      💎 大切にしている価値観
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {keywords.map((word) => (
+                        <span
+                          key={word}
+                          className="inline-flex items-center rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-xs text-teal-700"
+                        >
+                          {word}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 )}
 
                 {/* 🧭 欲求サーベイのミニレーダー（公開者のみ・プレビュー。指示書65。
@@ -586,6 +611,27 @@ export default function MembersPage() {
                     </div>
                   );
                 })}
+
+              {/* 💎 大切にしている価値観（指示書68・レーダーのすぐ上・常に公開） */}
+              {normalizeValueKeywords(selected.valueKeywords).length > 0 && (
+                <div className="border-t border-gray-100 pt-3 space-y-1.5">
+                  <h3 className="text-[13px] text-gray-400">
+                    💎 大切にしている価値観
+                  </h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {normalizeValueKeywords(selected.valueKeywords).map(
+                      (word) => (
+                        <span
+                          key={word}
+                          className="inline-flex items-center rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-xs text-teal-700"
+                        >
+                          {word}
+                        </span>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* 🧭 5つの基本的欲求（公開している人のみ・指示書58） */}
               {selected.needsSurvey?.visibility === "public" &&
