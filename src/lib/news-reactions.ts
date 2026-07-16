@@ -137,8 +137,11 @@ export async function getReactorIdentity(): Promise<{
       const meta = user.user_metadata as Record<string, unknown> | null;
       const name =
         typeof meta?.display_name === "string" ? meta.display_name.trim() : "";
+      // メールアドレスは保存しない（指示書73）。表示名が無ければ null にする。
+      // 表示側は resolveReactorName がプロフィール登録名で解決し、
+      // 解決できなければ「名前未設定」に倒す。
       return {
-        reactor: { id: user.id, name: name || user.email || null },
+        reactor: { id: user.id, name: name || null },
         loggedIn: true,
       };
     }
@@ -253,11 +256,12 @@ export function isAnonymousReactorId(id: string): boolean {
   return id.startsWith("anon_");
 }
 
-// メールアドレスは画面に出さない（指示書72）。
-// getReactorIdentity はアカウント表示名が無いとき user.email を name に入れるため、
-// スナップショットにメールが混ざる。その場合は名前なし扱いにする
+// メールアドレスは画面に出さない（指示書72）・保存もしない（指示書73）。
+// 指示書73より前は getReactorIdentity が表示名の代わりに user.email を name に入れて
+// おり、既存データにメール形式のスナップショットが残りうる。その場合は名前なし扱いにする
 // （＝指示書71の「アカウント表示名なしの人は名前未設定」を正しく満たす）。
-function looksLikeEmail(value: string): boolean {
+// 表示側（resolveReactorName）と洗浄側で必ずこの判定を共有すること。
+export function looksLikeEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
