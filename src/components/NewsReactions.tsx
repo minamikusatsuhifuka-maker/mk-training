@@ -19,12 +19,16 @@ import {
   type NewsReactionsMap,
   type ReactionKey,
   type Reactor,
+  type ReactorNameMap,
 } from "@/lib/news-reactions";
+import { loadProfilesIndex } from "@/lib/staff-profiles";
 
 export type NewsReactionsController = {
   map: NewsReactionsMap;
   identity: Reactor | null;
   loggedIn: boolean;
+  // userId → プロフィール登録名（「押した人を見る」の表示名解決用・画面あたり1回だけ読む）
+  profileNames: ReactorNameMap;
   toggle: (newsId: string, key: ReactionKey) => Promise<void>;
   setName: (name: string) => Promise<void>;
 };
@@ -33,6 +37,7 @@ export function useNewsReactions(): NewsReactionsController {
   const [map, setMap] = useState<NewsReactionsMap>({});
   const [identity, setIdentity] = useState<Reactor | null>(null);
   const [loggedIn, setLoggedIn] = useState(false);
+  const [profileNames, setProfileNames] = useState<ReactorNameMap>({});
 
   useEffect(() => {
     loadNewsReactions()
@@ -42,6 +47,18 @@ export function useNewsReactions(): NewsReactionsController {
       .then((r) => {
         setIdentity(r.reactor);
         setLoggedIn(r.loggedIn);
+      })
+      .catch(() => {});
+    // プロフィール一覧は画面あたり1回だけ（リアクション1件ごとには読まない）。
+    // 読めなくても保存済み name にフォールバックするので表示は壊れない。
+    loadProfilesIndex()
+      .then((items) => {
+        const names: ReactorNameMap = {};
+        for (const p of items) {
+          const name = (p.name ?? "").trim();
+          if (p.userId && name) names[p.userId] = name;
+        }
+        setProfileNames(names);
       })
       .catch(() => {});
   }, []);
@@ -92,7 +109,7 @@ export function useNewsReactions(): NewsReactionsController {
     }
   };
 
-  return { map, identity, loggedIn, toggle, setName };
+  return { map, identity, loggedIn, profileNames, toggle, setName };
 }
 
 // ─── 一覧カード用サマリー（件数のあるリアクションだけ小さく表示） ───
@@ -122,7 +139,7 @@ export function ReactionBar({
   newsId: string;
   controller: NewsReactionsController;
 }) {
-  const { map, identity, loggedIn, toggle, setName } = controller;
+  const { map, identity, loggedIn, profileNames, toggle, setName } = controller;
   const [showPeople, setShowPeople] = useState(false);
   const [showNameModal, setShowNameModal] = useState(false);
   const [nameInput, setNameInput] = useState("");
@@ -208,7 +225,8 @@ export function ReactionBar({
           {REACTION_META.filter((m) => (entry[m.key]?.length ?? 0) > 0).map(
             (m) => (
               <p key={m.key} className="text-[11px] text-gray-600">
-                {m.emoji} {m.label}：{reactorNamesLabel(entry[m.key] ?? [])}
+                {m.emoji} {m.label}：
+                {reactorNamesLabel(entry[m.key] ?? [], profileNames)}
               </p>
             )
           )}

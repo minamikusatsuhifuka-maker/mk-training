@@ -240,10 +240,45 @@ export function totalReactionsOf(
   return Object.values(entry).reduce((sum, list) => sum + (list?.length ?? 0), 0);
 }
 
+// ─── 表示名の解決（指示書71） ───
+// 保存されている name は「押した瞬間のスナップショット」なので、表示時に最新の
+// プロフィール登録名で解決する（保存データは書き換えない・移行不要）。
+// userId → プロフィール登録名。staff_profiles_index（loadProfilesIndex）から作る。
+export type ReactorNameMap = Record<string, string>;
+
+export const UNNAMED_REACTOR_LABEL = "名前未設定";
+
+// 未ログインの匿名リアクションか（getAnonymousReactorId が付ける接頭辞で判定）
+export function isAnonymousReactorId(id: string): boolean {
+  return id.startsWith("anon_");
+}
+
+// 表示名を解決する。null = 「匿名」として集計する未ログインの人。
+// 優先順位: プロフィール登録名 → 保存された name → 「名前未設定」
+export function resolveReactorName(
+  reactor: Reactor,
+  profileNames: ReactorNameMap = {}
+): string | null {
+  const fromProfile = profileNames[reactor.id]?.trim();
+  if (fromProfile) return fromProfile;
+  const snapshot = reactor.name?.trim();
+  if (snapshot) return snapshot;
+  // 未ログインの匿名は従来どおり「匿名 ×N」にまとめる（指示書37Rの仕様を維持）
+  return isAnonymousReactorId(reactor.id) ? null : UNNAMED_REACTOR_LABEL;
+}
+
 // 押した人の表示名リスト（名前あり→名前、匿名は「匿名 ×N」にまとめる）
-export function reactorNamesLabel(list: Reactor[]): string {
-  const named = list.filter((r) => r.name).map((r) => r.name as string);
-  const anonCount = list.length - named.length;
+export function reactorNamesLabel(
+  list: Reactor[],
+  profileNames: ReactorNameMap = {}
+): string {
+  const named: string[] = [];
+  let anonCount = 0;
+  for (const r of list) {
+    const name = resolveReactorName(r, profileNames);
+    if (name === null) anonCount++;
+    else named.push(name);
+  }
   const parts = [...named];
   if (anonCount > 0) {
     parts.push(anonCount === 1 ? "匿名" : `匿名 ×${anonCount}`);
