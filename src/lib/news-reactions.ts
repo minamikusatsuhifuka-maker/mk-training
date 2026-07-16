@@ -253,6 +253,14 @@ export function isAnonymousReactorId(id: string): boolean {
   return id.startsWith("anon_");
 }
 
+// メールアドレスは画面に出さない（指示書72）。
+// getReactorIdentity はアカウント表示名が無いとき user.email を name に入れるため、
+// スナップショットにメールが混ざる。その場合は名前なし扱いにする
+// （＝指示書71の「アカウント表示名なしの人は名前未設定」を正しく満たす）。
+function looksLikeEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 // 表示名を解決する。null = 「匿名」として集計する未ログインの人。
 // 優先順位: プロフィール登録名 → 保存された name → 「名前未設定」
 export function resolveReactorName(
@@ -262,7 +270,7 @@ export function resolveReactorName(
   const fromProfile = profileNames[reactor.id]?.trim();
   if (fromProfile) return fromProfile;
   const snapshot = reactor.name?.trim();
-  if (snapshot) return snapshot;
+  if (snapshot && !looksLikeEmail(snapshot)) return snapshot;
   // 未ログインの匿名は従来どおり「匿名 ×N」にまとめる（指示書37Rの仕様を維持）
   return isAnonymousReactorId(reactor.id) ? null : UNNAMED_REACTOR_LABEL;
 }

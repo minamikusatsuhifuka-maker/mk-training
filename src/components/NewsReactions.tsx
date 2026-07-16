@@ -15,6 +15,7 @@ import {
   hasReacted,
   applyReactorName,
   reactorNamesLabel,
+  resolveReactorName,
   NEWS_AUTHOR_LS_KEY,
   type NewsReactionsMap,
   type ReactionKey,
@@ -206,7 +207,8 @@ export function ReactionBar({
         </button>
         {loggedIn ? (
           <span className="text-[11px] text-gray-400">
-            {identity?.name ?? ""} として反応中
+            {(identity && resolveReactorName(identity, profileNames)) ?? ""}{" "}
+            として反応中
           </span>
         ) : (
           <button
