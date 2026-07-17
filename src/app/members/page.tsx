@@ -74,9 +74,11 @@ import {
 import { NeedsRadarChart } from "@/components/NeedsRadarChart";
 import { normalizeValueKeywords } from "@/lib/value-keywords";
 import {
+  buildPeriodRangeLabels,
   collectMemberAnswers,
+  loadQuestionSchedule,
   loadWeeklyQuestions,
-  weekRangeLabel,
+  type QuestionSchedule,
   type WeeklyHistoryItem,
   type WeeklyQuestionsData,
 } from "@/lib/weekly-questions";
@@ -157,8 +159,10 @@ export default function MembersPage() {
   );
   // 管理画面設定の列数を広い画面での最大値とし、狭い画面では自動で減らす（指示書45）
   const effectiveCols = useEffectiveColumns(cardConfig.columns);
-  // 今週の質問の回答履歴（指示書47。機能スイッチOFF時はnullのまま＝非表示）
+  // みんなへの質問の回答履歴（指示書47。機能スイッチOFF時はnullのまま＝非表示）
   const [weeklyData, setWeeklyData] = useState<WeeklyQuestionsData | null>(null);
+  // 配信間隔設定（期間ラベルの算出用。指示書75）
+  const [schedule, setSchedule] = useState<QuestionSchedule | null>(null);
   const [showAllHistory, setShowAllHistory] = useState(false);
   // 共通点バッジ（指示書46R-C。ログイン中＋自分のプロフィールがある場合のみ）
   const [features, setFeatures] = useState<PortalFeatures>(
@@ -193,12 +197,13 @@ export default function MembersPage() {
         );
       })
       .catch(() => {});
-    // 機能スイッチ＋今週の質問の回答履歴（スイッチONのときだけ読み込む）
+    // 機能スイッチ＋みんなへの質問の回答履歴（スイッチONのときだけ読み込む）
     loadPortalFeatures()
       .then((f) => {
         setFeatures(f);
         if (f.weeklyQuestion) {
           loadWeeklyQuestions().then(setWeeklyData).catch(() => {});
+          loadQuestionSchedule().then(setSchedule).catch(() => {});
         }
       })
       .catch(() => {});
@@ -265,11 +270,17 @@ export default function MembersPage() {
     return values;
   };
 
-  // 今週の質問の回答履歴（id=userId優先、無ければname一致。新しい順）。指示書47
+  // みんなへの質問の回答履歴（id=userId優先、無ければname一致。新しい順）。指示書47
   const weeklyHistory =
     selected && weeklyData
       ? collectMemberAnswers(weeklyData, selected.userId, selected.name)
       : [];
+
+  // 期間キー→日付範囲ラベル（履歴の日付表示用。指示書75）
+  const periodLabels = useMemo(
+    () => (weeklyData ? buildPeriodRangeLabels(weeklyData, schedule) : {}),
+    [weeklyData, schedule]
+  );
 
   // カード表示用: 全メンバーの回答履歴を一括算出（指示書50。weekly_questions の
   // 読み込みは上の1回のみで、収集ロジックは詳細ダイアログと同じ collectMemberAnswers を共用）
@@ -459,14 +470,14 @@ export default function MembersPage() {
                   </div>
                 )}
 
-                {/* 💬 今週の質問より（最新2件・0件の人は非表示）指示書50。
+                {/* 💬 みんなへの質問より（最新2件・0件の人は非表示）指示書50。
                     weeklyData は weeklyQuestion ON のときだけ読み込まれるため機能スイッチと連動。
                     カード全体が詳細ダイアログへのボタンなので添え書きもクリックで詳細が開く。 */}
                 {weeklyAnswers.length > 0 && (
                   <div className="w-full min-w-0 border-t border-gray-100 pt-3 space-y-1.5">
                     <p className="flex items-center gap-1.5 text-[13px] text-gray-400">
                       <MessageCircle className="h-3.5 w-3.5 shrink-0" />
-                      💬 今週の質問より
+                      💬 みんなへの質問より
                     </p>
                     {weeklyAnswers.slice(0, 2).map((h) => (
                       <div key={`${h.weekKey}_${h.at}`} className="min-w-0">
@@ -754,12 +765,12 @@ export default function MembersPage() {
                   </div>
                 )}
 
-              {/* これまでの回答（今週の質問。0件なら非表示・最新5件＋もっと見る）指示書47 */}
+              {/* これまでの回答（みんなへの質問。0件なら非表示・最新5件＋もっと見る）指示書47 */}
               {weeklyHistory.length > 0 && (
                 <div className="border-t border-gray-100 pt-3">
                   <h3 className="flex items-center gap-1.5 text-[13px] text-gray-400 mb-2">
                     <MessageCircle className="h-3.5 w-3.5 shrink-0" />
-                    💬 これまでの回答（今週の質問）
+                    💬 これまでの回答（みんなへの質問）
                   </h3>
                   <ul className="space-y-2.5">
                     {(showAllHistory
@@ -774,7 +785,7 @@ export default function MembersPage() {
                           {h.text}
                         </p>
                         <p className="text-[11px] text-gray-400 mt-0.5">
-                          {weekRangeLabel(h.weekKey)}の週
+                          {periodLabels[h.weekKey] ?? h.weekKey}
                         </p>
                       </li>
                     ))}

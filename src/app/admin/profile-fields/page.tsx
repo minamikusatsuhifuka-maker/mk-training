@@ -457,7 +457,7 @@ export default function ProfileFieldsAdminPage() {
                   { key: "showMessage", label: "ひとこと" },
                   {
                     key: "showWeeklyAnswers",
-                    label: "💬 今週の質問の回答（最新2件）を表示",
+                    label: "💬 みんなへの質問の回答（最新2件）を表示",
                   },
                 ] as const
               ).map((opt) => (

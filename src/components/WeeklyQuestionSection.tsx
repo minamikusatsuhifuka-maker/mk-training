@@ -1,11 +1,13 @@
 "use client";
 
-// ホーム「今週の質問」セクション（指示書46-A/47、46Rでプール自動ローテ＋実名必須）
-// - 質問はプールから週次自動ローテーション（withWeeklyRotation。手動上書き週はそれが優先）
-// - 回答の投稿/編集/削除（1人=週1件、id=userId/匿名IDで判定）。回答は名前必須（46R）
+// ホーム「みんなへの質問」セクション（指示書46-A/47、46Rでプール自動ローテ＋実名必須、
+// 75で配信間隔設定に対応）
+// - 質問はプールから期間ごとに自動ローテーション（withWeeklyRotation。手動上書き期間はそれが優先）
+// - 期間は配信間隔設定（portal_question_schedule）から算出。未設定は従来の週次（月曜起点）
+// - 回答の投稿/編集/削除（1人=期間1件、id=userId/匿名IDで判定）。回答は名前必須（46R）
 // - 回答への 👍🙏 リアクション（トグル）
 // - 管理者は質問文をこの場で編集（保存時に questionByWeek へも記録）
-// - portal_features.weeklyQuestion が OFF なら丸ごと非表示
+// - portal_features.weeklyQuestion が OFF、または配信間隔が「停止」なら丸ごと非表示
 // - 「📚 過去の質問をみる」→ /weekly-questions（アーカイブ）
 
 import { useEffect, useState } from "react";
@@ -21,15 +23,16 @@ import {
 } from "@/lib/news-reactions";
 import { loadPortalFeatures } from "@/lib/portal-features";
 import {
-  currentWeekKey,
+  currentPeriodKey,
+  currentPeriodRangeLabel,
   hasWeeklyReacted,
+  loadQuestionSchedule,
   loadWeeklyQuestions,
   removeWeeklyAnswer,
   saveWeeklyQuestions,
   setWeeklyReaction,
   upsertWeeklyAnswer,
   weeklyReactionCount,
-  weekRangeLabel,
   withWeeklyRotation,
   WEEKLY_REACTION_META,
   type WeeklyQuestionsData,
@@ -67,19 +70,33 @@ export function WeeklyQuestionSection({
   const [questionDraft, setQuestionDraft] = useState("");
   const [savingQuestion, setSavingQuestion] = useState(false);
 
-  const weekKey = currentWeekKey();
+  // 現在の期間キー（配信間隔設定から算出。従来データと同じ "YYYY-MM-DD" 形式）と表示用ラベル
+  const [periodKey, setPeriodKey] = useState<string | null>(null);
+  const [periodLabel, setPeriodLabel] = useState("");
 
   useEffect(() => {
     loadPortalFeatures()
-      .then((f) => {
-        setEnabled(f.weeklyQuestion);
-        if (!f.weeklyQuestion) return;
+      .then(async (f) => {
+        if (!f.weeklyQuestion) {
+          setEnabled(false);
+          return;
+        }
+        // 配信間隔が「停止」ならセクションごと非表示（アーカイブは残る。指示書75）
+        const schedule = await loadQuestionSchedule().catch(() => null);
+        if (schedule?.interval === "off") {
+          setEnabled(false);
+          return;
+        }
+        setEnabled(true);
+        const pk = currentPeriodKey(schedule);
+        setPeriodKey(pk);
+        setPeriodLabel(currentPeriodRangeLabel(schedule));
         // 有効時のみデータとidentityを読み込む
         loadWeeklyQuestions()
           .then((d) => {
             setData(d);
-            // 週が変わっていればプールから次の質問へ進め、questionByWeek に記録（差分がある時だけ保存）
-            const rotated = withWeeklyRotation(d);
+            // 期間が変わっていればプールから次の質問へ進め、questionByWeek に記録（差分がある時だけ保存）
+            const rotated = withWeeklyRotation(d, pk);
             if (rotated) {
               saveWeeklyQuestions(rotated)
                 .then((ok) => ok && setData(rotated))
@@ -106,8 +123,9 @@ export function WeeklyQuestionSection({
       .catch(() => setEnabled(false));
   }, []);
 
-  if (!enabled || !data) return null;
+  if (!enabled || !data || !periodKey) return null;
 
+  const weekKey = periodKey;
   const question = (data.questionByWeek[weekKey] ?? data.question).trim();
   const answers = data.answers[weekKey] ?? [];
   const myAnswer = reactor ? answers.find((a) => a.id === reactor.id) : undefined;
@@ -230,12 +248,10 @@ export function WeeklyQuestionSection({
     <section className="px-4 py-5 border-b border-gray-100">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-xs font-medium text-gray-800 uppercase tracking-wider">
-          今週の質問
+          みんなへの質問
         </h2>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">
-            {weekRangeLabel(weekKey)}
-          </span>
+          <span className="text-xs text-gray-500">{periodLabel}</span>
           <AdminOnly>
             <button
               type="button"
@@ -292,7 +308,7 @@ export function WeeklyQuestionSection({
         </div>
       ) : (
         <p className="text-sm text-gray-500">
-          今週の質問はまだ設定されていません。
+          みんなへの質問はまだ設定されていません。
         </p>
       )}
 
@@ -427,7 +443,7 @@ export function WeeklyQuestionSection({
               名前を設定してください
             </h3>
             <p className="text-xs text-gray-500">
-              今週の質問への回答は名前の設定が必要です（回答と一緒に表示されます）。
+              みんなへの質問への回答は名前の設定が必要です（回答と一緒に表示されます）。
             </p>
             <input
               value={nameDraft}

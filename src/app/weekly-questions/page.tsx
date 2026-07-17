@@ -1,10 +1,11 @@
 "use client";
 
-// 今週の質問アーカイブ（指示書47 ■2）
-// 週ごと（新しい順）に「日付範囲＋質問文」を見出しに、その週の全回答（名前＋ひと言＋👍🙏件数）を表示。
+// みんなへの質問アーカイブ（指示書47 ■2、75で期間ラベル対応）
+// 期間ごと（新しい順）に「日付範囲＋質問文」を見出しに、その期間の全回答（名前＋ひと言＋👍🙏件数）を表示。
 // アコーディオン折りたたみ＋簡易キーワード検索（質問文・回答・名前）。
 // サイドバー登録なし（ホームの「📚 過去の質問をみる」からのリンク遷移のみ）。
 // portal_features.weeklyQuestion OFF 時は非表示（データは保持）。
+// 配信間隔が「停止」でもこのページは閲覧できる（指示書75）。
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -16,11 +17,13 @@ import {
   type ReactorNameMap,
 } from "@/lib/news-reactions";
 import {
-  currentWeekKey,
+  buildPeriodRangeLabels,
+  currentPeriodKey,
+  loadQuestionSchedule,
   loadWeeklyQuestions,
   weeklyReactionCount,
-  weekRangeLabel,
   WEEKLY_REACTION_META,
+  type QuestionSchedule,
   type WeeklyQuestionsData,
 } from "@/lib/weekly-questions";
 
@@ -37,9 +40,8 @@ export default function WeeklyQuestionsArchivePage() {
   const [data, setData] = useState<WeeklyQuestionsData | null>(null);
   const [query, setQuery] = useState("");
   const [profileNames, setProfileNames] = useState<ReactorNameMap>({});
-  const [openWeeks, setOpenWeeks] = useState<Set<string>>(
-    () => new Set([currentWeekKey()])
-  );
+  const [schedule, setSchedule] = useState<QuestionSchedule | null>(null);
+  const [openWeeks, setOpenWeeks] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     loadPortalFeatures()
@@ -47,6 +49,15 @@ export default function WeeklyQuestionsArchivePage() {
         setEnabled(f.weeklyQuestion);
         if (f.weeklyQuestion) {
           loadWeeklyQuestions().then(setData).catch(() => {});
+          // 期間ラベル算出＋現在の期間を初期展開（未設定は従来の週キー）
+          loadQuestionSchedule()
+            .then((s) => {
+              setSchedule(s);
+              setOpenWeeks((prev) => new Set([...prev, currentPeriodKey(s)]));
+            })
+            .catch(() => {
+              setOpenWeeks((prev) => new Set([...prev, currentPeriodKey(null)]));
+            });
           // 回答者名の解決用（この画面で1回だけ・指示書74）
           loadProfilesIndex()
             .then((items) => {
@@ -75,7 +86,13 @@ export default function WeeklyQuestionsArchivePage() {
       return next;
     });
 
-  // 週ごとの表示データ（新しい順）＋キーワード絞り込み
+  // 期間キー→日付範囲ラベル（間隔変更をまたいでも「次の期間の前日」で正確に出す）
+  const periodLabels = useMemo(
+    () => (data ? buildPeriodRangeLabels(data, schedule) : {}),
+    [data, schedule]
+  );
+
+  // 期間ごとの表示データ（新しい順）＋キーワード絞り込み
   const weeks = useMemo(() => {
     if (!data) return [];
     const q = query.trim().toLowerCase();
@@ -85,7 +102,7 @@ export default function WeeklyQuestionsArchivePage() {
         const question = data.questionByWeek[weekKey]?.trim() || null;
         const all = data.answers[weekKey] ?? [];
         if (!q) return { weekKey, question, answers: all };
-        // 質問文がヒット → その週の全回答を表示。回答/名前ヒット → 該当回答のみ。
+        // 質問文がヒット → その期間の全回答を表示。回答/名前ヒット → 該当回答のみ。
         if ((question ?? "").toLowerCase().includes(q)) {
           return { weekKey, question, answers: all };
         }
@@ -102,9 +119,9 @@ export default function WeeklyQuestionsArchivePage() {
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-6">
       <PageHeader
-        title="📚 今週の質問アーカイブ"
-        description="過去の質問とみんなの回答を週ごとに振り返れます"
-        badge={data ? `${Object.keys(data.answers).length} 週分` : undefined}
+        title="📚 みんなへの質問アーカイブ"
+        description="過去の質問とみんなの回答を期間ごとに振り返れます"
+        badge={data ? `${Object.keys(data.answers).length} 回分` : undefined}
       />
       <Link
         href="/"
@@ -117,7 +134,7 @@ export default function WeeklyQuestionsArchivePage() {
         <p className="text-sm text-muted-foreground">読み込み中...</p>
       ) : !enabled ? (
         <p className="text-sm text-muted-foreground">
-          「今週の質問」は現在オフになっています。
+          「みんなへの質問」は現在オフになっています。
         </p>
       ) : !data ? (
         <p className="text-sm text-muted-foreground">読み込み中...</p>
@@ -134,7 +151,7 @@ export default function WeeklyQuestionsArchivePage() {
             <p className="text-sm text-muted-foreground">
               {query.trim()
                 ? "検索に一致する回答がありません。"
-                : "まだ回答がありません。ホームの「今週の質問」から回答してみましょう。"}
+                : "まだ回答がありません。ホームの「みんなへの質問」から回答してみましょう。"}
             </p>
           ) : (
             <div className="space-y-3">
@@ -151,7 +168,7 @@ export default function WeeklyQuestionsArchivePage() {
                       className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
                     >
                       <span className="text-xs text-gray-400 tabular-nums shrink-0">
-                        📅 {weekRangeLabel(w.weekKey)}
+                        📅 {periodLabels[w.weekKey] ?? w.weekKey}
                       </span>
                       <span className="flex-1 min-w-0 text-sm font-medium text-gray-900 truncate">
                         {w.question ?? "（当時の質問）"}

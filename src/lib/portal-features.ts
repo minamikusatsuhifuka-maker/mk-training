@@ -8,7 +8,7 @@ import { loadPortalObject, savePortalObject } from "./portal-store";
 export const PORTAL_FEATURES_KEY = "portal_features";
 
 export type PortalFeatures = {
-  weeklyQuestion: boolean; // 今週の質問（ホーム/履歴/アーカイブ）
+  weeklyQuestion: boolean; // みんなへの質問（ホーム/履歴/アーカイブ）
   thanksShowcase: boolean; // ありがとうの見える化（ホーム常時表示・/profileの📮）
   commonPoints: boolean; // 共通点バッジ（/members）
 };
@@ -26,9 +26,9 @@ export const PORTAL_FEATURE_META: {
 }[] = [
   {
     key: "weeklyQuestion",
-    label: "❓ 今週の質問",
+    label: "❓ みんなへの質問",
     description:
-      "ホームの「今週の質問」セクション・メンバー紹介の回答履歴・アーカイブページ（/weekly-questions）を表示します。",
+      "ホームの「みんなへの質問」セクション・メンバー紹介の回答履歴・アーカイブページ（/weekly-questions）を表示します。",
   },
   {
     key: "thanksShowcase",

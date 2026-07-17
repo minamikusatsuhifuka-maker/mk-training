@@ -1,17 +1,19 @@
-// 今週の質問（指示書46-A/47、46Rでプール自動ローテーション追加）
+// みんなへの質問（指示書46-A/47、46Rでプール自動ローテーション、75で配信間隔設定）
 // content_store `weekly_questions` に単一オブジェクトで保存:
 //   {
 //     question: string,                                  // 現在の質問文
 //     answers: { [weekKey]: [{ id, name, text, at }] },  // id = ログインuserId / 匿名ID
-//     questionByWeek: { [weekKey]: string },             // 週→質問文（アーカイブ復元用）
+//     questionByWeek: { [weekKey]: string },             // 期間→質問文（アーカイブ復元用）
 //     reactions: { [weekKey]: { [answerId]: { like|thanks: Reactor[] } } },
 //     pool: string[],                                    // 質問プール（管理画面で編集）
 //     currentIndex: number                               // プール内の現在位置
 //   }
-// weekKey = その週の月曜日のJST日付（"YYYY-MM-DD"）。
+// weekKey = 期間開始日のJST日付（"YYYY-MM-DD"）。指示書74までは「その週の月曜日」、
+// 75以降は配信間隔設定（portal_question_schedule）のアンカーから算出した期間開始日。
+// どちらも同じ形式なので過去データはそのまま読める（キー・保存形式は変更しない）。
 // identity（userId/匿名ID/名前）は news-reactions の getReactorIdentity を共用する。
-// 週切替: questionByWeek[今週] が未記録ならプールを1つ進めて記録（withWeeklyRotation）。
-// 管理者の手動上書き（✏️質問を編集）は questionByWeek[今週] を書くので、その週はそれが優先。
+// 期間切替: questionByWeek[現期間] が未記録ならプールを1つ進めて記録（withWeeklyRotation）。
+// 管理者の手動上書き（✏️質問を編集）は questionByWeek[現期間] を書くので、その期間はそれが優先。
 
 import { loadPortalObject, savePortalObject } from "./portal-store";
 import type { Reactor } from "./news-reactions";
@@ -94,6 +96,224 @@ export function weekRangeLabel(weekKey: string): string {
   return `${start.getUTCMonth() + 1}/${start.getUTCDate()}〜${end.getUTCMonth() + 1}/${end.getUTCDate()}`;
 }
 
+// ─── 配信間隔（指示書75） ───
+// content_store `portal_question_schedule` に単一オブジェクトで保存:
+//   { interval: "weekly"|"biweekly"|"monthly"|"off", anchorAt: "ISO8601" }
+// anchorAt = 管理画面で間隔を変更した時刻（アンカー）。そこから周期を刻む。
+// 未設定（null）= 従来どおり「その週の月曜日」起点の毎週（デプロイ起因で質問を変えない）。
+
+export type QuestionScheduleInterval = "weekly" | "biweekly" | "monthly" | "off";
+
+export type QuestionSchedule = {
+  interval: QuestionScheduleInterval;
+  anchorAt: string; // ISO8601
+};
+
+export const QUESTION_SCHEDULE_KEY = "portal_question_schedule";
+
+export const QUESTION_INTERVAL_META: {
+  key: QuestionScheduleInterval;
+  label: string;
+}[] = [
+  { key: "weekly", label: "毎週" },
+  { key: "biweekly", label: "隔週" },
+  { key: "monthly", label: "月1回" },
+  { key: "off", label: "停止" },
+];
+
+export function normalizeQuestionSchedule(
+  raw: unknown
+): QuestionSchedule | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const interval = QUESTION_INTERVAL_META.find((m) => m.key === o.interval)?.key;
+  if (!interval) return null;
+  if (typeof o.anchorAt !== "string" || Number.isNaN(Date.parse(o.anchorAt)))
+    return null;
+  return { interval, anchorAt: o.anchorAt };
+}
+
+export async function loadQuestionSchedule(): Promise<QuestionSchedule | null> {
+  const raw = await loadPortalObject<unknown>(QUESTION_SCHEDULE_KEY, null);
+  return normalizeQuestionSchedule(raw);
+}
+
+export async function saveQuestionSchedule(
+  schedule: QuestionSchedule
+): Promise<boolean> {
+  return savePortalObject(QUESTION_SCHEDULE_KEY, schedule);
+}
+
+// ─── 期間計算（JST暦日ベース・決定的） ───
+// 期間キーは従来の weekKey と同じ "YYYY-MM-DD"（期間開始日のJST日付）。
+
+const DAY_MS = 86400 * 1000;
+const JST_OFFSET_MS = 9 * 3600 * 1000;
+const JP_WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"] as const;
+
+// Date → そのJST暦日を表す UTC 0時のミリ秒（日単位の比較・加減算に使う）
+function jstDayMs(date: Date): number {
+  return Math.floor((date.getTime() + JST_OFFSET_MS) / DAY_MS) * DAY_MS;
+}
+
+function keyFromDayMs(ms: number): string {
+  const d = new Date(ms);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+function dayMsFromKey(key: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+  if (!m) return null;
+  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+}
+
+// 月1回用: y年m月（0始まり）の「アンカーと同じ日」。存在しない日はその月の末日。
+function monthlyStartMs(y: number, m0: number, anchorDay: number): number {
+  const lastDay = new Date(Date.UTC(y, m0 + 1, 0)).getUTCDate();
+  return Date.UTC(y, m0, Math.min(anchorDay, lastDay));
+}
+
+// 現在の期間の開始日（UTC 0時ms）。off はアンカー日で固定（切替なし）。
+function currentPeriodStartDayMs(schedule: QuestionSchedule, now: Date): number {
+  const anchor = jstDayMs(new Date(schedule.anchorAt));
+  const today = jstDayMs(now);
+  if (today <= anchor) return anchor;
+  if (schedule.interval === "weekly" || schedule.interval === "biweekly") {
+    const span = (schedule.interval === "weekly" ? 7 : 14) * DAY_MS;
+    return anchor + Math.floor((today - anchor) / span) * span;
+  }
+  if (schedule.interval === "monthly") {
+    const anchorDay = new Date(anchor).getUTCDate();
+    const t = new Date(today);
+    let y = t.getUTCFullYear();
+    let m0 = t.getUTCMonth();
+    let start = monthlyStartMs(y, m0, anchorDay);
+    if (start > today) {
+      m0 -= 1;
+      if (m0 < 0) {
+        m0 = 11;
+        y -= 1;
+      }
+      start = monthlyStartMs(y, m0, anchorDay);
+    }
+    return Math.max(start, anchor);
+  }
+  return anchor; // off
+}
+
+// 現在の期間キー。未設定（schedule=null）は従来の週キー（月曜起点）をそのまま使う。
+export function currentPeriodKey(
+  schedule: QuestionSchedule | null,
+  now: Date = new Date()
+): string {
+  if (!schedule) return currentWeekKey(now);
+  return keyFromDayMs(currentPeriodStartDayMs(schedule, now));
+}
+
+// 次回切替日（UTC 0時ms）。off は切替なし（null）。未設定は次の月曜。
+export function nextSwitchDayMs(
+  schedule: QuestionSchedule | null,
+  now: Date = new Date()
+): number | null {
+  if (!schedule) {
+    const wk = dayMsFromKey(currentWeekKey(now));
+    return wk === null ? null : wk + 7 * DAY_MS;
+  }
+  if (schedule.interval === "off") return null;
+  const start = currentPeriodStartDayMs(schedule, now);
+  if (schedule.interval === "weekly") return start + 7 * DAY_MS;
+  if (schedule.interval === "biweekly") return start + 14 * DAY_MS;
+  // monthly: 翌月の同日（存在しない日は末日）
+  const anchorDay = new Date(
+    jstDayMs(new Date(schedule.anchorAt))
+  ).getUTCDate();
+  const s = new Date(start);
+  let y = s.getUTCFullYear();
+  let m0 = s.getUTCMonth() + 1;
+  if (m0 > 11) {
+    m0 = 0;
+    y += 1;
+  }
+  return monthlyStartMs(y, m0, anchorDay);
+}
+
+// 管理画面表示用: "7/23（水）"
+export function formatSwitchDate(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}（${JP_WEEKDAYS[d.getUTCDay()]}）`;
+}
+
+function shortDate(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+}
+
+// ホーム表示用: 現在の期間の日付範囲（"7/16〜8/15"。切替なしなら "7/16〜"）
+export function currentPeriodRangeLabel(
+  schedule: QuestionSchedule | null,
+  now: Date = new Date()
+): string {
+  const startMs = dayMsFromKey(currentPeriodKey(schedule, now));
+  if (startMs === null) return "";
+  const next = nextSwitchDayMs(schedule, now);
+  if (next === null || next - DAY_MS <= startMs) return shortDate(startMs);
+  return `${shortDate(startMs)}〜${shortDate(next - DAY_MS)}`;
+}
+
+// アーカイブ・回答履歴用: 期間キー→日付範囲ラベルの一覧。
+// 終了日は「次に存在する期間キーの前日」から決める（間隔変更をまたいでも正確）。
+// 最新キーの終了日は設定から算出（未設定=従来週次は開始+6日）。判定できなければ "7/16〜"。
+export function buildPeriodRangeLabels(
+  data: WeeklyQuestionsData,
+  schedule: QuestionSchedule | null,
+  now: Date = new Date()
+): Record<string, string> {
+  const keys = Array.from(
+    new Set([...Object.keys(data.answers), ...Object.keys(data.questionByWeek)])
+  ).sort();
+  const labels: Record<string, string> = {};
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    const startMs = dayMsFromKey(key);
+    if (startMs === null) {
+      labels[key] = key;
+      continue;
+    }
+    let endMs: number | null = null;
+    const nextKeyMs = i + 1 < keys.length ? dayMsFromKey(keys[i + 1]) : null;
+    if (nextKeyMs !== null) {
+      endMs = nextKeyMs - DAY_MS;
+    } else if (!schedule) {
+      endMs = startMs + 6 * DAY_MS; // 従来の週次
+    } else if (schedule.interval !== "off") {
+      const cur = dayMsFromKey(currentPeriodKey(schedule, now));
+      if (cur !== null && cur === startMs) {
+        const next = nextSwitchDayMs(schedule, now);
+        if (next !== null) endMs = next - DAY_MS;
+      } else if (cur !== null && cur > startMs) {
+        endMs = cur - DAY_MS;
+      }
+    }
+    labels[key] =
+      endMs !== null && endMs > startMs
+        ? `${shortDate(startMs)}〜${shortDate(endMs)}`
+        : endMs === startMs
+          ? shortDate(startMs)
+          : `${shortDate(startMs)}〜`;
+  }
+  return labels;
+}
+
+// 未設定環境で「毎週」をそのまま保存するとき用のアンカー（今週の月曜 JST 0時）。
+// これで期間キーが従来の週キーと完全一致し、保存起因で質問が切り替わらない。
+export function legacyWeeklyAnchorIso(now: Date = new Date()): string {
+  const ms = dayMsFromKey(currentWeekKey(now));
+  return new Date((ms ?? jstDayMs(now)) - JST_OFFSET_MS).toISOString();
+}
+
 // ─── 読込・保存 ───
 
 export function normalizeWeeklyQuestions(raw: unknown): WeeklyQuestionsData {
@@ -173,11 +393,37 @@ export async function saveWeeklyQuestions(
 
 // ─── 純関数（履歴・回答・リアクション） ───
 
-// 週次ローテーション＋今週の質問の確定（指示書46R。変更不要なら null）。
+// 期間切替の実体（記録済みチェックなし）。withWeeklyRotation と、間隔変更時の
+// 強制切替（advanceToNewPeriod）の両方から使う。
+// - プールあり → currentIndex を循環で進めて質問を確定・記録。
+// - プール空 → 現行 question をそのまま記録（47までの挙動）。
+function rotateIntoPeriod(
+  data: WeeklyQuestionsData,
+  periodKey: string
+): WeeklyQuestionsData | null {
+  if (data.pool.length === 0) {
+    const q = data.question.trim();
+    if (!q) return null;
+    return {
+      ...data,
+      questionByWeek: { ...data.questionByWeek, [periodKey]: q },
+    };
+  }
+  // 過去に一度でも期間が確定していれば1つ進め、初回は現在位置から開始する
+  const advance = Object.keys(data.questionByWeek).length > 0 ? 1 : 0;
+  const idx = (data.currentIndex + advance) % data.pool.length;
+  const q = data.pool[idx];
+  return {
+    ...data,
+    question: q,
+    currentIndex: idx,
+    questionByWeek: { ...data.questionByWeek, [periodKey]: q },
+  };
+}
+
+// 期間ローテーション＋現期間の質問の確定（指示書46R。変更不要なら null）。
 // ホーム表示のたびに呼ばれても差分がある時だけ保存される（冪等）。
-// - questionByWeek[今週] が記録済み → その質問が正（手動上書き含む）。question フィールドだけ同期。
-// - 未記録＋プールあり → currentIndex を循環で進めて今週の質問を確定・記録。
-// - 未記録＋プール空 → 現行 question をそのまま記録（47までの挙動）。
+// - questionByWeek[現期間] が記録済み → その質問が正（手動上書き含む）。question フィールドだけ同期。
 export function withWeeklyRotation(
   data: WeeklyQuestionsData,
   weekKey: string = currentWeekKey()
@@ -187,24 +433,16 @@ export function withWeeklyRotation(
     if (data.question !== recorded) return { ...data, question: recorded };
     return null;
   }
-  if (data.pool.length === 0) {
-    const q = data.question.trim();
-    if (!q) return null;
-    return {
-      ...data,
-      questionByWeek: { ...data.questionByWeek, [weekKey]: q },
-    };
-  }
-  // 過去に一度でも週が確定していれば1つ進め、初回は現在位置から開始する
-  const advance = Object.keys(data.questionByWeek).length > 0 ? 1 : 0;
-  const idx = (data.currentIndex + advance) % data.pool.length;
-  const q = data.pool[idx];
-  return {
-    ...data,
-    question: q,
-    currentIndex: idx,
-    questionByWeek: { ...data.questionByWeek, [weekKey]: q },
-  };
+  return rotateIntoPeriod(data, weekKey);
+}
+
+// 間隔変更時の即時切替（指示書75）。記録済みでも新しい質問で上書きして
+// 「保存と同時に切り替わる」を保証する（同日切替の衝突時も含む）。
+export function advanceToNewPeriod(
+  data: WeeklyQuestionsData,
+  periodKey: string
+): WeeklyQuestionsData | null {
+  return rotateIntoPeriod(data, periodKey);
 }
 
 // 同一IDの回答は週内で1件（上書き）。投稿順は維持し、既存の位置を置き換える。

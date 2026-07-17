@@ -279,7 +279,7 @@ export const HOME_SECTION_LABELS: Record<HomeSectionKey, string> = {
   today_word: "💬 今日の一言",
   news: "📢 新着情報",
   quick_access: "⚡ クイックアクセス",
-  weekly_question: "❓ 今週の質問",
+  weekly_question: "❓ みんなへの質問",
   kizuki: "💛 気づきシェア",
   thanks: "♥ ありがとうカード",
   policy: "🎯 経営方針",

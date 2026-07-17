@@ -17,7 +17,7 @@ export type MembersCardConfig = {
   showKana: boolean;
   showRole: boolean;
   showMessage: boolean;
-  /** 「今週の質問」の回答履歴（最新2件）をカードに表示（指示書50・既定ON）。
+  /** 「みんなへの質問」の回答履歴（最新2件）をカードに表示（指示書50・既定ON）。
    *  portal_features.weeklyQuestion OFF 時は設定に関わらず非表示。 */
   showWeeklyAnswers: boolean;
   columns: MembersCardColumns;

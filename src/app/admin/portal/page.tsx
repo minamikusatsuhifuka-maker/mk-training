@@ -62,8 +62,18 @@ import {
   type PortalFeatures,
 } from "@/lib/portal-features";
 import {
+  advanceToNewPeriod,
+  currentPeriodKey,
+  formatSwitchDate,
+  legacyWeeklyAnchorIso,
+  loadQuestionSchedule,
   loadWeeklyQuestions,
+  nextSwitchDayMs,
+  saveQuestionSchedule,
   saveWeeklyQuestions,
+  QUESTION_INTERVAL_META,
+  type QuestionSchedule,
+  type QuestionScheduleInterval,
 } from "@/lib/weekly-questions";
 import {
   TASKS_PAGE_LAYOUT_KEY,
@@ -306,11 +316,18 @@ export default function AdminPortalPage() {
   );
   const [savingFeatures, setSavingFeatures] = useState(false);
 
-  // 今週の質問の質問プール（weekly_questions.pool。「⚙ 機能」タブで編集）
+  // みんなへの質問の質問プール（weekly_questions.pool。「⚙ 機能」タブで編集）
   const [pool, setPool] = useState<string[]>([]);
   const [poolLoaded, setPoolLoaded] = useState(false);
   const [newPoolQuestion, setNewPoolQuestion] = useState("");
   const [savingPool, setSavingPool] = useState(false);
+
+  // 質問の配信間隔（portal_question_schedule。指示書75。null=未設定（毎週として動作））
+  const [schedule, setSchedule] = useState<QuestionSchedule | null>(null);
+  const [scheduleLoaded, setScheduleLoaded] = useState(false);
+  const [intervalDraft, setIntervalDraft] =
+    useState<QuestionScheduleInterval>("weekly");
+  const [savingSchedule, setSavingSchedule] = useState(false);
 
   useEffect(() => {
     loadPortalFeatures().then(setFeatures).catch(() => {});
@@ -318,7 +335,68 @@ export default function AdminPortalPage() {
       .then((d) => setPool(d.pool))
       .catch(() => {})
       .finally(() => setPoolLoaded(true));
+    loadQuestionSchedule()
+      .then((s) => {
+        setSchedule(s);
+        setIntervalDraft(s?.interval ?? "weekly");
+      })
+      .catch(() => {})
+      .finally(() => setScheduleLoaded(true));
   }, []);
+
+  // 配信間隔の保存（指示書75）。
+  // - 間隔が実際に変わった場合のみアンカーを現在時刻に更新し、その場で新しい質問へ切替。
+  // - 同じ間隔のまま再保存してもアンカーは維持（誤操作で質問が飛ばない）。
+  // - 未設定環境で「毎週」をそのまま保存する場合は今週の月曜をアンカーにし、
+  //   期間キーが従来の週キーと一致するようにする（保存起因の切替なし）。
+  const handleSaveSchedule = async () => {
+    if (savingSchedule) return;
+    const effectivePrev = schedule?.interval ?? "weekly";
+    const changed = intervalDraft !== effectivePrev;
+    if (changed) {
+      const msg =
+        intervalDraft === "off"
+          ? "停止すると、ホームの質問セクションが非表示になります（アーカイブは残ります）。よろしいですか？"
+          : "保存すると新しい質問に切り替わります。よろしいですか？";
+      if (!confirm(msg)) return;
+    }
+    setSavingSchedule(true);
+    const next: QuestionSchedule = changed
+      ? { interval: intervalDraft, anchorAt: new Date().toISOString() }
+      : (schedule ?? { interval: "weekly", anchorAt: legacyWeeklyAnchorIso() });
+    const ok = await saveQuestionSchedule(next);
+    if (!ok) {
+      setSavingSchedule(false);
+      flash("⚠ 配信間隔の保存に失敗しました");
+      return;
+    }
+    // 間隔が変わったときはその場で新しい質問に切り替える（停止時は切替不要）
+    let switched = false;
+    if (changed && next.interval !== "off") {
+      const fresh = await loadWeeklyQuestions().catch(() => null);
+      if (fresh) {
+        const rotated = advanceToNewPeriod(fresh, currentPeriodKey(next));
+        if (rotated) {
+          switched = await saveWeeklyQuestions(rotated).catch(() => false);
+        }
+      }
+    }
+    setSchedule(next);
+    setSavingSchedule(false);
+    if (!changed) flash("💾 配信間隔を保存しました（変更はありません）");
+    else if (next.interval === "off")
+      flash("💾 配信を停止しました（ホームに表示されません）");
+    else if (switched) flash("💾 配信間隔を保存し、新しい質問に切り替えました");
+    else flash("💾 配信間隔を保存しました");
+  };
+
+  // 配信間隔の現在状態（表示用）
+  const currentIntervalKey = schedule?.interval ?? "weekly";
+  const currentIntervalLabel =
+    QUESTION_INTERVAL_META.find((m) => m.key === currentIntervalKey)?.label ??
+    "毎週";
+  const nextSwitchMs =
+    currentIntervalKey === "off" ? null : nextSwitchDayMs(schedule);
 
   const handleToggleFeature = async (
     key: keyof PortalFeatures,
@@ -2449,15 +2527,72 @@ export default function AdminPortalPage() {
             </div>
           </section>
 
-          {/* 質問プール（週次自動ローテーション） */}
+          {/* 配信間隔（指示書75） */}
           <section className="space-y-3 border-t border-gray-200 pt-6">
             <div>
               <h2 className="text-sm font-semibold text-gray-800">
-                ❓ 今週の質問 — 質問プール
+                📅 みんなへの質問 — 配信間隔
               </h2>
               <p className="text-xs text-gray-500 mt-1">
-                週が変わるとこのプールから上から順（循環）に自動で出題されます。ホームの「✏️
-                質問を編集」（管理者のみ）で手動上書きした週はそれが優先され、翌週からまた自動に戻ります。プールを空にすると自動出題は止まります。
+                質問が新しいものに切り替わる間隔を設定します。間隔を変えて保存すると、その場で新しい質問に切り替わります（同じ間隔のまま保存し直しても切り替わりません）。
+              </p>
+            </div>
+            {!scheduleLoaded ? (
+              <p className="text-xs text-gray-500">読み込み中...</p>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-4">
+                  {QUESTION_INTERVAL_META.map((m) => (
+                    <label
+                      key={m.key}
+                      className="flex items-center gap-1.5 text-sm text-gray-700"
+                    >
+                      <input
+                        type="radio"
+                        name="question-interval"
+                        checked={intervalDraft === m.key}
+                        disabled={savingSchedule}
+                        onChange={() => setIntervalDraft(m.key)}
+                      />
+                      {m.label}
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-600">
+                  {currentIntervalKey === "off" ? (
+                    <>現在: 停止中（ホームに表示されません）</>
+                  ) : (
+                    <>
+                      現在: {currentIntervalLabel}
+                      {schedule ? "" : "（既定）"}
+                      {nextSwitchMs !== null &&
+                        ` ／ 次の切替: ${formatSwitchDate(nextSwitchMs)}`}
+                    </>
+                  )}
+                </p>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSaveSchedule}
+                    disabled={savingSchedule}
+                    className="text-sm px-4 py-2 rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50"
+                  >
+                    {savingSchedule ? "保存中..." : "💾 配信間隔を保存"}
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+
+          {/* 質問プール（期間ごとの自動ローテーション） */}
+          <section className="space-y-3 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">
+                ❓ みんなへの質問 — 質問プール
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                期間が切り替わるとこのプールから上から順（循環）に自動で出題されます。切替間隔は上の「配信間隔」で設定できます。ホームの「✏️
+                質問を編集」（管理者のみ）で手動上書きした期間はそれが優先され、次の切替からまた自動に戻ります。プールを空にすると自動出題は止まります。
               </p>
             </div>
             {!poolLoaded ? (

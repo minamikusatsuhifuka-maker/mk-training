@@ -794,7 +794,7 @@ export default function PortalHome() {
         </div>
       </section>
     ),
-    // 今週の質問（指示書46-A/47）: 機能スイッチOFF時はコンポーネント側でnullを返す
+    // みんなへの質問（指示書46-A/47、75）: 機能スイッチOFF・配信停止時はコンポーネント側でnullを返す
     weekly_question: (
       <WeeklyQuestionSection profileNames={reactions.profileNames} />
     ),
