@@ -17,6 +17,8 @@
 
 import { loadPortalObject, savePortalObject } from "./portal-store";
 import type { Reactor } from "./news-reactions";
+import { getSupabaseBrowserClient } from "./supabase-browser";
+import { isAdminUser } from "./admin-role";
 
 export const WEEKLY_QUESTIONS_KEY = "weekly_questions";
 
@@ -443,6 +445,35 @@ export function advanceToNewPeriod(
   periodKey: string
 ): WeeklyQuestionsData | null {
   return rotateIntoPeriod(data, periodKey);
+}
+
+// 質問の手動上書き（✏️質問を編集）を管理者確認つきで保存する（指示書76）。
+// UIの AdminOnly と同じ isAdminUser 判定を lib 境界でも行い、非管理者なら保存せず null。
+// 自動ローテーション（withWeeklyRotation）は全員が通る正常経路なので対象外。
+// ※ anonキー直書き設計のためサーバー側での完全な強制は構造上不可（指示書70）。
+//    lib を通る経路での防止までがこの関数のスコープ。
+// 保存成功時は保存後データを返す（呼び出し側の setData 用）。
+export async function saveQuestionOverride(
+  periodKey: string,
+  question: string
+): Promise<WeeklyQuestionsData | null> {
+  const q = question.trim();
+  try {
+    const { data } = await getSupabaseBrowserClient().auth.getUser();
+    if (!isAdminUser(data.user)) return null;
+  } catch {
+    return null;
+  }
+  const fresh = await loadWeeklyQuestions().catch(() => null);
+  if (!fresh) return null;
+  const next: WeeklyQuestionsData = {
+    ...fresh,
+    question: q,
+    questionByWeek: q
+      ? { ...fresh.questionByWeek, [periodKey]: q }
+      : fresh.questionByWeek,
+  };
+  return (await saveWeeklyQuestions(next)) ? next : null;
 }
 
 // 同一IDの回答は週内で1件（上書き）。投稿順は維持し、既存の位置を置き換える。

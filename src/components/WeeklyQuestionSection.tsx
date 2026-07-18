@@ -29,6 +29,7 @@ import {
   loadQuestionSchedule,
   loadWeeklyQuestions,
   removeWeeklyAnswer,
+  saveQuestionOverride,
   saveWeeklyQuestions,
   setWeeklyReaction,
   upsertWeeklyAnswer,
@@ -233,15 +234,11 @@ export function WeeklyQuestionSection({
     const q = questionDraft.trim();
     if (savingQuestion) return;
     setSavingQuestion(true);
-    const ok = await applyAndSave((fresh) => ({
-      ...fresh,
-      question: q,
-      questionByWeek: q
-        ? { ...fresh.questionByWeek, [weekKey]: q }
-        : fresh.questionByWeek,
-    }));
+    // 管理者チェック込みの専用関数で保存（lib境界でも防止。指示書76）
+    const next = await saveQuestionOverride(weekKey, q);
+    if (next) setData(next);
     setSavingQuestion(false);
-    if (ok) setEditingQuestion(false);
+    if (next) setEditingQuestion(false);
   };
 
   return (
