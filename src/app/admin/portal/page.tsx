@@ -66,6 +66,8 @@ import {
   saveClinicMetrics,
   emptyClinicMetrics,
   genInitiativeId,
+  monthTotal,
+  isLegacyOnly,
   type ClinicMetrics,
 } from "@/lib/clinic-metrics";
 import {
@@ -341,13 +343,15 @@ export default function AdminPortalPage() {
   const [savingMetrics, setSavingMetrics] = useState(false);
   const [newMonth, setNewMonth] = useState<{
     ym: string;
-    sales: string;
+    insurance: string;
+    selfPay: string;
     counseling: string;
-  }>({ ym: "", sales: "", counseling: "" });
-  const [newInit, setNewInit] = useState<{ date: string; label: string }>({
-    date: "",
-    label: "",
-  });
+  }>({ ym: "", insurance: "", selfPay: "", counseling: "" });
+  const [newInit, setNewInit] = useState<{
+    date: string;
+    endDate: string;
+    label: string;
+  }>({ date: "", endDate: "", label: "" });
 
   useEffect(() => {
     loadPortalFeatures().then(setFeatures).catch(() => {});
@@ -513,17 +517,18 @@ export default function AdminPortalPage() {
         ...metrics.months,
         {
           ym,
-          sales: parseNumOrNull(newMonth.sales),
+          insurance: parseNumOrNull(newMonth.insurance),
+          selfPay: parseNumOrNull(newMonth.selfPay),
           counseling: parseNumOrNull(newMonth.counseling),
         },
       ].sort((a, b) => a.ym.localeCompare(b.ym)),
     });
-    setNewMonth({ ym: "", sales: "", counseling: "" });
+    setNewMonth({ ym: "", insurance: "", selfPay: "", counseling: "" });
   };
 
   const updateMonth = (
     ym: string,
-    field: "sales" | "counseling",
+    field: "insurance" | "selfPay" | "counseling",
     value: string
   ) => {
     if (!metrics) return;
@@ -543,31 +548,55 @@ export default function AdminPortalPage() {
   const addInitiative = () => {
     if (!metrics) return;
     const date = newInit.date;
+    const endDate = newInit.endDate;
     const label = newInit.label.trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      flash("⚠ 施策の日付を入力してください");
+      flash("⚠ 施策の開始日を入力してください");
       return;
     }
     if (!label) {
       flash("⚠ 施策ラベルを入力してください");
       return;
     }
+    if (endDate && endDate < date) {
+      flash("⚠ 終了日は開始日以降にしてください");
+      return;
+    }
     setMetrics({
       ...metrics,
       initiatives: [
         ...metrics.initiatives,
-        { id: genInitiativeId(), date, label },
+        {
+          id: genInitiativeId(),
+          date,
+          label,
+          ...(endDate ? { endDate } : {}),
+        },
       ].sort((a, b) => a.date.localeCompare(b.date)),
     });
-    setNewInit({ date: "", label: "" });
+    setNewInit({ date: "", endDate: "", label: "" });
   };
 
-  const updateInit = (id: string, field: "date" | "label", value: string) => {
+  const updateInit = (
+    id: string,
+    field: "date" | "endDate" | "label",
+    value: string
+  ) => {
     if (!metrics) return;
     setMetrics({
       ...metrics,
       initiatives: metrics.initiatives.map((it) =>
-        it.id === id ? { ...it, [field]: value } : it
+        it.id === id
+          ? field === "endDate"
+            ? value
+              ? { ...it, endDate: value }
+              : (() => {
+                  const { endDate: _drop, ...rest } = it;
+                  void _drop;
+                  return rest;
+                })()
+            : { ...it, [field]: value }
+          : it
       ),
     });
   };
@@ -2833,47 +2862,81 @@ export default function AdminPortalPage() {
                       まだありません。下の欄から追加してください。
                     </p>
                   ) : (
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-[10px] text-gray-400 px-1">
-                        <span className="w-24">年月</span>
-                        <span className="w-24">売上(万円)</span>
-                        <span className="w-28">カウンセリング(件)</span>
+                    <div className="space-y-1 overflow-x-auto">
+                      <div className="flex items-center gap-2 text-[10px] text-gray-400 px-1 min-w-[520px]">
+                        <span className="w-20">年月</span>
+                        <span className="w-20">保険(万円)</span>
+                        <span className="w-20">自費(万円)</span>
+                        <span className="w-24">カウンセリング</span>
+                        <span className="w-24">合算(万円)</span>
                         <span />
                       </div>
-                      {metrics.months.map((m) => (
-                        <div key={m.ym} className="flex items-center gap-2">
-                          <span className="w-24 text-sm tabular-nums">
-                            {m.ym}
-                          </span>
-                          <input
-                            type="number"
-                            min={0}
-                            value={m.sales ?? ""}
-                            onChange={(e) =>
-                              updateMonth(m.ym, "sales", e.target.value)
-                            }
-                            placeholder="—"
-                            className="w-24 h-8 rounded border border-gray-200 px-2 text-sm"
-                          />
-                          <input
-                            type="number"
-                            min={0}
-                            value={m.counseling ?? ""}
-                            onChange={(e) =>
-                              updateMonth(m.ym, "counseling", e.target.value)
-                            }
-                            placeholder="—"
-                            className="w-28 h-8 rounded border border-gray-200 px-2 text-sm"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeMonth(m.ym)}
-                            className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50"
+                      {metrics.months.map((m) => {
+                        const total = monthTotal(m);
+                        const legacy = isLegacyOnly(m);
+                        return (
+                          <div
+                            key={m.ym}
+                            className="flex items-center gap-2 min-w-[520px]"
                           >
-                            削除
-                          </button>
-                        </div>
-                      ))}
+                            <span className="w-20 text-sm tabular-nums">
+                              {m.ym}
+                            </span>
+                            <input
+                              type="number"
+                              min={0}
+                              value={m.insurance ?? ""}
+                              onChange={(e) =>
+                                updateMonth(m.ym, "insurance", e.target.value)
+                              }
+                              placeholder="—"
+                              className="w-20 h-8 rounded border border-gray-200 px-2 text-sm"
+                            />
+                            <input
+                              type="number"
+                              min={0}
+                              value={m.selfPay ?? ""}
+                              onChange={(e) =>
+                                updateMonth(m.ym, "selfPay", e.target.value)
+                              }
+                              placeholder="—"
+                              className="w-20 h-8 rounded border border-gray-200 px-2 text-sm"
+                            />
+                            <input
+                              type="number"
+                              min={0}
+                              value={m.counseling ?? ""}
+                              onChange={(e) =>
+                                updateMonth(m.ym, "counseling", e.target.value)
+                              }
+                              placeholder="—"
+                              className="w-24 h-8 rounded border border-gray-200 px-2 text-sm"
+                            />
+                            <span
+                              className="w-24 text-sm tabular-nums text-gray-600"
+                              title={
+                                legacy
+                                  ? "内訳未入力（合算のみ）。保険/自費を入力すると内訳ありに移行します。"
+                                  : undefined
+                              }
+                            >
+                              {total ?? "—"}
+                              {legacy && (
+                                <span className="text-[9px] text-amber-600 ml-1">
+                                  内訳未
+                                </span>
+                              )}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => removeMonth(m.ym)}
+                              className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50"
+                            >
+                              削除
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -2888,11 +2951,21 @@ export default function AdminPortalPage() {
                     <input
                       type="number"
                       min={0}
-                      value={newMonth.sales}
+                      value={newMonth.insurance}
                       onChange={(e) =>
-                        setNewMonth({ ...newMonth, sales: e.target.value })
+                        setNewMonth({ ...newMonth, insurance: e.target.value })
                       }
-                      placeholder="売上(万円)"
+                      placeholder="保険(万円)"
+                      className="w-24 h-8 rounded border border-gray-200 px-2 text-sm"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      value={newMonth.selfPay}
+                      onChange={(e) =>
+                        setNewMonth({ ...newMonth, selfPay: e.target.value })
+                      }
+                      placeholder="自費(万円)"
                       className="w-24 h-8 rounded border border-gray-200 px-2 text-sm"
                     />
                     <input
@@ -2925,16 +2998,34 @@ export default function AdminPortalPage() {
                       まだありません。下の欄から追加してください。
                     </p>
                   ) : (
-                    <div className="space-y-1">
+                    <div className="space-y-1 overflow-x-auto">
+                      <div className="flex items-center gap-2 text-[10px] text-gray-400 px-1 min-w-[480px]">
+                        <span className="w-32">開始日</span>
+                        <span className="w-32">終了日（任意）</span>
+                        <span className="flex-1">ラベル</span>
+                        <span />
+                      </div>
                       {metrics.initiatives.map((it) => (
-                        <div key={it.id} className="flex items-center gap-2">
+                        <div
+                          key={it.id}
+                          className="flex items-center gap-2 min-w-[480px]"
+                        >
                           <input
                             type="date"
                             value={it.date}
                             onChange={(e) =>
                               updateInit(it.id, "date", e.target.value)
                             }
-                            className="w-36 h-8 rounded border border-gray-200 px-2 text-sm"
+                            className="w-32 h-8 rounded border border-gray-200 px-2 text-sm"
+                          />
+                          <input
+                            type="date"
+                            value={it.endDate ?? ""}
+                            min={it.date || undefined}
+                            onChange={(e) =>
+                              updateInit(it.id, "endDate", e.target.value)
+                            }
+                            className="w-32 h-8 rounded border border-gray-200 px-2 text-sm"
                           />
                           <input
                             value={it.label}
@@ -2954,14 +3045,25 @@ export default function AdminPortalPage() {
                       ))}
                     </div>
                   )}
-                  <div className="flex items-center gap-2 mt-2">
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
                     <input
                       type="date"
                       value={newInit.date}
                       onChange={(e) =>
                         setNewInit({ ...newInit, date: e.target.value })
                       }
-                      className="w-36 h-8 rounded border border-gray-200 px-2 text-sm"
+                      className="w-32 h-8 rounded border border-gray-200 px-2 text-sm"
+                      aria-label="施策の開始日"
+                    />
+                    <input
+                      type="date"
+                      value={newInit.endDate}
+                      min={newInit.date || undefined}
+                      onChange={(e) =>
+                        setNewInit({ ...newInit, endDate: e.target.value })
+                      }
+                      className="w-32 h-8 rounded border border-gray-200 px-2 text-sm"
+                      aria-label="施策の終了日（任意）"
                     />
                     <input
                       value={newInit.label}

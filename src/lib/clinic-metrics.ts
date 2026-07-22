@@ -1,4 +1,4 @@
-// クリニックの歩み（指示書80）: 月別売上×カウンセリング数×施策マーカー
+// クリニックの歩み（指示書80で新設、81で保険/自費/合算・期間つき施策に拡張）
 // content_store 単一キー `portal_metrics` に { months, initiatives, updatedAt } を保存（専用テーブルなし）。
 // 経営計画書・第三章「数字は鏡」の実装。売上を追わせるためではなく、質を尽くした結果を映すため。
 //
@@ -13,16 +13,22 @@ import { isAdminUser } from "./admin-role";
 
 export const PORTAL_METRICS_KEY = "portal_metrics";
 
-// 売上は万円の整数、カウンセリングは件数。どちらか未入力（null）を許容＝欠測。
+// 売上は万円の整数。insurance=保険売上・selfPay=自費売上（施術＋物販）。
+// counseling=カウンセリング件数。すべて欠測（null）許容。
+// sales は旧80データの後方互換（内訳なしの合算）。内訳（insurance/selfPay）があれば正規化で null 化する。
+// 合算は保存せず表示時に計算する（二重管理しない）。
 export type MonthMetric = {
   ym: string; // "YYYY-MM"
-  sales: number | null;
+  insurance: number | null;
+  selfPay: number | null;
   counseling: number | null;
+  sales?: number | null; // 旧データ互換（内訳未入力の合算のみ）
 };
 
 export type Initiative = {
   id: string;
-  date: string; // "YYYY-MM-DD"
+  date: string; // "YYYY-MM-DD"（開始日）
+  endDate?: string; // "YYYY-MM-DD"（任意・期間つき施策の終了日。date<=endDate）
   label: string;
 };
 
@@ -56,12 +62,39 @@ export function initiativeYm(date: string): string {
   return date.slice(0, 7);
 }
 
-// "2026-07" → "26/7"（軸ラベル用）
+// "2026-07" → { year:"26", month:"7" }（軸ラベル用）
 export function shortYm(ym: string): { year: string; month: string } {
-  const m = YM_RE.exec(ym);
-  if (!m) return { year: "", month: ym };
+  if (!YM_RE.test(ym)) return { year: "", month: ym };
   const [y, mo] = ym.split("-");
   return { year: y.slice(2), month: String(Number(mo)) };
+}
+
+// ─── 合算・内訳のヘルパ（合算は保存せず表示時に計算） ───
+
+// 保険・自費のいずれかが入力済みか（内訳あり）
+export function hasBreakdown(m: MonthMetric): boolean {
+  return m.insurance != null || m.selfPay != null;
+}
+
+// 内訳なしの旧データ（合算のみ）か
+export function isLegacyOnly(m: MonthMetric): boolean {
+  return !hasBreakdown(m) && m.sales != null;
+}
+
+// 合算（棒の高さ）。内訳ありは保険＋自費、旧データは sales、どちらも無ければ null。
+export function monthTotal(m: MonthMetric): number | null {
+  if (hasBreakdown(m)) return (m.insurance ?? 0) + (m.selfPay ?? 0);
+  if (m.sales != null) return m.sales;
+  return null;
+}
+
+// 施策の期間ラベル "2026/3/1〜5/31"（単日は "2026/7/15"）
+export function formatInitiative(i: Initiative): string {
+  const f = (d: string) => {
+    const [y, m, dd] = d.split("-");
+    return `${y}/${Number(m)}/${Number(dd)}`;
+  };
+  return i.endDate ? `${f(i.date)}〜${f(i.endDate)}` : f(i.date);
 }
 
 // ─── 正規化（読み書き両境界で通す） ───
@@ -76,18 +109,22 @@ export function normalizeClinicMetrics(raw: unknown): ClinicMetrics {
       if (!r || typeof r !== "object") continue;
       const ym = typeof r.ym === "string" ? r.ym : "";
       if (!YM_RE.test(ym)) continue;
-      byYm.set(ym, {
-        ym,
-        sales: toNumOrNull(r.sales),
-        counseling: toNumOrNull(r.counseling),
-      });
+      const insurance = toNumOrNull(r.insurance);
+      const selfPay = toNumOrNull(r.selfPay);
+      const counseling = toNumOrNull(r.counseling);
+      // 旧80データ互換: sales は内訳が無いときだけ残す（二重管理しない）
+      let sales = toNumOrNull(r.sales);
+      if (insurance != null || selfPay != null) sales = null;
+      const month: MonthMetric = { ym, insurance, selfPay, counseling };
+      if (sales != null) month.sales = sales;
+      byYm.set(ym, month);
     }
   }
   const months = Array.from(byYm.values()).sort((a, b) =>
     a.ym.localeCompare(b.ym)
   );
 
-  // initiatives: 日付検証・ラベル必須・id補完・日付昇順
+  // initiatives: 日付検証・ラベル必須・endDate任意（date<=endDate違反は破棄）・id補完・日付昇順
   const initiatives: Initiative[] = [];
   if (Array.isArray(o.initiatives)) {
     for (const r of o.initiatives as Record<string, unknown>[]) {
@@ -95,10 +132,16 @@ export function normalizeClinicMetrics(raw: unknown): ClinicMetrics {
       const date = typeof r.date === "string" ? r.date : "";
       const label = typeof r.label === "string" ? r.label.trim() : "";
       if (!DATE_RE.test(date) || !label) continue;
+      let endDate =
+        typeof r.endDate === "string" && DATE_RE.test(r.endDate)
+          ? r.endDate
+          : undefined;
+      if (endDate && endDate < date) endDate = undefined; // date<=endDate を検証
       initiatives.push({
         id: typeof r.id === "string" && r.id ? r.id : genInitiativeId(),
         date,
         label,
+        ...(endDate ? { endDate } : {}),
       });
     }
   }
@@ -135,14 +178,18 @@ export async function saveClinicMetrics(
 
 // ─── 表示用ヘルパ ───
 
-// 表示する月軸 = months と initiatives（施策のあるym）の和集合を昇順に。
-// これにより「施策だけあって数値未入力の月」も列として出せる（欠測はグラフ側でスキップ）。
+// 表示する月軸 = months と initiatives（開始月・終了月）の和集合を昇順に。
+// 施策だけで数値未入力の月・期間施策の終端月も列として出せる（欠測はグラフ側でスキップ）。
 export function buildAxisYms(data: ClinicMetrics): string[] {
   const set = new Set<string>();
   for (const m of data.months) set.add(m.ym);
   for (const i of data.initiatives) {
-    const ym = initiativeYm(i.date);
-    if (YM_RE.test(ym)) set.add(ym);
+    const s = initiativeYm(i.date);
+    if (YM_RE.test(s)) set.add(s);
+    if (i.endDate) {
+      const e = initiativeYm(i.endDate);
+      if (YM_RE.test(e)) set.add(e);
+    }
   }
   return Array.from(set).sort((a, b) => a.localeCompare(b));
 }
