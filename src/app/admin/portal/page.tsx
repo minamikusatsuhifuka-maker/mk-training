@@ -62,6 +62,13 @@ import {
   type PortalFeatures,
 } from "@/lib/portal-features";
 import {
+  loadClinicMetrics,
+  saveClinicMetrics,
+  emptyClinicMetrics,
+  genInitiativeId,
+  type ClinicMetrics,
+} from "@/lib/clinic-metrics";
+import {
   advanceToNewPeriod,
   currentPeriodKey,
   formatSwitchDate,
@@ -329,6 +336,19 @@ export default function AdminPortalPage() {
     useState<QuestionScheduleInterval>("weekly");
   const [savingSchedule, setSavingSchedule] = useState(false);
 
+  // 📈 クリニックの歩み（指示書80。「⚙ 機能」タブで月次・施策を入力）
+  const [metrics, setMetrics] = useState<ClinicMetrics | null>(null);
+  const [savingMetrics, setSavingMetrics] = useState(false);
+  const [newMonth, setNewMonth] = useState<{
+    ym: string;
+    sales: string;
+    counseling: string;
+  }>({ ym: "", sales: "", counseling: "" });
+  const [newInit, setNewInit] = useState<{ date: string; label: string }>({
+    date: "",
+    label: "",
+  });
+
   useEffect(() => {
     loadPortalFeatures().then(setFeatures).catch(() => {});
     loadWeeklyQuestions()
@@ -342,6 +362,9 @@ export default function AdminPortalPage() {
       })
       .catch(() => {})
       .finally(() => setScheduleLoaded(true));
+    loadClinicMetrics()
+      .then(setMetrics)
+      .catch(() => setMetrics(emptyClinicMetrics()));
   }, []);
 
   // 配信間隔の保存（指示書75）。
@@ -464,6 +487,113 @@ export default function AdminPortalPage() {
     }
     setPool(cleaned);
     flash("💾 質問プールを保存しました");
+  };
+
+  // ─── 📈 クリニックの歩み（指示書80） ───
+  const parseNumOrNull = (s: string): number | null => {
+    if (s.trim() === "") return null;
+    const n = Math.round(Number(s));
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  };
+
+  const addMetricMonth = () => {
+    if (!metrics) return;
+    const ym = newMonth.ym;
+    if (!/^\d{4}-\d{2}$/.test(ym)) {
+      flash("⚠ 年月を選択してください");
+      return;
+    }
+    if (metrics.months.some((m) => m.ym === ym)) {
+      flash("⚠ 同じ年月が既にあります");
+      return;
+    }
+    setMetrics({
+      ...metrics,
+      months: [
+        ...metrics.months,
+        {
+          ym,
+          sales: parseNumOrNull(newMonth.sales),
+          counseling: parseNumOrNull(newMonth.counseling),
+        },
+      ].sort((a, b) => a.ym.localeCompare(b.ym)),
+    });
+    setNewMonth({ ym: "", sales: "", counseling: "" });
+  };
+
+  const updateMonth = (
+    ym: string,
+    field: "sales" | "counseling",
+    value: string
+  ) => {
+    if (!metrics) return;
+    setMetrics({
+      ...metrics,
+      months: metrics.months.map((m) =>
+        m.ym === ym ? { ...m, [field]: parseNumOrNull(value) } : m
+      ),
+    });
+  };
+
+  const removeMonth = (ym: string) => {
+    if (!metrics) return;
+    setMetrics({ ...metrics, months: metrics.months.filter((m) => m.ym !== ym) });
+  };
+
+  const addInitiative = () => {
+    if (!metrics) return;
+    const date = newInit.date;
+    const label = newInit.label.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      flash("⚠ 施策の日付を入力してください");
+      return;
+    }
+    if (!label) {
+      flash("⚠ 施策ラベルを入力してください");
+      return;
+    }
+    setMetrics({
+      ...metrics,
+      initiatives: [
+        ...metrics.initiatives,
+        { id: genInitiativeId(), date, label },
+      ].sort((a, b) => a.date.localeCompare(b.date)),
+    });
+    setNewInit({ date: "", label: "" });
+  };
+
+  const updateInit = (id: string, field: "date" | "label", value: string) => {
+    if (!metrics) return;
+    setMetrics({
+      ...metrics,
+      initiatives: metrics.initiatives.map((it) =>
+        it.id === id ? { ...it, [field]: value } : it
+      ),
+    });
+  };
+
+  const removeInit = (id: string) => {
+    if (!metrics) return;
+    setMetrics({
+      ...metrics,
+      initiatives: metrics.initiatives.filter((it) => it.id !== id),
+    });
+  };
+
+  const handleSaveMetrics = async () => {
+    if (!metrics || savingMetrics) return;
+    setSavingMetrics(true);
+    const ok = await saveClinicMetrics(metrics);
+    if (ok) {
+      const fresh = await loadClinicMetrics().catch(() => null);
+      if (fresh) setMetrics(fresh);
+    }
+    setSavingMetrics(false);
+    flash(
+      ok
+        ? "💾 クリニックの歩みを保存しました"
+        : "⚠ 保存に失敗しました（管理者権限をご確認ください）"
+    );
   };
 
   useEffect(() => {
@@ -2672,6 +2802,193 @@ export default function AdminPortalPage() {
                     className="text-sm px-4 py-2 rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50"
                   >
                     {savingPool ? "保存中..." : "💾 質問プールを保存"}
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+
+          {/* 📈 クリニックの歩み — データ入力（指示書80） */}
+          <section className="space-y-3 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">
+                📈 クリニックの歩み — データ入力
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                月別の売上（万円）とカウンセリング数（件）・施策を入力すると、ホームの「📈
+                クリニックの歩み」に反映されます。数字は目的ではなく、みなさんが質を尽くした結果を映す鏡です（個人別の数字は扱わず、チーム全体のみ）。
+              </p>
+            </div>
+            {!metrics ? (
+              <p className="text-xs text-gray-500">読み込み中...</p>
+            ) : (
+              <>
+                {/* 月次データ */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-700 mb-1">
+                    月次データ
+                  </p>
+                  {metrics.months.length === 0 ? (
+                    <p className="text-xs text-gray-500">
+                      まだありません。下の欄から追加してください。
+                    </p>
+                  ) : (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-[10px] text-gray-400 px-1">
+                        <span className="w-24">年月</span>
+                        <span className="w-24">売上(万円)</span>
+                        <span className="w-28">カウンセリング(件)</span>
+                        <span />
+                      </div>
+                      {metrics.months.map((m) => (
+                        <div key={m.ym} className="flex items-center gap-2">
+                          <span className="w-24 text-sm tabular-nums">
+                            {m.ym}
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            value={m.sales ?? ""}
+                            onChange={(e) =>
+                              updateMonth(m.ym, "sales", e.target.value)
+                            }
+                            placeholder="—"
+                            className="w-24 h-8 rounded border border-gray-200 px-2 text-sm"
+                          />
+                          <input
+                            type="number"
+                            min={0}
+                            value={m.counseling ?? ""}
+                            onChange={(e) =>
+                              updateMonth(m.ym, "counseling", e.target.value)
+                            }
+                            placeholder="—"
+                            className="w-28 h-8 rounded border border-gray-200 px-2 text-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeMonth(m.ym)}
+                            className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50"
+                          >
+                            削除
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <input
+                      type="month"
+                      value={newMonth.ym}
+                      onChange={(e) =>
+                        setNewMonth({ ...newMonth, ym: e.target.value })
+                      }
+                      className="w-32 h-8 rounded border border-gray-200 px-2 text-sm"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      value={newMonth.sales}
+                      onChange={(e) =>
+                        setNewMonth({ ...newMonth, sales: e.target.value })
+                      }
+                      placeholder="売上(万円)"
+                      className="w-24 h-8 rounded border border-gray-200 px-2 text-sm"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      value={newMonth.counseling}
+                      onChange={(e) =>
+                        setNewMonth({ ...newMonth, counseling: e.target.value })
+                      }
+                      placeholder="件数"
+                      className="w-24 h-8 rounded border border-gray-200 px-2 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={addMetricMonth}
+                      className="text-xs px-3 h-8 rounded bg-teal-600 text-white hover:bg-teal-700"
+                    >
+                      追加
+                    </button>
+                  </div>
+                </div>
+
+                {/* 施策 */}
+                <div className="border-t border-gray-100 pt-3">
+                  <p className="text-xs font-semibold text-gray-700 mb-1">
+                    施策（グラフに縦線＋番号で表示）
+                  </p>
+                  {metrics.initiatives.length === 0 ? (
+                    <p className="text-xs text-gray-500">
+                      まだありません。下の欄から追加してください。
+                    </p>
+                  ) : (
+                    <div className="space-y-1">
+                      {metrics.initiatives.map((it) => (
+                        <div key={it.id} className="flex items-center gap-2">
+                          <input
+                            type="date"
+                            value={it.date}
+                            onChange={(e) =>
+                              updateInit(it.id, "date", e.target.value)
+                            }
+                            className="w-36 h-8 rounded border border-gray-200 px-2 text-sm"
+                          />
+                          <input
+                            value={it.label}
+                            onChange={(e) =>
+                              updateInit(it.id, "label", e.target.value)
+                            }
+                            className="flex-1 min-w-0 h-8 rounded border border-gray-200 px-2 text-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeInit(it.id)}
+                            className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50"
+                          >
+                            削除
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 mt-2">
+                    <input
+                      type="date"
+                      value={newInit.date}
+                      onChange={(e) =>
+                        setNewInit({ ...newInit, date: e.target.value })
+                      }
+                      className="w-36 h-8 rounded border border-gray-200 px-2 text-sm"
+                    />
+                    <input
+                      value={newInit.label}
+                      onChange={(e) =>
+                        setNewInit({ ...newInit, label: e.target.value })
+                      }
+                      placeholder="施策ラベル（例：LINE予約開始）"
+                      className="flex-1 min-w-0 h-8 rounded border border-gray-200 px-2 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={addInitiative}
+                      className="text-xs px-3 h-8 rounded bg-teal-600 text-white hover:bg-teal-700"
+                    >
+                      追加
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSaveMetrics}
+                    disabled={savingMetrics}
+                    className="text-sm px-4 py-2 rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50"
+                  >
+                    {savingMetrics ? "保存中..." : "💾 クリニックの歩みを保存"}
                   </button>
                 </div>
               </>

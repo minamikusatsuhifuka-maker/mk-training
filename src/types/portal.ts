@@ -265,6 +265,7 @@ export type HomeSectionKey =
   | "news"
   | "quick_access"
   | "gantt_summary"
+  | "clinic_metrics"
   | "weekly_question"
   | "kizuki"
   | "thanks"
@@ -281,6 +282,7 @@ export const HOME_SECTION_LABELS: Record<HomeSectionKey, string> = {
   news: "📢 新着情報",
   quick_access: "⚡ クイックアクセス",
   gantt_summary: "🎯 クリニック目標（進行中）",
+  clinic_metrics: "📈 クリニックの歩み",
   weekly_question: "❓ みんなへの質問",
   kizuki: "💛 気づきシェア",
   thanks: "♥ ありがとうカード",
@@ -293,10 +295,11 @@ export const DEFAULT_HOME_LAYOUT: HomeSectionConfig[] = [
   { key: "news", order: 1 },
   { key: "quick_access", order: 2 },
   { key: "gantt_summary", order: 3 },
-  { key: "weekly_question", order: 4 },
-  { key: "kizuki", order: 5 },
-  { key: "thanks", order: 6 },
-  { key: "policy", order: 7 },
+  { key: "clinic_metrics", order: 4 },
+  { key: "weekly_question", order: 5 },
+  { key: "kizuki", order: 6 },
+  { key: "thanks", order: 7 },
+  { key: "policy", order: 8 },
 ];
 
 // 保存済み設定を検証・補完する。空/不正なら既定順に丸ごとフォールバック（ホームが壊れない）。
