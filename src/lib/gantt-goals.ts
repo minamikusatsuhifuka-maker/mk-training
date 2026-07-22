@@ -1,9 +1,15 @@
-// クリニック目標のガントチャート（指示書77。task-matrix の personal/calendar から移植）
+// クリニック目標のガントチャート（指示書77で移植、78で日単位化＋詳細5項目を追加）
 // content_store 単一キー `portal_gantt` に { goals, updatedAt } を保存する（専用テーブルなし）。
-// データモデルは task-matrix の GanttGoal を尊重（category・milestones の概念を保持。
-// task-matrix に無い概念＝order/memo 等は新設しない）。
-// 保存は管理者のみ（指示書77・76と同じ流儀）。UIの AdminOnly と同じ isAdminUser 判定を
-// lib 境界でも行い、非管理者なら保存せず false を返す。
+// 期間は日単位（start/end = "YYYY-MM-DD"）。カテゴリ・milestones の概念は task-matrix から保持
+// （milestones の編集UIは無し＝概念のみ・スコープ外）。task-matrix に無い概念（order 等）は新設しない。
+//
+// 【既存データ互換（指示書78・lazy migration）】
+//   77時点の年・月形式（startYear/startMonth/endYear/endMonth）は normalizeGoals で
+//   start=その月の1日 / end=その月の末日 に自動変換する（読み込み境界で必ず通す）。
+//   保存も同じ正規化済みデータ（新形式）を書くので、次回以降は新形式で読める。
+//   → 既存目標が消えたり位置がずれたりしない。
+//
+// 保存は管理者のみ（77と同じ。UIの isAdmin と同じ isAdminUser 判定を lib 境界でも行う）。
 // ※ anonキー直書き設計のためサーバー側での完全な強制は構造上不可（指示書70）。
 //    lib を通る経路での防止までがこの関数のスコープ。
 
@@ -13,25 +19,29 @@ import { isAdminUser } from "./admin-role";
 
 export const PORTAL_GANTT_KEY = "portal_gantt";
 
-// startMonth/endMonth は 0=1月 … 11=12月（task-matrix と同一）
+// milestones の month は 0=1月 … 11=12月（task-matrix と同一・概念保持）
 export type Milestone = { year: number; month: number; label: string };
 
 export type GanttGoal = {
   id: string;
   title: string;
   category: string;
-  startYear: number;
-  startMonth: number;
-  endYear: number;
-  endMonth: number;
+  start: string; // "YYYY-MM-DD"
+  end: string; // "YYYY-MM-DD"
   progress: number; // 0〜100
   color: string; // GANTT_COLOR_OPTIONS の value
   milestones: Milestone[];
+  // 詳細5項目（指示書78。すべて任意）
+  purpose?: string; // 🎯 目的
+  background?: string; // 📖 背景
+  significance?: string; // 💡 意義
+  achievedState?: string; // 🌟 達成イメージ
+  memo?: string; // 📝 自由メモ
 };
 
 export type GanttData = { goals: GanttGoal[]; updatedAt: string };
 
-// ─── 定数（task-matrix より移植） ───
+// ─── 定数 ───
 
 export const MONTH_LABELS = [
   "1月", "2月", "3月", "4月", "5月", "6月",
@@ -84,34 +94,123 @@ export function ganttYears(now: Date = new Date()): number[] {
   return Array.from({ length: 5 }, (_, i) => y + i);
 }
 
-// 選択年内での位置（0〜1）。今日の縦線・マイルストーンに使う。
-export function monthPosInYear(
+// ─── 日付ユーティリティ（日単位のバー座標系。すべてローカル暦日） ───
+
+const DAY_MS = 86400 * 1000;
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+// "YYYY-MM-DD" → ローカル0時の Date（不正なら null）
+export function parseYmd(s: string | undefined | null): Date | null {
+  if (typeof s !== "string") return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export function toYmd(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+// 年の境界（元日0時ms 〜 翌年元日0時ms）
+function yearBounds(year: number): { startMs: number; endMs: number } {
+  return {
+    startMs: new Date(year, 0, 1).getTime(),
+    endMs: new Date(year + 1, 0, 1).getTime(),
+  };
+}
+
+// goal の開始ms／終了ms（終了日を含めるため翌日0時を排他終端にする）
+function goalStartMs(goal: GanttGoal): number {
+  return (parseYmd(goal.start) ?? new Date()).getTime();
+}
+function goalEndMsExclusive(goal: GanttGoal): number {
+  const d = parseYmd(goal.end) ?? parseYmd(goal.start) ?? new Date();
+  return d.getTime() + DAY_MS;
+}
+
+// 選択年に表示すべきか（期間が年に重なるか）
+export function goalOverlapsYear(goal: GanttGoal, year: number): boolean {
+  const { startMs, endMs } = yearBounds(year);
+  return goalStartMs(goal) < endMs && goalEndMsExclusive(goal) > startMs;
+}
+
+// 選択年内でのバー位置（%）。年の日数（365/366）に対する日単位の正確な割合。
+export function barFractions(
+  goal: GanttGoal,
+  year: number
+): { left: number; width: number } {
+  const { startMs, endMs } = yearBounds(year);
+  const span = endMs - startMs;
+  const clampStart = Math.max(goalStartMs(goal), startMs);
+  const clampEnd = Math.min(goalEndMsExclusive(goal), endMs);
+  const left = ((clampStart - startMs) / span) * 100;
+  const width = (Math.max(0, clampEnd - clampStart) / span) * 100;
+  return { left, width };
+}
+
+// 「今日」の年内位置（0〜1）。選択年と今年が違えば null。
+export function todayFractionInYear(
   year: number,
-  month: number,
-  dayOfMonth: number = 1
-): number {
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  return (month + (dayOfMonth - 1) / daysInMonth) / 12;
+  now: Date = new Date()
+): number | null {
+  if (now.getFullYear() !== year) return null;
+  const { startMs, endMs } = yearBounds(year);
+  const todayMid = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  ).getTime();
+  return (todayMid - startMs) / (endMs - startMs);
+}
+
+// マイルストーンの年内位置（月ベース・概念保持のため現行方式のまま）
+export function milestonePosInYear(month: number): number {
+  return (month + 0.5) / 12;
 }
 
 export function genGanttId(): string {
   return `gantt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// 「今日が期間内」の判定（ホーム要約・進行中の目標に使う）
+// 「今日が期間内」の判定（ホーム要約・進行中の目標に使う）。日単位・終了日を含む。
 export function isGoalActive(goal: GanttGoal, now: Date = new Date()): boolean {
-  const today = now.getFullYear() * 12 + now.getMonth();
-  const start = goal.startYear * 12 + goal.startMonth;
-  const end = goal.endYear * 12 + goal.endMonth;
-  return start <= today && today <= end;
+  const todayMid = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  ).getTime();
+  return goalStartMs(goal) <= todayMid && todayMid < goalEndMsExclusive(goal);
 }
 
-// 期間ラベル "2026/1〜2026/9"
+// 期間ラベル "2026/1/15〜2026/7/31"
 export function formatGoalRange(goal: GanttGoal): string {
-  return `${goal.startYear}/${goal.startMonth + 1}〜${goal.endYear}/${goal.endMonth + 1}`;
+  const s = parseYmd(goal.start);
+  const e = parseYmd(goal.end);
+  const f = (d: Date | null) =>
+    d ? `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}` : "";
+  return `${f(s)}〜${f(e)}`;
 }
 
-// ─── 読込・保存 ───
+// 詳細5項目のいずれかが記入済みか
+export function hasAnyDetail(goal: GanttGoal): boolean {
+  return [
+    goal.purpose,
+    goal.background,
+    goal.significance,
+    goal.achievedState,
+    goal.memo,
+  ].some((v) => typeof v === "string" && v.trim() !== "");
+}
+
+// ─── 読込・保存（正規化＝月→日 lazy migration をここに集約） ───
+
+function optStr(v: unknown): string | undefined {
+  return typeof v === "string" && v.trim() !== "" ? v : undefined;
+}
 
 function normalizeGoals(raw: unknown): GanttGoal[] {
   const data = raw as { goals?: unknown } | null;
@@ -120,6 +219,31 @@ function normalizeGoals(raw: unknown): GanttGoal[] {
   for (const g of list as Record<string, unknown>[]) {
     if (!g || typeof g !== "object") continue;
     if (typeof g.id !== "string" || typeof g.title !== "string") continue;
+
+    // 期間: 新形式(start/end)を優先。無ければ旧・年月形式から変換（start=月初/end=月末）。
+    let start = optStr(g.start);
+    let end = optStr(g.end);
+    if (!start || !parseYmd(start)) {
+      const sy = Number(g.startYear);
+      const sm = Number(g.startMonth);
+      if (Number.isFinite(sy) && Number.isFinite(sm)) {
+        start = `${sy}-${pad2(sm + 1)}-01`;
+      }
+    }
+    if (!end || !parseYmd(end)) {
+      const ey = Number(g.endYear);
+      const em = Number(g.endMonth);
+      if (Number.isFinite(ey) && Number.isFinite(em)) {
+        const lastDay = new Date(ey, em + 1, 0).getDate();
+        end = `${ey}-${pad2(em + 1)}-${pad2(lastDay)}`;
+      }
+    }
+    // どちらも決まらなければこの目標はスキップ（壊れたデータの安全網）
+    if (!start || !parseYmd(start)) continue;
+    if (!end || !parseYmd(end)) end = start;
+    // 終了 < 開始 の逆転は開始に揃える
+    if (end < start) end = start;
+
     const ms = Array.isArray(g.milestones)
       ? (g.milestones as Record<string, unknown>[])
           .filter(
@@ -135,20 +259,25 @@ function normalizeGoals(raw: unknown): GanttGoal[] {
             label: m.label as string,
           }))
       : [];
+
     out.push({
       id: g.id,
       title: g.title,
-      category: typeof g.category === "string" ? g.category : GANTT_CATEGORIES[0],
-      startYear: Number(g.startYear) || new Date().getFullYear(),
-      startMonth: Number(g.startMonth) || 0,
-      endYear: Number(g.endYear) || new Date().getFullYear(),
-      endMonth: Number(g.endMonth) || 0,
+      category:
+        typeof g.category === "string" ? g.category : GANTT_CATEGORIES[0],
+      start,
+      end,
       progress:
         typeof g.progress === "number"
           ? Math.max(0, Math.min(100, g.progress))
           : 0,
       color: typeof g.color === "string" ? g.color : "gantt-blue",
       milestones: ms,
+      purpose: optStr(g.purpose),
+      background: optStr(g.background),
+      significance: optStr(g.significance),
+      achievedState: optStr(g.achievedState),
+      memo: optStr(g.memo),
     });
   }
   return out;
@@ -160,6 +289,7 @@ export async function loadGanttGoals(): Promise<GanttGoal[]> {
 }
 
 // 管理者のみ保存（lib 境界チェック）。非管理者・未ログインは false。
+// 保存前に normalizeGoals を通し、新形式（start/end）で書き出す（lazy migration の確定）。
 export async function saveGanttGoals(goals: GanttGoal[]): Promise<boolean> {
   try {
     const { data } = await getSupabaseBrowserClient().auth.getUser();
@@ -167,6 +297,7 @@ export async function saveGanttGoals(goals: GanttGoal[]): Promise<boolean> {
   } catch {
     return false;
   }
-  const payload: GanttData = { goals, updatedAt: new Date().toISOString() };
+  const clean = normalizeGoals({ goals });
+  const payload: GanttData = { goals: clean, updatedAt: new Date().toISOString() };
   return savePortalObject(PORTAL_GANTT_KEY, payload);
 }

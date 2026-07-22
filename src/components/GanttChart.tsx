@@ -1,12 +1,12 @@
 "use client";
 
-// クリニック目標のガントチャート本体（指示書77。task-matrix の GanttChart.tsx を忠実に移植）
-// - 年度タブ／期間バー／マイルストーン◇／今日の縦線／目標名 sticky 固定／全目標一覧モーダル
-// - データは content_store（portal_gantt）。task-matrix の Supabase 取得は content_store に置換。
-// - 編集UI（計画を追加・行クリック編集・編集アイコン）は管理者のみレンダリング。
-//   非管理者は閲覧専用（バー・一覧の閲覧のみ）。保存も lib 境界で管理者チェック（gantt-goals.ts）。
+// クリニック目標のガントチャート本体（指示書77で移植、78で日単位化＋詳細5項目＋詳細モーダル）
+// - 年度タブ／期間バー（日単位）／マイルストーン◇／今日の縦線（日単位）／目標名 sticky 固定／全目標一覧モーダル
+// - データは content_store（portal_gantt）。期間は日単位（start/end="YYYY-MM-DD"）。
+// - 編集UI（目標を追加・行クリック編集・編集アイコン・詳細記入）は管理者のみ。
+//   「詳細を確認」ボタンは全員に表示（閲覧専用モーダル）。保存も lib 境界で管理者チェック（gantt-goals.ts）。
 
-import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { isAdminUser } from "@/lib/admin-role";
 import {
@@ -16,8 +16,14 @@ import {
   GANTT_CATEGORIES,
   getGanttGradient,
   ganttYears,
-  monthPosInYear,
+  barFractions,
+  goalOverlapsYear,
+  todayFractionInYear,
+  milestonePosInYear,
   genGanttId,
+  toYmd,
+  formatGoalRange,
+  hasAnyDetail,
   loadGanttGoals,
   saveGanttGoals,
 } from "@/lib/gantt-goals";
@@ -41,6 +47,23 @@ function useIsAdmin(): boolean {
   return isAdmin;
 }
 
+// 詳細項目の並び（未記入は詳細モーダルで非表示）
+const DETAIL_FIELDS: {
+  key: "purpose" | "background" | "significance" | "achievedState" | "memo";
+  label: string;
+  placeholder: string;
+}[] = [
+  { key: "purpose", label: "🎯 目的", placeholder: "この目標で何を目指すか" },
+  { key: "background", label: "📖 背景", placeholder: "なぜ今この目標なのか" },
+  { key: "significance", label: "💡 意義", placeholder: "達成でクリニック・患者様にどんな価値があるか" },
+  {
+    key: "achievedState",
+    label: "🌟 達成イメージ",
+    placeholder: "達成された場合にどのような状態になっているか",
+  },
+  { key: "memo", label: "📝 自由メモ", placeholder: "補足・進め方など自由に" },
+];
+
 // 目標 追加・編集モーダル（管理者のみ開かれる）
 function GanttEditModal({
   mode,
@@ -58,42 +81,60 @@ function GanttEditModal({
   const isEdit = mode.type === "edit";
   const initial = isEdit ? mode.goal : null;
   const now = useMemo(() => new Date(), []);
-  const thisYear = now.getFullYear();
+
+  // 既定: 開始=今日、終了=約3ヶ月後
+  const defaultStart = useMemo(() => toYmd(now), [now]);
+  const defaultEnd = useMemo(
+    () => toYmd(new Date(now.getFullYear(), now.getMonth() + 3, now.getDate())),
+    [now]
+  );
 
   const [title, setTitle] = useState(initial?.title ?? "");
   const [category, setCategory] = useState(
     initial?.category ?? GANTT_CATEGORIES[0]
   );
-  const [startYear, setStartYear] = useState(initial?.startYear ?? thisYear);
-  const [startMonth, setStartMonth] = useState(
-    initial?.startMonth ?? now.getMonth()
-  );
-  const [endYear, setEndYear] = useState(initial?.endYear ?? thisYear);
-  const [endMonth, setEndMonth] = useState(
-    initial?.endMonth ?? Math.min(11, now.getMonth() + 3)
-  );
+  const [start, setStart] = useState(initial?.start ?? defaultStart);
+  const [end, setEnd] = useState(initial?.end ?? defaultEnd);
   const [color, setColor] = useState(initial?.color ?? "gantt-teal");
   const [progress, setProgress] = useState(initial?.progress ?? 0);
+  const [purpose, setPurpose] = useState(initial?.purpose ?? "");
+  const [background, setBackground] = useState(initial?.background ?? "");
+  const [significance, setSignificance] = useState(initial?.significance ?? "");
+  const [achievedState, setAchievedState] = useState(
+    initial?.achievedState ?? ""
+  );
+  const [memo, setMemo] = useState(initial?.memo ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const titleRef = useRef<HTMLInputElement>(null);
 
-  const startTotal = startYear * 12 + startMonth;
-  const endTotal = endYear * 12 + endMonth;
-  const valid = title.trim() !== "" && endTotal >= startTotal;
+  const detailState = { purpose, background, significance, achievedState, memo };
+  const detailSetters: Record<string, (v: string) => void> = {
+    purpose: setPurpose,
+    background: setBackground,
+    significance: setSignificance,
+    achievedState: setAchievedState,
+    memo: setMemo,
+  };
+
+  // 終了日 < 開始日 は不可（YYYY-MM-DD は文字列比較で日付順になる）
+  const valid = title.trim() !== "" && !!start && !!end && end >= start;
 
   const handleSave = () => {
     if (!valid) return;
+    const trim = (v: string) => (v.trim() === "" ? undefined : v.trim());
     onSave({
       id: initial?.id ?? genGanttId(),
       title: title.trim(),
       category,
-      startYear,
-      startMonth,
-      endYear,
-      endMonth,
+      start,
+      end,
       progress,
       color,
       milestones: initial?.milestones ?? [],
+      purpose: trim(purpose),
+      background: trim(background),
+      significance: trim(significance),
+      achievedState: trim(achievedState),
+      memo: trim(memo),
     });
   };
 
@@ -103,8 +144,9 @@ function GanttEditModal({
         className="absolute inset-0 bg-black/40 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden">
-        <div className="bg-gradient-to-r from-teal-50 to-emerald-50 px-6 py-4 flex items-center justify-between">
+      {/* 縦長でも保存/削除が押せるよう flex-col + 本文スクロール */}
+      <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="bg-gradient-to-r from-teal-50 to-emerald-50 px-6 py-4 flex items-center justify-between shrink-0">
           <h3 className="text-lg font-bold text-gray-700">
             {isEdit ? "目標を編集" : "新しい目標を追加"}
           </h3>
@@ -128,19 +170,15 @@ function GanttEditModal({
             </svg>
           </button>
         </div>
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-4 overflow-y-auto flex-1">
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1">
               目標タイトル
             </label>
             <input
-              ref={titleRef}
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && valid) handleSave();
-              }}
               placeholder="例: 電子カルテ完全移行"
               className="w-full rounded-lg border border-gray-100 px-3 py-2.5 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-teal-200 focus:border-gray-300"
             />
@@ -166,67 +204,33 @@ function GanttEditModal({
               ))}
             </div>
           </div>
+          {/* 期間: 日単位（input type=date） */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">
-                開始
+                開始日
               </label>
-              <div className="flex gap-1.5">
-                <select
-                  value={startYear}
-                  onChange={(e) => setStartYear(Number(e.target.value))}
-                  className="flex-1 rounded-lg border border-gray-100 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-200"
-                >
-                  {years.map((y) => (
-                    <option key={y} value={y}>
-                      {y}年
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={startMonth}
-                  onChange={(e) => setStartMonth(Number(e.target.value))}
-                  className="flex-1 rounded-lg border border-gray-100 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-200"
-                >
-                  {MONTH_LABELS.map((m, i) => (
-                    <option key={i} value={i}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <input
+                type="date"
+                value={start}
+                onChange={(e) => setStart(e.target.value)}
+                className="w-full rounded-lg border border-gray-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-200"
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">
-                終了
+                終了日
               </label>
-              <div className="flex gap-1.5">
-                <select
-                  value={endYear}
-                  onChange={(e) => setEndYear(Number(e.target.value))}
-                  className="flex-1 rounded-lg border border-gray-100 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-200"
-                >
-                  {years.map((y) => (
-                    <option key={y} value={y}>
-                      {y}年
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={endMonth}
-                  onChange={(e) => setEndMonth(Number(e.target.value))}
-                  className="flex-1 rounded-lg border border-gray-100 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-200"
-                >
-                  {MONTH_LABELS.map((m, i) => (
-                    <option key={i} value={i}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {!valid && title.trim() !== "" && (
+              <input
+                type="date"
+                value={end}
+                min={start || undefined}
+                onChange={(e) => setEnd(e.target.value)}
+                className="w-full rounded-lg border border-gray-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-200"
+              />
+              {start && end && end < start && (
                 <p className="text-[11px] text-red-500 mt-1">
-                  終了は開始以降にしてください
+                  終了日は開始日以降にしてください
                 </p>
               )}
             </div>
@@ -270,8 +274,31 @@ function GanttEditModal({
               })}
             </div>
           </div>
+
+          {/* 詳細5項目（任意） */}
+          <div className="pt-2 border-t border-gray-100">
+            <p className="text-xs font-semibold text-gray-500 mb-1">
+              詳細（全員が「詳細を確認」で閲覧します・任意）
+            </p>
+            <div className="space-y-3">
+              {DETAIL_FIELDS.map((f) => (
+                <div key={f.key}>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">
+                    {f.label}
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={detailState[f.key]}
+                    onChange={(e) => detailSetters[f.key](e.target.value)}
+                    placeholder={f.placeholder}
+                    className="w-full rounded-lg border border-gray-100 px-3 py-2 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-teal-200 resize-none"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-        <div className="px-6 pb-5 flex items-center justify-between">
+        <div className="px-6 py-4 flex items-center justify-between shrink-0 border-t border-gray-100 bg-white">
           {isEdit && onDelete ? (
             confirmDelete ? (
               <div className="flex items-center gap-2">
@@ -341,6 +368,110 @@ function GanttEditModal({
   );
 }
 
+// 「詳細を確認」モーダル（全員閲覧・編集UIなし）
+function GanttDetailModal({
+  goal,
+  isAdmin,
+  onClose,
+  onEdit,
+}: {
+  goal: GanttGoal;
+  isAdmin: boolean;
+  onClose: () => void;
+  onEdit: (goal: GanttGoal) => void;
+}) {
+  const g = getGanttGradient(goal.color);
+  const filled = DETAIL_FIELDS.filter((f) => {
+    const v = goal[f.key];
+    return typeof v === "string" && v.trim() !== "";
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="bg-gradient-to-r from-teal-50 to-emerald-50 px-6 py-4 flex items-start justify-between shrink-0">
+          <div className="flex items-start gap-3 min-w-0">
+            <div
+              className={`w-2 h-10 rounded-full bg-gradient-to-b ${g.from} ${g.to} shrink-0 mt-0.5`}
+            />
+            <div className="min-w-0">
+              <h3 className="text-lg font-bold text-gray-700 truncate">
+                {goal.title}
+              </h3>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                <span className="text-xs text-gray-500">{goal.category}</span>
+                <span className="text-xs text-gray-400">
+                  {formatGoalRange(goal)}
+                </span>
+                <span className="text-xs font-medium text-gray-600">
+                  進捗 {goal.progress}%
+                </span>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-white/40 transition-colors shrink-0"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={2}
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M6 18 18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4 overflow-y-auto flex-1">
+          {filled.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-6">
+              詳細は未記入です
+            </p>
+          ) : (
+            filled.map((f) => (
+              <div key={f.key}>
+                <p className="text-xs font-semibold text-gray-500 mb-1">
+                  {f.label}
+                </p>
+                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                  {goal[f.key]}
+                </p>
+              </div>
+            ))
+          )}
+          <p className="text-[11px] text-gray-400 pt-3 border-t border-gray-100">
+            クリニック全体で同じ目的・目標を共有するためのページです
+          </p>
+        </div>
+
+        {isAdmin && (
+          <div className="px-6 py-4 flex justify-end shrink-0 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={() => onEdit(goal)}
+              className="px-4 py-2 text-sm font-semibold text-teal-700 hover:text-teal-800 hover:bg-teal-50 rounded-lg transition-colors"
+            >
+              ✏️ 編集
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function GanttChart() {
   const isAdmin = useIsAdmin();
   const [goals, setGoals] = useState<GanttGoal[]>([]);
@@ -351,6 +482,7 @@ export default function GanttChart() {
 
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [ganttModal, setGanttModal] = useState<GanttModalMode | null>(null);
+  const [detailGoal, setDetailGoal] = useState<GanttGoal | null>(null);
   const [showGoalsList, setShowGoalsList] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -365,22 +497,17 @@ export default function GanttChart() {
     setTimeout(() => setToast(null), 2000);
   }, []);
 
-  // 今日の正確な位置（選択年内の割合 0〜1）
-  const todayPosition = useMemo(() => {
-    if (currentYear !== selectedYear) return null;
-    return monthPosInYear(currentYear, currentMonth, now.getDate());
-  }, [selectedYear, currentYear, currentMonth, now]);
+  // 今日の正確な位置（選択年内の割合 0〜1・日単位）
+  const todayPosition = useMemo(
+    () => todayFractionInYear(selectedYear, now),
+    [selectedYear, now]
+  );
 
   // 選択年に表示すべき goal をフィルタ
-  const visibleGoals = useMemo(() => {
-    return goals.filter((g) => {
-      const gStartTotal = g.startYear * 12 + g.startMonth;
-      const gEndTotal = g.endYear * 12 + g.endMonth;
-      const yearStart = selectedYear * 12;
-      const yearEnd = selectedYear * 12 + 11;
-      return gStartTotal <= yearEnd && gEndTotal >= yearStart;
-    });
-  }, [goals, selectedYear]);
+  const visibleGoals = useMemo(
+    () => goals.filter((g) => goalOverlapsYear(g, selectedYear)),
+    [goals, selectedYear]
+  );
 
   const persist = useCallback(
     async (next: GanttGoal[]) => {
@@ -417,27 +544,21 @@ export default function GanttChart() {
     [persist]
   );
 
-  // goal のバー位置（選択年に対する割合）
+  // goal のバー位置（日単位・選択年に対する割合）
   const getBarStyle = (goal: GanttGoal) => {
-    const yearStart = selectedYear * 12;
-    const yearEnd = selectedYear * 12 + 12;
-    const gStart = goal.startYear * 12 + goal.startMonth;
-    const gEnd = goal.endYear * 12 + goal.endMonth + 1;
-    const clampStart = Math.max(gStart, yearStart);
-    const clampEnd = Math.min(gEnd, yearEnd);
-    const leftPct = ((clampStart - yearStart) / 12) * 100;
-    const widthPct = ((clampEnd - clampStart) / 12) * 100;
-    return { left: `${leftPct}%`, width: `${widthPct}%` };
+    const { left, width } = barFractions(goal, selectedYear);
+    return { left: `${left}%`, width: `${width}%` };
   };
 
-  const getMilestonePos = (ms: { year: number; month: number }) => {
-    if (ms.year !== selectedYear) return null;
-    return ((ms.month + 0.5) / 12) * 100;
-  };
-
-  // 行クリック（管理者のみ編集モーダル）
+  // 行クリック（管理者のみ編集モーダル。既存操作＝行クリック編集は変えない）
   const openEdit = (goal: GanttGoal) => {
     if (!isAdmin) return;
+    setGanttModal({ type: "edit", goal });
+  };
+
+  // 詳細モーダルから編集へ
+  const openEditFromDetail = (goal: GanttGoal) => {
+    setDetailGoal(null);
     setGanttModal({ type: "edit", goal });
   };
 
@@ -518,17 +639,11 @@ export default function GanttChart() {
         {visibleGoals.length === 0 && (
           <div className="px-6 py-10 text-center text-sm text-gray-400">
             {selectedYear}年の目標はまだありません。
-            {isAdmin
-              ? "「目標を追加」から作成しましょう。"
-              : ""}
+            {isAdmin ? "「目標を追加」から作成しましょう。" : ""}
           </div>
         )}
         {visibleGoals.map((goal) => {
           const barStyle = getBarStyle(goal);
-          const isMultiYear = goal.startYear !== goal.endYear;
-          const yearLabel = isMultiYear
-            ? `${goal.startYear}/${goal.startMonth + 1}〜${goal.endYear}/${goal.endMonth + 1}`
-            : "";
 
           return (
             <div
@@ -541,10 +656,7 @@ export default function GanttChart() {
               {/* 目標名（sticky固定） */}
               <div
                 className="w-[33vw] sm:w-48 shrink-0 sticky left-0 z-10 bg-white/40 backdrop-blur-sm group-hover:bg-gray-50/40 px-2 sm:px-4 py-3 flex items-center justify-between border-r border-gray-100 transition-colors"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowGoalsList(true);
-                }}
+                onClick={(e) => e.stopPropagation()}
               >
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] sm:text-sm font-semibold text-gray-700 truncate">
@@ -557,38 +669,61 @@ export default function GanttChart() {
                     <span className="text-[9px] sm:text-[10px] font-medium text-gray-500">
                       {goal.progress}%
                     </span>
-                    {yearLabel && (
-                      <span className="hidden sm:inline text-[9px] text-gray-300">
-                        {yearLabel}
-                      </span>
-                    )}
                   </div>
                 </div>
-                {isAdmin && (
+                <div className="flex items-center shrink-0 ml-1">
+                  {/* 詳細を確認（全員に表示） */}
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setGanttModal({ type: "edit", goal });
+                      setDetailGoal(goal);
                     }}
-                    className="shrink-0 opacity-0 group-hover:opacity-100 ml-1 sm:ml-2 w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-teal-500 hover:bg-gray-50 transition-all"
-                    aria-label="編集"
+                    className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-teal-600 hover:bg-gray-50 transition-all"
+                    aria-label="詳細を確認"
+                    title="詳細を確認"
                   >
                     <svg
-                      className="w-3.5 h-3.5"
+                      className="w-4 h-4"
                       fill="none"
                       viewBox="0 0 24 24"
-                      strokeWidth={2}
+                      strokeWidth={1.8}
                       stroke="currentColor"
                     >
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z"
+                        d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"
                       />
                     </svg>
                   </button>
-                )}
+                  {/* 編集（管理者のみ） */}
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setGanttModal({ type: "edit", goal });
+                      }}
+                      className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-teal-500 hover:bg-gray-50 transition-all"
+                      aria-label="編集"
+                    >
+                      <svg
+                        className="w-3.5 h-3.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth={2}
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z"
+                        />
+                      </svg>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* バーエリア（横スクロール対象） */}
@@ -632,10 +767,10 @@ export default function GanttChart() {
                   })()}
                 </div>
 
-                {/* マイルストーン */}
+                {/* マイルストーン（月ベース・概念保持） */}
                 {goal.milestones.map((ms, idx) => {
-                  const pos = getMilestonePos(ms);
-                  if (pos === null) return null;
+                  if (ms.year !== selectedYear) return null;
+                  const pos = milestonePosInYear(ms.month) * 100;
                   const g = getGanttGradient(goal.color);
                   return (
                     <div
@@ -732,13 +867,7 @@ export default function GanttChart() {
                 return (
                   <div
                     key={goal.id}
-                    onClick={() => {
-                      setShowGoalsList(false);
-                      if (isAdmin) setGanttModal({ type: "edit", goal });
-                    }}
-                    className={`flex items-center gap-3 p-3 rounded-xl bg-gray-50/50 transition-colors ${
-                      isAdmin ? "hover:bg-gray-100/60 cursor-pointer" : ""
-                    }`}
+                    className="flex items-center gap-3 p-3 rounded-xl bg-gray-50/50"
                   >
                     <div
                       className={`w-2 h-10 rounded-full bg-gradient-to-b ${g.from} ${g.to} shrink-0`}
@@ -755,25 +884,46 @@ export default function GanttChart() {
                           {goal.progress}%
                         </span>
                         <span className="text-[10px] text-gray-300">
-                          {goal.startYear}/{goal.startMonth + 1}〜{goal.endYear}/
-                          {goal.endMonth + 1}
+                          {formatGoalRange(goal)}
                         </span>
                       </div>
                     </div>
+                    {/* 詳細を確認（全員） */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowGoalsList(false);
+                        setDetailGoal(goal);
+                      }}
+                      className="shrink-0 px-2.5 py-1.5 text-xs font-semibold text-teal-700 bg-white border border-teal-200 rounded-lg hover:bg-teal-50 transition-colors"
+                    >
+                      詳細を確認
+                    </button>
+                    {/* 編集（管理者のみ） */}
                     {isAdmin && (
-                      <svg
-                        className="w-4 h-4 text-gray-300 shrink-0"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        strokeWidth={2}
-                        stroke="currentColor"
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowGoalsList(false);
+                          setGanttModal({ type: "edit", goal });
+                        }}
+                        className="shrink-0 w-8 h-8 flex items-center justify-center rounded text-gray-300 hover:text-teal-500 hover:bg-gray-50 transition-all"
+                        aria-label="編集"
                       >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="m8.25 4.5 7.5 7.5-7.5 7.5"
-                        />
-                      </svg>
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          strokeWidth={2}
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z"
+                          />
+                        </svg>
+                      </button>
                     )}
                   </div>
                 );
@@ -810,15 +960,23 @@ export default function GanttChart() {
         </div>
       )}
 
+      {/* 詳細を確認モーダル（全員閲覧） */}
+      {detailGoal && (
+        <GanttDetailModal
+          goal={detailGoal}
+          isAdmin={isAdmin}
+          onClose={() => setDetailGoal(null)}
+          onEdit={openEditFromDetail}
+        />
+      )}
+
       {/* 追加・編集モーダル（管理者のみ） */}
       {isAdmin && ganttModal && (
         <GanttEditModal
           mode={ganttModal}
           years={years}
           onSave={handleSaveGoal}
-          onDelete={
-            ganttModal.type === "edit" ? handleDeleteGoal : undefined
-          }
+          onDelete={ganttModal.type === "edit" ? handleDeleteGoal : undefined}
           onClose={() => setGanttModal(null)}
         />
       )}
