@@ -26,6 +26,7 @@ import {
 import { NEWS_AUTHOR_LS_KEY } from "@/lib/news-reactions";
 import { AI_INCHO_URL } from "@/lib/external-links";
 import { WeeklyQuestionSection } from "@/components/WeeklyQuestionSection";
+import { GanttSummarySection } from "@/components/GanttSummarySection";
 import {
   DEFAULT_PORTAL_FEATURES,
   loadPortalFeatures,
@@ -794,6 +795,8 @@ export default function PortalHome() {
         </div>
       </section>
     ),
+    // クリニック目標の要約（指示書77）: 進行中0件のときはコンポーネント側でnullを返す
+    gantt_summary: <GanttSummarySection />,
     // みんなへの質問（指示書46-A/47、75）: 機能スイッチOFF・配信停止時はコンポーネント側でnullを返す
     weekly_question: (
       <WeeklyQuestionSection profileNames={reactions.profileNames} />
