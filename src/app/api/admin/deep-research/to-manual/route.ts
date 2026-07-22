@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     }
 
     const prompt = getToManualPrompt(topic, content);
-    const raw = await generateText(prompt, { temperature: 0.3 });
+    const raw = await generateText(prompt);
     const parsed = parseJsonLoose<ParsedManual>(raw);
     if (!parsed) {
       return NextResponse.json(

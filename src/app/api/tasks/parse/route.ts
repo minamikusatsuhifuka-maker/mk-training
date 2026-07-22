@@ -179,7 +179,6 @@ ${textBlocks ? `--- テキスト内容 ---\n${textBlocks}` : ""}`;
         body: JSON.stringify({
           contents: [{ parts }],
           generationConfig: {
-            temperature: 0.1,
             maxOutputTokens: 8192,
             thinkingConfig: GEMINI_THINKING_CONFIG,
           },

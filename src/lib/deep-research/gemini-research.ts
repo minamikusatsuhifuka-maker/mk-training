@@ -1,29 +1,31 @@
 /**
  * ディープリサーチ専用 Gemini 呼び出し（REST + SSE + Google検索Grounding）
  *
- * ※ ai-incho から移植。mk-training の既存 Gemini ルート（gemini-2.5-pro をハードコード）には
- *    一切影響しない独立実装。モデルは GEMINI_MODEL || "gemini-3.5-flash"、キーは既存 GEMINI_API_KEY。
- * ※ 検索Grounding（リサーチ実行）も通常生成（学習資料）も、すべてこのファイル経由＝全経路 Gemini 3.5 Flash。
+ * ※ ai-incho から移植。独立実装だが、モデルIDは gemini-models.ts の
+ *    DEFAULT_GEMINI_MODEL に集約（GEMINI_MODEL 環境変数で上書き可・キーは既存 GEMINI_API_KEY）。
+ * ※ 検索Grounding（リサーチ実行）も通常生成（学習資料）も、すべてこのファイル経由。
+ * ※ Gemini 3.6 Flash は temperature / topK / topP のカスタム値を無視するため送らない。
  */
 
-import { GEMINI_THINKING_CONFIG } from "@/lib/gemini-models";
+import {
+  DEFAULT_GEMINI_MODEL,
+  GEMINI_THINKING_CONFIG,
+} from "@/lib/gemini-models";
 
 /** リサーチで使用するモデル名を解決する */
 export function getResearchModel(): string {
-  return process.env.GEMINI_MODEL || "gemini-3.5-flash";
+  return process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
 }
 
 /**
  * 非ストリーミングのテキスト生成（Google検索Groundingなし）。
  * 派生資料（研修資料・知識シート・クイズ・要約等）の生成に流用する。
  * @param prompt 送信するプロンプト
- * @param options temperature 等
  * @param model 使用するモデル（省略時は getResearchModel()）
  * @returns 生成テキスト全文
  */
 export async function generateText(
   prompt: string,
-  options: { temperature?: number } = {},
   model: string = getResearchModel()
 ): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY?.replace(/[^\x20-\x7E]/g, "") || "";
@@ -39,9 +41,6 @@ export async function generateText(
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: options.temperature ?? 0.4,
-        topK: 40,
-        topP: 0.95,
         maxOutputTokens: 12000,
         // Gemini 3.x は思考が既定ON。枠固定のJSON抽出が途中で切れるため最小化する。
         thinkingConfig: GEMINI_THINKING_CONFIG,
@@ -197,9 +196,6 @@ export async function* streamGeminiApiWithSearch(
   const payload = {
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: {
-      temperature: 0.7,
-      topK: 40,
-      topP: 0.95,
       maxOutputTokens: 12000,
     },
     tools: [{ google_search: {} }],

@@ -1,6 +1,6 @@
 // スタッフ向けAI機能の共通呼び出しヘルパー。
 // 管理トグル（content_store キー ai_provider_setting）に応じて Claude / Gemini を切替える。
-// 既定は 'gemini'（gemini-3.5-flash）。保存値があればそれを優先（トグルで claude に戻せる）。
+// 既定は 'gemini'（DEFAULT_GEMINI_MODEL）。保存値があればそれを優先（トグルで claude に戻せる）。
 // プロンプト本文・理念注入・出力整形は各 route 側に残す。
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
@@ -14,7 +14,7 @@ export const AI_PROVIDER_SETTING_KEY = "ai_provider_setting";
 
 export type AiProvider = "claude" | "gemini";
 
-// 既定は gemini（新規/未設定では Gemini 3.5-flash で動く。トグルで claude に戻せる）
+// 既定は gemini（新規/未設定では DEFAULT_GEMINI_MODEL で動く。トグルで claude に戻せる）
 export const DEFAULT_AI_PROVIDER: AiProvider = "gemini";
 
 // Claude の既定モデル（各 route の従来モデルを尊重するため override 可能）
@@ -54,6 +54,7 @@ export interface CallAIOptions {
   system?: string;
   messages: CallAIMessage[];
   maxTokens: number;
+  // Claude 専用（Gemini 3.6 Flash はカスタム temperature を無視するため送らない）
   temperature?: number;
   // JSON を期待する機能向け。Gemini 時に「JSONのみ出力」を明示する。
   // 実際のパースは呼び出し側の既存処理（3段階パース等）を流用する。
@@ -138,7 +139,7 @@ async function callGemini(opts: CallAIOptions): Promise<CallAIResult> {
       provider: "gemini",
     };
 
-  // 管理画面で選択中の Gemini モデル（3.5-flash / 3.1-pro）を使用
+  // 管理画面で選択中の Gemini モデル（3.6-flash / 3.1-pro）を使用
   const supabase = serverSupabase();
   const model = supabase
     ? await getSelectedGeminiModel(supabase)
@@ -158,13 +159,12 @@ async function callGemini(opts: CallAIOptions): Promise<CallAIResult> {
     systemText = systemText ? `${systemText}\n\n${jsonNote}` : jsonNote;
   }
 
+  // temperature は転送しない（Gemini 3.6 Flash はカスタム値を無視。Claude 側でのみ使用）
   const generationConfig: Record<string, unknown> = {
     maxOutputTokens: opts.maxTokens,
     // Gemini 3.x は思考が既定ON。枠固定JSON抽出が切れるため最小化（既存方針を踏襲）。
     thinkingConfig: GEMINI_THINKING_CONFIG,
   };
-  if (typeof opts.temperature === "number")
-    generationConfig.temperature = opts.temperature;
 
   const body: Record<string, unknown> = { contents, generationConfig };
   if (systemText) body.systemInstruction = { parts: [{ text: systemText }] };

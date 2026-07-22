@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
     const targetLevel: KnowledgeLevel = level === "expert" ? "expert" : "basic";
     const prompt = getKnowledgeSheetPrompt(topic, content, targetLevel);
-    const markdown = stripCodeFence(await generateText(prompt, { temperature: 0.3 }));
+    const markdown = stripCodeFence(await generateText(prompt));
 
     return NextResponse.json({ markdown, level: targetLevel });
   } catch (e) {

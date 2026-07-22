@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     }
 
     const prompt = getToOrgKnowledgePrompt(topic, content);
-    const raw = await generateText(prompt, { temperature: 0.3 });
+    const raw = await generateText(prompt);
     const parsed = parseJsonLoose<ParsedKnowledge>(raw);
     if (!parsed) {
       return NextResponse.json(

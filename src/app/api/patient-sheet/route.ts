@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 
     const prompt =
       (await getAiBackgroundBlock()) + getPatientSheetPrompt(topic, content);
-    const markdown = stripCodeFence(await generateText(prompt, { temperature: 0.4 }));
+    const markdown = stripCodeFence(await generateText(prompt));
 
     return NextResponse.json({ markdown });
   } catch (e) {

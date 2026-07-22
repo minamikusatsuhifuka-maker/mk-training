@@ -149,7 +149,6 @@ export async function POST(req: NextRequest) {
             },
           ],
           generationConfig: {
-            temperature: 0.1,
             maxOutputTokens: 8192,
             thinkingConfig: GEMINI_THINKING_CONFIG,
           },

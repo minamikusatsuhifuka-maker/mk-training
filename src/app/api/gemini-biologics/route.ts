@@ -133,7 +133,6 @@ ${JSON.stringify(currentData, null, 2)}
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
-            temperature: 0.1,
             maxOutputTokens: 8192,
             thinkingConfig: GEMINI_THINKING_CONFIG,
           }

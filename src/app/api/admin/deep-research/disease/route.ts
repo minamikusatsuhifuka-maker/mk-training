@@ -2,7 +2,7 @@
  * 疾患ディープリサーチ → 各形式への変換・保存 API
  *  入力: { diseaseName, diseaseEnglishName, currentData, perspective, targets[] }
  *  処理:
- *   1) 検索Grounding付きで疾患リサーチを実行（gemini-3.5-flash）
+ *   1) 検索Grounding付きで疾患リサーチを実行（getResearchModel() のモデル）
  *   2) targets に応じて変換・保存
  *      - 'material'       : derived_materials に disease_research タイプで保存
  *      - 'org_knowledge'  : OrgKnowledge へ変換 → org_knowledges（isApproved:false）
@@ -123,7 +123,7 @@ export async function POST(request: Request) {
     // 2-b) 組織ナレッジへ変換
     if (targets.includes("org_knowledge")) {
       try {
-        const raw = await generateText(getToOrgKnowledgePrompt(diseaseName, researchText), { temperature: 0.3 });
+        const raw = await generateText(getToOrgKnowledgePrompt(diseaseName, researchText));
         const parsed = parseJsonLoose<ParsedKnowledge>(raw);
         if (!parsed) throw new Error("ナレッジJSONの解析に失敗しました");
         const saved = await addOrgKnowledge({
@@ -143,7 +143,7 @@ export async function POST(request: Request) {
     // 2-c) マニュアルへ変換
     if (targets.includes("manual")) {
       try {
-        const raw = await generateText(getToManualPrompt(diseaseName, researchText), { temperature: 0.3 });
+        const raw = await generateText(getToManualPrompt(diseaseName, researchText));
         const parsed = parseJsonLoose<ParsedManual>(raw);
         if (!parsed) throw new Error("マニュアルJSONの解析に失敗しました");
         const saved = await addManual({
@@ -174,7 +174,7 @@ export async function POST(request: Request) {
     // 2-d) 疾患データ更新案を生成（保存はフロントで確認後）
     if (targets.includes("disease_update")) {
       try {
-        const raw = await generateText(getDiseaseUpdatePrompt(diseaseName, currentData, researchText), { temperature: 0.3 });
+        const raw = await generateText(getDiseaseUpdatePrompt(diseaseName, currentData, researchText));
         const parsed = parseJsonLoose<DiseaseUpdate>(raw);
         if (!parsed) throw new Error("疾患更新案JSONの解析に失敗しました");
         diseaseUpdate = {

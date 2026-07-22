@@ -36,7 +36,7 @@ export async function POST(request: Request) {
         : 10;
 
     const prompt = getQuizPrompt(topic, content, n);
-    const raw = stripCodeFence(await generateText(prompt, { temperature: 0.4 }));
+    const raw = stripCodeFence(await generateText(prompt));
 
     // JSON 抽出（前後に余計な文字があっても { から } までを拾う）
     let parsed: { questions?: QuizQuestion[] };

@@ -91,7 +91,6 @@ ${JSON.stringify(itemsSummary, null, 2).slice(0, 6000)}
           body: JSON.stringify({
             contents: [{ parts: [{ text: batchPrompt }] }],
             generationConfig: {
-              temperature: 0.1,
               maxOutputTokens: 8192,
               thinkingConfig: GEMINI_THINKING_CONFIG,
             },
@@ -415,7 +414,6 @@ ${JSON.stringify(currentData, null, 2).slice(0, 3000)}
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
-            temperature: 0.1,
             maxOutputTokens: 4096,
             thinkingConfig: GEMINI_THINKING_CONFIG,
           }

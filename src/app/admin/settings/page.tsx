@@ -6,6 +6,7 @@ import {
   GEMINI_MODELS,
   DEFAULT_GEMINI_MODEL,
   GEMINI_MODEL_SETTING_KEY,
+  isKnownGeminiModel,
 } from "@/lib/gemini-models";
 import {
   AI_PROVIDER_SETTING_KEY,
@@ -47,7 +48,8 @@ export default function SettingsPage() {
           .eq("id", GEMINI_MODEL_SETTING_KEY)
           .single();
         const model = (data?.data as { model?: string } | null)?.model;
-        if (model) setSelectedModel(model);
+        // 保存値が候補外（廃止済みモデルID）の場合はデフォルト表示のまま
+        if (model && isKnownGeminiModel(model)) setSelectedModel(model);
       } catch {
         /* 未設定時はデフォルトのまま */
       }
