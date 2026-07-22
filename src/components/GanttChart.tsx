@@ -670,6 +670,23 @@ export default function GanttChart() {
                       {goal.progress}%
                     </span>
                   </div>
+                  {/* 目的・達成イメージを常時1行表示（指示書79・記入済みのみ・全員に表示） */}
+                  {goal.purpose && (
+                    <p
+                      className="text-[9px] sm:text-[10px] text-gray-400 truncate mt-0.5"
+                      title={goal.purpose}
+                    >
+                      🎯 {goal.purpose}
+                    </p>
+                  )}
+                  {goal.achievedState && (
+                    <p
+                      className="text-[9px] sm:text-[10px] text-gray-400 truncate mt-0.5"
+                      title={goal.achievedState}
+                    >
+                      🌟 {goal.achievedState}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center shrink-0 ml-1">
                   {/* 詳細を確認（全員に表示） */}
