@@ -1,6 +1,6 @@
 "use client";
 
-// ホーム「📈 クリニックの歩み」セクション（80新設 / 81保険・自費・期間つき施策 / 82タイプ切替＋小修正）
+// ホーム「📈 クリニックの歩み」セクション（80新設 / 81保険・自費・期間つき施策 / 82タイプ切替＋小修正 / 84縦幅3段階＋数値ポップ）
 // - グラフタイプ3種を切替（①積み上げ棒＝既定 ②折れ線 ③積み上げ面）。選択は localStorage で維持。
 // - 売上=保険（teal）＋自費（amber）。合算＝保険＋自費（表示時計算）。旧80データ（内訳なし）はグレー。
 // - カウンセリング数は右軸の折れ線（全タイプ共通）。1件も無ければ右軸・凡例・線を出さない（82小修正1）。
@@ -58,6 +58,40 @@ const CHART_TYPES: { key: ChartType; icon: string; label: string }[] = [
   { key: "area", icon: "⛰", label: "面" },
 ];
 
+// 縦幅3段階（84）。compact=82までの現状値。選択は localStorage で維持（既定は標準）。
+type ChartHeight = "compact" | "standard" | "tall";
+const CHART_HEIGHT_KEY = "mk_metrics_chart_height";
+const CHART_HEIGHTS: { key: ChartHeight; label: string; plotH: number }[] = [
+  { key: "compact", label: "コンパクト", plotH: 190 },
+  { key: "standard", label: "標準", plotH: 266 },
+  { key: "tall", label: "たっぷり", plotH: 360 },
+];
+function plotHeightOf(h: ChartHeight): number {
+  return CHART_HEIGHTS.find((c) => c.key === h)?.plotH ?? 266;
+}
+
+// ツールチップ1か月分の内容（84）。整形済み metricMap から作り、3タイプで共通。
+type TipRow = { label: string; value: string; bold?: boolean };
+type TipData = { heading: string; rows: TipRow[] };
+function buildTipData(ym: string, m: MonthMetric | undefined): TipData | null {
+  if (!m) return null;
+  const man = (v: number) => `${v.toLocaleString("ja-JP")}万円`;
+  const rows: TipRow[] = [];
+  if (hasBreakdown(m)) {
+    if (m.insurance != null) rows.push({ label: "保険売上", value: man(m.insurance) });
+    if (m.selfPay != null) rows.push({ label: "自費売上", value: man(m.selfPay) });
+    rows.push({ label: "合算", value: man(monthTotal(m) ?? 0), bold: true });
+  } else if (isLegacyOnly(m)) {
+    rows.push({ label: "合算", value: `${man(m.sales ?? 0)}（内訳未入力）`, bold: true });
+  }
+  if (typeof m.counseling === "number") {
+    rows.push({ label: "カウンセリング", value: `${m.counseling.toLocaleString("ja-JP")}件` });
+  }
+  if (rows.length === 0) return null;
+  const [y, mo] = ym.split("-");
+  return { heading: `${y}年${Number(mo)}月`, rows };
+}
+
 type PlottedInitiative = { init: Initiative; no: number };
 
 // value 配列（null=欠測）を連続点の runs に分割
@@ -85,6 +119,7 @@ function Chart({
   hasCounseling,
   chartType,
   containerWidth,
+  plotH,
 }: {
   yms: string[];
   metricMap: Map<string, MonthMetric>;
@@ -93,8 +128,8 @@ function Chart({
   hasCounseling: boolean;
   chartType: ChartType;
   containerWidth: number;
+  plotH: number;
 }) {
-  const plotH = 190;
   const padL = 46;
   const padR = hasCounseling ? 46 : 16; // カウンセリング無しなら右余白を詰める
   const padT = 22;
@@ -110,6 +145,56 @@ function Chart({
   const baseline = padT + plotH;
   const xCenter = (i: number) => padL + colW * (i + 0.5);
   const xLeft = (i: number) => padL + colW * i;
+
+  // ── 数値ポップ（84）: 月列単位のヒットエリア。ホバー（PC）＋タップ（スマホ）両対応・3タイプ共通 ──
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const [pinnedIdx, setPinnedIdx] = useState<number | null>(null); // タップで固定表示
+  const [tipPos, setTipPos] = useState({ x: 0, y: 0 });
+  const activeIdx =
+    pinnedIdx != null && pinnedIdx < yms.length
+      ? pinnedIdx
+      : hoverIdx != null && hoverIdx < yms.length
+        ? hoverIdx
+        : null;
+
+  const posFromEvent = (e: React.MouseEvent) => {
+    const r = svgRef.current?.getBoundingClientRect();
+    return r ? { x: e.clientX - r.left, y: e.clientY - r.top } : { x: 0, y: 0 };
+  };
+
+  // 期間変更などで月配列が変わったら閉じる
+  useEffect(() => {
+    setHoverIdx(null);
+    setPinnedIdx(null);
+  }, [yms]);
+
+  // タップ固定中はグラフ外タップで閉じる（スマホ）
+  useEffect(() => {
+    if (pinnedIdx == null) return;
+    const onDown = (ev: PointerEvent) => {
+      if (
+        wrapRef.current &&
+        ev.target instanceof Node &&
+        !wrapRef.current.contains(ev.target)
+      ) {
+        setPinnedIdx(null);
+        setHoverIdx(null);
+      }
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [pinnedIdx]);
+
+  const tipData = useMemo(
+    () => yms.map((ym) => buildTipData(ym, metricMap.get(ym))),
+    [yms, metricMap]
+  );
+  const tip = activeIdx != null ? tipData[activeIdx] : null;
+  // 端で見切れないよう左右反転（ツールチップ幅の見積もり）
+  const TIP_W = 190;
+  const tipFlip = tipPos.x + 12 + TIP_W > width;
 
   const totals = yms.map((ym) => {
     const m = metricMap.get(ym);
@@ -337,13 +422,16 @@ function Chart({
 
   return (
     <div className="overflow-x-auto">
+      <div ref={wrapRef} className="relative" style={{ width }}>
       <svg
+        ref={svgRef}
         width={width}
         height={height}
         viewBox={`0 0 ${width} ${height}`}
         role="img"
         aria-label="月別の売上（保険・自費）とカウンセリング数の推移"
         className="block"
+        onMouseLeave={() => setHoverIdx(null)}
       >
         {/* グリッド線 */}
         {gridYs.map((y, i) => (
@@ -385,6 +473,18 @@ function Chart({
               <line key={`vl-${m.no}`} x1={x} y1={padT} x2={x} y2={baseline} stroke="#cbd5e1" strokeWidth={1} strokeDasharray="3 3" />
             );
           })}
+
+        {/* 対象月の列ハイライト（84・薄い背景） */}
+        {activeIdx != null && (
+          <rect
+            x={xLeft(activeIdx)}
+            y={padT}
+            width={colW}
+            height={plotH}
+            fill="#64748b"
+            opacity={0.08}
+          />
+        )}
 
         {/* 売上（タイプ別） */}
         {chartType === "bar" && renderBars()}
@@ -437,7 +537,54 @@ function Chart({
             </g>
           );
         })}
+
+        {/* 月列の透明ヒットエリア（84・最前面）: 細い棒や点を狙わなくても列全体で反応 */}
+        {yms.map((ym, i) => (
+          <rect
+            key={`hit-${ym}`}
+            x={xLeft(i)}
+            y={padT}
+            width={colW}
+            height={plotH + 28}
+            fill="transparent"
+            onMouseEnter={(e) => {
+              setHoverIdx(i);
+              setTipPos(posFromEvent(e));
+            }}
+            onMouseMove={(e) => setTipPos(posFromEvent(e))}
+            onClick={(e) => {
+              setPinnedIdx(i);
+              setTipPos(posFromEvent(e));
+            }}
+          />
+        ))}
       </svg>
+
+      {/* 数値ポップ（84）: カーソル/タップ位置の近くに表示・端では左右反転 */}
+      {tip && (
+        <div
+          className="absolute z-10 pointer-events-none rounded-lg border border-gray-200 bg-white/95 shadow-md px-3 py-2 whitespace-nowrap"
+          style={{
+            left: tipFlip ? undefined : tipPos.x + 12,
+            right: tipFlip ? width - tipPos.x + 12 : undefined,
+            top: Math.max(4, Math.min(tipPos.y + 14, height - 110)),
+          }}
+        >
+          <p className="text-[11px] font-semibold text-gray-800 mb-0.5">{tip.heading}</p>
+          {tip.rows.map((r, ri) => (
+            <p
+              key={ri}
+              className={`text-[11px] flex items-center justify-between gap-3 ${
+                r.bold ? "font-bold text-gray-800" : "text-gray-600"
+              }`}
+            >
+              <span>{r.label}</span>
+              <span className="tabular-nums">{r.value}</span>
+            </p>
+          ))}
+        </div>
+      )}
+      </div>
       {hasLegacy && (
         <p className="text-[10px] text-gray-400 mt-1 px-1">
           ※ グレーは内訳（保険/自費）未入力の合算のみの月です。
@@ -453,6 +600,7 @@ export function ClinicMetricsSection() {
   const [rangeEnd, setRangeEnd] = useState("");
   const [rangeInit, setRangeInit] = useState(false);
   const [chartType, setChartType] = useState<ChartType>("bar");
+  const [chartHeight, setChartHeight] = useState<ChartHeight>("standard");
 
   const boxRef = useRef<HTMLDivElement>(null);
   const [boxWidth, setBoxWidth] = useState(0);
@@ -477,6 +625,25 @@ export function ClinicMetricsSection() {
     setChartType(t);
     try {
       localStorage.setItem(CHART_TYPE_KEY, t);
+    } catch {
+      /* 保存できなくても表示は切替 */
+    }
+  };
+
+  // localStorage から縦幅復元（84。不正/未保存は "standard"）
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(CHART_HEIGHT_KEY);
+      if (v === "compact" || v === "standard" || v === "tall") setChartHeight(v);
+    } catch {
+      /* localStorage 不可環境 */
+    }
+  }, []);
+
+  const changeHeight = (h: ChartHeight) => {
+    setChartHeight(h);
+    try {
+      localStorage.setItem(CHART_HEIGHT_KEY, h);
     } catch {
       /* 保存できなくても表示は切替 */
     }
@@ -586,6 +753,25 @@ export function ClinicMetricsSection() {
               </button>
             ))}
           </div>
+          {/* 縦幅切替（84・セグメント） */}
+          <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden">
+            {CHART_HEIGHTS.map((h) => (
+              <button
+                key={h.key}
+                type="button"
+                onClick={() => changeHeight(h.key)}
+                className={`text-xs px-2 py-1 transition-colors ${
+                  chartHeight === h.key
+                    ? "bg-teal-500 text-white"
+                    : "text-gray-600 hover:bg-gray-50"
+                }`}
+                aria-pressed={chartHeight === h.key}
+                title={`縦幅：${h.label}`}
+              >
+                {h.label}
+              </button>
+            ))}
+          </div>
           <input
             type="month"
             value={rangeStart}
@@ -654,6 +840,7 @@ export function ClinicMetricsSection() {
           hasCounseling={hasCounseling}
           chartType={chartType}
           containerWidth={boxWidth}
+          plotH={plotHeightOf(chartHeight)}
         />
       </div>
 
