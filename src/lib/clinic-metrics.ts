@@ -193,3 +193,52 @@ export function buildAxisYms(data: ClinicMetrics): string[] {
   }
   return Array.from(set).sort((a, b) => a.localeCompare(b));
 }
+
+// ─── 12か月移動平均（指示書93・整形層に集約。表示期間に依存しない全データ基準） ───
+
+function ymToIndex(ym: string): number {
+  const [y, mo] = ym.split("-").map(Number);
+  return y * 12 + (mo - 1);
+}
+function indexToYm(idx: number): string {
+  const y = Math.floor(idx / 12);
+  const mo = (idx % 12) + 1;
+  return `${y}-${String(mo).padStart(2, "0")}`;
+}
+
+/**
+ * 合算売上（保険＋自費／旧データは sales）の12か月 trailing 移動平均を全データ基準で計算する。
+ * - その月を含む過去12暦月の窓で、値がある月だけを母数に平均（完全欠測月は母数から除外）。
+ * - データ開始から12か月未満の月は「ある分の平均」を返し、開業月から線が途切れないようにする。
+ * - 返却は ym → 平均値（万円）の Map。データ月の範囲 [最初,最後] の全暦月に値を持つ。
+ */
+export function computeMovingAvg12(data: ClinicMetrics): Map<string, number> {
+  const totalByYm = new Map<string, number>();
+  for (const m of data.months) {
+    const t = monthTotal(m);
+    if (t != null) totalByYm.set(m.ym, t);
+  }
+  const result = new Map<string, number>();
+  if (totalByYm.size === 0) return result;
+
+  const indices = Array.from(totalByYm.keys())
+    .filter((ym) => YM_RE.test(ym))
+    .map(ymToIndex)
+    .sort((a, b) => a - b);
+  const firstIdx = indices[0];
+  const lastIdx = indices[indices.length - 1];
+
+  for (let idx = firstIdx; idx <= lastIdx; idx++) {
+    let sum = 0;
+    let count = 0;
+    for (let w = idx - 11; w <= idx; w++) {
+      const v = totalByYm.get(indexToYm(w));
+      if (v != null) {
+        sum += v;
+        count++;
+      }
+    }
+    if (count > 0) result.set(indexToYm(idx), sum / count);
+  }
+  return result;
+}

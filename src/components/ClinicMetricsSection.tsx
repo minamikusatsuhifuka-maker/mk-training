@@ -15,6 +15,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   loadClinicMetrics,
   buildAxisYms,
+  computeMovingAvg12,
   initiativeYm,
   shortYm,
   monthTotal,
@@ -25,6 +26,9 @@ import {
   type MonthMetric,
   type Initiative,
 } from "@/lib/clinic-metrics";
+
+// 12か月移動平均線の色（gray-800・破線。合算線 TOTAL=#475569 より濃く＋破線で区別）
+const MOVING_AVG_COLOR = "#1f2937";
 
 const CIRCLED = [
   "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩",
@@ -64,7 +68,11 @@ const PLOT_H = 360;
 // ツールチップ1か月分の内容（84）。整形済み metricMap から作り、3タイプで共通。
 type TipRow = { label: string; value: string; bold?: boolean };
 type TipData = { heading: string; rows: TipRow[] };
-function buildTipData(ym: string, m: MonthMetric | undefined): TipData | null {
+function buildTipData(
+  ym: string,
+  m: MonthMetric | undefined,
+  movingAvg?: number
+): TipData | null {
   if (!m) return null;
   const man = (v: number) => `${v.toLocaleString("ja-JP")}万円`;
   const rows: TipRow[] = [];
@@ -77,6 +85,9 @@ function buildTipData(ym: string, m: MonthMetric | undefined): TipData | null {
   }
   if (typeof m.counseling === "number") {
     rows.push({ label: "カウンセリング", value: `${m.counseling.toLocaleString("ja-JP")}件` });
+  }
+  if (typeof movingAvg === "number") {
+    rows.push({ label: "12か月平均", value: man(Math.round(movingAvg)) });
   }
   if (rows.length === 0) return null;
   const [y, mo] = ym.split("-");
@@ -105,6 +116,7 @@ function runsOf(
 function Chart({
   yms,
   metricMap,
+  movingAvg,
   plotted,
   hasLegacy,
   hasCounseling,
@@ -114,6 +126,7 @@ function Chart({
 }: {
   yms: string[];
   metricMap: Map<string, MonthMetric>;
+  movingAvg: Map<string, number>;
   plotted: PlottedInitiative[];
   hasLegacy: boolean;
   hasCounseling: boolean;
@@ -182,8 +195,8 @@ function Chart({
   }, [pinnedIdx]);
 
   const tipData = useMemo(
-    () => yms.map((ym) => buildTipData(ym, metricMap.get(ym))),
-    [yms, metricMap]
+    () => yms.map((ym) => buildTipData(ym, metricMap.get(ym), movingAvg.get(ym))),
+    [yms, metricMap, movingAvg]
   );
   const tip = activeIdx != null ? tipData[activeIdx] : null;
   // 端で見切れないよう左右反転（ツールチップ幅の見積もり）
@@ -194,10 +207,26 @@ function Chart({
     const m = metricMap.get(ym);
     return m ? monthTotal(m) : null;
   });
+  // 12か月移動平均の表示範囲ぶんの点（値は全データ基準・期間で変わらない）
+  const avgVals = yms.map((ym) => movingAvg.get(ym) ?? null);
+  // y軸スケールは合算・移動平均の両方を収める（平均線が上端で切れないように）
   const salesMax = niceCeil(
-    Math.max(1, ...totals.filter((v): v is number => typeof v === "number"))
+    Math.max(
+      1,
+      ...totals.filter((v): v is number => typeof v === "number"),
+      ...avgVals.filter((v): v is number => typeof v === "number")
+    )
   );
   const ySales = (v: number) => baseline - (v / salesMax) * plotH;
+  const avgPts = yms.map((ym, i) => {
+    const v = movingAvg.get(ym);
+    return typeof v === "number" ? { x: xCenter(i), y: ySales(v) } : null;
+  });
+  const avgRuns = runsOf(avgPts);
+  // 年区切り: 表示範囲内の各1月の左端（＝年の境目）。先頭列は軸と重なるため除外。
+  const yearDividerX = yms
+    .map((ym, i) => (i > 0 && shortYm(ym).month === "1" ? xLeft(i) : null))
+    .filter((x): x is number => x != null);
 
   const countVals = yms.map((ym) => metricMap.get(ym)?.counseling ?? null);
   const countMax = niceCeil(
@@ -450,6 +479,19 @@ function Chart({
           </>
         )}
 
+        {/* 年区切り（93）: 各1月の左端に控えめな縦線。グリッドよりわずかに濃く、施策の破線とは別（実線） */}
+        {yearDividerX.map((x, i) => (
+          <line
+            key={`ydiv-${i}`}
+            x1={x}
+            y1={padT}
+            x2={x}
+            y2={baseline}
+            stroke="#e2e8f0"
+            strokeWidth={1}
+          />
+        ))}
+
         {/* 期間施策の帯（背面） */}
         {marks
           .filter((m) => m.isPeriod)
@@ -502,6 +544,20 @@ function Chart({
             )}
           </>
         )}
+
+        {/* 12か月移動平均線（93・全タイプ共通・破線・ヒットエリアより下） */}
+        {avgRuns.map((run, ri) => (
+          <polyline
+            key={`avg-${ri}`}
+            points={run.map((p) => `${p.x},${p.y}`).join(" ")}
+            fill="none"
+            stroke={MOVING_AVG_COLOR}
+            strokeWidth={1.5}
+            strokeDasharray="5 3"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        ))}
 
         {/* 施策番号 */}
         {marks.map((m) => {
@@ -669,6 +725,12 @@ export function ClinicMetricsSection() {
     return m;
   }, [data]);
 
+  // 12か月移動平均は全データ基準で1度だけ計算（表示期間を絞っても値は不変・指示書93）
+  const movingAvgMap = useMemo(
+    () => (data ? computeMovingAvg12(data) : new Map<string, number>()),
+    [data]
+  );
+
   const hasLegacy = useMemo(
     () =>
       displayedYms.some((ym) => {
@@ -785,6 +847,13 @@ export function ClinicMetricsSection() {
             <span className="text-[11px] text-gray-600">カウンセリング数（件）</span>
           </div>
         )}
+        {/* 12か月移動平均（93）: 破線サンプル */}
+        <div className="flex items-center gap-1.5">
+          <svg width="18" height="6" aria-hidden>
+            <line x1="0" y1="3" x2="18" y2="3" stroke={MOVING_AVG_COLOR} strokeWidth="1.5" strokeDasharray="5 3" />
+          </svg>
+          <span className="text-[11px] text-gray-600">12か月平均</span>
+        </div>
       </div>
 
       <div ref={boxRef} className="bg-white border border-gray-100 rounded-xl p-2">
@@ -794,6 +863,7 @@ export function ClinicMetricsSection() {
           <Chart
             yms={displayedYms}
             metricMap={metricMap}
+            movingAvg={movingAvgMap}
             plotted={plotted}
             hasLegacy={hasLegacy}
             hasCounseling={hasCounseling}
