@@ -257,7 +257,9 @@ export async function POST(req: NextRequest) {
       .from(STAFF_PHOTOS_BUCKET)
       .getPublicUrl(path);
 
-    // 旧ファイルは Storage に残す（世代管理はスコープ外・指示書87）
+    // 旧ファイルは Storage に残す（指示書87）。指示書88: 旧doc全体を snapshot として履歴に保存し、
+    // 履歴から旧版を開ける/DLできるようにする（prevFileUrl/prevFilePath/旧fileName/旧updatedAt を含む）。
+    const prevDoc: LibraryDoc = { ...store.docs[idx] };
     const updated: LibraryDoc = {
       ...store.docs[idx],
       fileName,
@@ -276,6 +278,7 @@ export async function POST(req: NextRequest) {
       action: "replace",
       docId: updated.id,
       docTitle: updated.title,
+      snapshot: prevDoc, // 差し替え前の版（履歴から開く/DL する）
     });
     return NextResponse.json({ ok: true, doc: updated });
   } catch (e) {

@@ -1,14 +1,16 @@
 "use client";
 
-// 資料庫の本体UI（指示書86＋87・wiki方式）
+// 資料庫の本体UI（指示書86＋87＋88＋89）
 // - タブ: 「資料一覧」「変更履歴」。
 // - 一覧: 検索窓＋カテゴリチップ（複数選択）＋件数。カード（開く/DL・編集・削除）。
-// - 登録: ＋資料を登録 → ファイル選択 → AIが下書き提案（タイトル/カテゴリ/キーワード/要約）→ 編集して送信。
-//   登録＝即公開（承認なし・87）。抽出不能ファイルは手入力にフォールバック。
-// - 編集・削除・復元・差し替えはログインユーザー全員が可能（87）。削除は確認ダイアログ必須。
-// - すべての操作はサーバー(Service Role)経由。変更履歴に記録され、削除は履歴から復元できる。
+// - 登録: 単発（＋資料を登録・確認フォーム）と、一括（ドラッグ&ドロップ/複数選択・89）。
+//   一括はAI提案をそのまま自動確定で登録（wiki方式＝後から編集・履歴で担保）。
+// - 88: 変更履歴の差し替えエントリから「旧版を開く/DL」できる（snapshot利用）。
+// - 89 Part B: マウント時にまず auth.getUser() でセッションを確立してから取得（Cookie同期のレース対策）。
+//   これをしないと初回ロードでサーバーがCookieを認識できず 401→「ログインが必要です」になる（profileページと同じ流儀）。
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -43,11 +45,14 @@ import {
 import { Label } from "@/components/ui/label";
 import {
   LIBRARY_CATEGORIES,
+  LIBRARY_MAX_BYTES,
+  isSupportedLibraryFile,
   filterDocs,
   fileKind,
   opensInBrowser,
   FILE_KIND_META,
   ACTION_META,
+  genLibraryId,
   type LibraryDoc,
   type LibraryCategory,
   type LibraryLogEntry,
@@ -80,10 +85,68 @@ function formatDateTime(iso: string): string {
 }
 
 // 開く/ダウンロードのリンク先。PDFはそのまま新規タブ、それ以外は ?download で保存を促す。
-function fileHref(doc: LibraryDoc): string {
-  if (opensInBrowser(doc.mimeType, doc.fileName)) return doc.fileUrl;
-  const sep = doc.fileUrl.includes("?") ? "&" : "?";
-  return `${doc.fileUrl}${sep}download=${encodeURIComponent(doc.fileName || "download")}`;
+function fileHref(d: {
+  fileUrl: string;
+  fileName: string;
+  mimeType: string;
+}): string {
+  if (opensInBrowser(d.mimeType, d.fileName)) return d.fileUrl;
+  const sep = d.fileUrl.includes("?") ? "&" : "?";
+  return `${d.fileUrl}${sep}download=${encodeURIComponent(d.fileName || "download")}`;
+}
+
+const stripExt = (name: string) => name.replace(/\.[^.]+$/, "");
+
+// ドロップされた DataTransfer からファイル一覧を取得（フォルダは webkitGetAsEntry で再帰走査・89）
+async function filesFromDataTransfer(dt: DataTransfer): Promise<File[]> {
+  const items = dt.items;
+  // items API が使えない場合は通常の files（複数ファイル）にフォールバック
+  const supportsEntry =
+    items && items.length > 0 && typeof items[0].webkitGetAsEntry === "function";
+  if (!supportsEntry) return Array.from(dt.files);
+
+  // entry は同期的に取り出す必要がある（後で await すると items が失効するため）
+  const entries: any[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const e = (items[i] as any).webkitGetAsEntry?.();
+    if (e) entries.push(e);
+  }
+  const files: File[] = [];
+  const walk = async (entry: any): Promise<void> => {
+    if (entry.isFile) {
+      const f: File = await new Promise((res, rej) => entry.file(res, rej));
+      files.push(f);
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      const readBatch = (): Promise<any[]> =>
+        new Promise((res, rej) => reader.readEntries(res, rej));
+      let batch = await readBatch();
+      while (batch.length > 0) {
+        for (const en of batch) await walk(en);
+        batch = await readBatch();
+      }
+    }
+  };
+  for (const e of entries) await walk(e);
+  return files.length > 0 ? files : Array.from(dt.files);
+}
+
+// 限定並列でタスクを回す（AI解析の同時実行を2〜3に制限・89）
+async function runPool<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>
+): Promise<void> {
+  let i = 0;
+  const n = Math.min(concurrency, items.length);
+  await Promise.all(
+    Array.from({ length: n }, async () => {
+      while (i < items.length) {
+        const idx = i++;
+        await worker(items[idx]);
+      }
+    })
+  );
 }
 
 type FormState = {
@@ -112,6 +175,34 @@ const EMPTY_FORM: FormState = {
   searchText: "",
 };
 
+type BulkStatus =
+  | "待機中"
+  | "AI解析中"
+  | "登録中"
+  | "登録済み"
+  | "失敗"
+  | "スキップ";
+
+type BulkItem = {
+  id: string;
+  file: File;
+  name: string;
+  status: BulkStatus;
+  reason?: string;
+  title?: string;
+  category?: string;
+  dup?: boolean;
+};
+
+const BULK_STATUS_STYLE: Record<BulkStatus, string> = {
+  待機中: "bg-muted text-muted-foreground",
+  AI解析中: "bg-blue-100 text-blue-700",
+  登録中: "bg-amber-100 text-amber-700",
+  登録済み: "bg-emerald-100 text-emerald-700",
+  失敗: "bg-red-100 text-red-700",
+  スキップ: "bg-stone-200 text-stone-600",
+};
+
 export default function LibraryBrowser() {
   const [docs, setDocs] = useState<LibraryDoc[]>([]);
   const [log, setLog] = useState<LibraryLogEntry[]>([]);
@@ -121,22 +212,49 @@ export default function LibraryBrowser() {
   const [query, setQuery] = useState("");
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
 
-  // 登録/編集ダイアログ
+  // 登録/編集ダイアログ（単発）
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [parsing, setParsing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [fallbackNote, setFallbackNote] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 削除確認
   const [deleteTarget, setDeleteTarget] = useState<LibraryDoc | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // 一括登録（89）
+  const [bulkItems, setBulkItems] = useState<BulkItem[]>([]);
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const bulkInputRef = useRef<HTMLInputElement>(null);
+  const docsRef = useRef<LibraryDoc[]>([]);
+  docsRef.current = docs;
+
   const refresh = useCallback(async () => {
+    // 89 Part B: まずセッションを確立（Cookie同期）。未実施だと初回401になる。
     try {
-      const res = await fetch("/api/library", { cache: "no-store" });
+      await getSupabaseBrowserClient().auth.getUser();
+    } catch {
+      /* noop */
+    }
+    try {
+      let res = await fetch("/api/library", { cache: "no-store" });
+      if (res.status === 401) {
+        // レース対策: 少し待ってセッション再確認 → 1回だけ再試行
+        await new Promise((r) => setTimeout(r, 800));
+        try {
+          await getSupabaseBrowserClient().auth.getUser();
+        } catch {
+          /* noop */
+        }
+        res = await fetch("/api/library", { cache: "no-store" });
+      }
+      if (res.status === 401) {
+        setLoadError("ログインが必要です。ページを再読み込みしてください。");
+        return;
+      }
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error || `読み込みに失敗しました (${res.status})`);
@@ -167,7 +285,7 @@ export default function LibraryBrowser() {
     );
   };
 
-  // ─── 登録ダイアログを開く ───
+  // ─── 単発 登録/編集 ───
   const openCreate = () => {
     setForm(EMPTY_FORM);
     setFormError("");
@@ -193,19 +311,11 @@ export default function LibraryBrowser() {
     setFormOpen(true);
   };
 
-  // ファイル選択 → AI提案（登録時のみ自動実行。編集時は差し替えファイルとして扱う）
   const onPickFile = async (file: File | null) => {
     if (!file) return;
-    setForm((f) => ({
-      ...f,
-      file,
-      fileName: file.name,
-      mimeType: file.type,
-    }));
+    setForm((f) => ({ ...f, file, fileName: file.name, mimeType: file.type }));
     setFormError("");
     setFallbackNote(false);
-
-    // AI提案は登録時のみ自動（編集の差し替えはメタを維持）
     if (form.mode !== "create") return;
 
     setParsing(true);
@@ -213,10 +323,7 @@ export default function LibraryBrowser() {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("fileName", file.name);
-      const res = await fetch("/api/library/parse", {
-        method: "POST",
-        body: fd,
-      });
+      const res = await fetch("/api/library/parse", { method: "POST", body: fd });
       const data = (await res.json()) as LibrarySuggestion & { error?: string };
       if (!res.ok) throw new Error(data.error || "AI提案に失敗しました");
       if (data.fallback) {
@@ -224,26 +331,21 @@ export default function LibraryBrowser() {
         setForm((f) => ({
           ...f,
           searchText: data.searchText || "",
-          // タイトル未設定ならファイル名をタイトル初期値に
-          title: f.title || file.name.replace(/\.[^.]+$/, ""),
+          title: f.title || stripExt(file.name),
         }));
       } else {
         setForm((f) => ({
           ...f,
-          title: data.title || file.name.replace(/\.[^.]+$/, ""),
+          title: data.title || stripExt(file.name),
           category: data.category,
           keywordsText: data.keywords.join("、"),
           summary: data.summary,
           searchText: data.searchText || "",
         }));
       }
-    } catch (e) {
-      // AI失敗でも手入力で登録できる
+    } catch {
       setFallbackNote(true);
-      setForm((f) => ({
-        ...f,
-        title: f.title || file.name.replace(/\.[^.]+$/, ""),
-      }));
+      setForm((f) => ({ ...f, title: f.title || stripExt(file.name) }));
     } finally {
       setParsing(false);
     }
@@ -277,7 +379,6 @@ export default function LibraryBrowser() {
           throw new Error(j.error || "登録に失敗しました");
         }
       } else {
-        // メタ編集
         const res = await fetch("/api/library/manage", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -294,7 +395,6 @@ export default function LibraryBrowser() {
           const j = await res.json().catch(() => ({}));
           throw new Error(j.error || "編集に失敗しました");
         }
-        // ファイル差し替えがあれば追加で実行
         if (form.file) {
           const fd = new FormData();
           fd.append("id", form.id);
@@ -358,8 +458,140 @@ export default function LibraryBrowser() {
     }
   };
 
-  // 現存する docId のセット（履歴の「復元」出し分け用）
   const existingIds = useMemo(() => new Set(docs.map((d) => d.id)), [docs]);
+
+  // ─── 一括登録（89） ───
+  const patchBulk = (id: string, patch: Partial<BulkItem>) =>
+    setBulkItems((prev) =>
+      prev.map((it) => (it.id === id ? { ...it, ...patch } : it))
+    );
+
+  // 1ファイル分: AI解析 → （直列化して）登録
+  const processOne = useCallback(
+    async (
+      item: BulkItem,
+      serializeRegister: (task: () => Promise<void>) => Promise<void>
+    ) => {
+      try {
+        patchBulk(item.id, { status: "AI解析中" });
+        let suggestion: (LibrarySuggestion & { error?: string }) | null = null;
+        try {
+          const fd = new FormData();
+          fd.append("file", item.file);
+          fd.append("fileName", item.name);
+          const res = await fetch("/api/library/parse", {
+            method: "POST",
+            body: fd,
+          });
+          if (res.ok) suggestion = await res.json();
+        } catch {
+          /* AI失敗はファイル名で登録に落とす */
+        }
+        const usable = suggestion && !suggestion.fallback;
+        const title = usable && suggestion!.title ? suggestion!.title : stripExt(item.name);
+        const category = usable ? suggestion!.category : "その他";
+        const keywords = usable ? suggestion!.keywords : [];
+        const summary = usable ? suggestion!.summary : "";
+        const searchText = suggestion?.searchText || "";
+
+        patchBulk(item.id, { status: "登録中", title, category });
+        await serializeRegister(async () => {
+          const fd = new FormData();
+          fd.append("file", item.file);
+          fd.append("fileName", item.name);
+          fd.append("title", title);
+          fd.append("category", category);
+          fd.append("keywords", JSON.stringify(keywords));
+          fd.append("summary", summary);
+          fd.append("searchText", searchText);
+          const res = await fetch("/api/library", { method: "POST", body: fd });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || "登録に失敗しました");
+          }
+        });
+        patchBulk(item.id, { status: "登録済み", title, category });
+      } catch (e) {
+        patchBulk(item.id, {
+          status: "失敗",
+          reason: e instanceof Error ? e.message : "失敗しました",
+        });
+      }
+    },
+    []
+  );
+
+  const startBulk = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
+      const existingNames = new Set(docsRef.current.map((d) => d.fileName));
+      const items: BulkItem[] = files.map((f) => {
+        const base: BulkItem = {
+          id: genLibraryId("bulk"),
+          file: f,
+          name: f.name,
+          status: "待機中",
+          dup: existingNames.has(f.name),
+        };
+        if (f.size === 0 || f.size > LIBRARY_MAX_BYTES) {
+          return { ...base, status: "スキップ", reason: "サイズ超過（20MBまで）" };
+        }
+        if (!isSupportedLibraryFile(f.name, f.type)) {
+          return { ...base, status: "スキップ", reason: "対応外の形式" };
+        }
+        return base;
+      });
+      setBulkItems(items);
+      setBulkRunning(true);
+
+      // portal_library への追記は上書き事故を避けるため直列化（89）
+      let regChain: Promise<void> = Promise.resolve();
+      const serializeRegister = (task: () => Promise<void>): Promise<void> => {
+        const run = regChain.then(task);
+        regChain = run.then(
+          () => {},
+          () => {}
+        );
+        return run;
+      };
+
+      const toProcess = items.filter((i) => i.status === "待機中");
+      await runPool(toProcess, 3, (item) => processOne(item, serializeRegister));
+
+      setBulkRunning(false);
+      await refresh();
+    },
+    [processOne, refresh]
+  );
+
+  const retryOne = useCallback(
+    async (item: BulkItem) => {
+      // 単発リトライ（直列化不要＝そのまま実行）
+      await processOne(item, (task) => task());
+    },
+    [processOne]
+  );
+
+  const onDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (bulkRunning) return;
+    const files = await filesFromDataTransfer(e.dataTransfer);
+    startBulk(files);
+  };
+
+  const bulkSummary = useMemo(() => {
+    let done = 0,
+      skip = 0,
+      fail = 0;
+    for (const it of bulkItems) {
+      if (it.status === "登録済み") done++;
+      else if (it.status === "スキップ") skip++;
+      else if (it.status === "失敗") fail++;
+    }
+    const settled = done + skip + fail;
+    return { done, skip, fail, settled, total: bulkItems.length };
+  }, [bulkItems]);
 
   return (
     <div className="space-y-4">
@@ -376,6 +608,123 @@ export default function LibraryBrowser() {
 
         {/* ─── 資料一覧 ─── */}
         <TabsContent value="docs" className="space-y-4 mt-4">
+          {/* 一括ドロップゾーン（89） */}
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!bulkRunning) setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={onDrop}
+            onClick={() => !bulkRunning && bulkInputRef.current?.click()}
+            className={`rounded-lg border-2 border-dashed p-4 text-center cursor-pointer transition-colors ${
+              dragOver
+                ? "border-teal bg-teal/5"
+                : "border-input hover:bg-muted/50"
+            }`}
+          >
+            <p className="text-sm">
+              📥 ここにファイルやフォルダをドラッグ&ドロップ、またはクリックして複数選択
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              PDF / Word / PowerPoint / Excel（20MBまで）。AIが自動で分類して登録します。
+            </p>
+            <input
+              ref={bulkInputRef}
+              type="file"
+              multiple
+              accept=".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,application/pdf"
+              className="hidden"
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                if (files.length) startBulk(files);
+                e.target.value = "";
+              }}
+            />
+          </div>
+
+          {/* 一括キュー */}
+          {bulkItems.length > 0 && (
+            <div className="border rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <p className="text-sm font-medium">
+                  一括登録: {bulkSummary.settled}/{bulkSummary.total}
+                  {bulkRunning && (
+                    <span className="text-red-600 ml-2">
+                      登録中はページを閉じないでください
+                    </span>
+                  )}
+                </p>
+                {!bulkRunning && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setBulkItems([])}
+                  >
+                    クリア
+                  </Button>
+                )}
+              </div>
+              <div className="h-2 w-full bg-muted rounded overflow-hidden">
+                <div
+                  className="h-full bg-teal transition-all"
+                  style={{
+                    width: `${
+                      bulkSummary.total
+                        ? (bulkSummary.settled / bulkSummary.total) * 100
+                        : 0
+                    }%`,
+                  }}
+                />
+              </div>
+              {!bulkRunning && bulkSummary.total > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  ✅ {bulkSummary.done}件登録 ・ ⏭ {bulkSummary.skip}件スキップ ・ ✗{" "}
+                  {bulkSummary.fail}件失敗
+                </p>
+              )}
+              <div className="max-h-72 overflow-y-auto space-y-1.5">
+                {bulkItems.map((it) => (
+                  <div
+                    key={it.id}
+                    className="flex items-center gap-2 text-sm border rounded px-2 py-1.5 flex-wrap"
+                  >
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${BULK_STATUS_STYLE[it.status]}`}
+                    >
+                      {it.status}
+                    </span>
+                    <span className="truncate flex-1 min-w-0" title={it.name}>
+                      {it.title || it.name}
+                      {it.dup && (
+                        <span className="text-amber-600 ml-1">⚠同名あり</span>
+                      )}
+                    </span>
+                    {it.category && (
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {it.category}
+                      </span>
+                    )}
+                    {it.reason && (
+                      <span className="text-xs text-red-600 shrink-0">
+                        {it.reason}
+                      </span>
+                    )}
+                    {it.status === "失敗" && !bulkRunning && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => retryOne(it)}
+                      >
+                        再試行
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-3">
             <Input
               placeholder="キーワードで検索（タイトル・キーワード・要約・本文）"
@@ -424,7 +773,7 @@ export default function LibraryBrowser() {
           {!loading && filtered.length === 0 && !loadError && (
             <p className="text-sm text-muted-foreground py-8 text-center">
               {docs.length === 0
-                ? "まだ資料がありません。「＋資料を登録」から追加してください。"
+                ? "まだ資料がありません。上のエリアにドラッグ&ドロップして登録してください。"
                 : "条件に合う資料がありません。"}
             </p>
           )}
@@ -525,6 +874,12 @@ export default function LibraryBrowser() {
                   e.action === "delete" &&
                   e.snapshot &&
                   !existingIds.has(e.docId);
+                // 88: 差し替えは snapshot（旧版）を開く/DL できる
+                const prev =
+                  e.action === "replace" && e.snapshot ? e.snapshot : null;
+                const prevIsPdf = prev
+                  ? opensInBrowser(prev.mimeType, prev.fileName)
+                  : false;
                 return (
                   <div
                     key={e.id}
@@ -544,6 +899,17 @@ export default function LibraryBrowser() {
                     <span className="text-xs text-muted-foreground">
                       {formatDateTime(e.at)}
                     </span>
+                    {prev && (
+                      <a
+                        href={fileHref(prev)}
+                        target={prevIsPdf ? "_blank" : undefined}
+                        rel="noreferrer"
+                      >
+                        <Button size="sm" variant="outline">
+                          {prevIsPdf ? "旧版を開く" : "旧版をDL"}
+                        </Button>
+                      </a>
+                    )}
                     {canRestore && (
                       <Button
                         size="sm"
@@ -561,7 +927,7 @@ export default function LibraryBrowser() {
         </TabsContent>
       </Tabs>
 
-      {/* ─── 登録/編集ダイアログ ─── */}
+      {/* ─── 登録/編集ダイアログ（単発） ─── */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -586,7 +952,6 @@ export default function LibraryBrowser() {
                 )}
               </Label>
               <input
-                ref={fileInputRef}
                 type="file"
                 accept=".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,application/pdf"
                 onChange={(e) => onPickFile(e.target.files?.[0] ?? null)}

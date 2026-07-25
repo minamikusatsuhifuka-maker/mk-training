@@ -244,6 +244,35 @@ export function extForFile(mimeType: string, fileName = ""): string {
   }
 }
 
+// ─── 一括登録・バリデーション用（指示書89） ───
+
+export const LIBRARY_MAX_BYTES = 20 * 1024 * 1024; // 20MB（parse/登録APIと共通）
+
+// 資料として受け付ける拡張子（これ以外は一括登録でスキップ）
+export const SUPPORTED_EXTENSIONS = [
+  "pdf",
+  "doc",
+  "docx",
+  "ppt",
+  "pptx",
+  "xls",
+  "xlsx",
+] as const;
+
+function extOf(fileName: string): string {
+  const n = (fileName || "").toLowerCase();
+  const dot = n.lastIndexOf(".");
+  return dot >= 0 ? n.slice(dot + 1) : "";
+}
+
+// 一括登録で受け付けられる形式か（対応外はスキップ）
+export function isSupportedLibraryFile(fileName: string, mimeType = ""): boolean {
+  const ext = extOf(fileName);
+  if ((SUPPORTED_EXTENSIONS as readonly string[]).includes(ext)) return true;
+  // 拡張子が無い/不明でも MIME が既知ドキュメントなら許可
+  return fileKind(mimeType, fileName) !== "other";
+}
+
 // ─── クライアント側検索フィルタ ───
 
 export function filterDocs(
