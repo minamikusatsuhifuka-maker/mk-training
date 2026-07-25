@@ -26,12 +26,14 @@ export type LibraryCategory = (typeof LIBRARY_CATEGORIES)[number];
 export const DEFAULT_CATEGORY: LibraryCategory = "その他";
 
 export const KEYWORDS_MAX = 10;
+export const TREATMENTS_MAX = 5; // 1docあたりの施術・機器タグ上限（指示書90）
 
 export type LibraryDoc = {
   id: string;
   title: string;
   category: LibraryCategory;
   keywords: string[];
+  treatments: string[]; // 施術・機器タグ（0〜5個・AI検知＋手修正・指示書90）
   summary: string;
   fileName: string;
   filePath: string; // Storage パス（library/xxx.pdf）
@@ -61,7 +63,8 @@ export type LibraryLogEntry = {
   action: LibraryAction;
   docId: string;
   docTitle: string;
-  snapshot?: LibraryDoc; // delete 時のみ元 doc を保持（復元用）
+  note?: string; // 変更内容の補足（例「施術タグ付与: メソナJ」・指示書90）
+  snapshot?: LibraryDoc; // delete/replace 時に元 doc を保持（復元・旧版表示用）
 };
 
 export type LibraryLog = { entries: LibraryLogEntry[]; updatedAt: string };
@@ -71,6 +74,7 @@ export type LibrarySuggestion = {
   title: string;
   category: LibraryCategory;
   keywords: string[];
+  treatments: string[]; // 施術・機器タグ提案（指示書90）
   summary: string;
   searchText: string;
   // 抽出できず手入力にフォールバックする場合 true（AI提案なし）
@@ -94,6 +98,16 @@ export function normalizeKeywords(input: unknown): string[] {
   return Array.from(new Set(cleaned)).slice(0, KEYWORDS_MAX);
 }
 
+// 施術・機器タグの正規化（trim・重複除去・空破棄・上限5・指示書90）
+export function normalizeTreatments(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const cleaned = input
+    .filter((v): v is string => typeof v === "string")
+    .map((s) => s.trim())
+    .filter((s) => s !== "");
+  return Array.from(new Set(cleaned)).slice(0, TREATMENTS_MAX);
+}
+
 function str(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
@@ -113,6 +127,7 @@ export function normalizeDoc(raw: unknown): LibraryDoc | null {
     title,
     category: normalizeCategory(g.category),
     keywords: normalizeKeywords(g.keywords),
+    treatments: normalizeTreatments(g.treatments),
     summary: str(g.summary),
     fileName: str(g.fileName),
     filePath: str(g.filePath),
@@ -158,6 +173,7 @@ export function normalizeLogEntry(raw: unknown): LibraryLogEntry | null {
     action,
     docId: str(g.docId),
     docTitle: str(g.docTitle),
+    ...(str(g.note) ? { note: str(g.note) } : {}),
     ...(snap ? { snapshot: snap } : {}),
   };
 }
@@ -275,27 +291,59 @@ export function isSupportedLibraryFile(fileName: string, mimeType = ""): boolean
 
 // ─── クライアント側検索フィルタ ───
 
+export const UNTAGGED_CHIP = "__untagged__"; // 「タグなし」チップの内部値
+
 export function filterDocs(
   docs: LibraryDoc[],
   query: string,
-  selectedCategories: string[]
+  selectedCategories: string[],
+  selectedTreatments: string[] = [],
+  untaggedSelected = false
 ): LibraryDoc[] {
   const q = query.trim().toLowerCase();
   const cats = new Set(selectedCategories);
+  const treats = selectedTreatments;
+  const treatActive = treats.length > 0 || untaggedSelected;
   return docs.filter((d) => {
     if (cats.size > 0 && !cats.has(d.category)) return false;
+    // 施術・機器タグ絞り込み: 実タグは AND、「タグなし」は OR 併用
+    if (treatActive) {
+      const matchUntagged = untaggedSelected && d.treatments.length === 0;
+      const matchTags =
+        treats.length > 0 && treats.every((t) => d.treatments.includes(t));
+      if (!(matchUntagged || matchTags)) return false;
+    }
     if (!q) return true;
     const hay = [
       d.title,
       d.summary,
       d.searchText,
       d.keywords.join(" "),
+      d.treatments.join(" "),
       d.category,
     ]
       .join(" ")
       .toLowerCase();
     return hay.includes(q);
   });
+}
+
+// 登録資料から施術・機器タグの一覧を件数つきで集計（多い順・指示書90）
+export function collectTreatmentCounts(
+  docs: LibraryDoc[]
+): { tag: string; count: number }[] {
+  const map = new Map<string, number>();
+  for (const d of docs) {
+    for (const t of d.treatments) map.set(t, (map.get(t) ?? 0) + 1);
+  }
+  return Array.from(map.entries())
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, "ja"));
+}
+
+// 既知タグの一覧（parse プロンプトへ渡す・重複除去）
+export function allKnownTreatments(docs: LibraryDoc[]): string[] {
+  return collectTreatmentCounts(docs).map((x) => x.tag);
 }
 
 // ─── ID 採番（モジュール読込時に new Date() しない・関数内でのみ） ───

@@ -17,6 +17,7 @@ import {
   LIBRARY_CATEGORIES,
   normalizeCategory,
   normalizeKeywords,
+  normalizeTreatments,
   fileKind,
   type LibrarySuggestion,
 } from "@/lib/library";
@@ -51,7 +52,15 @@ function parseJsonObjectLoose(raw: string): Record<string, unknown> | null {
   return null;
 }
 
-function buildPrompt(fileName: string, bodyHint: string): string {
+function buildPrompt(
+  fileName: string,
+  bodyHint: string,
+  knownTags: string[]
+): string {
+  const tagList =
+    knownTags.length > 0
+      ? knownTags.map((t) => `「${t}」`).join("、")
+      : "（まだ登録なし）";
   return `あなたは日本のクリニックの業務アシスタントです。
 添付は院内の説明資料・同意書などのドキュメント（${bodyHint}）です。ファイル名は「${fileName}」。
 内容を読み、次のJSONオブジェクトのみを返してください。
@@ -60,11 +69,17 @@ function buildPrompt(fileName: string, bodyHint: string): string {
   "title": "資料の内容が分かる簡潔な日本語タイトル",
   "category": "5択のいずれか1つ",
   "keywords": ["検索に役立つ語", "..."],
+  "treatments": ["施術名や機器名", "..."],
   "summary": "内容を1行で表す日本語要約（40〜80字程度）"
 }
 
 - category は次の5つから最も適切な1つを厳密に選ぶ: ${LIBRARY_CATEGORIES.join(" / ")}。迷う場合は「その他」。
-- keywords は5〜10個。診療科目・施術名・検査名・書類種別など、スタッフが探す時に打ちそうな語。
+- keywords は5〜10個。診療科目・検査名・書類種別など、スタッフが探す時に打ちそうな語。
+- treatments は「施術・機器の軸」で探すためのタグ（0〜5個）。この資料が扱う施術名・機器名のみを入れる。
+  - 既存タグ一覧: ${tagList}。この中と同じ施術・機器なら**必ず一覧の表記をそのまま使う**（表記ゆれを作らない）。
+  - 本当に新しい施術・機器のときだけ新しい名称を追加してよい。
+  - 一般名詞・症状名・部位名はタグにしない（例:「ほくろ」は施術名でないので不可、「ほくろ切除」は可）。
+  - 該当する施術・機器が無ければ空配列 []。
 - title は資料名がファイルから読めればそれを尊重し、簡潔に整える。
 - 出力はJSONオブジェクトのみ。前後の文章・説明・コードフェンス(\`\`\`)を付けない。JSONは必ず完結させる。`;
 }
@@ -74,6 +89,7 @@ function fallbackResponse(searchText = ""): NextResponse {
     title: "",
     category: "その他",
     keywords: [],
+    treatments: [],
     summary: "",
     searchText: searchText.slice(0, SEARCH_TEXT_LIMIT),
     fallback: true,
@@ -102,21 +118,24 @@ export async function POST(req: NextRequest) {
     } catch {
       return NextResponse.json({ error: "不正なリクエストです" }, { status: 400 });
     }
-    const file = form.get("file");
-    if (!(file instanceof Blob)) {
-      return NextResponse.json({ error: "ファイルがありません" }, { status: 400 });
-    }
-    if (file.size === 0 || file.size > MAX_BYTES) {
-      return NextResponse.json(
-        { error: "ファイルサイズが不正です（20MBまで）" },
-        { status: 400 }
-      );
+    // 既存タグ一覧（表記ゆれ抑制のためプロンプトへ渡す・指示書90）
+    let knownTags: string[] = [];
+    try {
+      const raw = JSON.parse((form.get("knownTags") as string) || "[]");
+      if (Array.isArray(raw))
+        knownTags = raw
+          .filter((v): v is string => typeof v === "string")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .slice(0, 200);
+    } catch {
+      knownTags = [];
     }
 
     const fileName = (form.get("fileName") as string) || "";
-    const mimeType = file.type || "";
-    const kind = fileKind(mimeType, fileName);
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const bodyText = ((form.get("searchText") as string) || "").trim();
+    const file = form.get("file");
+    const hasFile = file instanceof Blob;
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -127,29 +146,57 @@ export async function POST(req: NextRequest) {
     let parts: Record<string, unknown>[];
     let searchText = "";
 
-    if (kind === "pdf") {
-      const base64 = buffer.toString("base64");
-      parts = [
-        { text: buildPrompt(fileName, "PDF・全ページ") },
-        { inline_data: { mime_type: "application/pdf", data: base64 } },
-      ];
-    } else if (kind === "word" || kind === "ppt") {
-      const extracted = await extractOfficeText(buffer, mimeType, fileName);
-      if (!extracted.ok) {
-        // 抽出不能 → 手入力フォールバック（登録は止めない）
+    if (hasFile) {
+      if (file.size === 0 || file.size > MAX_BYTES) {
+        return NextResponse.json(
+          { error: "ファイルサイズが不正です（20MBまで）" },
+          { status: 400 }
+        );
+      }
+      const mimeType = file.type || "";
+      const kind = fileKind(mimeType, fileName);
+      const buffer = Buffer.from(await file.arrayBuffer());
+
+      if (kind === "pdf") {
+        const base64 = buffer.toString("base64");
+        parts = [
+          { text: buildPrompt(fileName, "PDF・全ページ", knownTags) },
+          { inline_data: { mime_type: "application/pdf", data: base64 } },
+        ];
+      } else if (kind === "word" || kind === "ppt") {
+        const extracted = await extractOfficeText(buffer, mimeType, fileName);
+        if (!extracted.ok) {
+          // 抽出不能 → 手入力フォールバック（登録は止めない）
+          return fallbackResponse();
+        }
+        searchText = extracted.text;
+        parts = [
+          {
+            text:
+              buildPrompt(
+                fileName,
+                kind === "word" ? "Word文書" : "PowerPoint",
+                knownTags
+              ) +
+              `\n\n--- 資料本文（抽出テキスト・先頭のみ） ---\n${extracted.text.slice(0, 12000)}`,
+          },
+        ];
+      } else {
+        // Excel・その他・旧形式 → AI提案なしの手入力フォールバック
         return fallbackResponse();
       }
-      searchText = extracted.text;
+    } else if (bodyText) {
+      // ファイルなし・抽出済みテキストモード（既存資料への一括タグ付け・指示書90）
+      searchText = bodyText;
       parts = [
         {
           text:
-            buildPrompt(fileName, kind === "word" ? "Word文書" : "PowerPoint") +
-            `\n\n--- 資料本文（抽出テキスト・先頭のみ） ---\n${extracted.text.slice(0, 12000)}`,
+            buildPrompt(fileName || "既存資料", "抽出済みテキスト", knownTags) +
+            `\n\n--- 資料本文（抽出テキスト・先頭のみ） ---\n${bodyText.slice(0, 12000)}`,
         },
       ];
     } else {
-      // Excel・その他・旧形式 → AI提案なしの手入力フォールバック
-      return fallbackResponse();
+      return NextResponse.json({ error: "ファイルがありません" }, { status: 400 });
     }
 
     const response = await fetch(
@@ -183,6 +230,7 @@ export async function POST(req: NextRequest) {
       title: typeof obj.title === "string" ? obj.title.trim() : "",
       category: normalizeCategory(obj.category),
       keywords: normalizeKeywords(obj.keywords),
+      treatments: normalizeTreatments(obj.treatments),
       summary: typeof obj.summary === "string" ? obj.summary.trim() : "",
       searchText: searchText.slice(0, SEARCH_TEXT_LIMIT),
       fallback: false,

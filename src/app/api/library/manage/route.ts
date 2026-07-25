@@ -23,6 +23,7 @@ import {
   LIBRARY_PATH_PREFIX,
   normalizeCategory,
   normalizeKeywords,
+  normalizeTreatments,
   extForFile,
   genLibraryId,
   type LibraryDoc,
@@ -136,18 +137,24 @@ export async function PATCH(req: NextRequest) {
         body.keywords !== undefined
           ? normalizeKeywords(body.keywords)
           : cur.keywords,
+      treatments:
+        body.treatments !== undefined
+          ? normalizeTreatments(body.treatments)
+          : cur.treatments,
       summary:
         typeof body.summary === "string" ? body.summary.trim() : cur.summary,
       updatedAt: new Date().toISOString(),
     };
     store.docs[idx] = updated;
     await saveStore(admin, store);
+    const note = typeof body.note === "string" ? body.note.trim() : "";
     await appendLog(admin, {
       userId: user.id,
       userName,
       action: "edit",
       docId: updated.id,
       docTitle: updated.title,
+      ...(note ? { note } : {}),
     });
     return NextResponse.json({ ok: true, doc: updated });
   } catch (e) {

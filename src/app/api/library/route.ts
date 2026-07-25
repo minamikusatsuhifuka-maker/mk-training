@@ -19,6 +19,7 @@ import {
   LIBRARY_PATH_PREFIX,
   normalizeCategory,
   normalizeKeywords,
+  normalizeTreatments,
   extForFile,
   genLibraryId,
   type LibraryDoc,
@@ -116,6 +117,14 @@ export async function POST(req: NextRequest) {
   } catch {
     keywords = [];
   }
+  let treatments: string[] = [];
+  try {
+    treatments = normalizeTreatments(
+      JSON.parse((form.get("treatments") as string) || "[]")
+    );
+  } catch {
+    treatments = [];
+  }
   const summary = ((form.get("summary") as string) || "").trim();
   const searchText = ((form.get("searchText") as string) || "").slice(
     0,
@@ -144,6 +153,7 @@ export async function POST(req: NextRequest) {
       title,
       category,
       keywords,
+      treatments,
       summary,
       fileName,
       filePath: path,

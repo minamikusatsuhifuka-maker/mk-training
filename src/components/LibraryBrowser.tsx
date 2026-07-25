@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { isAdminUser } from "@/lib/admin-role";
 import {
   LIBRARY_CATEGORIES,
   LIBRARY_MAX_BYTES,
@@ -53,11 +54,31 @@ import {
   FILE_KIND_META,
   ACTION_META,
   genLibraryId,
+  collectTreatmentCounts,
+  allKnownTreatments,
+  UNTAGGED_CHIP,
   type LibraryDoc,
   type LibraryCategory,
   type LibraryLogEntry,
   type LibrarySuggestion,
 } from "@/lib/library";
+
+// ログイン中の管理者判定（GanttChart と同じ流儀・一括タグ付けボタンの表示制御）
+function useIsAdmin(): boolean {
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    supabase.auth
+      .getUser()
+      .then(({ data }) => setIsAdmin(isAdminUser(data.user)))
+      .catch(() => {});
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setIsAdmin(isAdminUser(session?.user ?? null));
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+  return isAdmin;
+}
 
 // キーワード文字列 → 配列（読点・カンマ・空白区切り）
 function parseKeywords(text: string): string[] {
@@ -158,6 +179,7 @@ type FormState = {
   title: string;
   category: LibraryCategory;
   keywordsText: string;
+  treatmentsText: string;
   summary: string;
   searchText: string;
 };
@@ -171,9 +193,37 @@ const EMPTY_FORM: FormState = {
   title: "",
   category: "その他",
   keywordsText: "",
+  treatmentsText: "",
   summary: "",
   searchText: "",
 };
+
+// 施術タグ一括付与のキュー項目
+type TagStatus =
+  | "待機中"
+  | "AI解析中"
+  | "保存中"
+  | "付与済み"
+  | "タグなし"
+  | "失敗";
+type TagItem = {
+  id: string;
+  docId: string;
+  name: string;
+  status: TagStatus;
+  tags?: string[];
+  reason?: string;
+};
+const TAG_STATUS_STYLE: Record<TagStatus, string> = {
+  待機中: "bg-muted text-muted-foreground",
+  AI解析中: "bg-blue-100 text-blue-700",
+  保存中: "bg-amber-100 text-amber-700",
+  付与済み: "bg-emerald-100 text-emerald-700",
+  タグなし: "bg-stone-200 text-stone-600",
+  失敗: "bg-red-100 text-red-700",
+};
+
+const TREATMENT_CHIPS_INITIAL = 12; // 「もっと見る」前の初期表示数
 
 type BulkStatus =
   | "待機中"
@@ -211,6 +261,13 @@ export default function LibraryBrowser() {
 
   const [query, setQuery] = useState("");
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
+  const [selectedTreatments, setSelectedTreatments] = useState<string[]>([]);
+  const [showAllTags, setShowAllTags] = useState(false);
+  const isAdmin = useIsAdmin();
+
+  // 施術タグ一括付与
+  const [tagItems, setTagItems] = useState<TagItem[]>([]);
+  const [tagRunning, setTagRunning] = useState(false);
 
   // 登録/編集ダイアログ（単発）
   const [formOpen, setFormOpen] = useState(false);
@@ -274,14 +331,36 @@ export default function LibraryBrowser() {
     refresh();
   }, [refresh]);
 
+  const untaggedSelected = selectedTreatments.includes(UNTAGGED_CHIP);
+  const realTreatments = useMemo(
+    () => selectedTreatments.filter((t) => t !== UNTAGGED_CHIP),
+    [selectedTreatments]
+  );
   const filtered = useMemo(
-    () => filterDocs(docs, query, selectedCats),
-    [docs, query, selectedCats]
+    () =>
+      filterDocs(docs, query, selectedCats, realTreatments, untaggedSelected),
+    [docs, query, selectedCats, realTreatments, untaggedSelected]
+  );
+
+  // 施術・機器タグの集計（件数つき・多い順）
+  const treatmentCounts = useMemo(
+    () => collectTreatmentCounts(docs),
+    [docs]
+  );
+  const untaggedCount = useMemo(
+    () => docs.filter((d) => d.treatments.length === 0).length,
+    [docs]
   );
 
   const toggleCat = (cat: string) => {
     setSelectedCats((prev) =>
       prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
+    );
+  };
+
+  const toggleTreatment = (tag: string) => {
+    setSelectedTreatments((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
   };
 
@@ -303,6 +382,7 @@ export default function LibraryBrowser() {
       title: doc.title,
       category: doc.category,
       keywordsText: doc.keywords.join("、"),
+      treatmentsText: doc.treatments.join("、"),
       summary: doc.summary,
       searchText: doc.searchText,
     });
@@ -323,6 +403,7 @@ export default function LibraryBrowser() {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("fileName", file.name);
+      fd.append("knownTags", JSON.stringify(allKnownTreatments(docsRef.current)));
       const res = await fetch("/api/library/parse", { method: "POST", body: fd });
       const data = (await res.json()) as LibrarySuggestion & { error?: string };
       if (!res.ok) throw new Error(data.error || "AI提案に失敗しました");
@@ -339,6 +420,7 @@ export default function LibraryBrowser() {
           title: data.title || stripExt(file.name),
           category: data.category,
           keywordsText: data.keywords.join("、"),
+          treatmentsText: (data.treatments || []).join("、"),
           summary: data.summary,
           searchText: data.searchText || "",
         }));
@@ -364,6 +446,7 @@ export default function LibraryBrowser() {
     setSubmitting(true);
     try {
       const keywords = parseKeywords(form.keywordsText);
+      const treatments = parseKeywords(form.treatmentsText).slice(0, 5);
       if (form.mode === "create") {
         const fd = new FormData();
         fd.append("file", form.file!);
@@ -371,6 +454,7 @@ export default function LibraryBrowser() {
         fd.append("title", form.title.trim());
         fd.append("category", form.category);
         fd.append("keywords", JSON.stringify(keywords));
+        fd.append("treatments", JSON.stringify(treatments));
         fd.append("summary", form.summary.trim());
         fd.append("searchText", form.searchText);
         const res = await fetch("/api/library", { method: "POST", body: fd });
@@ -388,6 +472,7 @@ export default function LibraryBrowser() {
             title: form.title.trim(),
             category: form.category,
             keywords,
+            treatments,
             summary: form.summary.trim(),
           }),
         });
@@ -479,6 +564,10 @@ export default function LibraryBrowser() {
           const fd = new FormData();
           fd.append("file", item.file);
           fd.append("fileName", item.name);
+          fd.append(
+            "knownTags",
+            JSON.stringify(allKnownTreatments(docsRef.current))
+          );
           const res = await fetch("/api/library/parse", {
             method: "POST",
             body: fd,
@@ -491,6 +580,7 @@ export default function LibraryBrowser() {
         const title = usable && suggestion!.title ? suggestion!.title : stripExt(item.name);
         const category = usable ? suggestion!.category : "その他";
         const keywords = usable ? suggestion!.keywords : [];
+        const treatments = usable ? suggestion!.treatments || [] : [];
         const summary = usable ? suggestion!.summary : "";
         const searchText = suggestion?.searchText || "";
 
@@ -502,6 +592,7 @@ export default function LibraryBrowser() {
           fd.append("title", title);
           fd.append("category", category);
           fd.append("keywords", JSON.stringify(keywords));
+          fd.append("treatments", JSON.stringify(treatments));
           fd.append("summary", summary);
           fd.append("searchText", searchText);
           const res = await fetch("/api/library", { method: "POST", body: fd });
@@ -593,6 +684,140 @@ export default function LibraryBrowser() {
     return { done, skip, fail, settled, total: bulkItems.length };
   }, [bulkItems]);
 
+  // ─── 既存資料への施術タグ一括付与（管理者のみ・89の仕組みを流用・指示書90） ───
+  const patchTag = (id: string, patch: Partial<TagItem>) =>
+    setTagItems((prev) =>
+      prev.map((it) => (it.id === id ? { ...it, ...patch } : it))
+    );
+
+  const knownTagsRef = useRef<string[]>([]);
+
+  const processTag = useCallback(
+    async (
+      item: TagItem,
+      serializeSave: (task: () => Promise<void>) => Promise<void>
+    ) => {
+      const doc = docsRef.current.find((d) => d.id === item.docId);
+      if (!doc) {
+        patchTag(item.id, { status: "失敗", reason: "資料が見つかりません" });
+        return;
+      }
+      try {
+        patchTag(item.id, { status: "AI解析中" });
+        let treatments: string[] = [];
+        const fd = new FormData();
+        fd.append("fileName", doc.fileName);
+        fd.append("searchText", doc.searchText);
+        fd.append("knownTags", JSON.stringify(knownTagsRef.current));
+        const res = await fetch("/api/library/parse", {
+          method: "POST",
+          body: fd,
+        });
+        if (res.ok) {
+          const s = (await res.json()) as LibrarySuggestion;
+          treatments = (s.treatments || []).slice(0, 5);
+        }
+        if (treatments.length === 0) {
+          patchTag(item.id, { status: "タグなし" });
+          return;
+        }
+        patchTag(item.id, { status: "保存中", tags: treatments });
+        await serializeSave(async () => {
+          const r = await fetch("/api/library/manage", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "edit",
+              id: doc.id,
+              treatments,
+              note: `施術タグ付与: ${treatments.join("、")}`,
+            }),
+          });
+          if (!r.ok) {
+            const j = await r.json().catch(() => ({}));
+            throw new Error(j.error || "保存に失敗しました");
+          }
+        });
+        // 以降のファイルが既存タグを優先できるよう共有一覧を更新
+        knownTagsRef.current = Array.from(
+          new Set([...knownTagsRef.current, ...treatments])
+        );
+        patchTag(item.id, { status: "付与済み", tags: treatments });
+      } catch (e) {
+        patchTag(item.id, {
+          status: "失敗",
+          reason: e instanceof Error ? e.message : "失敗しました",
+        });
+      }
+    },
+    []
+  );
+
+  const startTagging = useCallback(async () => {
+    if (tagRunning) return;
+    knownTagsRef.current = allKnownTreatments(docsRef.current);
+    // 対象: treatments 未設定（空）のdocのみ。searchText 空はスキップ（タグなし）
+    const candidates = docsRef.current.filter(
+      (d) => d.treatments.length === 0
+    );
+    if (candidates.length === 0) {
+      setTagItems([]);
+      setLoadError("施術タグ未設定の資料はありません。");
+      return;
+    }
+    const items: TagItem[] = candidates.map((d) => {
+      const base: TagItem = {
+        id: genLibraryId("tag"),
+        docId: d.id,
+        name: d.title || d.fileName,
+        status: "待機中",
+      };
+      if (!d.searchText || !d.searchText.trim()) {
+        return { ...base, status: "タグなし", reason: "本文なし" };
+      }
+      return base;
+    });
+    setTagItems(items);
+    setTagRunning(true);
+
+    let saveChain: Promise<void> = Promise.resolve();
+    const serializeSave = (task: () => Promise<void>): Promise<void> => {
+      const run = saveChain.then(task);
+      saveChain = run.then(
+        () => {},
+        () => {}
+      );
+      return run;
+    };
+
+    const toProcess = items.filter((i) => i.status === "待機中");
+    await runPool(toProcess, 3, (item) => processTag(item, serializeSave));
+
+    setTagRunning(false);
+    await refresh();
+  }, [tagRunning, processTag, refresh]);
+
+  const retryTag = useCallback(
+    async (item: TagItem) => {
+      await processTag(item, (task) => task());
+      await refresh();
+    },
+    [processTag, refresh]
+  );
+
+  const tagSummary = useMemo(() => {
+    let assigned = 0,
+      none = 0,
+      fail = 0;
+    for (const it of tagItems) {
+      if (it.status === "付与済み") assigned++;
+      else if (it.status === "タグなし") none++;
+      else if (it.status === "失敗") fail++;
+    }
+    const settled = assigned + none + fail;
+    return { assigned, none, fail, settled, total: tagItems.length };
+  }, [tagItems]);
+
   return (
     <div className="space-y-4">
       <Tabs defaultValue="docs" className="w-full">
@@ -601,9 +826,20 @@ export default function LibraryBrowser() {
             <TabsTrigger value="docs">📚 資料一覧</TabsTrigger>
             <TabsTrigger value="history">🕘 変更履歴</TabsTrigger>
           </TabsList>
-          <Button onClick={openCreate} className="bg-teal text-teal-foreground">
-            ＋資料を登録
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {isAdmin && (
+              <Button
+                variant="outline"
+                onClick={startTagging}
+                disabled={tagRunning}
+              >
+                {tagRunning ? "付与中…" : "🏷 施術タグを一括付与"}
+              </Button>
+            )}
+            <Button onClick={openCreate} className="bg-teal text-teal-foreground">
+              ＋資料を登録
+            </Button>
+          </div>
         </div>
 
         {/* ─── 資料一覧 ─── */}
@@ -725,9 +961,88 @@ export default function LibraryBrowser() {
             </div>
           )}
 
+          {/* 施術タグ一括付与キュー */}
+          {tagItems.length > 0 && (
+            <div className="border rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <p className="text-sm font-medium">
+                  🏷 施術タグ一括付与: {tagSummary.settled}/{tagSummary.total}
+                  {tagRunning && (
+                    <span className="text-red-600 ml-2">
+                      付与中はページを閉じないでください
+                    </span>
+                  )}
+                </p>
+                {!tagRunning && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setTagItems([])}
+                  >
+                    クリア
+                  </Button>
+                )}
+              </div>
+              <div className="h-2 w-full bg-muted rounded overflow-hidden">
+                <div
+                  className="h-full bg-teal transition-all"
+                  style={{
+                    width: `${
+                      tagSummary.total
+                        ? (tagSummary.settled / tagSummary.total) * 100
+                        : 0
+                    }%`,
+                  }}
+                />
+              </div>
+              {!tagRunning && tagSummary.total > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  🏷 {tagSummary.assigned}件付与 ・ ─ {tagSummary.none}件タグなし ・
+                  ✗ {tagSummary.fail}件失敗
+                </p>
+              )}
+              <div className="max-h-72 overflow-y-auto space-y-1.5">
+                {tagItems.map((it) => (
+                  <div
+                    key={it.id}
+                    className="flex items-center gap-2 text-sm border rounded px-2 py-1.5 flex-wrap"
+                  >
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${TAG_STATUS_STYLE[it.status]}`}
+                    >
+                      {it.status}
+                    </span>
+                    <span className="truncate flex-1 min-w-0" title={it.name}>
+                      {it.name}
+                    </span>
+                    {it.tags && it.tags.length > 0 && (
+                      <span className="text-xs text-teal shrink-0">
+                        {it.tags.join("・")}
+                      </span>
+                    )}
+                    {it.reason && (
+                      <span className="text-xs text-red-600 shrink-0">
+                        {it.reason}
+                      </span>
+                    )}
+                    {it.status === "失敗" && !tagRunning && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => retryTag(it)}
+                      >
+                        再試行
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-3">
             <Input
-              placeholder="キーワードで検索（タイトル・キーワード・要約・本文）"
+              placeholder="キーワードで検索（タイトル・キーワード・施術タグ・要約・本文）"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -759,6 +1074,70 @@ export default function LibraryBrowser() {
                 </button>
               )}
             </div>
+
+            {/* 施術・機器タグのチップ列（自動生成・件数バッジ・多い順・複数選択AND） */}
+            {(treatmentCounts.length > 0 || untaggedCount > 0) && (
+              <div className="flex flex-wrap gap-2 items-center">
+                <span className="text-xs text-muted-foreground mr-1">
+                  施術・機器:
+                </span>
+                {(showAllTags
+                  ? treatmentCounts
+                  : treatmentCounts.slice(0, TREATMENT_CHIPS_INITIAL)
+                ).map(({ tag, count }) => {
+                  const active = selectedTreatments.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => toggleTreatment(tag)}
+                      className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                        active
+                          ? "bg-indigo-600 text-white border-indigo-600"
+                          : "bg-background text-indigo-700 border-indigo-200 hover:bg-indigo-50"
+                      }`}
+                    >
+                      {tag}
+                      <span className="ml-1 opacity-70">{count}</span>
+                    </button>
+                  );
+                })}
+                {!showAllTags &&
+                  treatmentCounts.length > TREATMENT_CHIPS_INITIAL && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllTags(true)}
+                      className="px-2.5 py-1 rounded-full text-xs text-muted-foreground underline"
+                    >
+                      もっと見る（+{treatmentCounts.length - TREATMENT_CHIPS_INITIAL}）
+                    </button>
+                  )}
+                {untaggedCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => toggleTreatment(UNTAGGED_CHIP)}
+                    className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                      untaggedSelected
+                        ? "bg-stone-600 text-white border-stone-600"
+                        : "bg-background text-muted-foreground border-input hover:bg-muted"
+                    }`}
+                  >
+                    タグなし
+                    <span className="ml-1 opacity-70">{untaggedCount}</span>
+                  </button>
+                )}
+                {selectedTreatments.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTreatments([])}
+                    className="px-2.5 py-1 rounded-full text-xs text-muted-foreground underline"
+                  >
+                    クリア
+                  </button>
+                )}
+              </div>
+            )}
+
             <p className="text-sm text-muted-foreground">
               {loading ? "読み込み中…" : `${filtered.length} 件`}
             </p>
@@ -806,6 +1185,19 @@ export default function LibraryBrowser() {
                       <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
                         {doc.summary}
                       </p>
+                    )}
+
+                    {doc.treatments.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {doc.treatments.map((t) => (
+                          <span
+                            key={t}
+                            className="text-[11px] bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full px-2 py-0.5"
+                          >
+                            🏷 {t}
+                          </span>
+                        ))}
+                      </div>
                     )}
 
                     {doc.keywords.length > 0 && (
@@ -892,6 +1284,11 @@ export default function LibraryBrowser() {
                     </span>
                     <span className="font-medium break-words flex-1 min-w-0">
                       {e.docTitle || "（無題）"}
+                      {e.note && (
+                        <span className="block text-xs text-muted-foreground font-normal">
+                          {e.note}
+                        </span>
+                      )}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       {e.userName || "不明"}
@@ -1019,6 +1416,23 @@ export default function LibraryBrowser() {
                   setForm((f) => ({ ...f, keywordsText: e.target.value }))
                 }
                 placeholder="ほくろ、切除、局所麻酔"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="lib-treatments">
+                施術・機器タグ
+                <span className="text-xs text-muted-foreground ml-2">
+                  （施術名/機器名・最大5個・読点/カンマ区切り）
+                </span>
+              </Label>
+              <Input
+                id="lib-treatments"
+                value={form.treatmentsText}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, treatmentsText: e.target.value }))
+                }
+                placeholder="メソナJ、ダーマペン"
               />
             </div>
 
