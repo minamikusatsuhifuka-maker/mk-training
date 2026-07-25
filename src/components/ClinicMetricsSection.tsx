@@ -11,7 +11,7 @@
 // 【整形と描画の分離】期間フィルタ・欠測処理・合算計算は section 側（useMemo）で1度だけ行い、
 // 整形済みの metricMap / plotted / フラグを Chart に渡す。3タイプは同じ整形結果を共有し重複実装しない。
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   loadClinicMetrics,
   buildAxisYms,
@@ -58,17 +58,8 @@ const CHART_TYPES: { key: ChartType; icon: string; label: string }[] = [
   { key: "area", icon: "⛰", label: "面" },
 ];
 
-// 縦幅3段階（84）。compact=82までの現状値。選択は localStorage で維持（既定は標準）。
-type ChartHeight = "compact" | "standard" | "tall";
-const CHART_HEIGHT_KEY = "mk_metrics_chart_height";
-const CHART_HEIGHTS: { key: ChartHeight; label: string; plotH: number }[] = [
-  { key: "compact", label: "コンパクト", plotH: 190 },
-  { key: "standard", label: "標準", plotH: 266 },
-  { key: "tall", label: "たっぷり", plotH: 360 },
-];
-function plotHeightOf(h: ChartHeight): number {
-  return CHART_HEIGHTS.find((c) => c.key === h)?.plotH ?? 266;
-}
+// 縦幅は「たっぷり」360px 固定（指示書91・切替UIと localStorage は廃止）。
+const PLOT_H = 360;
 
 // ツールチップ1か月分の内容（84）。整形済み metricMap から作り、3タイプで共通。
 type TipRow = { label: string; value: string; bold?: boolean };
@@ -136,11 +127,14 @@ function Chart({
   const padB = 54;
   const n = yms.length;
   const MIN_COL = 44;
-  // コンテナ幅に追随（広い画面は幅いっぱい／狭い画面は MIN_COL で横スクロール）
-  const avail = Math.max(0, containerWidth - 2);
+  // コンテナ幅に追随（広い画面は幅いっぱい／狭い画面は MIN_COL で横スクロール）。
+  // 指示書91-3: 外枠の padding(p-2=16px)＋border(2px) を差し引き、fit時に右端がはみ出さないようにする。
+  const CONTENT_INSET = 18;
+  const avail = Math.max(0, containerWidth - CONTENT_INSET);
   const colW =
     n > 0 ? Math.max(MIN_COL, (avail - padL - padR) / n) : MIN_COL;
-  const width = padL + colW * n + padR;
+  // 指示書91-3: コンテンツ幅は必ず「月数×最小列幅」を満たす（全期間でも末尾まで到達できる）
+  const width = Math.max(avail, padL + colW * n + padR);
   const height = padT + plotH + padB;
   const baseline = padT + plotH;
   const xCenter = (i: number) => padL + colW * (i + 0.5);
@@ -600,7 +594,6 @@ export function ClinicMetricsSection() {
   const [rangeEnd, setRangeEnd] = useState("");
   const [rangeInit, setRangeInit] = useState(false);
   const [chartType, setChartType] = useState<ChartType>("bar");
-  const [chartHeight, setChartHeight] = useState<ChartHeight>("standard");
 
   const boxRef = useRef<HTMLDivElement>(null);
   const [boxWidth, setBoxWidth] = useState(0);
@@ -630,27 +623,9 @@ export function ClinicMetricsSection() {
     }
   };
 
-  // localStorage から縦幅復元（84。不正/未保存は "standard"）
-  useEffect(() => {
-    try {
-      const v = localStorage.getItem(CHART_HEIGHT_KEY);
-      if (v === "compact" || v === "standard" || v === "tall") setChartHeight(v);
-    } catch {
-      /* localStorage 不可環境 */
-    }
-  }, []);
-
-  const changeHeight = (h: ChartHeight) => {
-    setChartHeight(h);
-    try {
-      localStorage.setItem(CHART_HEIGHT_KEY, h);
-    } catch {
-      /* 保存できなくても表示は切替 */
-    }
-  };
-
-  // コンテナ幅に追随（82小修正2）
-  useEffect(() => {
+  // コンテナ幅に追随。指示書91-2: 初回は useLayoutEffect で同期測定し、
+  // 幅が取れるまでSVGを描画しない（boxWidth=0→実測 の二段描画による初回アニメを防ぐ）。
+  useLayoutEffect(() => {
     const el = boxRef.current;
     if (!el) return;
     const ro = new ResizeObserver((entries) => {
@@ -753,25 +728,6 @@ export function ClinicMetricsSection() {
               </button>
             ))}
           </div>
-          {/* 縦幅切替（84・セグメント） */}
-          <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden">
-            {CHART_HEIGHTS.map((h) => (
-              <button
-                key={h.key}
-                type="button"
-                onClick={() => changeHeight(h.key)}
-                className={`text-xs px-2 py-1 transition-colors ${
-                  chartHeight === h.key
-                    ? "bg-teal-500 text-white"
-                    : "text-gray-600 hover:bg-gray-50"
-                }`}
-                aria-pressed={chartHeight === h.key}
-                title={`縦幅：${h.label}`}
-              >
-                {h.label}
-              </button>
-            ))}
-          </div>
           <input
             type="month"
             value={rangeStart}
@@ -832,16 +788,22 @@ export function ClinicMetricsSection() {
       </div>
 
       <div ref={boxRef} className="bg-white border border-gray-100 rounded-xl p-2">
-        <Chart
-          yms={displayedYms}
-          metricMap={metricMap}
-          plotted={plotted}
-          hasLegacy={hasLegacy}
-          hasCounseling={hasCounseling}
-          chartType={chartType}
-          containerWidth={boxWidth}
-          plotH={plotHeightOf(chartHeight)}
-        />
+        {/* 指示書91-2: 幅が確定してから描画（二段描画の初回アニメを防ぐ）。
+            未測定時は同じ高さのプレースホルダでレイアウトシフトも防ぐ。 */}
+        {boxWidth > 0 ? (
+          <Chart
+            yms={displayedYms}
+            metricMap={metricMap}
+            plotted={plotted}
+            hasLegacy={hasLegacy}
+            hasCounseling={hasCounseling}
+            chartType={chartType}
+            containerWidth={boxWidth}
+            plotH={PLOT_H}
+          />
+        ) : (
+          <div style={{ height: PLOT_H + 22 + 54 }} aria-hidden />
+        )}
       </div>
 
       {/* 施策の番号つきリスト */}
