@@ -27,7 +27,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Mobile header + drawer */}
-      <div className="flex-1 min-h-screen flex flex-col">
+      {/* min-w-0: flex項目のmin-width:autoが子の内在幅で最小幅を張るのを防ぐ（指示書92）。
+          これが無いと歩みグラフ等の幅広コンテンツが狭画面でviewportを超えて膨張し、
+          body{overflow-x:hidden}に右端を切られてスクロールで末尾に到達できなくなる。 */}
+      <div className="flex-1 min-w-0 min-h-screen flex flex-col">
         <header className="md:hidden bg-teal text-white px-4 py-3 flex items-center justify-between sticky top-0 z-40">
           <button type="button" onClick={() => setMenuOpen(true)} className="text-xl min-w-[44px] min-h-[44px] flex items-center justify-center">
             ☰
@@ -96,7 +99,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <main className="flex-1 overflow-y-auto p-3 md:p-6">
+        <main className="flex-1 min-w-0 overflow-y-auto p-3 md:p-6">
           {children}
         </main>
       </div>
