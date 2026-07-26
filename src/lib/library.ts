@@ -27,6 +27,18 @@ export const DEFAULT_CATEGORY: LibraryCategory = "その他";
 
 export const KEYWORDS_MAX = 10;
 export const TREATMENTS_MAX = 5; // 1docあたりの施術・機器タグ上限（指示書90）
+export const VERSIONS_MAX = 20; // 1docあたりの版履歴上限（指示書95・超過は古い順に破棄）
+
+// 版（差し替え前のファイル世代・指示書95）。ファイル実体はStorageに残る前提でメタのみ蓄積。
+export type DocVersion = {
+  versionId: string;
+  fileName: string;
+  filePath: string;
+  fileUrl: string;
+  mimeType: string;
+  replacedAt: string;
+  replacedBy: string; // 差し替えた人の表示名
+};
 
 export type LibraryDoc = {
   id: string;
@@ -44,6 +56,7 @@ export type LibraryDoc = {
   uploadedByName: string; // 表示名（プロフィール名 or email）
   uploadedAt: string;
   updatedAt: string;
+  versions: DocVersion[]; // 差し替え世代（新しいものほど末尾・指示書95）
 };
 
 export type LibraryStore = { docs: LibraryDoc[]; updatedAt: string };
@@ -53,7 +66,8 @@ export type LibraryAction =
   | "edit"
   | "delete"
   | "replace"
-  | "restore";
+  | "restore"
+  | "rollback";
 
 export type LibraryLogEntry = {
   id: string;
@@ -112,6 +126,28 @@ function str(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
 
+// 版の正規化（不正要素破棄・上限20・古い順に破棄＝末尾20を残す・指示書95）
+export function normalizeVersions(input: unknown): DocVersion[] {
+  if (!Array.isArray(input)) return [];
+  const out: DocVersion[] = [];
+  for (const raw of input) {
+    if (!raw || typeof raw !== "object") continue;
+    const g = raw as Record<string, unknown>;
+    const fileUrl = str(g.fileUrl);
+    if (!fileUrl) continue; // 開けない版は破棄
+    out.push({
+      versionId: str(g.versionId) || `ver-${out.length}`,
+      fileName: str(g.fileName),
+      filePath: str(g.filePath),
+      fileUrl,
+      mimeType: str(g.mimeType),
+      replacedAt: str(g.replacedAt) || new Date(0).toISOString(),
+      replacedBy: str(g.replacedBy),
+    });
+  }
+  return out.slice(-VERSIONS_MAX);
+}
+
 // 1件の資料メタを正規化（必須項目が欠けるものは null＝破棄）。status は無視（87で撤廃）。
 export function normalizeDoc(raw: unknown): LibraryDoc | null {
   if (!raw || typeof raw !== "object") return null;
@@ -138,6 +174,7 @@ export function normalizeDoc(raw: unknown): LibraryDoc | null {
     uploadedByName: str(g.uploadedByName),
     uploadedAt,
     updatedAt: str(g.updatedAt) || uploadedAt,
+    versions: normalizeVersions(g.versions),
   };
 }
 
@@ -362,4 +399,5 @@ export const ACTION_META: Record<
   delete: { label: "削除", className: "bg-red-100 text-red-700" },
   replace: { label: "差し替え", className: "bg-amber-100 text-amber-700" },
   restore: { label: "復元", className: "bg-violet-100 text-violet-700" },
+  rollback: { label: "版を戻す", className: "bg-cyan-100 text-cyan-700" },
 };

@@ -164,6 +164,7 @@ export async function POST(req: NextRequest) {
       uploadedByName: userName,
       uploadedAt: now,
       updatedAt: now,
+      versions: [],
     };
 
     const store = await loadStore(admin);

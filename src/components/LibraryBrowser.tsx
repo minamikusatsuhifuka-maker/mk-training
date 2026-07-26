@@ -61,6 +61,7 @@ import {
   type LibraryCategory,
   type LibraryLogEntry,
   type LibrarySuggestion,
+  type DocVersion,
 } from "@/lib/library";
 
 // ログイン中の管理者判定（GanttChart と同じ流儀・一括タグ付けボタンの表示制御）
@@ -280,6 +281,13 @@ export default function LibraryBrowser() {
   // 削除確認
   const [deleteTarget, setDeleteTarget] = useState<LibraryDoc | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // 版のロールバック確認（指示書95）
+  const [rollbackTarget, setRollbackTarget] = useState<{
+    docId: string;
+    version: DocVersion;
+  } | null>(null);
+  const [rollingBack, setRollingBack] = useState(false);
 
   // 一括登録（89）
   const [bulkItems, setBulkItems] = useState<BulkItem[]>([]);
@@ -543,7 +551,37 @@ export default function LibraryBrowser() {
     }
   };
 
+  const doRollback = async () => {
+    if (!rollbackTarget) return;
+    setRollingBack(true);
+    try {
+      const res = await fetch("/api/library/manage", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "rollback",
+          id: rollbackTarget.docId,
+          versionId: rollbackTarget.version.versionId,
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "版の復元に失敗しました");
+      }
+      setRollbackTarget(null);
+      await refresh();
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : "版の復元に失敗しました");
+    } finally {
+      setRollingBack(false);
+    }
+  };
+
   const existingIds = useMemo(() => new Set(docs.map((d) => d.id)), [docs]);
+
+  // 編集中docの最新状態（版履歴はrefresh後のdocsから引き、rollback直後も更新される）
+  const editingDoc =
+    form.mode === "edit" ? docs.find((d) => d.id === form.id) ?? null : null;
 
   // ─── 一括登録（89） ───
   const patchBulk = (id: string, patch: Partial<BulkItem>) =>
@@ -1449,6 +1487,78 @@ export default function LibraryBrowser() {
               />
             </div>
 
+            {/* 版履歴（指示書95・編集時のみ・版があれば表示） */}
+            {editingDoc && editingDoc.versions.length > 0 && (
+              <div className="space-y-1.5 border-t pt-3">
+                <Label>版履歴（新しい順）</Label>
+                <div className="max-h-56 overflow-y-auto space-y-1.5">
+                  {/* 現行版 */}
+                  <div className="flex items-center gap-2 text-sm border rounded px-2 py-1.5 flex-wrap bg-muted/40">
+                    <span className="shrink-0">
+                      {FILE_KIND_META[fileKind(editingDoc.mimeType, editingDoc.fileName)].icon}
+                    </span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 shrink-0">
+                      現在
+                    </span>
+                    <span className="truncate flex-1 min-w-0" title={editingDoc.fileName}>
+                      {editingDoc.fileName}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground shrink-0">
+                      {formatDateTime(editingDoc.updatedAt)}
+                    </span>
+                    <a
+                      href={fileHref(editingDoc)}
+                      target={opensInBrowser(editingDoc.mimeType, editingDoc.fileName) ? "_blank" : undefined}
+                      rel="noreferrer"
+                    >
+                      <Button size="sm" variant="outline">
+                        {opensInBrowser(editingDoc.mimeType, editingDoc.fileName) ? "開く" : "DL"}
+                      </Button>
+                    </a>
+                  </div>
+                  {/* 旧版（新しい順＝配列逆順） */}
+                  {[...editingDoc.versions].reverse().map((v) => {
+                    const isPdf = opensInBrowser(v.mimeType, v.fileName);
+                    return (
+                      <div
+                        key={v.versionId}
+                        className="flex items-center gap-2 text-sm border rounded px-2 py-1.5 flex-wrap"
+                      >
+                        <span className="shrink-0">
+                          {FILE_KIND_META[fileKind(v.mimeType, v.fileName)].icon}
+                        </span>
+                        <span className="truncate flex-1 min-w-0" title={v.fileName}>
+                          {v.fileName || "（旧版）"}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground shrink-0">
+                          {formatDateTime(v.replacedAt)}
+                          {v.replacedBy ? `・${v.replacedBy}` : ""}
+                        </span>
+                        <a
+                          href={fileHref(v)}
+                          target={isPdf ? "_blank" : undefined}
+                          rel="noreferrer"
+                        >
+                          <Button size="sm" variant="outline">
+                            {isPdf ? "開く" : "DL"}
+                          </Button>
+                        </a>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            setRollbackTarget({ docId: editingDoc.id, version: v })
+                          }
+                        >
+                          この版に戻す
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {formError && <p className="text-sm text-red-600">{formError}</p>}
           </div>
 
@@ -1498,6 +1608,35 @@ export default function LibraryBrowser() {
               className="bg-red-600 hover:bg-red-700 text-white"
             >
               {deleting ? "削除中…" : "削除する"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ─── 版の復元確認（指示書95） ─── */}
+      <AlertDialog
+        open={!!rollbackTarget}
+        onOpenChange={(o) => !o && setRollbackTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>この版に戻しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              「{rollbackTarget?.version.fileName}」を現在のファイルにします。
+              いまの現行版は版履歴に残るので、あとで戻すこともできます。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={rollingBack}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                doRollback();
+              }}
+              disabled={rollingBack}
+              className="bg-teal text-teal-foreground"
+            >
+              {rollingBack ? "復元中…" : "この版に戻す"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

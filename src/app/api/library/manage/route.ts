@@ -21,12 +21,14 @@ import { STAFF_PHOTOS_BUCKET } from "@/lib/staff-profiles";
 import { loadStore, saveStore, loadLog, appendLog } from "@/lib/library-server";
 import {
   LIBRARY_PATH_PREFIX,
+  VERSIONS_MAX,
   normalizeCategory,
   normalizeKeywords,
   normalizeTreatments,
   extForFile,
   genLibraryId,
   type LibraryDoc,
+  type DocVersion,
 } from "@/lib/library";
 
 export const runtime = "nodejs";
@@ -113,6 +115,64 @@ export async function PATCH(req: NextRequest) {
         docTitle: restored.title,
       });
       return NextResponse.json({ ok: true, doc: restored });
+    }
+
+    if (action === "rollback") {
+      // 指示書95: 選択した版(versionId)を現行に据え、現行だったファイルは versions に積む
+      const versionId = typeof body.versionId === "string" ? body.versionId : "";
+      if (!versionId) {
+        return NextResponse.json({ error: "版IDがありません" }, { status: 400 });
+      }
+      const store = await loadStore(admin);
+      const idx = store.docs.findIndex((d) => d.id === id);
+      if (idx < 0) {
+        return NextResponse.json(
+          { error: "資料が見つかりません" },
+          { status: 404 }
+        );
+      }
+      const cur = store.docs[idx];
+      const target = cur.versions.find((v) => v.versionId === versionId);
+      if (!target) {
+        return NextResponse.json(
+          { error: "指定の版が見つかりません" },
+          { status: 404 }
+        );
+      }
+      // 現行ファイルを版として積む
+      const curAsVersion: DocVersion = {
+        versionId: genLibraryId("ver"),
+        fileName: cur.fileName,
+        filePath: cur.filePath,
+        fileUrl: cur.fileUrl,
+        mimeType: cur.mimeType,
+        replacedAt: new Date().toISOString(),
+        replacedBy: userName,
+      };
+      const nextVersions = [
+        ...cur.versions.filter((v) => v.versionId !== versionId),
+        curAsVersion,
+      ].slice(-VERSIONS_MAX);
+      const updated: LibraryDoc = {
+        ...cur,
+        fileName: target.fileName,
+        filePath: target.filePath,
+        fileUrl: target.fileUrl,
+        mimeType: target.mimeType,
+        updatedAt: new Date().toISOString(),
+        versions: nextVersions,
+      };
+      store.docs[idx] = updated;
+      await saveStore(admin, store);
+      await appendLog(admin, {
+        userId: user.id,
+        userName,
+        action: "rollback",
+        docId: updated.id,
+        docTitle: updated.title,
+        note: `版を復元: ${target.fileName || target.versionId}`,
+      });
+      return NextResponse.json({ ok: true, doc: updated });
     }
 
     // action === "edit"
@@ -264,9 +324,19 @@ export async function POST(req: NextRequest) {
       .from(STAFF_PHOTOS_BUCKET)
       .getPublicUrl(path);
 
-    // 旧ファイルは Storage に残す（指示書87）。指示書88: 旧doc全体を snapshot として履歴に保存し、
-    // 履歴から旧版を開ける/DLできるようにする（prevFileUrl/prevFilePath/旧fileName/旧updatedAt を含む）。
+    // 旧ファイルは Storage に残す（指示書87）。指示書88: 旧doc全体を snapshot として履歴に保存。
+    // 指示書95: 旧版を versions[] に push（全世代を追える）。20版超は古い順に破棄。
     const prevDoc: LibraryDoc = { ...store.docs[idx] };
+    const userName2 = await resolveUserName(db, user.id, user.email);
+    const newVersion: DocVersion = {
+      versionId: genLibraryId("ver"),
+      fileName: prevDoc.fileName,
+      filePath: prevDoc.filePath,
+      fileUrl: prevDoc.fileUrl,
+      mimeType: prevDoc.mimeType,
+      replacedAt: new Date().toISOString(),
+      replacedBy: userName2,
+    };
     const updated: LibraryDoc = {
       ...store.docs[idx],
       fileName,
@@ -275,13 +345,15 @@ export async function POST(req: NextRequest) {
       mimeType,
       searchText,
       updatedAt: new Date().toISOString(),
+      versions: [...(store.docs[idx].versions ?? []), newVersion].slice(
+        -VERSIONS_MAX
+      ),
     };
     store.docs[idx] = updated;
     await saveStore(admin, store);
-    const userName = await resolveUserName(db, user.id, user.email);
     await appendLog(admin, {
       userId: user.id,
-      userName,
+      userName: userName2,
       action: "replace",
       docId: updated.id,
       docTitle: updated.title,
