@@ -49,6 +49,8 @@ export type StaffProfile = {
   // 大切にしている価値観（指示書68）: lib/value-keywords.ts の52語から最大5個。
   // 常に公開（customFieldsPrivacy 対象外）。未設定は undefined / 空配列。
   valueKeywords?: string[];
+  // 資料庫のお気に入り（指示書97）: docId配列。個人ごと・端末をまたいで引き継ぐ。
+  favoriteDocIds?: string[];
   // メールアドレスの表示希望（指示書44・既定OFF）。
   // email はサーバー側でセッションから確定して保存する（クライアント値は受け取らない）。
   // 表示は「詳細ダイアログのみ・showEmail=true の人のみ」。一覧カード/indexには載せない。
@@ -80,6 +82,7 @@ export function emptyProfile(userId: string, name = ""): StaffProfile {
     photos: [],
     customFields: {},
     customFieldsPrivacy: {},
+    favoriteDocIds: [],
     showEmail: false,
     email: "",
     updatedAt: "",

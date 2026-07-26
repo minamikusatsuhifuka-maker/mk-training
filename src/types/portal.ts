@@ -269,7 +269,8 @@ export type HomeSectionKey =
   | "weekly_question"
   | "kizuki"
   | "thanks"
-  | "policy";
+  | "policy"
+  | "library_news";
 
 export type HomeSectionConfig = {
   key: HomeSectionKey;
@@ -287,6 +288,7 @@ export const HOME_SECTION_LABELS: Record<HomeSectionKey, string> = {
   kizuki: "💛 気づきシェア",
   thanks: "♥ ありがとうカード",
   policy: "🎯 経営方針",
+  library_news: "📚 資料庫の新着・更新",
 };
 
 // 現状のハードコード順（未設定/不正時のフォールバック用の既定値）
@@ -300,6 +302,7 @@ export const DEFAULT_HOME_LAYOUT: HomeSectionConfig[] = [
   { key: "kizuki", order: 6 },
   { key: "thanks", order: 7 },
   { key: "policy", order: 8 },
+  { key: "library_news", order: 9 },
 ];
 
 // 保存済み設定を検証・補完する。空/不正なら既定順に丸ごとフォールバック（ホームが壊れない）。

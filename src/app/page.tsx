@@ -28,6 +28,7 @@ import { AI_INCHO_URL } from "@/lib/external-links";
 import { WeeklyQuestionSection } from "@/components/WeeklyQuestionSection";
 import { GanttSummarySection } from "@/components/GanttSummarySection";
 import { ClinicMetricsSection } from "@/components/ClinicMetricsSection";
+import { LibraryNewsSection } from "@/components/LibraryNewsSection";
 import {
   DEFAULT_PORTAL_FEATURES,
   loadPortalFeatures,
@@ -800,6 +801,8 @@ export default function PortalHome() {
     gantt_summary: <GanttSummarySection />,
     // クリニックの歩みグラフ（指示書80）: データ0件のときはコンポーネント側でnullを返す
     clinic_metrics: <ClinicMetricsSection />,
+    // 資料庫の新着・更新（指示書97-H）: 0件ならコンポーネント側でnullを返す
+    library_news: <LibraryNewsSection />,
     // みんなへの質問（指示書46-A/47、75）: 機能スイッチOFF・配信停止時はコンポーネント側でnullを返す
     weekly_question: (
       <WeeklyQuestionSection profileNames={reactions.profileNames} />

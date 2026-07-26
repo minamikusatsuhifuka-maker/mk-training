@@ -170,6 +170,17 @@ export async function PUT(req: NextRequest) {
       ? normalizeValueKeywords(body.valueKeywords)
       : current.valueKeywords;
 
+  // 資料庫お気に入り（指示書97）: 送られた場合のみ更新（未送信は既存保持＝68の教訓）。
+  // docId は任意の文字列（ホワイトリスト不可）なので trim・重複除去・上限のみ。
+  const favoriteDocIds =
+    "favoriteDocIds" in body
+      ? (Array.isArray(body.favoriteDocIds) ? body.favoriteDocIds : [])
+          .filter((v): v is string => typeof v === "string" && v.trim() !== "")
+          .map((v) => v.trim().slice(0, 64))
+          .filter((v, i, a) => a.indexOf(v) === i)
+          .slice(0, 500)
+      : current.favoriteDocIds;
+
   const next = {
     ...current,
     userId: user.id,
@@ -184,6 +195,7 @@ export async function PUT(req: NextRequest) {
     customFieldsPrivacy,
     needsSurvey,
     valueKeywords,
+    favoriteDocIds,
     // メール表示の希望（既定OFF）。email はセッションから確定（クライアント値は使わない＝なりすまし防止）
     showEmail: body.showEmail === true,
     email: user.email ?? "",

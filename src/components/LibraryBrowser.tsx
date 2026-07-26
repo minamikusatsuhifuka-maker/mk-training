@@ -268,6 +268,12 @@ export default function LibraryBrowser() {
 
   const [query, setQuery] = useState("");
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
+
+  // A お気に入り（指示書97）: staff_profile.favoriteDocIds。プロフィール全体を保持して丸ごとPUT（68の教訓）
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const profileRef = useRef<Record<string, unknown> | null>(null);
+  // B 最近開いた（指示書97）: localStorage・id配列・最大5
+  const [recentIds, setRecentIds] = useState<string[]>([]);
   const [selectedTreatments, setSelectedTreatments] = useState<string[]>([]);
   const [showAllTags, setShowAllTags] = useState(false);
   const isAdmin = useIsAdmin();
@@ -356,6 +362,89 @@ export default function LibraryBrowser() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // A: 自分のプロフィールを取得して favoriteDocIds を得る（丸ごと保持してPUT時にnameを消さない）
+  useEffect(() => {
+    (async () => {
+      try {
+        await getSupabaseBrowserClient().auth.getUser();
+      } catch {
+        /* noop */
+      }
+      try {
+        const res = await fetch("/api/profile", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        const p = data?.profile;
+        if (p && typeof p === "object") {
+          profileRef.current = p as Record<string, unknown>;
+          setFavoriteIds(
+            Array.isArray(p.favoriteDocIds)
+              ? (p.favoriteDocIds as string[])
+              : []
+          );
+        }
+      } catch {
+        /* 未ログイン等は★非表示のまま */
+      }
+    })();
+  }, []);
+
+  // B: 最近開いた（localStorage）
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("mk_library_recent");
+      const arr = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(arr)) setRecentIds(arr.filter((v) => typeof v === "string").slice(0, 5));
+    } catch {
+      /* noop */
+    }
+  }, []);
+
+  const recordRecent = useCallback((docId: string) => {
+    setRecentIds((prev) => {
+      const next = [docId, ...prev.filter((id) => id !== docId)].slice(0, 5);
+      try {
+        localStorage.setItem("mk_library_recent", JSON.stringify(next));
+      } catch {
+        /* noop */
+      }
+      return next;
+    });
+  }, []);
+
+  const isFavorite = (id: string) => favoriteIds.includes(id);
+
+  // A: ★トグル（楽観更新＋失敗ロールバック）。プロフィール全体を丸ごとPUT（favoriteのみ差し替え）
+  const toggleFavorite = useCallback(
+    async (docId: string) => {
+      const prev = favoriteIds;
+      const next = prev.includes(docId)
+        ? prev.filter((id) => id !== docId)
+        : [...prev, docId];
+      setFavoriteIds(next); // 楽観更新
+      const base = profileRef.current;
+      if (!base) {
+        // プロフィール未取得（未ログイン等）は保存できないのでロールバック
+        setFavoriteIds(prev);
+        setLoadError("お気に入りの保存にはログインが必要です。");
+        return;
+      }
+      try {
+        const res = await fetch("/api/profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...base, favoriteDocIds: next }),
+        });
+        if (!res.ok) throw new Error("保存失敗");
+        profileRef.current = { ...base, favoriteDocIds: next };
+      } catch {
+        setFavoriteIds(prev); // ロールバック
+        setLoadError("お気に入りの保存に失敗しました。");
+      }
+    },
+    [favoriteIds]
+  );
 
   const untaggedSelected = selectedTreatments.includes(UNTAGGED_CHIP);
   const realTreatments = useMemo(
@@ -1024,6 +1113,187 @@ export default function LibraryBrowser() {
     return { assigned, none, fail, settled, total: tagItems.length };
   }, [tagItems]);
 
+  // お気に入り資料（★セクション用・検索/絞り込みの影響を受けない）
+  const favoriteDocs = useMemo(
+    () => docs.filter((d) => favoriteIds.includes(d.id)),
+    [docs, favoriteIds]
+  );
+  // 最近開いた資料（recentIds順・削除済みidはスキップ）
+  const recentDocs = useMemo(() => {
+    const byId = new Map(docs.map((d) => [d.id, d]));
+    return recentIds
+      .map((id) => byId.get(id))
+      .filter((d): d is LibraryDoc => !!d)
+      .slice(0, 5);
+  }, [docs, recentIds]);
+
+  // 1資料カードの描画（一覧・★よく使う資料 で共用）
+  const renderCard = (doc: LibraryDoc) => {
+    const meta = FILE_KIND_META[fileKind(doc.mimeType, doc.fileName)];
+    const isPdf = opensInBrowser(doc.mimeType, doc.fileName);
+    const fav = isFavorite(doc.id);
+    return (
+      <Card key={doc.id} className="flex flex-col">
+        <CardContent className="p-4 flex flex-col gap-3 flex-1">
+          <div className="flex items-start gap-2">
+            <span className="text-xl leading-none">{meta.icon}</span>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-sm leading-snug break-words">
+                {doc.title}
+              </h3>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <Badge variant="secondary" className="text-xs">
+                  {doc.category}
+                </Badge>
+                <span className="text-xs text-muted-foreground">{meta.label}</span>
+                {docVersionNumber(doc) > 1 && (
+                  <span className="text-[10px] font-medium bg-slate-100 text-slate-600 rounded px-1.5 py-0.5">
+                    v{docVersionNumber(doc)}
+                  </span>
+                )}
+              </div>
+            </div>
+            {/* A: お気に入り★トグル */}
+            <button
+              type="button"
+              onClick={() => toggleFavorite(doc.id)}
+              aria-label={fav ? "お気に入り解除" : "お気に入りに追加"}
+              title={fav ? "お気に入り解除" : "お気に入りに追加"}
+              className={`shrink-0 text-lg leading-none ${fav ? "text-amber-500" : "text-gray-300 hover:text-amber-400"}`}
+            >
+              {fav ? "★" : "☆"}
+            </button>
+          </div>
+
+          {/* 更新待ちバナー（指示書96） */}
+          {doc.pendingUpdate && (
+            <div className="rounded-lg border border-cyan-300 bg-cyan-50 p-2 space-y-2">
+              <p className="text-xs text-cyan-800">
+                🔄 更新待ちあり（{doc.pendingUpdate.uploadedByName || "不明"}・
+                {formatDateTime(doc.pendingUpdate.uploadedAt)}）
+              </p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <a
+                  href={fileHref({
+                    fileUrl: doc.pendingUpdate.fileUrl,
+                    fileName: doc.pendingUpdate.fileName,
+                    mimeType: doc.pendingUpdate.mimeType,
+                  })}
+                  target={opensInBrowser(doc.pendingUpdate.mimeType, doc.pendingUpdate.fileName) ? "_blank" : undefined}
+                  rel="noreferrer"
+                >
+                  <Button size="sm" variant="outline">新版を開く</Button>
+                </a>
+                <a href={fileHref(doc)} target={isPdf ? "_blank" : undefined} rel="noreferrer">
+                  <Button size="sm" variant="outline">現行版を開く</Button>
+                </a>
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => {
+                    setKeepTitle(true);
+                    setApproveTarget(doc);
+                  }}
+                  disabled={busyDocId === doc.id}
+                >
+                  ✅ 承認して差し替え
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => withdrawUpdate(doc.id)}
+                  disabled={busyDocId === doc.id}
+                >
+                  ↩ 取り下げ
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {doc.summary && (
+            <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
+              {doc.summary}
+            </p>
+          )}
+
+          {doc.treatments.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {doc.treatments.map((t) => (
+                <span
+                  key={t}
+                  className="text-[11px] bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full px-2 py-0.5"
+                >
+                  🏷 {t}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {doc.keywords.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {doc.keywords.slice(0, 6).map((k) => (
+                <span
+                  key={k}
+                  className="text-[11px] bg-muted text-muted-foreground rounded px-1.5 py-0.5"
+                >
+                  {k}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-auto pt-2 flex items-center justify-between gap-2">
+            <span className="text-[11px] text-muted-foreground truncate">
+              {formatDateTime(doc.updatedAt)}
+            </span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <a
+                href={fileHref(doc)}
+                target={isPdf ? "_blank" : undefined}
+                rel="noreferrer"
+                onClick={() => recordRecent(doc.id)}
+              >
+                <Button size="sm" variant="outline">
+                  {isPdf ? "開く" : "ダウンロード"}
+                </Button>
+              </a>
+              {/* C: PDFのみ印刷（新規タブ表示） */}
+              {isPdf && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    recordRecent(doc.id);
+                    window.open(doc.fileUrl, "_blank", "noopener,noreferrer");
+                  }}
+                  title="新規タブで開いて印刷"
+                >
+                  🖨 印刷
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => openEdit(doc)}
+                aria-label="編集"
+              >
+                ✏️
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setDeleteTarget(doc)}
+                aria-label="削除"
+              >
+                🗑️
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <Tabs defaultValue="docs" className="w-full">
@@ -1254,6 +1524,43 @@ export default function LibraryBrowser() {
             </div>
           )}
 
+          {/* A: ★よく使う資料（検索/絞り込みの影響を受けず常に上部・0件非表示） */}
+          {favoriteDocs.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold">★ よく使う資料</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {favoriteDocs.map((doc) => renderCard(doc))}
+              </div>
+            </div>
+          )}
+
+          {/* B: 最近開いた資料（localStorage・小さく・0件非表示） */}
+          {recentDocs.length > 0 && (
+            <div className="space-y-1.5">
+              <h3 className="text-sm font-semibold">🕒 最近開いた資料</h3>
+              <div className="flex flex-wrap gap-2">
+                {recentDocs.map((doc) => {
+                  const isPdf = opensInBrowser(doc.mimeType, doc.fileName);
+                  const km = FILE_KIND_META[fileKind(doc.mimeType, doc.fileName)];
+                  return (
+                    <a
+                      key={doc.id}
+                      href={fileHref(doc)}
+                      target={isPdf ? "_blank" : undefined}
+                      rel="noreferrer"
+                      onClick={() => recordRecent(doc.id)}
+                      className="text-xs border rounded-full px-3 py-1 hover:bg-muted flex items-center gap-1 max-w-[220px]"
+                      title={doc.title}
+                    >
+                      <span>{km.icon}</span>
+                      <span className="truncate">{doc.title}</span>
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-3">
             <Input
               placeholder="キーワードで検索（タイトル・キーワード・施術タグ・要約・本文）"
@@ -1372,147 +1679,7 @@ export default function LibraryBrowser() {
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filtered.map((doc) => {
-              const meta = FILE_KIND_META[fileKind(doc.mimeType, doc.fileName)];
-              const isPdf = opensInBrowser(doc.mimeType, doc.fileName);
-              return (
-                <Card key={doc.id} className="flex flex-col">
-                  <CardContent className="p-4 flex flex-col gap-3 flex-1">
-                    <div className="flex items-start gap-2">
-                      <span className="text-xl leading-none">{meta.icon}</span>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-sm leading-snug break-words">
-                          {doc.title}
-                        </h3>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          <Badge variant="secondary" className="text-xs">
-                            {doc.category}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {meta.label}
-                          </span>
-                          {docVersionNumber(doc) > 1 && (
-                            <span className="text-[10px] font-medium bg-slate-100 text-slate-600 rounded px-1.5 py-0.5">
-                              v{docVersionNumber(doc)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 更新待ちバナー（指示書96） */}
-                    {doc.pendingUpdate && (
-                      <div className="rounded-lg border border-cyan-300 bg-cyan-50 p-2 space-y-2">
-                        <p className="text-xs text-cyan-800">
-                          🔄 更新待ちあり（{doc.pendingUpdate.uploadedByName || "不明"}・
-                          {formatDateTime(doc.pendingUpdate.uploadedAt)}）
-                        </p>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <a
-                            href={fileHref({
-                              fileUrl: doc.pendingUpdate.fileUrl,
-                              fileName: doc.pendingUpdate.fileName,
-                              mimeType: doc.pendingUpdate.mimeType,
-                            })}
-                            target={opensInBrowser(doc.pendingUpdate.mimeType, doc.pendingUpdate.fileName) ? "_blank" : undefined}
-                            rel="noreferrer"
-                          >
-                            <Button size="sm" variant="outline">新版を開く</Button>
-                          </a>
-                          <a href={fileHref(doc)} target={isPdf ? "_blank" : undefined} rel="noreferrer">
-                            <Button size="sm" variant="outline">現行版を開く</Button>
-                          </a>
-                          <Button
-                            size="sm"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                            onClick={() => {
-                              setKeepTitle(true);
-                              setApproveTarget(doc);
-                            }}
-                            disabled={busyDocId === doc.id}
-                          >
-                            ✅ 承認して差し替え
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => withdrawUpdate(doc.id)}
-                            disabled={busyDocId === doc.id}
-                          >
-                            ↩ 取り下げ
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {doc.summary && (
-                      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
-                        {doc.summary}
-                      </p>
-                    )}
-
-                    {doc.treatments.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {doc.treatments.map((t) => (
-                          <span
-                            key={t}
-                            className="text-[11px] bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full px-2 py-0.5"
-                          >
-                            🏷 {t}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {doc.keywords.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {doc.keywords.slice(0, 6).map((k) => (
-                          <span
-                            key={k}
-                            className="text-[11px] bg-muted text-muted-foreground rounded px-1.5 py-0.5"
-                          >
-                            {k}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="mt-auto pt-2 flex items-center justify-between gap-2">
-                      <span className="text-[11px] text-muted-foreground truncate">
-                        {formatDateTime(doc.updatedAt)}
-                      </span>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <a
-                          href={fileHref(doc)}
-                          target={isPdf ? "_blank" : undefined}
-                          rel="noreferrer"
-                        >
-                          <Button size="sm" variant="outline">
-                            {isPdf ? "開く" : "ダウンロード"}
-                          </Button>
-                        </a>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => openEdit(doc)}
-                          aria-label="編集"
-                        >
-                          ✏️
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setDeleteTarget(doc)}
-                          aria-label="削除"
-                        >
-                          🗑️
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+            {filtered.map((doc) => renderCard(doc))}
           </div>
         </TabsContent>
 
