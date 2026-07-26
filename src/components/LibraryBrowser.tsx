@@ -275,9 +275,10 @@ export default function LibraryBrowser() {
   const [query, setQuery] = useState("");
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
 
-  // A お気に入り（指示書97）: staff_profile.favoriteDocIds。プロフィール全体を保持して丸ごとPUT（68の教訓）
+  // A お気に入り（指示書97/99）: staff_profile.favoriteDocIds。★保存は { favoriteDocIds } のみ部分更新
+  // （PUTは "favoriteDocIds" in body のときだけ更新・未送信は既存保持なので、全体PUTは不要＝上書き事故を防ぐ）
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
-  const profileRef = useRef<Record<string, unknown> | null>(null);
+  const profileLoadedRef = useRef(false); // 自分のプロフィールを取得できたか（未ログイン判定用）
   // B 最近開いた（指示書97）: localStorage・id配列・最大5
   const [recentIds, setRecentIds] = useState<string[]>([]);
   const [selectedTreatments, setSelectedTreatments] = useState<string[]>([]);
@@ -380,7 +381,7 @@ export default function LibraryBrowser() {
     refresh();
   }, [refresh]);
 
-  // A: 自分のプロフィールを取得して favoriteDocIds を得る（丸ごと保持してPUT時にnameを消さない）
+  // A: 自分のプロフィールから現在の★一覧(favoriteDocIds)だけを取得（指示書99: 全体保持はしない）
   useEffect(() => {
     (async () => {
       try {
@@ -394,7 +395,7 @@ export default function LibraryBrowser() {
         const data = await res.json();
         const p = data?.profile;
         if (p && typeof p === "object") {
-          profileRef.current = p as Record<string, unknown>;
+          profileLoadedRef.current = true;
           setFavoriteIds(
             Array.isArray(p.favoriteDocIds)
               ? (p.favoriteDocIds as string[])
@@ -432,7 +433,8 @@ export default function LibraryBrowser() {
 
   const isFavorite = (id: string) => favoriteIds.includes(id);
 
-  // A: ★トグル（楽観更新＋失敗ロールバック）。プロフィール全体を丸ごとPUT（favoriteのみ差し替え）
+  // A: ★トグル（楽観更新＋失敗ロールバック）。指示書99: { favoriteDocIds } だけを部分更新PUT
+  // （プロフィール全体は送らない＝別画面で編集した自己紹介・価値観・サーベイ等を古い値で上書きしない）
   const toggleFavorite = useCallback(
     async (docId: string) => {
       const prev = favoriteIds;
@@ -440,8 +442,7 @@ export default function LibraryBrowser() {
         ? prev.filter((id) => id !== docId)
         : [...prev, docId];
       setFavoriteIds(next); // 楽観更新
-      const base = profileRef.current;
-      if (!base) {
+      if (!profileLoadedRef.current) {
         // プロフィール未取得（未ログイン等）は保存できないのでロールバック
         setFavoriteIds(prev);
         setLoadError("お気に入りの保存にはログインが必要です。");
@@ -451,10 +452,9 @@ export default function LibraryBrowser() {
         const res = await fetch("/api/profile", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...base, favoriteDocIds: next }),
+          body: JSON.stringify({ favoriteDocIds: next }),
         });
         if (!res.ok) throw new Error("保存失敗");
-        profileRef.current = { ...base, favoriteDocIds: next };
       } catch {
         setFavoriteIds(prev); // ロールバック
         setLoadError("お気に入りの保存に失敗しました。");
