@@ -165,6 +165,7 @@ export async function POST(req: NextRequest) {
       uploadedAt: now,
       updatedAt: now,
       versions: [],
+      pendingUpdate: null,
     };
 
     const store = await loadStore(admin);

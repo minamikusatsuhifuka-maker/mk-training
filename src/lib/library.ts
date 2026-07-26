@@ -57,6 +57,25 @@ export type LibraryDoc = {
   uploadedAt: string;
   updatedAt: string;
   versions: DocVersion[]; // 差し替え世代（新しいものほど末尾・指示書95）
+  pendingUpdate: PendingUpdate | null; // 承認待ちの新版（指示書96・同時1件）
+};
+
+// 更新待ち（承認前の新版・指示書96）。この時点で公開版(doc本体)は不変。
+export type PendingUpdate = {
+  fileName: string;
+  filePath: string;
+  fileUrl: string;
+  mimeType: string;
+  searchText: string;
+  aiMeta: {
+    title: string;
+    keywords: string[];
+    summary: string;
+    treatments: string[];
+  };
+  uploadedBy: string;
+  uploadedByName: string;
+  uploadedAt: string;
 };
 
 export type LibraryStore = { docs: LibraryDoc[]; updatedAt: string };
@@ -67,7 +86,9 @@ export type LibraryAction =
   | "delete"
   | "replace"
   | "restore"
-  | "rollback";
+  | "rollback"
+  | "approveUpdate"
+  | "withdrawUpdate";
 
 export type LibraryLogEntry = {
   id: string;
@@ -148,6 +169,34 @@ export function normalizeVersions(input: unknown): DocVersion[] {
   return out.slice(-VERSIONS_MAX);
 }
 
+// 更新待ちの正規化（不正・fileUrl欠落は null・指示書96）
+export function normalizePendingUpdate(input: unknown): PendingUpdate | null {
+  if (!input || typeof input !== "object") return null;
+  const g = input as Record<string, unknown>;
+  const fileUrl = str(g.fileUrl);
+  if (!fileUrl) return null;
+  const meta = (g.aiMeta && typeof g.aiMeta === "object" ? g.aiMeta : {}) as Record<
+    string,
+    unknown
+  >;
+  return {
+    fileName: str(g.fileName),
+    filePath: str(g.filePath),
+    fileUrl,
+    mimeType: str(g.mimeType),
+    searchText: str(g.searchText),
+    aiMeta: {
+      title: str(meta.title),
+      keywords: normalizeKeywords(meta.keywords),
+      summary: str(meta.summary),
+      treatments: normalizeTreatments(meta.treatments),
+    },
+    uploadedBy: str(g.uploadedBy),
+    uploadedByName: str(g.uploadedByName),
+    uploadedAt: str(g.uploadedAt) || new Date(0).toISOString(),
+  };
+}
+
 // 1件の資料メタを正規化（必須項目が欠けるものは null＝破棄）。status は無視（87で撤廃）。
 export function normalizeDoc(raw: unknown): LibraryDoc | null {
   if (!raw || typeof raw !== "object") return null;
@@ -175,7 +224,13 @@ export function normalizeDoc(raw: unknown): LibraryDoc | null {
     uploadedAt,
     updatedAt: str(g.updatedAt) || uploadedAt,
     versions: normalizeVersions(g.versions),
+    pendingUpdate: normalizePendingUpdate(g.pendingUpdate),
   };
+}
+
+// 版番号（N = 旧版数 + 1・v1は表示省略可・指示書96）
+export function docVersionNumber(doc: { versions?: DocVersion[] }): number {
+  return (doc.versions?.length ?? 0) + 1;
 }
 
 export function normalizeStore(raw: unknown): LibraryStore {
@@ -326,6 +381,82 @@ export function isSupportedLibraryFile(fileName: string, mimeType = ""): boolean
   return fileKind(mimeType, fileName) !== "other";
 }
 
+// ─── 更新の自動検知（指示書96・純粋関数・クライアント/サーバ共用） ───
+
+// ファイル名の正規化: NFKC(全半角)・小文字・拡張子除去・空白除去
+export function normalizeForMatch(name: string): string {
+  return (name || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\.[^.]+$/, "")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
+function bigrams(s: string): string[] {
+  const g: string[] = [];
+  for (let i = 0; i < s.length - 1; i++) g.push(s.slice(i, i + 2));
+  return g;
+}
+
+// タイトル類似度（Dice係数・0〜1）。正規化後の bigram 重なりで測る。
+export function titleSimilarity(a: string, b: string): number {
+  const A = normalizeForMatch(a);
+  const B = normalizeForMatch(b);
+  if (!A || !B) return 0;
+  if (A === B) return 1;
+  const ga = bigrams(A);
+  const gb = bigrams(B);
+  if (ga.length === 0 || gb.length === 0) return 0;
+  const map = new Map<string, number>();
+  for (const g of ga) map.set(g, (map.get(g) ?? 0) + 1);
+  let inter = 0;
+  for (const g of gb) {
+    const c = map.get(g);
+    if (c && c > 0) {
+      inter++;
+      map.set(g, c - 1);
+    }
+  }
+  return (2 * inter) / (ga.length + gb.length);
+}
+
+export const TITLE_SIM_THRESHOLD = 0.8;
+
+export type UpdateCandidate = {
+  doc: LibraryDoc;
+  reason: "filename" | "title";
+  score: number;
+};
+
+// 単発登録用: ファイル名一致 or タイトル高類似の候補（スコア降順）
+export function findUpdateCandidates(
+  docs: LibraryDoc[],
+  fileName: string,
+  aiTitle = ""
+): UpdateCandidate[] {
+  const nf = normalizeForMatch(fileName);
+  const out: UpdateCandidate[] = [];
+  for (const d of docs) {
+    const nameMatch = !!nf && normalizeForMatch(d.fileName) === nf;
+    const sim = aiTitle ? titleSimilarity(aiTitle, d.title) : 0;
+    if (nameMatch) out.push({ doc: d, reason: "filename", score: 1 });
+    else if (sim >= TITLE_SIM_THRESHOLD)
+      out.push({ doc: d, reason: "title", score: sim });
+  }
+  return out.sort((a, b) => b.score - a.score);
+}
+
+// 一括D&D用: ファイル名一致のみ（最初の一致doc）
+export function findFilenameMatch(
+  docs: LibraryDoc[],
+  fileName: string
+): LibraryDoc | null {
+  const nf = normalizeForMatch(fileName);
+  if (!nf) return null;
+  return docs.find((d) => normalizeForMatch(d.fileName) === nf) ?? null;
+}
+
 // ─── クライアント側検索フィルタ ───
 
 export const UNTAGGED_CHIP = "__untagged__"; // 「タグなし」チップの内部値
@@ -400,4 +531,6 @@ export const ACTION_META: Record<
   replace: { label: "差し替え", className: "bg-amber-100 text-amber-700" },
   restore: { label: "復元", className: "bg-violet-100 text-violet-700" },
   rollback: { label: "版を戻す", className: "bg-cyan-100 text-cyan-700" },
+  approveUpdate: { label: "更新を承認", className: "bg-emerald-100 text-emerald-700" },
+  withdrawUpdate: { label: "更新取り下げ", className: "bg-stone-200 text-stone-600" },
 };

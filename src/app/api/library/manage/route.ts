@@ -27,8 +27,10 @@ import {
   normalizeTreatments,
   extForFile,
   genLibraryId,
+  docVersionNumber,
   type LibraryDoc,
   type DocVersion,
+  type PendingUpdate,
 } from "@/lib/library";
 
 export const runtime = "nodejs";
@@ -175,6 +177,86 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ ok: true, doc: updated });
     }
 
+    if (action === "approveUpdate") {
+      // 指示書96: 更新待ちを承認して公開版に昇格。現行を versions[] に積む。誰でも可。
+      const store = await loadStore(admin);
+      const idx = store.docs.findIndex((d) => d.id === id);
+      if (idx < 0) {
+        return NextResponse.json({ error: "資料が見つかりません" }, { status: 404 });
+      }
+      const cur = store.docs[idx];
+      const pu = cur.pendingUpdate;
+      if (!pu) {
+        return NextResponse.json({ error: "更新待ちがありません" }, { status: 404 });
+      }
+      // タイトルは承認者の選択（既定=既存を保持）。keepTitle=false で新提案を採用。
+      const keepTitle = body.keepTitle !== false;
+      const nextTitle =
+        !keepTitle && pu.aiMeta.title ? pu.aiMeta.title : cur.title;
+      const fromV = docVersionNumber(cur);
+      const curAsVersion: DocVersion = {
+        versionId: genLibraryId("ver"),
+        fileName: cur.fileName,
+        filePath: cur.filePath,
+        fileUrl: cur.fileUrl,
+        mimeType: cur.mimeType,
+        replacedAt: new Date().toISOString(),
+        replacedBy: userName, // 承認者
+      };
+      const updated: LibraryDoc = {
+        ...cur,
+        title: nextTitle,
+        fileName: pu.fileName,
+        filePath: pu.filePath,
+        fileUrl: pu.fileUrl,
+        mimeType: pu.mimeType,
+        searchText: pu.searchText || cur.searchText,
+        keywords: pu.aiMeta.keywords.length ? pu.aiMeta.keywords : cur.keywords,
+        summary: pu.aiMeta.summary || cur.summary,
+        treatments: pu.aiMeta.treatments.length
+          ? pu.aiMeta.treatments
+          : cur.treatments,
+        updatedAt: new Date().toISOString(),
+        versions: [...cur.versions, curAsVersion].slice(-VERSIONS_MAX),
+        pendingUpdate: null,
+      };
+      store.docs[idx] = updated;
+      await saveStore(admin, store);
+      await appendLog(admin, {
+        userId: user.id,
+        userName,
+        action: "approveUpdate",
+        docId: updated.id,
+        docTitle: updated.title,
+        note: `v${fromV}→v${fromV + 1}（承認: ${userName || "不明"}）`,
+      });
+      return NextResponse.json({ ok: true, doc: updated });
+    }
+
+    if (action === "withdrawUpdate") {
+      // 指示書96: 更新待ちを取り下げ（ファイルはStorage残置）。誰でも可。
+      const store = await loadStore(admin);
+      const idx = store.docs.findIndex((d) => d.id === id);
+      if (idx < 0) {
+        return NextResponse.json({ error: "資料が見つかりません" }, { status: 404 });
+      }
+      const cur = store.docs[idx];
+      if (!cur.pendingUpdate) {
+        return NextResponse.json({ error: "更新待ちがありません" }, { status: 404 });
+      }
+      const updated: LibraryDoc = { ...cur, pendingUpdate: null };
+      store.docs[idx] = updated;
+      await saveStore(admin, store);
+      await appendLog(admin, {
+        userId: user.id,
+        userName,
+        action: "withdrawUpdate",
+        docId: updated.id,
+        docTitle: updated.title,
+      });
+      return NextResponse.json({ ok: true, doc: updated });
+    }
+
     // action === "edit"
     const store = await loadStore(admin);
     const idx = store.docs.findIndex((d) => d.id === id);
@@ -304,14 +386,37 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 指示書96: 即時差し替えを廃止し「更新待ち(pendingUpdate)」を作る。承認は別途 approveUpdate。
+    if (store.docs[idx].pendingUpdate) {
+      return NextResponse.json(
+        { error: "この資料には既に更新待ちがあります。先に承認または取り下げしてください。" },
+        { status: 409 }
+      );
+    }
+
     const fileName =
       ((form.get("fileName") as string) || "").trim() ||
       store.docs[idx].fileName;
     const mimeType = file.type || store.docs[idx].mimeType;
-    const searchText =
-      form.get("searchText") !== null
-        ? ((form.get("searchText") as string) || "").slice(0, SEARCH_TEXT_LIMIT)
-        : store.docs[idx].searchText;
+    const searchText = ((form.get("searchText") as string) || "").slice(
+      0,
+      SEARCH_TEXT_LIMIT
+    );
+    // AI提案メタ（承認時に採用/選択）
+    const aiTitle = ((form.get("title") as string) || "").trim();
+    const aiSummary = ((form.get("summary") as string) || "").trim();
+    let aiKeywords: string[] = [];
+    let aiTreatments: string[] = [];
+    try {
+      aiKeywords = normalizeKeywords(JSON.parse((form.get("keywords") as string) || "[]"));
+    } catch {
+      aiKeywords = [];
+    }
+    try {
+      aiTreatments = normalizeTreatments(JSON.parse((form.get("treatments") as string) || "[]"));
+    } catch {
+      aiTreatments = [];
+    }
 
     const ext = extForFile(mimeType, fileName);
     const path = `${LIBRARY_PATH_PREFIX}/${genLibraryId("f")}.${ext}`;
@@ -324,41 +429,26 @@ export async function POST(req: NextRequest) {
       .from(STAFF_PHOTOS_BUCKET)
       .getPublicUrl(path);
 
-    // 旧ファイルは Storage に残す（指示書87）。指示書88: 旧doc全体を snapshot として履歴に保存。
-    // 指示書95: 旧版を versions[] に push（全世代を追える）。20版超は古い順に破棄。
-    const prevDoc: LibraryDoc = { ...store.docs[idx] };
     const userName2 = await resolveUserName(db, user.id, user.email);
-    const newVersion: DocVersion = {
-      versionId: genLibraryId("ver"),
-      fileName: prevDoc.fileName,
-      filePath: prevDoc.filePath,
-      fileUrl: prevDoc.fileUrl,
-      mimeType: prevDoc.mimeType,
-      replacedAt: new Date().toISOString(),
-      replacedBy: userName2,
-    };
-    const updated: LibraryDoc = {
-      ...store.docs[idx],
+    const pending: PendingUpdate = {
       fileName,
       filePath: path,
       fileUrl: pub.publicUrl,
       mimeType,
       searchText,
-      updatedAt: new Date().toISOString(),
-      versions: [...(store.docs[idx].versions ?? []), newVersion].slice(
-        -VERSIONS_MAX
-      ),
+      aiMeta: {
+        title: aiTitle,
+        keywords: aiKeywords,
+        summary: aiSummary,
+        treatments: aiTreatments,
+      },
+      uploadedBy: user.id,
+      uploadedByName: userName2,
+      uploadedAt: new Date().toISOString(),
     };
+    const updated: LibraryDoc = { ...store.docs[idx], pendingUpdate: pending };
     store.docs[idx] = updated;
     await saveStore(admin, store);
-    await appendLog(admin, {
-      userId: user.id,
-      userName: userName2,
-      action: "replace",
-      docId: updated.id,
-      docTitle: updated.title,
-      snapshot: prevDoc, // 差し替え前の版（履歴から開く/DL する）
-    });
     return NextResponse.json({ ok: true, doc: updated });
   } catch (e) {
     return errorResponse(e);

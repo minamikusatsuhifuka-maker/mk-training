@@ -57,11 +57,15 @@ import {
   collectTreatmentCounts,
   allKnownTreatments,
   UNTAGGED_CHIP,
+  docVersionNumber,
+  findUpdateCandidates,
+  findFilenameMatch,
   type LibraryDoc,
   type LibraryCategory,
   type LibraryLogEntry,
   type LibrarySuggestion,
   type DocVersion,
+  type UpdateCandidate,
 } from "@/lib/library";
 
 // ログイン中の管理者判定（GanttChart と同じ流儀・一括タグ付けボタンの表示制御）
@@ -231,6 +235,7 @@ type BulkStatus =
   | "AI解析中"
   | "登録中"
   | "登録済み"
+  | "更新待ち"
   | "失敗"
   | "スキップ";
 
@@ -250,6 +255,7 @@ const BULK_STATUS_STYLE: Record<BulkStatus, string> = {
   AI解析中: "bg-blue-100 text-blue-700",
   登録中: "bg-amber-100 text-amber-700",
   登録済み: "bg-emerald-100 text-emerald-700",
+  更新待ち: "bg-cyan-100 text-cyan-700",
   失敗: "bg-red-100 text-red-700",
   スキップ: "bg-stone-200 text-stone-600",
 };
@@ -288,6 +294,18 @@ export default function LibraryBrowser() {
     version: DocVersion;
   } | null>(null);
   const [rollingBack, setRollingBack] = useState(false);
+
+  // 更新検知の候補ダイアログ（指示書96・単発登録時）
+  const [candidatePrompt, setCandidatePrompt] = useState<{
+    candidates: UpdateCandidate[];
+    keywords: string[];
+    treatments: string[];
+  } | null>(null);
+  // 更新承認ダイアログ（タイトル保持/採用の選択）
+  const [approveTarget, setApproveTarget] = useState<LibraryDoc | null>(null);
+  const [keepTitle, setKeepTitle] = useState(true);
+  const [approving, setApproving] = useState(false);
+  const [busyDocId, setBusyDocId] = useState<string | null>(null);
 
   // 一括登録（89）
   const [bulkItems, setBulkItems] = useState<BulkItem[]>([]);
@@ -441,6 +459,46 @@ export default function LibraryBrowser() {
     }
   };
 
+  // 新規として登録
+  const doCreateNew = async (keywords: string[], treatments: string[]) => {
+    const fd = new FormData();
+    fd.append("file", form.file!);
+    fd.append("fileName", form.fileName);
+    fd.append("title", form.title.trim());
+    fd.append("category", form.category);
+    fd.append("keywords", JSON.stringify(keywords));
+    fd.append("treatments", JSON.stringify(treatments));
+    fd.append("summary", form.summary.trim());
+    fd.append("searchText", form.searchText);
+    const res = await fetch("/api/library", { method: "POST", body: fd });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      throw new Error(j.error || "登録に失敗しました");
+    }
+  };
+
+  // 既存docの「更新待ち」を作成（承認は別途）
+  const createPendingForDoc = async (
+    docId: string,
+    keywords: string[],
+    treatments: string[]
+  ) => {
+    const fd = new FormData();
+    fd.append("id", docId);
+    fd.append("file", form.file!);
+    fd.append("fileName", form.fileName);
+    fd.append("title", form.title.trim());
+    fd.append("keywords", JSON.stringify(keywords));
+    fd.append("treatments", JSON.stringify(treatments));
+    fd.append("summary", form.summary.trim());
+    fd.append("searchText", form.searchText);
+    const res = await fetch("/api/library/manage", { method: "POST", body: fd });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      throw new Error(j.error || "更新待ちの作成に失敗しました");
+    }
+  };
+
   const submitForm = async () => {
     setFormError("");
     if (!form.title.trim()) {
@@ -451,26 +509,24 @@ export default function LibraryBrowser() {
       setFormError("ファイルを選択してください");
       return;
     }
+    const keywords = parseKeywords(form.keywordsText);
+    const treatments = parseKeywords(form.treatmentsText).slice(0, 5);
+
+    // 指示書96: 単発登録は既存資料の更新候補を検知してダイアログで確認
+    if (form.mode === "create") {
+      const cands = findUpdateCandidates(docsRef.current, form.fileName, form.title);
+      if (cands.length > 0) {
+        setCandidatePrompt({ candidates: cands, keywords, treatments });
+        return; // ユーザーの選択待ち
+      }
+    }
+
     setSubmitting(true);
     try {
-      const keywords = parseKeywords(form.keywordsText);
-      const treatments = parseKeywords(form.treatmentsText).slice(0, 5);
       if (form.mode === "create") {
-        const fd = new FormData();
-        fd.append("file", form.file!);
-        fd.append("fileName", form.fileName);
-        fd.append("title", form.title.trim());
-        fd.append("category", form.category);
-        fd.append("keywords", JSON.stringify(keywords));
-        fd.append("treatments", JSON.stringify(treatments));
-        fd.append("summary", form.summary.trim());
-        fd.append("searchText", form.searchText);
-        const res = await fetch("/api/library", { method: "POST", body: fd });
-        if (!res.ok) {
-          const j = await res.json().catch(() => ({}));
-          throw new Error(j.error || "登録に失敗しました");
-        }
+        await doCreateNew(keywords, treatments);
       } else {
+        // メタ編集は即時、ファイル差し替えは「更新待ち」として承認経路へ（指示書96）
         const res = await fetch("/api/library/manage", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -489,18 +545,9 @@ export default function LibraryBrowser() {
           throw new Error(j.error || "編集に失敗しました");
         }
         if (form.file) {
-          const fd = new FormData();
-          fd.append("id", form.id);
-          fd.append("file", form.file);
-          fd.append("fileName", form.fileName);
-          const res2 = await fetch("/api/library/manage", {
-            method: "POST",
-            body: fd,
-          });
-          if (!res2.ok) {
-            const j = await res2.json().catch(() => ({}));
-            throw new Error(j.error || "ファイル差し替えに失敗しました");
-          }
+          await createPendingForDoc(form.id, [], []); // 差し替えファイルは更新待ちに（メタは編集済み）
+          setFormError("");
+          alert("ファイルは更新待ちになりました。カードの「✅承認して差し替え」で公開されます。");
         }
       }
       setFormOpen(false);
@@ -509,6 +556,92 @@ export default function LibraryBrowser() {
       setFormError(e instanceof Error ? e.message : "処理に失敗しました");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // 候補ダイアログ: 「更新として登録」（更新待ちを作る）
+  const chooseUpdateCandidate = async (docId: string) => {
+    if (!candidatePrompt) return;
+    setSubmitting(true);
+    try {
+      await createPendingForDoc(
+        docId,
+        candidatePrompt.keywords,
+        candidatePrompt.treatments
+      );
+      setCandidatePrompt(null);
+      setFormOpen(false);
+      await refresh();
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : "更新待ちの作成に失敗しました");
+      setCandidatePrompt(null);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // 候補ダイアログ: 「別資料として登録」（新規）
+  const chooseNewInstead = async () => {
+    if (!candidatePrompt) return;
+    setSubmitting(true);
+    try {
+      await doCreateNew(candidatePrompt.keywords, candidatePrompt.treatments);
+      setCandidatePrompt(null);
+      setFormOpen(false);
+      await refresh();
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : "登録に失敗しました");
+      setCandidatePrompt(null);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // 更新待ちの承認（誰でも・タイトル保持/採用を選択）
+  const approveUpdate = async () => {
+    if (!approveTarget) return;
+    setApproving(true);
+    try {
+      const res = await fetch("/api/library/manage", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "approveUpdate",
+          id: approveTarget.id,
+          keepTitle,
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "承認に失敗しました");
+      }
+      setApproveTarget(null);
+      await refresh();
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "承認に失敗しました");
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  // 更新待ちの取り下げ
+  const withdrawUpdate = async (docId: string) => {
+    setBusyDocId(docId);
+    try {
+      const res = await fetch("/api/library/manage", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "withdrawUpdate", id: docId }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "取り下げに失敗しました");
+      }
+      await refresh();
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "取り下げに失敗しました");
+    } finally {
+      setBusyDocId(null);
     }
   };
 
@@ -579,6 +712,21 @@ export default function LibraryBrowser() {
 
   const existingIds = useMemo(() => new Set(docs.map((d) => d.id)), [docs]);
 
+  // 更新待ちのdoc（指示書96・版の更新タブ上部）
+  const pendingDocs = useMemo(
+    () => docs.filter((d) => d.pendingUpdate),
+    [docs]
+  );
+  // 承認済み更新の時系列（全docのversions[]を新しい順・下部リスト）
+  const versionTimeline = useMemo(() => {
+    const rows = docs.flatMap((d) =>
+      d.versions.map((v) => ({ doc: d, version: v }))
+    );
+    return rows.sort((a, b) =>
+      (b.version.replacedAt || "").localeCompare(a.version.replacedAt || "")
+    );
+  }, [docs]);
+
   // 編集中docの最新状態（版履歴はrefresh後のdocsから引き、rollback直後も更新される）
   const editingDoc =
     form.mode === "edit" ? docs.find((d) => d.id === form.id) ?? null : null;
@@ -622,24 +770,44 @@ export default function LibraryBrowser() {
         const summary = usable ? suggestion!.summary : "";
         const searchText = suggestion?.searchText || "";
 
+        // 指示書96: ファイル名一致は既存資料の「更新待ち」にする（新規即公開しない）
+        const match = findFilenameMatch(docsRef.current, item.name);
         patchBulk(item.id, { status: "登録中", title, category });
         await serializeRegister(async () => {
           const fd = new FormData();
           fd.append("file", item.file);
           fd.append("fileName", item.name);
-          fd.append("title", title);
-          fd.append("category", category);
-          fd.append("keywords", JSON.stringify(keywords));
-          fd.append("treatments", JSON.stringify(treatments));
-          fd.append("summary", summary);
-          fd.append("searchText", searchText);
-          const res = await fetch("/api/library", { method: "POST", body: fd });
-          if (!res.ok) {
-            const j = await res.json().catch(() => ({}));
-            throw new Error(j.error || "登録に失敗しました");
+          if (match) {
+            fd.append("id", match.id);
+            fd.append("title", title);
+            fd.append("keywords", JSON.stringify(keywords));
+            fd.append("treatments", JSON.stringify(treatments));
+            fd.append("summary", summary);
+            fd.append("searchText", searchText);
+            const res = await fetch("/api/library/manage", { method: "POST", body: fd });
+            if (!res.ok) {
+              const j = await res.json().catch(() => ({}));
+              throw new Error(j.error || "更新待ちの作成に失敗しました");
+            }
+          } else {
+            fd.append("title", title);
+            fd.append("category", category);
+            fd.append("keywords", JSON.stringify(keywords));
+            fd.append("treatments", JSON.stringify(treatments));
+            fd.append("summary", summary);
+            fd.append("searchText", searchText);
+            const res = await fetch("/api/library", { method: "POST", body: fd });
+            if (!res.ok) {
+              const j = await res.json().catch(() => ({}));
+              throw new Error(j.error || "登録に失敗しました");
+            }
           }
         });
-        patchBulk(item.id, { status: "登録済み", title, category });
+        patchBulk(item.id, {
+          status: match ? "更新待ち" : "登録済み",
+          title: match ? `🔄 更新待ち: ${match.title}` : title,
+          category,
+        });
       } catch (e) {
         patchBulk(item.id, {
           status: "失敗",
@@ -862,6 +1030,14 @@ export default function LibraryBrowser() {
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <TabsList>
             <TabsTrigger value="docs">📚 資料一覧</TabsTrigger>
+            <TabsTrigger value="updates">
+              🔄 版の更新
+              {pendingDocs.length > 0 && (
+                <span className="ml-1 text-xs bg-cyan-600 text-white rounded-full px-1.5">
+                  {pendingDocs.length}
+                </span>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="history">🕘 変更履歴</TabsTrigger>
           </TabsList>
           <div className="flex items-center gap-2 flex-wrap">
@@ -1215,9 +1391,59 @@ export default function LibraryBrowser() {
                           <span className="text-xs text-muted-foreground">
                             {meta.label}
                           </span>
+                          {docVersionNumber(doc) > 1 && (
+                            <span className="text-[10px] font-medium bg-slate-100 text-slate-600 rounded px-1.5 py-0.5">
+                              v{docVersionNumber(doc)}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
+
+                    {/* 更新待ちバナー（指示書96） */}
+                    {doc.pendingUpdate && (
+                      <div className="rounded-lg border border-cyan-300 bg-cyan-50 p-2 space-y-2">
+                        <p className="text-xs text-cyan-800">
+                          🔄 更新待ちあり（{doc.pendingUpdate.uploadedByName || "不明"}・
+                          {formatDateTime(doc.pendingUpdate.uploadedAt)}）
+                        </p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <a
+                            href={fileHref({
+                              fileUrl: doc.pendingUpdate.fileUrl,
+                              fileName: doc.pendingUpdate.fileName,
+                              mimeType: doc.pendingUpdate.mimeType,
+                            })}
+                            target={opensInBrowser(doc.pendingUpdate.mimeType, doc.pendingUpdate.fileName) ? "_blank" : undefined}
+                            rel="noreferrer"
+                          >
+                            <Button size="sm" variant="outline">新版を開く</Button>
+                          </a>
+                          <a href={fileHref(doc)} target={isPdf ? "_blank" : undefined} rel="noreferrer">
+                            <Button size="sm" variant="outline">現行版を開く</Button>
+                          </a>
+                          <Button
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                            onClick={() => {
+                              setKeepTitle(true);
+                              setApproveTarget(doc);
+                            }}
+                            disabled={busyDocId === doc.id}
+                          >
+                            ✅ 承認して差し替え
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => withdrawUpdate(doc.id)}
+                            disabled={busyDocId === doc.id}
+                          >
+                            ↩ 取り下げ
+                          </Button>
+                        </div>
+                      </div>
+                    )}
 
                     {doc.summary && (
                       <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
@@ -1291,6 +1517,102 @@ export default function LibraryBrowser() {
         </TabsContent>
 
         {/* ─── 変更履歴 ─── */}
+        {/* ─── 版の更新（指示書96） ─── */}
+        <TabsContent value="updates" className="mt-4 space-y-6">
+          {/* 更新待ち一覧 */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold">🔄 更新待ち</h3>
+            {pendingDocs.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                承認待ちの更新はありません。
+              </p>
+            ) : (
+              pendingDocs.map((d) => {
+                const pu = d.pendingUpdate!;
+                const newIsPdf = opensInBrowser(pu.mimeType, pu.fileName);
+                const curIsPdf = opensInBrowser(d.mimeType, d.fileName);
+                return (
+                  <div
+                    key={d.id}
+                    className="border rounded-lg p-3 space-y-2 bg-cyan-50/40"
+                  >
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium">{d.title}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {pu.uploadedByName || "不明"}・{formatDateTime(pu.uploadedAt)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <a href={fileHref({ fileUrl: pu.fileUrl, fileName: pu.fileName, mimeType: pu.mimeType })} target={newIsPdf ? "_blank" : undefined} rel="noreferrer">
+                        <Button size="sm" variant="outline">新版を{newIsPdf ? "開く" : "DL"}</Button>
+                      </a>
+                      <a href={fileHref(d)} target={curIsPdf ? "_blank" : undefined} rel="noreferrer">
+                        <Button size="sm" variant="outline">現行版を{curIsPdf ? "開く" : "DL"}</Button>
+                      </a>
+                      <Button
+                        size="sm"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                        onClick={() => {
+                          setKeepTitle(true);
+                          setApproveTarget(d);
+                        }}
+                        disabled={busyDocId === d.id}
+                      >
+                        ✅ 承認して差し替え
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => withdrawUpdate(d.id)}
+                        disabled={busyDocId === d.id}
+                      >
+                        ↩ 取り下げ
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* 承認済み更新の時系列 */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold">🕘 更新の履歴（新しい順）</h3>
+            {versionTimeline.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                まだ更新はありません。
+              </p>
+            ) : (
+              versionTimeline.map(({ doc, version }) => {
+                const newIsPdf = opensInBrowser(doc.mimeType, doc.fileName);
+                const oldIsPdf = opensInBrowser(version.mimeType, version.fileName);
+                return (
+                  <div
+                    key={version.versionId}
+                    className="flex items-center gap-3 border rounded-lg p-3 text-sm flex-wrap"
+                  >
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {formatDateTime(version.replacedAt)}
+                    </span>
+                    <span className="font-medium flex-1 min-w-0 break-words">
+                      {doc.title}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {version.replacedBy || "不明"}
+                    </span>
+                    <a href={fileHref(doc)} target={newIsPdf ? "_blank" : undefined} rel="noreferrer">
+                      <Button size="sm" variant="outline">新版(現行)</Button>
+                    </a>
+                    <a href={fileHref({ fileUrl: version.fileUrl, fileName: version.fileName, mimeType: version.mimeType })} target={oldIsPdf ? "_blank" : undefined} rel="noreferrer">
+                      <Button size="sm" variant="ghost">旧版</Button>
+                    </a>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </TabsContent>
+
         <TabsContent value="history" className="mt-4">
           {log.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">
@@ -1641,6 +1963,126 @@ export default function LibraryBrowser() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ─── 更新候補ダイアログ（指示書96・単発登録の更新検知） ─── */}
+      <Dialog
+        open={!!candidatePrompt}
+        onOpenChange={(o) => !o && setCandidatePrompt(null)}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>既存の資料の更新ですか？</DialogTitle>
+            <DialogDescription>
+              似た資料が見つかりました。どれかの更新として取り込むか、別資料として登録できます。
+              （更新は承認するまで公開版は変わりません）
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {candidatePrompt?.candidates.map((c) => (
+              <div
+                key={c.doc.id}
+                className="flex items-center gap-2 border rounded-lg p-2 flex-wrap"
+              >
+                <span className="text-sm flex-1 min-w-0 break-words">
+                  📄 {c.doc.title}
+                  <span className="text-xs text-muted-foreground ml-2">
+                    {c.reason === "filename" ? "ファイル名一致" : "タイトル類似"}
+                  </span>
+                </span>
+                <Button
+                  size="sm"
+                  className="bg-teal text-teal-foreground"
+                  onClick={() => chooseUpdateCandidate(c.doc.id)}
+                  disabled={submitting}
+                >
+                  🔄 これの更新
+                </Button>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setCandidatePrompt(null)}
+              disabled={submitting}
+            >
+              キャンセル
+            </Button>
+            <Button
+              onClick={chooseNewInstead}
+              disabled={submitting}
+            >
+              ➕ 別資料として登録
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── 更新承認ダイアログ（タイトル保持/採用の選択・指示書96） ─── */}
+      <Dialog
+        open={!!approveTarget}
+        onOpenChange={(o) => !o && setApproveTarget(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>更新を承認して差し替え</DialogTitle>
+            <DialogDescription>
+              新版を公開し、現在のファイルは版履歴に残ります。タイトルの扱いを選んでください。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 text-sm">
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="keepTitle"
+                checked={keepTitle}
+                onChange={() => setKeepTitle(true)}
+                className="mt-1"
+              />
+              <span>
+                既存のタイトルを保持（既定）
+                <span className="block text-xs text-muted-foreground">
+                  「{approveTarget?.title}」のまま
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="keepTitle"
+                checked={!keepTitle}
+                onChange={() => setKeepTitle(false)}
+                className="mt-1"
+                disabled={!approveTarget?.pendingUpdate?.aiMeta.title}
+              />
+              <span>
+                新提案のタイトルを採用
+                <span className="block text-xs text-muted-foreground">
+                  {approveTarget?.pendingUpdate?.aiMeta.title
+                    ? `「${approveTarget.pendingUpdate.aiMeta.title}」`
+                    : "（新提案タイトルなし）"}
+                </span>
+              </span>
+            </label>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setApproveTarget(null)}
+              disabled={approving}
+            >
+              キャンセル
+            </Button>
+            <Button
+              onClick={approveUpdate}
+              disabled={approving}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {approving ? "承認中…" : "✅ 承認して差し替え"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
