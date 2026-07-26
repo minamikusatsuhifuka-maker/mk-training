@@ -58,6 +58,7 @@ export type LibraryDoc = {
   updatedAt: string;
   versions: DocVersion[]; // 差し替え世代（新しいものほど末尾・指示書95）
   pendingUpdate: PendingUpdate | null; // 承認待ちの新版（指示書96・同時1件）
+  reviewDueAt: string; // 次の見直し日 "YYYY-MM-DD"（任意・未設定は ""・指示書98）
 };
 
 // 更新待ち（承認前の新版・指示書96）。この時点で公開版(doc本体)は不変。
@@ -88,7 +89,8 @@ export type LibraryAction =
   | "restore"
   | "rollback"
   | "approveUpdate"
-  | "withdrawUpdate";
+  | "withdrawUpdate"
+  | "mergeTag";
 
 export type LibraryLogEntry = {
   id: string;
@@ -225,7 +227,14 @@ export function normalizeDoc(raw: unknown): LibraryDoc | null {
     updatedAt: str(g.updatedAt) || uploadedAt,
     versions: normalizeVersions(g.versions),
     pendingUpdate: normalizePendingUpdate(g.pendingUpdate),
+    reviewDueAt: normalizeReviewDueAt(g.reviewDueAt),
   };
+}
+
+// 見直し日の正規化（"YYYY-MM-DD" のみ許可・不正は ""・指示書98）
+export function normalizeReviewDueAt(v: unknown): string {
+  const s = str(v);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
 }
 
 // 版番号（N = 旧版数 + 1・v1は表示省略可・指示書96）
@@ -423,6 +432,101 @@ export function titleSimilarity(a: string, b: string): number {
 
 export const TITLE_SIM_THRESHOLD = 0.8;
 
+// ─── 見直し期限（指示書98・JSTで判定） ───
+
+// JST の今日を "YYYY-MM-DD" で返す（実行環境のTZに依存しない）
+export function jstTodayYmd(now: Date = new Date()): string {
+  const jst = new Date(now.getTime() + (now.getTimezoneOffset() + 540) * 60000);
+  const y = jst.getFullYear();
+  const m = String(jst.getMonth() + 1).padStart(2, "0");
+  const d = String(jst.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+// JST基準で「今日から1年後」を "YYYY-MM-DD"（見直し日の既定値）
+export function oneYearFromTodayYmd(now: Date = new Date()): string {
+  const jst = new Date(now.getTime() + (now.getTimezoneOffset() + 540) * 60000);
+  const next = new Date(jst.getFullYear() + 1, jst.getMonth(), jst.getDate());
+  const y = next.getFullYear();
+  const m = String(next.getMonth() + 1).padStart(2, "0");
+  const d = String(next.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export const REVIEW_SOON_DAYS = 30;
+export type ReviewStatus = "none" | "overdue" | "soon" | "ok";
+
+// 見直し状態（YYYY-MM-DD は辞書順＝日付順で比較できる）
+export function reviewStatus(
+  reviewDueAt: string,
+  now: Date = new Date()
+): ReviewStatus {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(reviewDueAt)) return "none";
+  const today = jstTodayYmd(now);
+  if (reviewDueAt < today) return "overdue";
+  // 30日以内（今日〜today+30）
+  const jst = new Date(now.getTime() + (now.getTimezoneOffset() + 540) * 60000);
+  const soonLimit = new Date(
+    jst.getFullYear(),
+    jst.getMonth(),
+    jst.getDate() + REVIEW_SOON_DAYS
+  );
+  const sy = soonLimit.getFullYear();
+  const sm = String(soonLimit.getMonth() + 1).padStart(2, "0");
+  const sd = String(soonLimit.getDate()).padStart(2, "0");
+  const limit = `${sy}-${sm}-${sd}`;
+  return reviewDueAt <= limit ? "soon" : "ok";
+}
+
+// 見直し時期（超過＋30日以内）に該当するか（チップ抽出用）
+export function isReviewDue(reviewDueAt: string, now: Date = new Date()): boolean {
+  const s = reviewStatus(reviewDueAt, now);
+  return s === "overdue" || s === "soon";
+}
+
+// ─── 表記ゆれ検出・タグ統合（指示書98-F） ───
+
+export const TAG_MERGE_THRESHOLD = 0.7; // Dice係数のしきい値
+
+export type TagMergeSuggestion = {
+  a: string;
+  b: string;
+  countA: number;
+  countB: number;
+  reason: "包含" | "類似";
+};
+
+// タグ同士の表記ゆれ候補（包含関係 or Dice≥0.7）。件数付き。
+export function findTagMergeSuggestions(
+  docs: LibraryDoc[]
+): TagMergeSuggestion[] {
+  const counts = collectTreatmentCounts(docs);
+  const tags = counts.map((c) => c.tag);
+  const countOf = new Map(counts.map((c) => [c.tag, c.count]));
+  const out: TagMergeSuggestion[] = [];
+  for (let i = 0; i < tags.length; i++) {
+    for (let j = i + 1; j < tags.length; j++) {
+      const a = tags[i];
+      const b = tags[j];
+      const na = normalizeForMatch(a);
+      const nb = normalizeForMatch(b);
+      if (!na || !nb) continue;
+      const contains = na.includes(nb) || nb.includes(na);
+      const sim = titleSimilarity(a, b);
+      if (contains || sim >= TAG_MERGE_THRESHOLD) {
+        out.push({
+          a,
+          b,
+          countA: countOf.get(a) ?? 0,
+          countB: countOf.get(b) ?? 0,
+          reason: contains ? "包含" : "類似",
+        });
+      }
+    }
+  }
+  return out;
+}
+
 export type UpdateCandidate = {
   doc: LibraryDoc;
   reason: "filename" | "title";
@@ -533,4 +637,5 @@ export const ACTION_META: Record<
   rollback: { label: "版を戻す", className: "bg-cyan-100 text-cyan-700" },
   approveUpdate: { label: "更新を承認", className: "bg-emerald-100 text-emerald-700" },
   withdrawUpdate: { label: "更新取り下げ", className: "bg-stone-200 text-stone-600" },
+  mergeTag: { label: "タグ統合", className: "bg-indigo-100 text-indigo-700" },
 };

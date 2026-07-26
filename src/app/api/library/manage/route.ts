@@ -28,6 +28,8 @@ import {
   extForFile,
   genLibraryId,
   docVersionNumber,
+  normalizeReviewDueAt,
+  oneYearFromTodayYmd,
   type LibraryDoc,
   type DocVersion,
   type PendingUpdate,
@@ -219,6 +221,9 @@ export async function PATCH(req: NextRequest) {
         updatedAt: new Date().toISOString(),
         versions: [...cur.versions, curAsVersion].slice(-VERSIONS_MAX),
         pendingUpdate: null,
+        // 指示書98: 承認時に見直し日を1年後にリセット（resetReview 既定ON・OFFなら据え置き）
+        reviewDueAt:
+          body.resetReview === false ? cur.reviewDueAt : oneYearFromTodayYmd(),
       };
       store.docs[idx] = updated;
       await saveStore(admin, store);
@@ -257,6 +262,39 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ ok: true, doc: updated });
     }
 
+    if (action === "mergeTag") {
+      // 指示書98-F: 全docの treatments を from→to に一括置換（重複除去）。誰でも可・wiki方式。
+      const from = typeof body.from === "string" ? body.from.trim() : "";
+      const to = typeof body.to === "string" ? body.to.trim() : "";
+      if (!from || !to || from === to) {
+        return NextResponse.json({ error: "統合元/先が不正です" }, { status: 400 });
+      }
+      const store = await loadStore(admin);
+      let changed = 0;
+      for (let i = 0; i < store.docs.length; i++) {
+        const d = store.docs[i];
+        if (!d.treatments.includes(from)) continue;
+        const merged = normalizeTreatments(
+          d.treatments.map((t) => (t === from ? to : t))
+        );
+        store.docs[i] = { ...d, treatments: merged, updatedAt: new Date().toISOString() };
+        changed++;
+      }
+      if (changed === 0) {
+        return NextResponse.json({ error: "対象の資料がありません" }, { status: 404 });
+      }
+      await saveStore(admin, store);
+      await appendLog(admin, {
+        userId: user.id,
+        userName,
+        action: "mergeTag",
+        docId: "",
+        docTitle: "施術タグ",
+        note: `タグ統合: ${from} → ${to}（${changed}件）`,
+      });
+      return NextResponse.json({ ok: true, changed });
+    }
+
     // action === "edit"
     const store = await loadStore(admin);
     const idx = store.docs.findIndex((d) => d.id === id);
@@ -285,6 +323,10 @@ export async function PATCH(req: NextRequest) {
           : cur.treatments,
       summary:
         typeof body.summary === "string" ? body.summary.trim() : cur.summary,
+      reviewDueAt:
+        "reviewDueAt" in body
+          ? normalizeReviewDueAt(body.reviewDueAt)
+          : cur.reviewDueAt,
       updatedAt: new Date().toISOString(),
     };
     store.docs[idx] = updated;

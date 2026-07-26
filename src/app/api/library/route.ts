@@ -20,6 +20,7 @@ import {
   normalizeCategory,
   normalizeKeywords,
   normalizeTreatments,
+  normalizeReviewDueAt,
   extForFile,
   genLibraryId,
   type LibraryDoc,
@@ -166,6 +167,7 @@ export async function POST(req: NextRequest) {
       updatedAt: now,
       versions: [],
       pendingUpdate: null,
+      reviewDueAt: normalizeReviewDueAt(form.get("reviewDueAt")),
     };
 
     const store = await loadStore(admin);

@@ -60,6 +60,10 @@ import {
   docVersionNumber,
   findUpdateCandidates,
   findFilenameMatch,
+  reviewStatus,
+  isReviewDue,
+  oneYearFromTodayYmd,
+  findTagMergeSuggestions,
   type LibraryDoc,
   type LibraryCategory,
   type LibraryLogEntry,
@@ -187,6 +191,7 @@ type FormState = {
   treatmentsText: string;
   summary: string;
   searchText: string;
+  reviewDueAt: string;
 };
 
 const EMPTY_FORM: FormState = {
@@ -201,6 +206,7 @@ const EMPTY_FORM: FormState = {
   treatmentsText: "",
   summary: "",
   searchText: "",
+  reviewDueAt: "",
 };
 
 // 施術タグ一括付与のキュー項目
@@ -310,8 +316,19 @@ export default function LibraryBrowser() {
   // 更新承認ダイアログ（タイトル保持/採用の選択）
   const [approveTarget, setApproveTarget] = useState<LibraryDoc | null>(null);
   const [keepTitle, setKeepTitle] = useState(true);
+  const [resetReview, setResetReview] = useState(true); // 承認時に見直し日を1年後（既定ON・指示書98）
   const [approving, setApproving] = useState(false);
   const [busyDocId, setBusyDocId] = useState<string | null>(null);
+
+  // E: 「⏰見直し時期」チップ選択（指示書98）
+  const [reviewFilterOn, setReviewFilterOn] = useState(false);
+  // F: タグ統合の確認（どちらに寄せるか確定後の対象）
+  const [mergeTarget, setMergeTarget] = useState<{
+    from: string;
+    to: string;
+    count: number;
+  } | null>(null);
+  const [merging, setMerging] = useState(false);
 
   // 一括登録（89）
   const [bulkItems, setBulkItems] = useState<BulkItem[]>([]);
@@ -451,11 +468,16 @@ export default function LibraryBrowser() {
     () => selectedTreatments.filter((t) => t !== UNTAGGED_CHIP),
     [selectedTreatments]
   );
-  const filtered = useMemo(
-    () =>
-      filterDocs(docs, query, selectedCats, realTreatments, untaggedSelected),
-    [docs, query, selectedCats, realTreatments, untaggedSelected]
-  );
+  const filtered = useMemo(() => {
+    const base = filterDocs(
+      docs,
+      query,
+      selectedCats,
+      realTreatments,
+      untaggedSelected
+    );
+    return reviewFilterOn ? base.filter((d) => isReviewDue(d.reviewDueAt)) : base;
+  }, [docs, query, selectedCats, realTreatments, untaggedSelected, reviewFilterOn]);
 
   // 施術・機器タグの集計（件数つき・多い順）
   const treatmentCounts = useMemo(
@@ -466,6 +488,19 @@ export default function LibraryBrowser() {
     () => docs.filter((d) => d.treatments.length === 0).length,
     [docs]
   );
+  // E: 見直し時期（超過＋30日以内）の件数
+  const reviewDueCount = useMemo(
+    () => docs.filter((d) => isReviewDue(d.reviewDueAt)).length,
+    [docs]
+  );
+  // F: 整理アシストの検出（0件なら非表示に使う）
+  const cleanup = useMemo(() => {
+    const noTags = docs.filter((d) => d.treatments.length === 0);
+    const noSummary = docs.filter((d) => !d.summary.trim());
+    const noReview = docs.filter((d) => !d.reviewDueAt);
+    const mergePairs = findTagMergeSuggestions(docs);
+    return { noTags, noSummary, noReview, mergePairs };
+  }, [docs]);
 
   const toggleCat = (cat: string) => {
     setSelectedCats((prev) =>
@@ -500,6 +535,7 @@ export default function LibraryBrowser() {
       treatmentsText: doc.treatments.join("、"),
       summary: doc.summary,
       searchText: doc.searchText,
+      reviewDueAt: doc.reviewDueAt || "",
     });
     setFormError("");
     setFallbackNote(false);
@@ -559,6 +595,7 @@ export default function LibraryBrowser() {
     fd.append("treatments", JSON.stringify(treatments));
     fd.append("summary", form.summary.trim());
     fd.append("searchText", form.searchText);
+    fd.append("reviewDueAt", form.reviewDueAt);
     const res = await fetch("/api/library", { method: "POST", body: fd });
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
@@ -627,6 +664,7 @@ export default function LibraryBrowser() {
             keywords,
             treatments,
             summary: form.summary.trim(),
+            reviewDueAt: form.reviewDueAt,
           }),
         });
         if (!res.ok) {
@@ -698,6 +736,7 @@ export default function LibraryBrowser() {
           action: "approveUpdate",
           id: approveTarget.id,
           keepTitle,
+          resetReview,
         }),
       });
       if (!res.ok) {
@@ -731,6 +770,33 @@ export default function LibraryBrowser() {
       setLoadError(e instanceof Error ? e.message : "取り下げに失敗しました");
     } finally {
       setBusyDocId(null);
+    }
+  };
+
+  // F: タグ統合の実行（全docのtreatmentsを from→to 置換）
+  const doMergeTag = async () => {
+    if (!mergeTarget) return;
+    setMerging(true);
+    try {
+      const res = await fetch("/api/library/manage", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "mergeTag",
+          from: mergeTarget.from,
+          to: mergeTarget.to,
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "タグ統合に失敗しました");
+      }
+      setMergeTarget(null);
+      await refresh();
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "タグ統合に失敗しました");
+    } finally {
+      setMerging(false);
     }
   };
 
@@ -1151,6 +1217,16 @@ export default function LibraryBrowser() {
                     v{docVersionNumber(doc)}
                   </span>
                 )}
+                {reviewStatus(doc.reviewDueAt) === "overdue" && (
+                  <span className="text-[10px] font-medium bg-red-100 text-red-700 rounded px-1.5 py-0.5">
+                    ⏰ 見直し時期です
+                  </span>
+                )}
+                {reviewStatus(doc.reviewDueAt) === "soon" && (
+                  <span className="text-[10px] font-medium bg-amber-100 text-amber-700 rounded px-1.5 py-0.5">
+                    ⏰ まもなく見直し
+                  </span>
+                )}
               </div>
             </div>
             {/* A: お気に入り★トグル */}
@@ -1561,6 +1637,88 @@ export default function LibraryBrowser() {
             </div>
           )}
 
+          {/* F: 整理アシスト（指示書98・該当0件なら非表示） */}
+          {(cleanup.noTags.length > 0 ||
+            cleanup.noSummary.length > 0 ||
+            cleanup.noReview.length > 0 ||
+            cleanup.mergePairs.length > 0) && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 space-y-3">
+              <h3 className="text-sm font-semibold">🧹 整えるとよい資料</h3>
+
+              {/* ①②③: 各カテゴリを最大6件、編集で直行 */}
+              {[
+                { label: "施術タグなし", docs: cleanup.noTags },
+                { label: "要約が空", docs: cleanup.noSummary },
+                { label: "見直し日が未設定", docs: cleanup.noReview },
+              ]
+                .filter((g) => g.docs.length > 0)
+                .map((g) => (
+                  <div key={g.label} className="space-y-1">
+                    <p className="text-xs font-medium text-amber-800">
+                      {g.label}（{g.docs.length}件）
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {g.docs.slice(0, 6).map((d) => (
+                        <button
+                          key={d.id}
+                          type="button"
+                          onClick={() => openEdit(d)}
+                          className="text-xs border border-amber-300 bg-white rounded-full px-2.5 py-1 hover:bg-amber-100 max-w-[220px] truncate"
+                          title={`${d.title}（編集で直す）`}
+                        >
+                          {d.title}
+                        </button>
+                      ))}
+                      {g.docs.length > 6 && (
+                        <span className="text-xs text-muted-foreground self-center">
+                          ほか{g.docs.length - 6}件
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+              {/* ④: 表記ゆれの疑い → どちらに寄せるか2択 */}
+              {cleanup.mergePairs.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-amber-800">
+                    表記ゆれの疑い（{cleanup.mergePairs.length}組）
+                  </p>
+                  {cleanup.mergePairs.map((p, i) => (
+                    <div
+                      key={`${p.a}-${p.b}-${i}`}
+                      className="flex items-center gap-2 text-xs bg-white border border-amber-200 rounded-lg px-2 py-1.5 flex-wrap"
+                    >
+                      <span className="text-muted-foreground">{p.reason}:</span>
+                      <span className="font-medium">
+                        「{p.a}」({p.countA}) ／「{p.b}」({p.countB})
+                      </span>
+                      <span className="text-muted-foreground">どちらに寄せる？</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setMergeTarget({ from: p.b, to: p.a, count: p.countB })
+                        }
+                      >
+                        「{p.a}」に統合
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setMergeTarget({ from: p.a, to: p.b, count: p.countA })
+                        }
+                      >
+                        「{p.b}」に統合
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="space-y-3">
             <Input
               placeholder="キーワードで検索（タイトル・キーワード・施術タグ・要約・本文）"
@@ -1585,6 +1743,21 @@ export default function LibraryBrowser() {
                   </button>
                 );
               })}
+              {/* E: 見直し時期チップ（超過＋30日以内・件数バッジ・指示書98） */}
+              {reviewDueCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setReviewFilterOn((v) => !v)}
+                  className={`px-3 py-1 rounded-full text-sm border transition-colors ${
+                    reviewFilterOn
+                      ? "bg-red-500 text-white border-red-500"
+                      : "bg-background text-red-600 border-red-200 hover:bg-red-50"
+                  }`}
+                >
+                  ⏰ 見直し時期
+                  <span className="ml-1 opacity-70">{reviewDueCount}</span>
+                </button>
+              )}
               {selectedCats.length > 0 && (
                 <button
                   type="button"
@@ -1976,6 +2149,47 @@ export default function LibraryBrowser() {
               />
             </div>
 
+            {/* E: 次の見直し日（指示書98・1年後ボタン付き） */}
+            <div className="space-y-1.5">
+              <Label htmlFor="lib-review">
+                次の見直し日
+                <span className="text-xs text-muted-foreground ml-2">
+                  （任意・機器更新や法改正で古くなる資料に）
+                </span>
+              </Label>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Input
+                  id="lib-review"
+                  type="date"
+                  value={form.reviewDueAt}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, reviewDueAt: e.target.value }))
+                  }
+                  className="w-auto"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setForm((f) => ({ ...f, reviewDueAt: oneYearFromTodayYmd() }))
+                  }
+                >
+                  1年後
+                </Button>
+                {form.reviewDueAt && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setForm((f) => ({ ...f, reviewDueAt: "" }))}
+                  >
+                    クリア
+                  </Button>
+                )}
+              </div>
+            </div>
+
             {/* 版履歴（指示書95・編集時のみ・版があれば表示） */}
             {editingDoc && editingDoc.versions.length > 0 && (
               <div className="space-y-1.5 border-t pt-3">
@@ -2231,6 +2445,15 @@ export default function LibraryBrowser() {
                 </span>
               </span>
             </label>
+            {/* E: 承認時に見直し日を1年後にリセット（既定ON・指示書98） */}
+            <label className="flex items-center gap-2 cursor-pointer border-t pt-2 mt-1">
+              <input
+                type="checkbox"
+                checked={resetReview}
+                onChange={(e) => setResetReview(e.target.checked)}
+              />
+              <span>次の見直し日を1年後にする</span>
+            </label>
           </div>
           <DialogFooter>
             <Button
@@ -2250,6 +2473,35 @@ export default function LibraryBrowser() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ─── タグ統合の確認（指示書98-F） ─── */}
+      <AlertDialog
+        open={!!mergeTarget}
+        onOpenChange={(o) => !o && setMergeTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>タグを統合しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              「{mergeTarget?.from}」を使っている {mergeTarget?.count} 件の資料を
+              「{mergeTarget?.to}」に置き換えます。この操作は変更履歴に残ります。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={merging}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                doMergeTag();
+              }}
+              disabled={merging}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white"
+            >
+              {merging ? "統合中…" : "統合する"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
