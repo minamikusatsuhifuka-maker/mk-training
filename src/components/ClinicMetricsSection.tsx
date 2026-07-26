@@ -27,8 +27,8 @@ import {
   type Initiative,
 } from "@/lib/clinic-metrics";
 
-// 12か月移動平均線の色（gray-800・破線。合算線 TOTAL=#475569 より濃く＋破線で区別）
-const MOVING_AVG_COLOR = "#1f2937";
+// 12か月移動平均線の色（gray-400・薄い破線。視認できるが主張しない・指示書94）
+const MOVING_AVG_COLOR = "#9ca3af";
 
 const CIRCLED = [
   "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩",
@@ -49,13 +49,14 @@ function niceCeil(v: number): number {
 
 // 配色
 const INSURANCE = "#14b8a6"; // teal-500（保険）
-const SELFPAY = "#f59e0b"; // amber-500（自費）
+const SELFPAY = "#c026d3"; // fuchsia-600（自費・指示書94で amber から変更）
 const LEGACY = "#94a3b8"; // slate-400（旧データ・内訳未入力）
 const TOTAL = "#475569"; // slate-600（合算の線）
 const COUNSEL = "#0ea5e9"; // sky-500（カウンセリング折れ線）
 
 type ChartType = "bar" | "line" | "area";
 const CHART_TYPE_KEY = "mk_metrics_chart_type";
+const AVG_VISIBLE_KEY = "mk_metrics_avg_visible"; // 12か月平均線の表示ON/OFF（指示書94）
 const CHART_TYPES: { key: ChartType; icon: string; label: string }[] = [
   { key: "bar", icon: "📊", label: "棒" },
   { key: "line", icon: "📈", label: "線" },
@@ -117,6 +118,7 @@ function Chart({
   yms,
   metricMap,
   movingAvg,
+  avgVisible,
   plotted,
   hasLegacy,
   hasCounseling,
@@ -127,6 +129,7 @@ function Chart({
   yms: string[];
   metricMap: Map<string, MonthMetric>;
   movingAvg: Map<string, number>;
+  avgVisible: boolean;
   plotted: PlottedInitiative[];
   hasLegacy: boolean;
   hasCounseling: boolean;
@@ -195,8 +198,15 @@ function Chart({
   }, [pinnedIdx]);
 
   const tipData = useMemo(
-    () => yms.map((ym) => buildTipData(ym, metricMap.get(ym), movingAvg.get(ym))),
-    [yms, metricMap, movingAvg]
+    () =>
+      yms.map((ym) =>
+        buildTipData(
+          ym,
+          metricMap.get(ym),
+          avgVisible ? movingAvg.get(ym) : undefined
+        )
+      ),
+    [yms, metricMap, movingAvg, avgVisible]
   );
   const tip = activeIdx != null ? tipData[activeIdx] : null;
   // 端で見切れないよう左右反転（ツールチップ幅の見積もり）
@@ -545,8 +555,9 @@ function Chart({
           </>
         )}
 
-        {/* 12か月移動平均線（93・全タイプ共通・破線・ヒットエリアより下） */}
-        {avgRuns.map((run, ri) => (
+        {/* 12か月移動平均線（93・全タイプ共通・破線・ヒットエリアより下・94でON/OFF） */}
+        {avgVisible &&
+          avgRuns.map((run, ri) => (
           <polyline
             key={`avg-${ri}`}
             points={run.map((p) => `${p.x},${p.y}`).join(" ")}
@@ -650,6 +661,7 @@ export function ClinicMetricsSection() {
   const [rangeEnd, setRangeEnd] = useState("");
   const [rangeInit, setRangeInit] = useState(false);
   const [chartType, setChartType] = useState<ChartType>("bar");
+  const [avgVisible, setAvgVisible] = useState(true); // 12か月平均線の表示（指示書94・既定ON）
 
   const boxRef = useRef<HTMLDivElement>(null);
   const [boxWidth, setBoxWidth] = useState(0);
@@ -677,6 +689,27 @@ export function ClinicMetricsSection() {
     } catch {
       /* 保存できなくても表示は切替 */
     }
+  };
+
+  // 12か月平均線の表示ON/OFF復元（指示書94・既定ON。"0"のみOFF）
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(AVG_VISIBLE_KEY) === "0") setAvgVisible(false);
+    } catch {
+      /* localStorage 不可環境 */
+    }
+  }, []);
+
+  const toggleAvg = () => {
+    setAvgVisible((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(AVG_VISIBLE_KEY, next ? "1" : "0");
+      } catch {
+        /* 保存できなくても表示は切替 */
+      }
+      return next;
+    });
   };
 
   // コンテナ幅に追随。指示書91-2: 初回は useLayoutEffect で同期測定し、
@@ -790,6 +823,24 @@ export function ClinicMetricsSection() {
               </button>
             ))}
           </div>
+          {/* 12か月平均線 ON/OFF トグル（指示書94） */}
+          <button
+            type="button"
+            onClick={toggleAvg}
+            className={`text-xs px-2 py-1 rounded-lg border transition-colors ${
+              avgVisible
+                ? "bg-gray-100 text-gray-700 border-gray-300"
+                : "bg-white text-gray-400 border-gray-200 hover:bg-gray-50"
+            }`}
+            aria-pressed={avgVisible}
+            title="12か月平均線の表示"
+          >
+            <span
+              className="inline-block w-4 border-t-2 border-dashed align-middle mr-1"
+              style={{ borderColor: avgVisible ? MOVING_AVG_COLOR : "#d1d5db" }}
+            />
+            平均
+          </button>
           <input
             type="month"
             value={rangeStart}
@@ -833,7 +884,10 @@ export function ClinicMetricsSection() {
           <span className="text-[11px] text-gray-600">保険売上（万円）</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="inline-block w-4 h-2.5 rounded-sm bg-amber-500" />
+          <span
+            className="inline-block w-4 h-2.5 rounded-sm"
+            style={{ backgroundColor: SELFPAY }}
+          />
           <span className="text-[11px] text-gray-600">自費売上（施術＋物販）</span>
         </div>
         <span className="text-[11px] text-gray-500">
@@ -847,13 +901,15 @@ export function ClinicMetricsSection() {
             <span className="text-[11px] text-gray-600">カウンセリング数（件）</span>
           </div>
         )}
-        {/* 12か月移動平均（93）: 破線サンプル */}
-        <div className="flex items-center gap-1.5">
-          <svg width="18" height="6" aria-hidden>
-            <line x1="0" y1="3" x2="18" y2="3" stroke={MOVING_AVG_COLOR} strokeWidth="1.5" strokeDasharray="5 3" />
-          </svg>
-          <span className="text-[11px] text-gray-600">12か月平均</span>
-        </div>
+        {/* 12か月移動平均（93）: 破線サンプル・OFF時は凡例からも消す（94） */}
+        {avgVisible && (
+          <div className="flex items-center gap-1.5">
+            <svg width="18" height="6" aria-hidden>
+              <line x1="0" y1="3" x2="18" y2="3" stroke={MOVING_AVG_COLOR} strokeWidth="1.5" strokeDasharray="5 3" />
+            </svg>
+            <span className="text-[11px] text-gray-600">12か月平均</span>
+          </div>
+        )}
       </div>
 
       <div ref={boxRef} className="bg-white border border-gray-100 rounded-xl p-2">
@@ -864,6 +920,7 @@ export function ClinicMetricsSection() {
             yms={displayedYms}
             metricMap={metricMap}
             movingAvg={movingAvgMap}
+            avgVisible={avgVisible}
             plotted={plotted}
             hasLegacy={hasLegacy}
             hasCounseling={hasCounseling}
