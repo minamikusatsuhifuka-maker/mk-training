@@ -1,6 +1,6 @@
 "use client";
 
-// 資料のブラウザ内プレビュー（指示書100）
+// 資料のブラウザ内プレビュー（指示書100＋101）
 // - 外部Officeビューア（Microsoft/Google等）にファイルURLを渡さない。すべてブラウザ内で完結する
 //   （院内の同意書・運用資料を外部サービスに送らないための確定仕様）。
 // - PDF: iframe で公開URLを直接表示。
@@ -10,6 +10,8 @@
 // - Excel・旧形式(.doc/.ppt/.xls)・変換失敗・タイムアウト: 「プレビュー非対応」＋DL導線に
 //   フォールバック（エラーで落とさない）。
 // - 変換はモーダルを開いた時に実行（一覧表示時に全件変換しない）。
+// - 101 リンク型: YouTube は youtube-nocookie ドメインで埋め込み再生、
+//   Dropbox・その他（ID抽出失敗含む）は埋め込まず「新しいタブで開く」ボタン。
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -27,7 +29,9 @@ import {
   opensInBrowser,
   docVersionNumber,
   reviewStatus,
-  FILE_KIND_META,
+  docDisplayMeta,
+  youtubeEmbedUrl,
+  LINK_PROVIDER_META,
   type LibraryDoc,
 } from "@/lib/library";
 import { extractPptxSlideTexts } from "@/lib/library-extract";
@@ -37,6 +41,8 @@ type PreviewState =
   | { status: "pdf" }
   | { status: "docx"; html: string }
   | { status: "pptx"; slides: string[] }
+  | { status: "youtube"; embedUrl: string }
+  | { status: "externalLink" }
   | { status: "unsupported" };
 
 const CONVERT_TIMEOUT_MS = 20000;
@@ -68,6 +74,17 @@ export default function LibraryPreviewModal({
   useEffect(() => {
     if (!doc) return;
     let cancelled = false;
+
+    // 101 リンク型: YouTubeは埋め込み、それ以外は「新しいタブで開く」（fetch/変換なし）
+    if (doc.kind === "link") {
+      const embedUrl =
+        doc.linkProvider === "youtube" ? youtubeEmbedUrl(doc.linkUrl) : "";
+      setState(
+        embedUrl ? { status: "youtube", embedUrl } : { status: "externalLink" }
+      );
+      return;
+    }
+
     const kind = fileKind(doc.mimeType, doc.fileName);
     const ext = extOf(doc.fileName);
 
@@ -124,8 +141,9 @@ export default function LibraryPreviewModal({
   }, [doc]);
 
   if (!doc) return null;
-  const meta = FILE_KIND_META[fileKind(doc.mimeType, doc.fileName)];
-  const isPdf = opensInBrowser(doc.mimeType, doc.fileName);
+  const meta = docDisplayMeta(doc);
+  const isLink = doc.kind === "link";
+  const isPdf = !isLink && opensInBrowser(doc.mimeType, doc.fileName);
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -176,6 +194,36 @@ export default function LibraryPreviewModal({
             />
           )}
 
+          {/* 101: YouTube 埋め込み再生（プライバシー強化の nocookie ドメイン） */}
+          {state.status === "youtube" && (
+            <iframe
+              src={state.embedUrl}
+              title={doc.title}
+              className="w-full aspect-video border rounded-lg bg-black"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+            />
+          )}
+
+          {/* 101: Dropbox・その他リンク（埋め込み不安定のため新規タブで開く） */}
+          {state.status === "externalLink" && (
+            <div className="h-64 flex flex-col items-center justify-center gap-3 text-center px-4">
+              <p className="text-sm text-muted-foreground">
+                {LINK_PROVIDER_META[doc.linkProvider].label}のリンクです。
+                <br />
+                新しいタブで開いてご覧ください。
+              </p>
+              <a href={doc.linkUrl} target="_blank" rel="noreferrer">
+                <Button className="bg-teal text-teal-foreground">
+                  🔗 新しいタブで開く
+                </Button>
+              </a>
+              <p className="text-xs text-muted-foreground break-all max-w-full">
+                {doc.linkUrl}
+              </p>
+            </div>
+          )}
+
           {state.status === "docx" && (
             <div
               // @tailwindcss/typography(prose) 非依存のため要素ごとに指定（MarkdownView と同じ流儀）
@@ -221,11 +269,19 @@ export default function LibraryPreviewModal({
         </div>
 
         <DialogFooter className="flex-row flex-wrap justify-end gap-2">
-          <a href={downloadHref(doc)}>
-            <Button variant="outline" size="sm">
-              ⬇ ダウンロード
-            </Button>
-          </a>
+          {isLink ? (
+            <a href={doc.linkUrl} target="_blank" rel="noreferrer">
+              <Button variant="outline" size="sm">
+                🔗 新しいタブで開く
+              </Button>
+            </a>
+          ) : (
+            <a href={downloadHref(doc)}>
+              <Button variant="outline" size="sm">
+                ⬇ ダウンロード
+              </Button>
+            </a>
+          )}
           {isPdf && (
             <Button
               variant="outline"

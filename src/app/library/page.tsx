@@ -5,6 +5,7 @@
 // 登録＝即公開（承認なし）。編集・削除・復元はログインユーザー全員が可能で、変更履歴に残る。
 // データは content_store（portal_library / portal_library_log）、ファイルは Supabase Storage。
 
+import { Suspense } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import LibraryBrowser from "@/components/LibraryBrowser";
 
@@ -13,9 +14,12 @@ export default function LibraryPage() {
     <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
       <PageHeader
         title="📚 資料庫"
-        description="説明資料・同意書を登録すると、AIが内容を読んでカテゴリ・キーワード・要約を付けます。検索とカテゴリで探せます。"
+        description="説明資料・同意書・マニュアルを登録すると、AIが内容を読んでカテゴリ・キーワード・要約を付けます。検索とカテゴリで探せます。"
       />
-      <LibraryBrowser />
+      {/* 101: LibraryBrowser が useSearchParams で ?category= を読むため Suspense 必須（静的プリレンダ維持） */}
+      <Suspense fallback={null}>
+        <LibraryBrowser />
+      </Suspense>
     </div>
   );
 }

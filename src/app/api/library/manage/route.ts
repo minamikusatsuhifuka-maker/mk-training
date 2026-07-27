@@ -25,6 +25,8 @@ import {
   normalizeCategory,
   normalizeKeywords,
   normalizeTreatments,
+  normalizeLinkUrl,
+  detectLinkProvider,
   extForFile,
   genLibraryId,
   docVersionNumber,
@@ -309,8 +311,21 @@ export async function PATCH(req: NextRequest) {
       typeof body.title === "string" && body.title.trim()
         ? body.title.trim()
         : cur.title;
+    // 指示書101: リンク型のURL変更は通常の編集として扱う（版は作らない・変更履歴に残る）
+    let linkPatch: Partial<LibraryDoc> = {};
+    if (cur.kind === "link" && typeof body.linkUrl === "string") {
+      const linkUrl = normalizeLinkUrl(body.linkUrl);
+      if (!linkUrl) {
+        return NextResponse.json(
+          { error: "URLが不正です（https:// で始まるURLを入力してください）" },
+          { status: 400 }
+        );
+      }
+      linkPatch = { linkUrl, linkProvider: detectLinkProvider(linkUrl) };
+    }
     const updated: LibraryDoc = {
       ...cur,
+      ...linkPatch,
       title,
       category: normalizeCategory(body.category ?? cur.category),
       keywords:
@@ -425,6 +440,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "資料が見つかりません" },
         { status: 404 }
+      );
+    }
+
+    // 指示書101: 版管理はファイル型のみ。リンク型へのファイル差し替えは受け付けない。
+    if (store.docs[idx].kind === "link") {
+      return NextResponse.json(
+        { error: "リンク型資料はファイル差し替えできません。編集でURLを変更してください。" },
+        { status: 400 }
       );
     }
 

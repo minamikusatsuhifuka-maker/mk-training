@@ -73,7 +73,7 @@ function buildPrompt(
   "summary": "内容を1行で表す日本語要約（40〜80字程度）"
 }
 
-- category は次の5つから最も適切な1つを厳密に選ぶ: ${LIBRARY_CATEGORIES.join(" / ")}。迷う場合は「その他」。
+- category は次の${LIBRARY_CATEGORIES.length}つから最も適切な1つを厳密に選ぶ: ${LIBRARY_CATEGORIES.join(" / ")}。迷う場合は「その他」。
 - keywords は5〜10個。診療科目・検査名・書類種別など、スタッフが探す時に打ちそうな語。
 - treatments は「施術・機器の軸」で探すためのタグ（0〜5個）。この資料が扱う施術名・機器名のみを入れる。
   - 既存タグ一覧: ${tagList}。この中と同じ施術・機器なら**必ず一覧の表記をそのまま使う**（表記ゆれを作らない）。

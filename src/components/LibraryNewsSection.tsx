@@ -13,9 +13,8 @@ import {
   LIBRARY_KEY,
   normalizeStore,
   docVersionNumber,
-  fileKind,
   opensInBrowser,
-  FILE_KIND_META,
+  docDisplayMeta,
   type LibraryDoc,
 } from "@/lib/library";
 
@@ -30,7 +29,9 @@ function formatDate(iso: string): string {
   });
 }
 
+// リンク型は linkUrl、PDFは新規タブ、他ファイルは ?download（101でリンク型対応）
 function fileHref(d: LibraryDoc): string {
+  if (d.kind === "link") return d.linkUrl;
   if (opensInBrowser(d.mimeType, d.fileName)) return d.fileUrl;
   const sep = d.fileUrl.includes("?") ? "&" : "?";
   return `${d.fileUrl}${sep}download=${encodeURIComponent(d.fileName || "download")}`;
@@ -83,9 +84,10 @@ export function LibraryNewsSection() {
 
       <ul className="space-y-1.5">
         {recent.map((d) => {
-          const meta = FILE_KIND_META[fileKind(d.mimeType, d.fileName)];
+          const meta = docDisplayMeta(d);
           const vN = docVersionNumber(d);
-          const isPdf = opensInBrowser(d.mimeType, d.fileName);
+          const openInTab =
+            d.kind === "link" || opensInBrowser(d.mimeType, d.fileName);
           const actor = lastActor(d);
           return (
             <li
@@ -110,11 +112,11 @@ export function LibraryNewsSection() {
               </span>
               <a
                 href={fileHref(d)}
-                target={isPdf ? "_blank" : undefined}
+                target={openInTab ? "_blank" : undefined}
                 rel="noreferrer"
                 className="text-xs text-teal-600 hover:underline shrink-0"
               >
-                {isPdf ? "開く" : "DL"}
+                {openInTab ? "開く" : "DL"}
               </a>
             </li>
           );

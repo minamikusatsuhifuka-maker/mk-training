@@ -14,12 +14,13 @@ export const LIBRARY_LOG_MAX = 200;
 // staff-photos バケット内のパス接頭辞（バケット自体は既存の public バケットを再利用）
 export const LIBRARY_PATH_PREFIX = "library";
 
-// カテゴリ（コード固定・順序固定）
+// カテゴリ（コード固定・順序固定。「マニュアル」は指示書101で追加）
 export const LIBRARY_CATEGORIES = [
   "同意書",
   "施術説明",
   "検査・処置",
   "院内運用",
+  "マニュアル",
   "その他",
 ] as const;
 export type LibraryCategory = (typeof LIBRARY_CATEGORIES)[number];
@@ -40,6 +41,10 @@ export type DocVersion = {
   replacedBy: string; // 差し替えた人の表示名
 };
 
+// 資料の実体種別（指示書101）。既存doc（kind未定義）は "file" として扱う。
+export type DocKind = "file" | "link";
+export type LinkProvider = "youtube" | "dropbox" | "other";
+
 export type LibraryDoc = {
   id: string;
   title: string;
@@ -47,17 +52,20 @@ export type LibraryDoc = {
   keywords: string[];
   treatments: string[]; // 施術・機器タグ（0〜5個・AI検知＋手修正・指示書90）
   summary: string;
+  kind: DocKind; // "file"=Storageのファイル / "link"=外部URL（指示書101）
+  linkUrl: string; // kind="link" のみ（httpsのみ許可・それ以外は ""）
+  linkProvider: LinkProvider; // linkUrl から自動判定
   fileName: string;
-  filePath: string; // Storage パス（library/xxx.pdf）
-  fileUrl: string; // 公開URL（開く・ダウンロード用）
+  filePath: string; // Storage パス（library/xxx.pdf）。link型は ""
+  fileUrl: string; // 公開URL（開く・ダウンロード用）。link型は ""
   mimeType: string;
-  searchText: string; // 抽出テキスト先頭2000字程度（検索用）
+  searchText: string; // 抽出テキスト先頭2000字程度（検索用）。link型は ""
   uploadedBy: string; // userId
   uploadedByName: string; // 表示名（プロフィール名 or email）
   uploadedAt: string;
   updatedAt: string;
-  versions: DocVersion[]; // 差し替え世代（新しいものほど末尾・指示書95）
-  pendingUpdate: PendingUpdate | null; // 承認待ちの新版（指示書96・同時1件）
+  versions: DocVersion[]; // 差し替え世代（新しいものほど末尾・指示書95。版管理はfile型のみ）
+  pendingUpdate: PendingUpdate | null; // 承認待ちの新版（指示書96・同時1件・file型のみ）
   reviewDueAt: string; // 次の見直し日 "YYYY-MM-DD"（任意・未設定は ""・指示書98）
 };
 
@@ -200,14 +208,18 @@ export function normalizePendingUpdate(input: unknown): PendingUpdate | null {
 }
 
 // 1件の資料メタを正規化（必須項目が欠けるものは null＝破棄）。status は無視（87で撤廃）。
+// 101: kind="link"+有効な linkUrl はリンク型（fileUrl不要）。kind未定義の既存docはファイル型。
 export function normalizeDoc(raw: unknown): LibraryDoc | null {
   if (!raw || typeof raw !== "object") return null;
   const g = raw as Record<string, unknown>;
   const id = str(g.id);
   const title = str(g.title);
   const fileUrl = str(g.fileUrl);
-  // id・タイトル・ファイルURL のいずれかが欠ける行は壊れているとみなし破棄
-  if (!id || !title || !fileUrl) return null;
+  const linkUrl = normalizeLinkUrl(g.linkUrl);
+  const kind: DocKind = g.kind === "link" && linkUrl ? "link" : "file";
+  // id・タイトル、および実体（ファイル型=fileUrl / リンク型=linkUrl）が欠ける行は破棄
+  if (!id || !title) return null;
+  if (kind === "file" && !fileUrl) return null;
   const uploadedAt = str(g.uploadedAt) || new Date(0).toISOString();
   return {
     id,
@@ -216,17 +228,21 @@ export function normalizeDoc(raw: unknown): LibraryDoc | null {
     keywords: normalizeKeywords(g.keywords),
     treatments: normalizeTreatments(g.treatments),
     summary: str(g.summary),
-    fileName: str(g.fileName),
-    filePath: str(g.filePath),
-    fileUrl,
-    mimeType: str(g.mimeType),
-    searchText: str(g.searchText),
+    kind,
+    linkUrl: kind === "link" ? linkUrl : "",
+    linkProvider: kind === "link" ? detectLinkProvider(linkUrl) : "other",
+    fileName: kind === "link" ? "" : str(g.fileName),
+    filePath: kind === "link" ? "" : str(g.filePath),
+    fileUrl: kind === "link" ? "" : fileUrl,
+    mimeType: kind === "link" ? "" : str(g.mimeType),
+    searchText: kind === "link" ? "" : str(g.searchText),
     uploadedBy: str(g.uploadedBy),
     uploadedByName: str(g.uploadedByName),
     uploadedAt,
     updatedAt: str(g.updatedAt) || uploadedAt,
-    versions: normalizeVersions(g.versions),
-    pendingUpdate: normalizePendingUpdate(g.pendingUpdate),
+    // 版管理・更新待ちはファイル型のみ（リンク型のURL変更は通常の編集・指示書101）
+    versions: kind === "link" ? [] : normalizeVersions(g.versions),
+    pendingUpdate: kind === "link" ? null : normalizePendingUpdate(g.pendingUpdate),
     reviewDueAt: normalizeReviewDueAt(g.reviewDueAt),
   };
 }
@@ -235,6 +251,88 @@ export function normalizeDoc(raw: unknown): LibraryDoc | null {
 export function normalizeReviewDueAt(v: unknown): string {
   const s = str(v);
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
+}
+
+// ─── リンク型資料（指示書101・読み書き両境界で通す） ───
+
+// リンクURLの正規化（https のみ許可・URLとして不正は ""）
+export function normalizeLinkUrl(v: unknown): string {
+  const s = str(v).trim();
+  if (!s) return "";
+  try {
+    const u = new URL(s);
+    if (u.protocol !== "https:") return "";
+    return u.toString();
+  } catch {
+    return "";
+  }
+}
+
+// URLからプロバイダを自動判定
+export function detectLinkProvider(url: string): LinkProvider {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (
+      host === "youtu.be" ||
+      host === "youtube.com" ||
+      host.endsWith(".youtube.com")
+    ) {
+      return "youtube";
+    }
+    if (host === "dropbox.com" || host.endsWith(".dropbox.com")) {
+      return "dropbox";
+    }
+  } catch {
+    /* 不正URLは other */
+  }
+  return "other";
+}
+
+// YouTube の動画ID抽出（watch?v= / youtu.be/ / /shorts/ / /embed/ / /live/ に対応）
+export function youtubeVideoId(url: string): string {
+  const isId = (s: string) => /^[\w-]{6,20}$/.test(s);
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase().replace(/^(www\.|m\.)/, "");
+    if (host === "youtu.be") {
+      const id = u.pathname.split("/")[1] || "";
+      return isId(id) ? id : "";
+    }
+    if (host === "youtube.com" || host.endsWith(".youtube.com")) {
+      const v = u.searchParams.get("v");
+      if (v && isId(v)) return v;
+      const m = u.pathname.match(/^\/(?:shorts|embed|live)\/([\w-]{6,20})/);
+      if (m) return m[1];
+    }
+  } catch {
+    /* 不正URLは "" */
+  }
+  return "";
+}
+
+// 埋め込み再生URL（プライバシー強化の nocookie ドメインを使用・指示書101）
+export function youtubeEmbedUrl(url: string): string {
+  const id = youtubeVideoId(url);
+  return id ? `https://www.youtube-nocookie.com/embed/${id}` : "";
+}
+
+// リンク型のカード/一覧表示メタ
+export const LINK_PROVIDER_META: Record<
+  LinkProvider,
+  { icon: string; label: string }
+> = {
+  youtube: { icon: "▶️", label: "YouTube" },
+  dropbox: { icon: "🔗", label: "Dropbox" },
+  other: { icon: "🔗", label: "リンク" },
+};
+
+// docの表示アイコン/種別ラベル（file/link 共通の入り口。カード・チップ・ホーム新着で共用）
+export function docDisplayMeta(
+  doc: Pick<LibraryDoc, "kind" | "linkProvider" | "mimeType" | "fileName">
+): { icon: string; label: string } {
+  return doc.kind === "link"
+    ? LINK_PROVIDER_META[doc.linkProvider]
+    : FILE_KIND_META[fileKind(doc.mimeType, doc.fileName)];
 }
 
 // 版番号（N = 旧版数 + 1・v1は表示省略可・指示書96）
@@ -251,12 +349,18 @@ export function normalizeStore(raw: unknown): LibraryStore {
   return { docs, updatedAt: str((data as { updatedAt?: unknown })?.updatedAt) };
 }
 
+// 全アクションを列挙（漏れると normalizeLogEntry がそのログを破棄し履歴に出なくなる。
+// 95/96/98追加分が漏れていた既存バグを101で修正）
 const LOG_ACTIONS: LibraryAction[] = [
   "create",
   "edit",
   "delete",
   "replace",
   "restore",
+  "rollback",
+  "approveUpdate",
+  "withdrawUpdate",
+  "mergeTag",
 ];
 
 export function normalizeLogEntry(raw: unknown): LibraryLogEntry | null {

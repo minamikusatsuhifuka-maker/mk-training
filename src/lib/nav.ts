@@ -61,6 +61,8 @@ export const MASTER_ITEMS: MasterItem[] = [
   { key: "/news-history", href: "/news-history", label: "📜 お知らせ履歴", categoryId: "work" },
   { key: "/operations", href: "/operations", label: "📋 業務チェックリスト", categoryId: "work" },
   { key: "/library", href: "/library", label: "🗂️ 資料庫", categoryId: "work" },
+  // マニュアル＝資料庫のカテゴリ絞り込み済みビュー（別ページは作らない・指示書101。key は一意IDで可＝59の流儀）
+  { key: "library-manual", href: "/library?category=マニュアル", label: "📖 マニュアル", categoryId: "work" },
   { key: "/medical-fees", href: "/medical-fees", label: "💴 算定・点数表", categoryId: "work" },
   { key: "/expert", href: "/expert", label: "⭐ エキスパートの働き方", categoryId: "work" },
   { key: "/growth-builder", href: "/growth-builder", label: "🚀 成長ロードマップ", categoryId: "work" },

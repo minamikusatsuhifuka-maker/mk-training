@@ -21,6 +21,8 @@ import {
   normalizeKeywords,
   normalizeTreatments,
   normalizeReviewDueAt,
+  normalizeLinkUrl,
+  detectLinkProvider,
   extForFile,
   genLibraryId,
   type LibraryDoc,
@@ -94,23 +96,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "不正なリクエストです" }, { status: 400 });
   }
 
+  // 指示書101: kind="link" はファイルなしの外部URL登録（YouTube/Dropbox等）
+  const kind = form.get("kind") === "link" ? "link" : "file";
+
   const file = form.get("file");
-  if (!(file instanceof Blob)) {
-    return NextResponse.json({ error: "ファイルがありません" }, { status: 400 });
-  }
-  if (file.size === 0 || file.size > MAX_BYTES) {
-    return NextResponse.json(
-      { error: "ファイルサイズが不正です（20MBまで）" },
-      { status: 400 }
-    );
+  if (kind === "file") {
+    if (!(file instanceof Blob)) {
+      return NextResponse.json({ error: "ファイルがありません" }, { status: 400 });
+    }
+    if (file.size === 0 || file.size > MAX_BYTES) {
+      return NextResponse.json(
+        { error: "ファイルサイズが不正です（20MBまで）" },
+        { status: 400 }
+      );
+    }
   }
 
   const title = ((form.get("title") as string) || "").trim();
   if (!title) {
     return NextResponse.json({ error: "タイトルは必須です" }, { status: 400 });
   }
-  const fileName = ((form.get("fileName") as string) || "").trim() || "資料";
-  const mimeType = file.type || "application/octet-stream";
   const category = normalizeCategory(form.get("category"));
   let keywords: string[] = [];
   try {
@@ -134,33 +139,16 @@ export async function POST(req: NextRequest) {
 
   try {
     const admin = createSupabaseAdminClient();
-    const ext = extForFile(mimeType, fileName);
-    const path = `${LIBRARY_PATH_PREFIX}/${genLibraryId("f")}.${ext}`;
-    const bytes = Buffer.from(await file.arrayBuffer());
-
-    const { error: upError } = await admin.storage
-      .from(STAFF_PHOTOS_BUCKET)
-      .upload(path, bytes, { contentType: mimeType, upsert: false });
-    if (upError) throw new Error(upError.message);
-
-    const { data: pub } = admin.storage
-      .from(STAFF_PHOTOS_BUCKET)
-      .getPublicUrl(path);
-
     const now = new Date().toISOString();
     const userName = await resolveUserName(db, user.id, user.email);
-    const doc: LibraryDoc = {
+
+    const base = {
       id: genLibraryId(),
       title,
       category,
       keywords,
       treatments,
       summary,
-      fileName,
-      filePath: path,
-      fileUrl: pub.publicUrl,
-      mimeType,
-      searchText,
       uploadedBy: user.id,
       uploadedByName: userName,
       uploadedAt: now,
@@ -169,6 +157,57 @@ export async function POST(req: NextRequest) {
       pendingUpdate: null,
       reviewDueAt: normalizeReviewDueAt(form.get("reviewDueAt")),
     };
+
+    let doc: LibraryDoc;
+    if (kind === "link") {
+      // リンク型（指示書101）: Storageは使わない。httpsのみ許可・providerはURLから判定。
+      const linkUrl = normalizeLinkUrl(form.get("linkUrl"));
+      if (!linkUrl) {
+        return NextResponse.json(
+          { error: "URLが不正です（https:// で始まるURLを入力してください）" },
+          { status: 400 }
+        );
+      }
+      doc = {
+        ...base,
+        kind: "link",
+        linkUrl,
+        linkProvider: detectLinkProvider(linkUrl),
+        fileName: "",
+        filePath: "",
+        fileUrl: "",
+        mimeType: "",
+        searchText: "",
+      };
+    } else {
+      const f = file as Blob;
+      const fileName = ((form.get("fileName") as string) || "").trim() || "資料";
+      const mimeType = f.type || "application/octet-stream";
+      const ext = extForFile(mimeType, fileName);
+      const path = `${LIBRARY_PATH_PREFIX}/${genLibraryId("f")}.${ext}`;
+      const bytes = Buffer.from(await f.arrayBuffer());
+
+      const { error: upError } = await admin.storage
+        .from(STAFF_PHOTOS_BUCKET)
+        .upload(path, bytes, { contentType: mimeType, upsert: false });
+      if (upError) throw new Error(upError.message);
+
+      const { data: pub } = admin.storage
+        .from(STAFF_PHOTOS_BUCKET)
+        .getPublicUrl(path);
+
+      doc = {
+        ...base,
+        kind: "file",
+        linkUrl: "",
+        linkProvider: "other",
+        fileName,
+        filePath: path,
+        fileUrl: pub.publicUrl,
+        mimeType,
+        searchText,
+      };
+    }
 
     const store = await loadStore(admin);
     store.docs.push(doc);

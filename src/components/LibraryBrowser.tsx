@@ -12,6 +12,7 @@
 //   タグチップ/更新待ちバナーは stopPropagation でプレビューを開かない。
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,6 +68,10 @@ import {
   isReviewDue,
   oneYearFromTodayYmd,
   findTagMergeSuggestions,
+  normalizeLinkUrl,
+  detectLinkProvider,
+  docDisplayMeta,
+  type DocKind,
   type LibraryDoc,
   type LibraryCategory,
   type LibraryLogEntry,
@@ -117,12 +122,16 @@ function formatDateTime(iso: string): string {
   });
 }
 
-// 開く/ダウンロードのリンク先。PDFはそのまま新規タブ、それ以外は ?download で保存を促す。
+// 開く/ダウンロードのリンク先。リンク型は linkUrl、PDFはそのまま新規タブ、
+// それ以外のファイルは ?download で保存を促す（101でリンク型対応）。
 function fileHref(d: {
   fileUrl: string;
   fileName: string;
   mimeType: string;
+  kind?: DocKind;
+  linkUrl?: string;
 }): string {
+  if (d.kind === "link" && d.linkUrl) return d.linkUrl;
   if (opensInBrowser(d.mimeType, d.fileName)) return d.fileUrl;
   const sep = d.fileUrl.includes("?") ? "&" : "?";
   return `${d.fileUrl}${sep}download=${encodeURIComponent(d.fileName || "download")}`;
@@ -185,6 +194,8 @@ async function runPool<T>(
 type FormState = {
   mode: "create" | "edit";
   id: string;
+  kind: DocKind; // 📎ファイル / 🔗リンク（指示書101）
+  linkUrl: string;
   file: File | null;
   fileName: string;
   mimeType: string;
@@ -200,6 +211,8 @@ type FormState = {
 const EMPTY_FORM: FormState = {
   mode: "create",
   id: "",
+  kind: "file",
+  linkUrl: "",
   file: null,
   fileName: "",
   mimeType: "",
@@ -277,6 +290,18 @@ export default function LibraryBrowser() {
 
   const [query, setQuery] = useState("");
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
+
+  // 101: サイドバー「📖 マニュアル」等からの ?category= で初期カテゴリを設定
+  // （パラメータなしは従来どおり全件。同一ページ内でのクエリ変化にも追随する）
+  const categoryParam = useSearchParams().get("category");
+  useEffect(() => {
+    if (
+      categoryParam &&
+      (LIBRARY_CATEGORIES as readonly string[]).includes(categoryParam)
+    ) {
+      setSelectedCats([categoryParam]);
+    }
+  }, [categoryParam]);
 
   // A お気に入り（指示書97/99）: staff_profile.favoriteDocIds。★保存は { favoriteDocIds } のみ部分更新
   // （PUTは "favoriteDocIds" in body のときだけ更新・未送信は既存保持なので、全体PUTは不要＝上書き事故を防ぐ）
@@ -560,6 +585,8 @@ export default function LibraryBrowser() {
     setForm({
       mode: "edit",
       id: doc.id,
+      kind: doc.kind,
+      linkUrl: doc.linkUrl,
       file: null,
       fileName: doc.fileName,
       mimeType: doc.mimeType,
@@ -574,6 +601,23 @@ export default function LibraryBrowser() {
     setFormError("");
     setFallbackNote(false);
     setFormOpen(true);
+  };
+
+  // 101: YouTube URL なら oEmbed でタイトルを自動取得して下書きに入れる
+  // （YouTube自身への問い合わせのみ・失敗しても手入力で継続できる）
+  const fetchLinkTitle = async (url: string) => {
+    if (detectLinkProvider(url) !== "youtube") return;
+    try {
+      const res = await fetch(
+        `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const t = typeof data?.title === "string" ? data.title.trim() : "";
+      if (t) setForm((f) => (f.title ? f : { ...f, title: t }));
+    } catch {
+      /* 取得失敗は無視（手入力で継続） */
+    }
   };
 
   const onPickFile = async (file: File | null) => {
@@ -665,12 +709,70 @@ export default function LibraryBrowser() {
       setFormError("タイトルを入力してください");
       return;
     }
+    const keywords = parseKeywords(form.keywordsText);
+    const treatments = parseKeywords(form.treatmentsText).slice(0, 5);
+
+    // ─── 101: リンク型（URL検証は登録/編集共通・httpsのみ） ───
+    if (form.kind === "link") {
+      const linkUrl = normalizeLinkUrl(form.linkUrl);
+      if (!linkUrl) {
+        setFormError("https:// で始まる正しいURLを入力してください");
+        return;
+      }
+      setSubmitting(true);
+      try {
+        if (form.mode === "create") {
+          const fd = new FormData();
+          fd.append("kind", "link");
+          fd.append("linkUrl", linkUrl);
+          fd.append("title", form.title.trim());
+          fd.append("category", form.category);
+          fd.append("keywords", JSON.stringify(keywords));
+          fd.append("treatments", JSON.stringify(treatments));
+          fd.append("summary", form.summary.trim());
+          fd.append("reviewDueAt", form.reviewDueAt);
+          const res = await fetch("/api/library", { method: "POST", body: fd });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || "登録に失敗しました");
+          }
+        } else {
+          // URL変更は通常の編集（版は作らない・変更履歴に残る）
+          const res = await fetch("/api/library/manage", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "edit",
+              id: form.id,
+              linkUrl,
+              title: form.title.trim(),
+              category: form.category,
+              keywords,
+              treatments,
+              summary: form.summary.trim(),
+              reviewDueAt: form.reviewDueAt,
+            }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || "編集に失敗しました");
+          }
+        }
+        setFormOpen(false);
+        await refresh();
+      } catch (e) {
+        setFormError(e instanceof Error ? e.message : "処理に失敗しました");
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    // ─── ファイル型（従来どおり） ───
     if (form.mode === "create" && !form.file) {
       setFormError("ファイルを選択してください");
       return;
     }
-    const keywords = parseKeywords(form.keywordsText);
-    const treatments = parseKeywords(form.treatmentsText).slice(0, 5);
 
     // 指示書96: 単発登録は既存資料の更新候補を検知してダイアログで確認
     if (form.mode === "create") {
@@ -1229,9 +1331,12 @@ export default function LibraryBrowser() {
 
   // 1資料カードの描画（一覧・★よく使う資料 で共用）
   // 100: カード本体クリックでプレビュー。操作ボタン類は stopPropagation で開かない。
+  // 101: リンク型は ▶️/🔗＋プロバイダ名、ボタンは「開く」（新規タブ）。
   const renderCard = (doc: LibraryDoc) => {
-    const meta = FILE_KIND_META[fileKind(doc.mimeType, doc.fileName)];
-    const isPdf = opensInBrowser(doc.mimeType, doc.fileName);
+    const meta = docDisplayMeta(doc);
+    const isLink = doc.kind === "link";
+    const isPdf = !isLink && opensInBrowser(doc.mimeType, doc.fileName);
+    const openInTab = isLink || isPdf;
     const fav = isFavorite(doc.id);
     return (
       <Card
@@ -1372,7 +1477,7 @@ export default function LibraryBrowser() {
             <div className="flex items-center gap-1.5 shrink-0">
               <a
                 href={fileHref(doc)}
-                target={isPdf ? "_blank" : undefined}
+                target={openInTab ? "_blank" : undefined}
                 rel="noreferrer"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1380,7 +1485,7 @@ export default function LibraryBrowser() {
                 }}
               >
                 <Button size="sm" variant="outline">
-                  {isPdf ? "開く" : "ダウンロード"}
+                  {openInTab ? "開く" : "ダウンロード"}
                 </Button>
               </a>
               {/* C: PDFのみ印刷（新規タブ表示） */}
@@ -1690,7 +1795,7 @@ export default function LibraryBrowser() {
               {recentOpen && (
                 <div className="flex flex-wrap gap-2">
                   {recentDocs.map((doc) => {
-                    const km = FILE_KIND_META[fileKind(doc.mimeType, doc.fileName)];
+                    const km = docDisplayMeta(doc);
                     return (
                       <button
                         key={doc.id}
@@ -2116,40 +2221,98 @@ export default function LibraryBrowser() {
             <DialogDescription>
               {form.mode === "create"
                 ? "登録するとすぐに全員に共有されます。ファイルを選ぶとAIが内容を読んで下書きを提案します。"
-                : "内容を修正できます。ファイルを選び直すと差し替えられます。"}
+                : form.kind === "link"
+                  ? "内容を修正できます。URLもここで変更できます。"
+                  : "内容を修正できます。ファイルを選び直すと差し替えられます。"}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>
-                ファイル
-                {form.mode === "edit" && (
+            {/* 101: 📎ファイル / 🔗リンク の切替（新規登録時のみ。編集は種別固定） */}
+            {form.mode === "create" ? (
+              <div className="flex gap-2">
+                {(
+                  [
+                    { kind: "file", label: "📎 ファイル" },
+                    { kind: "link", label: "🔗 リンク" },
+                  ] as { kind: DocKind; label: string }[]
+                ).map(({ kind, label }) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, kind }))}
+                    className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                      form.kind === kind
+                        ? "bg-teal text-teal-foreground border-teal"
+                        : "bg-background text-muted-foreground border-input hover:bg-muted"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              form.kind === "link" && (
+                <p className="text-xs text-muted-foreground">
+                  🔗 リンク型の資料です（URLの変更は変更履歴に記録されます）
+                </p>
+              )
+            )}
+
+            {form.kind === "link" ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="lib-link-url">
+                  URL
                   <span className="text-xs text-muted-foreground ml-2">
-                    （変更する場合のみ選択）
+                    （YouTube限定公開・Dropbox共有リンクなど・https のみ）
                   </span>
+                </Label>
+                <Input
+                  id="lib-link-url"
+                  type="url"
+                  value={form.linkUrl}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, linkUrl: e.target.value }))
+                  }
+                  onBlur={() => fetchLinkTitle(form.linkUrl.trim())}
+                  placeholder="https://www.youtube.com/watch?v=…"
+                />
+                <p className="text-xs text-muted-foreground">
+                  動画はAIが内容を読めないため、タイトル・要約などは手入力してください
+                  （YouTubeはタイトルを自動取得します）。
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label>
+                  ファイル
+                  {form.mode === "edit" && (
+                    <span className="text-xs text-muted-foreground ml-2">
+                      （変更する場合のみ選択）
+                    </span>
+                  )}
+                </Label>
+                <input
+                  type="file"
+                  accept=".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,application/pdf"
+                  onChange={(e) => onPickFile(e.target.files?.[0] ?? null)}
+                  className="block w-full text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-input file:bg-background file:text-sm hover:file:bg-muted"
+                />
+                {form.fileName && (
+                  <p className="text-xs text-muted-foreground truncate">
+                    {form.fileName}
+                  </p>
                 )}
-              </Label>
-              <input
-                type="file"
-                accept=".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,application/pdf"
-                onChange={(e) => onPickFile(e.target.files?.[0] ?? null)}
-                className="block w-full text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-input file:bg-background file:text-sm hover:file:bg-muted"
-              />
-              {form.fileName && (
-                <p className="text-xs text-muted-foreground truncate">
-                  {form.fileName}
-                </p>
-              )}
-              {parsing && (
-                <p className="text-xs text-teal">AIが内容を読み取っています…</p>
-              )}
-              {fallbackNote && (
-                <p className="text-xs text-amber-600">
-                  このファイルは自動読み取りできませんでした。手入力で登録できます。
-                </p>
-              )}
-            </div>
+                {parsing && (
+                  <p className="text-xs text-teal">AIが内容を読み取っています…</p>
+                )}
+                {fallbackNote && (
+                  <p className="text-xs text-amber-600">
+                    このファイルは自動読み取りできませんでした。手入力で登録できます。
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="lib-title">タイトル</Label>
