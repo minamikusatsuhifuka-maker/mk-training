@@ -92,18 +92,20 @@ export function countMultiReactionPairs(map: NewsReactionsMap): number {
 // ─── 保存・読込 ───
 
 // 読込・保存の両方で正規化する（表示時点で必ず1つに見え、どの書き込み経路でも複数付かない）
-export async function loadNewsReactions(): Promise<NewsReactionsMap> {
-  const obj = await loadPortalObject<NewsReactionsMap | null>(
-    NEWS_REACTIONS_KEY,
-    null
-  );
+// storeKey を渡すと別ストアで同じ排他リアクションモデルを使える（指示書104: kizuki_reactions 等）。
+// 省略時は従来どおり portal_news_reactions（既存呼び出しは無変更）。
+export async function loadNewsReactions(
+  storeKey: string = NEWS_REACTIONS_KEY
+): Promise<NewsReactionsMap> {
+  const obj = await loadPortalObject<NewsReactionsMap | null>(storeKey, null);
   return obj && typeof obj === "object" ? normalizeNewsReactions(obj) : {};
 }
 
 export async function saveNewsReactions(
-  map: NewsReactionsMap
+  map: NewsReactionsMap,
+  storeKey: string = NEWS_REACTIONS_KEY
 ): Promise<boolean> {
-  return savePortalObject(NEWS_REACTIONS_KEY, normalizeNewsReactions(map));
+  return savePortalObject(storeKey, normalizeNewsReactions(map));
 }
 
 // ─── identity ───

@@ -34,14 +34,16 @@ export type NewsReactionsController = {
   setName: (name: string) => Promise<void>;
 };
 
-export function useNewsReactions(): NewsReactionsController {
+// storeKey を渡すと別ストア（例: kizuki_reactions・指示書104）で同じ排他モデルを使える。
+// 省略時は従来どおり portal_news_reactions（既存呼び出しは無変更）。
+export function useNewsReactions(storeKey?: string): NewsReactionsController {
   const [map, setMap] = useState<NewsReactionsMap>({});
   const [identity, setIdentity] = useState<Reactor | null>(null);
   const [loggedIn, setLoggedIn] = useState(false);
   const [profileNames, setProfileNames] = useState<ReactorNameMap>({});
 
   useEffect(() => {
-    loadNewsReactions()
+    loadNewsReactions(storeKey)
       .then(setMap)
       .catch(() => {});
     getReactorIdentity()
@@ -62,7 +64,7 @@ export function useNewsReactions(): NewsReactionsController {
         setProfileNames(names);
       })
       .catch(() => {});
-  }, []);
+  }, [storeKey]);
 
   // タップでトグル（楽観更新→保存。失敗時は元に戻す）。
   // 保存は最新データを読み直してから「望む最終状態」を適用する（並行更新に強く）。
@@ -73,9 +75,9 @@ export function useNewsReactions(): NewsReactionsController {
     const optimistic = setReaction(prev, newsId, key, identity, active);
     setMap(optimistic);
     try {
-      const fresh = await loadNewsReactions().catch(() => prev);
+      const fresh = await loadNewsReactions(storeKey).catch(() => prev);
       const merged = setReaction(fresh, newsId, key, identity, active);
-      const ok = await saveNewsReactions(merged);
+      const ok = await saveNewsReactions(merged, storeKey);
       setMap(ok ? merged : prev);
     } catch {
       setMap(prev);
@@ -101,9 +103,9 @@ export function useNewsReactions(): NewsReactionsController {
     const prev = map;
     setMap(applyReactorName(prev, identity.id, name));
     try {
-      const fresh = await loadNewsReactions().catch(() => prev);
+      const fresh = await loadNewsReactions(storeKey).catch(() => prev);
       const merged = applyReactorName(fresh, identity.id, name);
-      const ok = await saveNewsReactions(merged);
+      const ok = await saveNewsReactions(merged, storeKey);
       if (ok) setMap(merged);
     } catch {
       // 保存失敗時もローカル表示は維持（次回トグル時に再同期される）

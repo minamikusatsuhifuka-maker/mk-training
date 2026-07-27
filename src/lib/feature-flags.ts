@@ -64,7 +64,9 @@ export const FEATURE_META: FeatureMeta[] = [
 
 // 実装済み機能の集合。各フェーズの実装指示書でIDを追加していく。
 // ここに無いIDは管理画面に「未実装」バッジが付く（トグル自体は保存できる）。
-export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([]);
+export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
+  "kizuki", // 指示書104: 日々の気づき投稿（/kizuki）
+]);
 
 type StoredFeatureFlags = {
   features?: Record<string, unknown>;

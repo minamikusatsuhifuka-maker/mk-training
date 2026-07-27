@@ -71,6 +71,11 @@ import {
   type FeatureId,
 } from "@/lib/feature-flags";
 import {
+  loadKizukiStore,
+  saveKizukiStore,
+  type KizukiPost,
+} from "@/lib/kizuki";
+import {
   loadClinicMetrics,
   saveClinicMetrics,
   emptyClinicMetrics,
@@ -124,6 +129,7 @@ type TabKey =
   | "history"
   | "contrib"
   | "hiyari"
+  | "kizuki"
   | "thankyou"
   | "policy"
   | "word"
@@ -131,12 +137,15 @@ type TabKey =
   | "layout"
   | "features";
 
+// 「💛 気づきシェア」(hiyari=既存のヒヤリハット/良いこと複合) と
+// 「💡 日々の気づき」(kizuki=指示書104・記名投稿) は別機能。混同注意。
 const TABS: { key: TabKey; label: string }[] = [
   { key: "news", label: "📢 新着情報" },
   { key: "archive", label: "🗄️ アーカイブ" },
   { key: "history", label: "🕘 共有履歴" },
   { key: "contrib", label: "📊 共有ログ・貢献" },
   { key: "hiyari", label: "💛 気づきシェア" },
+  { key: "kizuki", label: "💡 日々の気づき" },
   { key: "thankyou", label: "♥ ありがとうカード" },
   { key: "policy", label: "🎯 経営方針" },
   { key: "word", label: "💬 今日の一言" },
@@ -243,6 +252,9 @@ export default function AdminPortalPage() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [newsArchive, setNewsArchive] = useState<ArchivedNewsItem[]>([]);
   const [hiyari, setHiyari] = useState<HiyariItem[]>([]);
+  // 日々の気づき（kizuki_posts・指示書104）。既存「気づきシェア」（hiyari）とは別物
+  const [kizukiPosts, setKizukiPosts] = useState<KizukiPost[]>([]);
+  const [busyKizukiId, setBusyKizukiId] = useState<string | null>(null);
   const [thankyou, setThankyou] = useState<ThankyouItem[]>([]);
   const [policies, setPolicies] = useState<PolicyItem[]>([]);
   const [todayWord, setTodayWord] = useState<TodayWord>({
@@ -371,6 +383,9 @@ export default function AdminPortalPage() {
   useEffect(() => {
     loadPortalFeatures().then(setFeatures).catch(() => {});
     getFeatureFlags().then(setFeatureFlags).catch(() => {});
+    loadKizukiStore()
+      .then((s) => setKizukiPosts(s.posts))
+      .catch(() => {});
     loadWeeklyQuestions()
       .then((d) => setPool(d.pool))
       .catch(() => {})
@@ -1037,6 +1052,31 @@ export default function AdminPortalPage() {
     if (ok) {
       setHiyari(next);
       flash("🗑️ 削除しました");
+    }
+  };
+
+  // ─────────────────────────────────────
+  // 日々の気づき（kizuki_posts・指示書104）: 論理削除・復元
+  // ─────────────────────────────────────
+  const setKizukiDeleted = async (id: string, deleted: boolean) => {
+    if (busyKizukiId) return;
+    if (deleted && !confirm("この投稿を削除しますか？（あとで復元できます）")) {
+      return;
+    }
+    setBusyKizukiId(id);
+    // 並行更新に強いよう最新を読み直してから適用（他ハンドラと同じ read-modify-write）
+    const store = await loadKizukiStore().catch(() => null);
+    const base = store ? store.posts : kizukiPosts;
+    const next = base.map((p) =>
+      p.id === id ? { ...p, deleted, updatedAt: new Date().toISOString() } : p
+    );
+    const ok = await saveKizukiStore(next);
+    setBusyKizukiId(null);
+    if (ok) {
+      setKizukiPosts(next);
+      flash(deleted ? "🗑️ 削除しました（復元できます）" : "♻️ 復元しました");
+    } else {
+      flash("⚠ 保存に失敗しました");
     }
   };
 
@@ -2129,6 +2169,71 @@ export default function AdminPortalPage() {
             </div>
           ))}
           {hiyari.length === 0 && (
+            <p className="text-sm text-gray-600 text-center py-8">
+              まだ投稿がありません
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* 日々の気づき（kizuki_posts・指示書104）: 一覧・論理削除・復元 */}
+      {tab === "kizuki" && (
+        <div className="space-y-2">
+          <p className="text-sm text-gray-600">
+            「💡 日々の気づき」（/kizuki）の投稿一覧です（投稿・編集はスタッフ画面から）。
+            削除は非表示化で、ここからいつでも復元できます。
+          </p>
+          {[...kizukiPosts]
+            .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
+            .map((p) => (
+              <div
+                key={p.id}
+                className={`border rounded-xl p-4 ${
+                  p.deleted
+                    ? "bg-gray-50 border-gray-200 opacity-70"
+                    : "bg-white border-gray-200"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-gray-800">
+                      {p.authorName || "名前未設定"}
+                    </span>
+                    <span className="text-xs text-gray-600">
+                      {formatDateTime(p.createdAt)}
+                    </span>
+                    {p.deleted && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 font-medium">
+                        削除済み
+                      </span>
+                    )}
+                  </div>
+                  {p.deleted ? (
+                    <button
+                      type="button"
+                      onClick={() => setKizukiDeleted(p.id, false)}
+                      disabled={busyKizukiId === p.id}
+                      className="text-xs px-2 py-1 border border-teal-200 text-teal-700 rounded hover:bg-teal-50 disabled:opacity-50"
+                    >
+                      ♻️ 復元
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setKizukiDeleted(p.id, true)}
+                      disabled={busyKizukiId === p.id}
+                      className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50 disabled:opacity-50"
+                    >
+                      削除
+                    </button>
+                  )}
+                </div>
+                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                  {p.body}
+                </p>
+              </div>
+            ))}
+          {kizukiPosts.length === 0 && (
             <p className="text-sm text-gray-600 text-center py-8">
               まだ投稿がありません
             </p>
