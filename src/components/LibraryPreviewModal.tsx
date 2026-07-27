@@ -12,6 +12,10 @@
 // - 変換はモーダルを開いた時に実行（一覧表示時に全件変換しない）。
 // - 101 リンク型: YouTube は youtube-nocookie ドメインで埋め込み再生、
 //   Dropbox・その他（ID抽出失敗含む）は埋め込まず「新しいタブで開く」ボタン。
+// - 102 A4紙面表示: モーダル幅 min(96vw,980px)。DialogContent の既定 sm:max-w-sm に勝つには
+//   sm: プレフィックス付きで上書きする必要がある（無印 max-w-* は sm 以上で既定に負けて狭くなる罠）。
+//   docx/pptx 本文は A4 相当幅 794px の白い紙面＋約20mm余白で中央寄せ。体裁は globals.css の
+//   .doc-preview スコープCSSで復元し、表は table-wrap でその表だけ横スクロールさせる。
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -113,7 +117,11 @@ export default function LibraryPreviewModal({
         const result = await mammoth.convertToHtml({ arrayBuffer: buf });
         if (cancelled) return;
         if (!result.value || !result.value.trim()) throw new Error("empty");
-        setState({ status: "docx", html: result.value });
+        // 102: 広い表はその表だけ横スクロールさせる（モーダル全体は横スクロールさせない）
+        const html = result.value
+          .replace(/<table/g, '<div class="table-wrap"><table')
+          .replace(/<\/table>/g, "</table></div>");
+        setState({ status: "docx", html });
       } else {
         const slides = await extractPptxSlideTexts(buf);
         if (cancelled) return;
@@ -147,7 +155,7 @@ export default function LibraryPreviewModal({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[92vh] flex flex-col">
+      <DialogContent className="sm:max-w-[min(96vw,980px)] h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-start gap-2 text-left">
             <span className="text-xl leading-none shrink-0">{meta.icon}</span>
@@ -179,7 +187,8 @@ export default function LibraryPreviewModal({
           </div>
         </DialogHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        {/* 本文だけスクロール（ヘッダ・フッタは固定）。全体の横スクロールは出さない */}
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden rounded-lg bg-muted/50">
           {state.status === "loading" && (
             <div className="h-64 flex items-center justify-center text-sm text-muted-foreground">
               <span className="animate-pulse">プレビューを準備しています…</span>
@@ -190,7 +199,7 @@ export default function LibraryPreviewModal({
             <iframe
               src={doc.fileUrl}
               title={doc.title}
-              className="w-full h-[65vh] border rounded-lg bg-muted/30"
+              className="w-full h-[78vh] border rounded-lg bg-muted/30"
             />
           )}
 
@@ -226,25 +235,29 @@ export default function LibraryPreviewModal({
 
           {state.status === "docx" && (
             <div
-              // @tailwindcss/typography(prose) 非依存のため要素ごとに指定（MarkdownView と同じ流儀）
-              className="text-sm leading-relaxed border rounded-lg p-4 bg-white space-y-2 [&_h1]:text-lg [&_h1]:font-bold [&_h2]:text-base [&_h2]:font-bold [&_h3]:font-semibold [&_p]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-teal [&_a]:underline [&_img]:max-w-full [&_table]:border-collapse [&_table]:my-2 [&_td]:border [&_td]:border-slate-300 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-slate-300 [&_th]:px-2 [&_th]:py-1"
+              // A4紙面: 本文幅794px上限・白背景・約20mm相当の余白（スマホは控えめ）。
+              // 体裁は globals.css の .doc-preview スコープCSSで復元（Tailwindリセット対策・指示書102）
+              className="doc-preview mx-auto my-4 w-full max-w-[794px] bg-white border rounded-lg shadow-sm px-5 py-6 sm:px-[75px] sm:py-[64px]"
               // mammoth の変換結果（テキストはエスケープ済みのHTML）を表示する
               dangerouslySetInnerHTML={{ __html: state.html }}
             />
           )}
 
           {state.status === "pptx" && (
-            <div className="space-y-3">
+            <div className="mx-auto my-4 w-full max-w-[794px] space-y-3 px-1">
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
                 ⚠ テキストのみの簡易プレビューです。レイアウトは再現されません。
                 正式にご覧になるときはダウンロードしてください。
               </p>
               {state.slides.map((text, i) => (
-                <div key={i} className="border rounded-lg p-3 space-y-1.5 bg-white">
+                <div
+                  key={i}
+                  className="border rounded-lg space-y-1.5 bg-white shadow-sm px-5 py-4 sm:px-8 sm:py-6"
+                >
                   <p className="text-xs font-semibold text-muted-foreground">
                     スライド {i + 1} / {state.slides.length}
                   </p>
-                  <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                  <p className="text-sm whitespace-pre-wrap leading-[1.7]">
                     {text || "（テキストなし）"}
                   </p>
                 </div>

@@ -156,3 +156,84 @@ html, body {
     left: var(--char-walk-to, calc(100% - 60px));
   }
 }
+
+/* ─── 資料庫プレビュー本文（指示書102） ───
+   mammoth が出力する素のHTMLは Tailwind のリセットCSSで見出し・表・箇条書きの体裁が
+   失われるため、.doc-preview スコープで印刷物に近い体裁を復元する。
+   mammoth のインラインスタイル（太字・下線・センタリング等）はそのまま尊重される。 */
+.doc-preview {
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  overflow-wrap: break-word;
+}
+.doc-preview h1 {
+  font-size: 1.375rem;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 1.5em 0 0.6em;
+}
+.doc-preview h2 {
+  font-size: 1.1875rem;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 1.4em 0 0.5em;
+}
+.doc-preview h3 {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  margin: 1.2em 0 0.4em;
+}
+.doc-preview h1:first-child,
+.doc-preview h2:first-child,
+.doc-preview h3:first-child {
+  margin-top: 0;
+}
+.doc-preview p {
+  margin: 0.6em 0;
+}
+.doc-preview ul {
+  list-style: disc;
+  padding-left: 1.6em;
+  margin: 0.6em 0;
+}
+.doc-preview ol {
+  list-style: decimal;
+  padding-left: 1.6em;
+  margin: 0.6em 0;
+}
+.doc-preview li {
+  margin: 0.25em 0;
+}
+/* 表: 本文幅にフィット。収まらない広い表は .table-wrap（変換時に挿入）だけ横スクロール */
+.doc-preview .table-wrap {
+  overflow-x: auto;
+  margin: 0.8em 0;
+}
+.doc-preview table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.doc-preview th,
+.doc-preview td {
+  border: 1px solid #d6d3d1;
+  padding: 0.45em 0.6em;
+  vertical-align: top;
+  text-align: left;
+}
+.doc-preview th {
+  background: #f5f5f4;
+  font-weight: 600;
+}
+.doc-preview img {
+  max-width: 100%;
+  height: auto;
+}
+.doc-preview a {
+  color: #0d9488;
+  text-decoration: underline;
+}
+.doc-preview strong {
+  font-weight: 700;
+}

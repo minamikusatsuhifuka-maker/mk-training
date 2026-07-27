@@ -311,6 +311,8 @@ export default function LibraryBrowser() {
   const [recentIds, setRecentIds] = useState<string[]>([]);
   // 100: 「最近開いた資料」の折りたたみ（既定=閉・localStorageに開閉を記憶）
   const [recentOpen, setRecentOpen] = useState(false);
+  // 102: 「🧹 整えるとよい資料」の折りたたみ（既定=閉・件数バッジは常時表示）
+  const [cleanupOpen, setCleanupOpen] = useState(false);
   // 100: ブラウザ内プレビュー対象
   const [previewDoc, setPreviewDoc] = useState<LibraryDoc | null>(null);
   const [selectedTreatments, setSelectedTreatments] = useState<string[]>([]);
@@ -449,9 +451,10 @@ export default function LibraryBrowser() {
     } catch {
       /* noop */
     }
-    // 100: 折りたたみ状態の復元（既定は閉）
+    // 100/102: 折りたたみ状態の復元（既定は閉）
     try {
       setRecentOpen(localStorage.getItem("mk_library_recent_open") === "1");
+      setCleanupOpen(localStorage.getItem("mk_library_cleanup_open") === "1");
     } catch {
       /* noop */
     }
@@ -462,6 +465,18 @@ export default function LibraryBrowser() {
       const next = !v;
       try {
         localStorage.setItem("mk_library_recent_open", next ? "1" : "0");
+      } catch {
+        /* noop */
+      }
+      return next;
+    });
+  };
+
+  const toggleCleanupOpen = () => {
+    setCleanupOpen((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("mk_library_cleanup_open", next ? "1" : "0");
       } catch {
         /* noop */
       }
@@ -560,6 +575,12 @@ export default function LibraryBrowser() {
     const mergePairs = findTagMergeSuggestions(docs);
     return { noTags, noSummary, noReview, mergePairs };
   }, [docs]);
+  // 102: 検出総件数（タグなし＋要約空＋期限未設定＋表記ゆれ組数）。閉じていても気づけるバッジ用
+  const cleanupCount =
+    cleanup.noTags.length +
+    cleanup.noSummary.length +
+    cleanup.noReview.length +
+    cleanup.mergePairs.length;
 
   const toggleCat = (cat: string) => {
     setSelectedCats((prev) =>
@@ -1814,13 +1835,28 @@ export default function LibraryBrowser() {
             </div>
           )}
 
-          {/* F: 整理アシスト（指示書98・該当0件なら非表示） */}
-          {(cleanup.noTags.length > 0 ||
-            cleanup.noSummary.length > 0 ||
-            cleanup.noReview.length > 0 ||
-            cleanup.mergePairs.length > 0) && (
+          {/* F: 整理アシスト（指示書98・該当0件なら非表示）
+              102: 折りたたみ式（既定=閉・mk_library_cleanup_open に記憶・件数バッジは常時表示） */}
+          {cleanupCount > 0 && (
             <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 space-y-3">
-              <h3 className="text-sm font-semibold">🧹 整えるとよい資料</h3>
+              <button
+                type="button"
+                onClick={toggleCleanupOpen}
+                aria-expanded={cleanupOpen}
+                className="text-sm font-semibold flex items-center gap-1.5 hover:opacity-70 w-full text-left"
+              >
+                <span
+                  className={`text-xs transition-transform ${cleanupOpen ? "rotate-90" : ""}`}
+                >
+                  ▶
+                </span>
+                🧹 整えるとよい資料
+                <span className="text-xs font-medium bg-amber-200 text-amber-900 rounded-full px-2 py-0.5">
+                  {cleanupCount}件
+                </span>
+              </button>
+              {cleanupOpen && (
+                <>
 
               {/* ①②③: 各カテゴリを最大6件、編集で直行 */}
               {[
@@ -1892,6 +1928,8 @@ export default function LibraryBrowser() {
                     </div>
                   ))}
                 </div>
+              )}
+                </>
               )}
             </div>
           )}
