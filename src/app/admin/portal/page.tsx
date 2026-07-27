@@ -62,6 +62,15 @@ import {
   type PortalFeatures,
 } from "@/lib/portal-features";
 import {
+  DEFAULT_FEATURE_FLAGS,
+  FEATURE_META,
+  IMPLEMENTED_FEATURES,
+  getFeatureFlags,
+  saveFeatureFlags,
+  type FeatureFlags,
+  type FeatureId,
+} from "@/lib/feature-flags";
+import {
   loadClinicMetrics,
   saveClinicMetrics,
   emptyClinicMetrics,
@@ -325,6 +334,12 @@ export default function AdminPortalPage() {
   );
   const [savingFeatures, setSavingFeatures] = useState(false);
 
+  // 機能の表示設定（portal_feature_flags。指示書103・未リリース機能の解禁フラグ・既定全OFF）
+  const [featureFlags, setFeatureFlags] = useState<FeatureFlags>(
+    DEFAULT_FEATURE_FLAGS
+  );
+  const [savingFlags, setSavingFlags] = useState(false);
+
   // みんなへの質問の質問プール（weekly_questions.pool。「⚙ 機能」タブで編集）
   const [pool, setPool] = useState<string[]>([]);
   const [poolLoaded, setPoolLoaded] = useState(false);
@@ -355,6 +370,7 @@ export default function AdminPortalPage() {
 
   useEffect(() => {
     loadPortalFeatures().then(setFeatures).catch(() => {});
+    getFeatureFlags().then(setFeatureFlags).catch(() => {});
     loadWeeklyQuestions()
       .then((d) => setPool(d.pool))
       .catch(() => {})
@@ -444,6 +460,28 @@ export default function AdminPortalPage() {
     const label =
       PORTAL_FEATURE_META.find((m) => m.key === key)?.label ?? String(key);
     flash(on ? `💾 ${label} をONにしました` : `💾 ${label} をOFFにしました`);
+  };
+
+  // 機能の表示設定（指示書103）: 楽観更新＋丸ごと保存（updatedAt はlib側で現在時刻に更新）
+  const handleToggleFlag = async (id: FeatureId, on: boolean) => {
+    if (savingFlags) return;
+    const prev = featureFlags;
+    const next = { ...featureFlags, [id]: on };
+    setFeatureFlags(next);
+    setSavingFlags(true);
+    const ok = await saveFeatureFlags(next);
+    setSavingFlags(false);
+    if (!ok) {
+      setFeatureFlags(prev);
+      flash("⚠ 機能の表示設定の保存に失敗しました");
+      return;
+    }
+    const label = FEATURE_META.find((m) => m.id === id)?.label ?? String(id);
+    flash(
+      on
+        ? `💾 ${label} を表示（ON）にしました`
+        : `💾 ${label} を非表示（OFF）にしました`
+    );
   };
 
   const movePoolItem = (index: number, dir: -1 | 1) =>
@@ -3095,6 +3133,46 @@ export default function AdminPortalPage() {
                 </div>
               </>
             )}
+          </section>
+
+          {/* 機能の表示設定（portal_feature_flags・指示書103） */}
+          <section className="space-y-4 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">
+                🚀 機能の表示設定
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                今後追加される新機能の公開スイッチです。OFFの機能はメニューに表示されず、
+                URLを直接開いても「準備中」と表示されます。既定はすべてOFFです。
+              </p>
+            </div>
+            <div className="space-y-3">
+              {FEATURE_META.map((m) => (
+                <div
+                  key={m.id}
+                  className="rounded-xl border border-gray-200 bg-white p-4 space-y-1.5"
+                >
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-800 flex-wrap">
+                    <input
+                      type="checkbox"
+                      checked={featureFlags[m.id]}
+                      disabled={savingFlags}
+                      onChange={(e) => handleToggleFlag(m.id, e.target.checked)}
+                    />
+                    {m.label}
+                    <span className="text-[10px] font-medium bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">
+                      Phase {m.phase}
+                    </span>
+                    {!IMPLEMENTED_FEATURES.has(m.id) && (
+                      <span className="text-[10px] font-medium bg-amber-100 text-amber-800 rounded-full px-2 py-0.5">
+                        未実装
+                      </span>
+                    )}
+                  </label>
+                  <p className="text-xs text-gray-500 pl-6">{m.description}</p>
+                </div>
+              ))}
+            </div>
           </section>
         </div>
       )}

@@ -3,6 +3,7 @@
 // content_store(portal_nav_config) は「その上の配置情報」。設定が無い/壊れていればマスターにフォールバックする。
 
 import { AI_INCHO_URL } from "./external-links";
+import type { FeatureId, FeatureFlags } from "./feature-flags";
 
 export const NAV_CONFIG_KEY = "portal_nav_config";
 export const UNCATEGORIZED_ID = "uncategorized";
@@ -11,12 +12,15 @@ export const UNCATEGORIZED_LABEL = "未分類";
 // --- マスター（既定構成） ---
 export type MasterCategory = { id: string; label: string };
 // external: true の項目は外部URL（別タブで開く。key はルートでなく一意ID）。指示書59
+// featureId: 機能フラグ連動（指示書103）。指定した項目はフラグOFFのときナビに表示されない。
+//   portal_nav_config の保存形状（key ベース）は変えない＝後方互換。
 export type MasterItem = {
   key: string;
   href: string;
   label: string;
   categoryId: string;
   external?: true;
+  featureId?: FeatureId;
 };
 
 export const MASTER_CATEGORIES: MasterCategory[] = [
@@ -172,17 +176,25 @@ export function normalizeConfig(cfg: NavConfig | null | undefined): NavConfig {
   return { categories, items: normItems };
 }
 
-function defaultResolved(): ResolvedCategory[] {
+function defaultResolved(flags?: FeatureFlags): ResolvedCategory[] {
   return MASTER_CATEGORIES.map((c) => ({
     id: c.id,
     label: c.label,
-    items: MASTER_ITEMS.filter((it) => it.categoryId === c.id).map((it) => ({
+    items: MASTER_ITEMS.filter(
+      (it) => it.categoryId === c.id && !isFeatureOff(it, flags)
+    ).map((it) => ({
       key: it.key,
       href: it.href,
       label: it.label,
       ...(it.external ? { external: true as const } : {}),
     })),
   }));
+}
+
+// 機能フラグでOFFのナビ項目か（指示書103）。
+// flags 省略時はフィルタしない（管理画面のナビ編集では全項目を扱うため）。
+function isFeatureOff(m: MasterItem, flags?: FeatureFlags): boolean {
+  return !!(flags && m.featureId && !flags[m.featureId]);
 }
 
 function isValidConfig(cfg: unknown): cfg is NavConfig {
@@ -193,9 +205,13 @@ function isValidConfig(cfg: unknown): cfg is NavConfig {
 
 // config を解決して描画用カテゴリ配列を返す。
 // 不正・未設定はマスター（既定）にフォールバック。マスターにあって config に無い項目は既定カテゴリ末尾に自動表示。
-export function resolveNav(cfg: NavConfig | null | undefined): ResolvedCategory[] {
+// flags を渡すと機能フラグOFFの項目を除外する（指示書103・省略時は全項目）。
+export function resolveNav(
+  cfg: NavConfig | null | undefined,
+  flags?: FeatureFlags
+): ResolvedCategory[] {
   try {
-    if (!isValidConfig(cfg)) return defaultResolved();
+    if (!isValidConfig(cfg)) return defaultResolved(flags);
 
     // 表示するカテゴリ（hidden除外、order順）
     const visibleCats = cfg.categories
@@ -221,6 +237,7 @@ export function resolveNav(cfg: NavConfig | null | undefined): ResolvedCategory[
     let needsUncategorized = false;
 
     for (const m of MASTER_ITEMS) {
+      if (isFeatureOff(m, flags)) continue; // 機能フラグOFFはナビ非表示（指示書103）
       const conf = itemByKey.get(m.key);
       const resolved: ResolvedItem = {
         key: m.key,
@@ -274,10 +291,10 @@ export function resolveNav(cfg: NavConfig | null | undefined): ResolvedCategory[
 
     // 何も表示できなくなる事故を防ぐ（安全網）
     const total = result.reduce((s, c) => s + c.items.length, 0);
-    if (total === 0) return defaultResolved();
+    if (total === 0) return defaultResolved(flags);
 
     return result;
   } catch {
-    return defaultResolved();
+    return defaultResolved(flags);
   }
 }
