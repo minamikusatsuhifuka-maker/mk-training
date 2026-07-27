@@ -1,6 +1,6 @@
 "use client";
 
-// 資料庫の本体UI（指示書86＋87＋88＋89）
+// 資料庫の本体UI（指示書86＋87＋88＋89＋100）
 // - タブ: 「資料一覧」「変更履歴」。
 // - 一覧: 検索窓＋カテゴリチップ（複数選択）＋件数。カード（開く/DL・編集・削除）。
 // - 登録: 単発（＋資料を登録・確認フォーム）と、一括（ドラッグ&ドロップ/複数選択・89）。
@@ -8,6 +8,8 @@
 // - 88: 変更履歴の差し替えエントリから「旧版を開く/DL」できる（snapshot利用）。
 // - 89 Part B: マウント時にまず auth.getUser() でセッションを確立してから取得（Cookie同期のレース対策）。
 //   これをしないと初回ロードでサーバーがCookieを認識できず 401→「ログインが必要です」になる（profileページと同じ流儀）。
+// - 100: カード本体クリックでブラウザ内プレビュー（LibraryPreviewModal）。★/編集/削除/DL/印刷/
+//   タグチップ/更新待ちバナーは stopPropagation でプレビューを開かない。
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
@@ -43,6 +45,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import LibraryPreviewModal from "@/components/LibraryPreviewModal";
 import { isAdminUser } from "@/lib/admin-role";
 import {
   LIBRARY_CATEGORIES,
@@ -281,6 +284,10 @@ export default function LibraryBrowser() {
   const profileLoadedRef = useRef(false); // 自分のプロフィールを取得できたか（未ログイン判定用）
   // B 最近開いた（指示書97）: localStorage・id配列・最大5
   const [recentIds, setRecentIds] = useState<string[]>([]);
+  // 100: 「最近開いた資料」の折りたたみ（既定=閉・localStorageに開閉を記憶）
+  const [recentOpen, setRecentOpen] = useState(false);
+  // 100: ブラウザ内プレビュー対象
+  const [previewDoc, setPreviewDoc] = useState<LibraryDoc | null>(null);
   const [selectedTreatments, setSelectedTreatments] = useState<string[]>([]);
   const [showAllTags, setShowAllTags] = useState(false);
   const isAdmin = useIsAdmin();
@@ -417,7 +424,25 @@ export default function LibraryBrowser() {
     } catch {
       /* noop */
     }
+    // 100: 折りたたみ状態の復元（既定は閉）
+    try {
+      setRecentOpen(localStorage.getItem("mk_library_recent_open") === "1");
+    } catch {
+      /* noop */
+    }
   }, []);
+
+  const toggleRecentOpen = () => {
+    setRecentOpen((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("mk_library_recent_open", next ? "1" : "0");
+      } catch {
+        /* noop */
+      }
+      return next;
+    });
+  };
 
   const recordRecent = useCallback((docId: string) => {
     setRecentIds((prev) => {
@@ -432,6 +457,15 @@ export default function LibraryBrowser() {
   }, []);
 
   const isFavorite = (id: string) => favoriteIds.includes(id);
+
+  // 100: プレビューを開く（開いた時点で「最近開いた」に記録）
+  const openPreview = useCallback(
+    (doc: LibraryDoc) => {
+      recordRecent(doc.id);
+      setPreviewDoc(doc);
+    },
+    [recordRecent]
+  );
 
   // A: ★トグル（楽観更新＋失敗ロールバック）。指示書99: { favoriteDocIds } だけを部分更新PUT
   // （プロフィール全体は送らない＝別画面で編集した自己紹介・価値観・サーベイ等を古い値で上書きしない）
@@ -1194,12 +1228,17 @@ export default function LibraryBrowser() {
   }, [docs, recentIds]);
 
   // 1資料カードの描画（一覧・★よく使う資料 で共用）
+  // 100: カード本体クリックでプレビュー。操作ボタン類は stopPropagation で開かない。
   const renderCard = (doc: LibraryDoc) => {
     const meta = FILE_KIND_META[fileKind(doc.mimeType, doc.fileName)];
     const isPdf = opensInBrowser(doc.mimeType, doc.fileName);
     const fav = isFavorite(doc.id);
     return (
-      <Card key={doc.id} className="flex flex-col">
+      <Card
+        key={doc.id}
+        className="flex flex-col cursor-pointer hover:shadow-md transition-shadow"
+        onClick={() => openPreview(doc)}
+      >
         <CardContent className="p-4 flex flex-col gap-3 flex-1">
           <div className="flex items-start gap-2">
             <span className="text-xl leading-none">{meta.icon}</span>
@@ -1232,7 +1271,10 @@ export default function LibraryBrowser() {
             {/* A: お気に入り★トグル */}
             <button
               type="button"
-              onClick={() => toggleFavorite(doc.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFavorite(doc.id);
+              }}
               aria-label={fav ? "お気に入り解除" : "お気に入りに追加"}
               title={fav ? "お気に入り解除" : "お気に入りに追加"}
               className={`shrink-0 text-lg leading-none ${fav ? "text-amber-500" : "text-gray-300 hover:text-amber-400"}`}
@@ -1241,9 +1283,12 @@ export default function LibraryBrowser() {
             </button>
           </div>
 
-          {/* 更新待ちバナー（指示書96） */}
+          {/* 更新待ちバナー（指示書96）。100: バナー内の操作はプレビューを開かない */}
           {doc.pendingUpdate && (
-            <div className="rounded-lg border border-cyan-300 bg-cyan-50 p-2 space-y-2">
+            <div
+              className="rounded-lg border border-cyan-300 bg-cyan-50 p-2 space-y-2"
+              onClick={(e) => e.stopPropagation()}
+            >
               <p className="text-xs text-cyan-800">
                 🔄 更新待ちあり（{doc.pendingUpdate.uploadedByName || "不明"}・
                 {formatDateTime(doc.pendingUpdate.uploadedAt)}）
@@ -1297,6 +1342,7 @@ export default function LibraryBrowser() {
               {doc.treatments.map((t) => (
                 <span
                   key={t}
+                  onClick={(e) => e.stopPropagation()}
                   className="text-[11px] bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full px-2 py-0.5"
                 >
                   🏷 {t}
@@ -1310,6 +1356,7 @@ export default function LibraryBrowser() {
               {doc.keywords.slice(0, 6).map((k) => (
                 <span
                   key={k}
+                  onClick={(e) => e.stopPropagation()}
                   className="text-[11px] bg-muted text-muted-foreground rounded px-1.5 py-0.5"
                 >
                   {k}
@@ -1327,7 +1374,10 @@ export default function LibraryBrowser() {
                 href={fileHref(doc)}
                 target={isPdf ? "_blank" : undefined}
                 rel="noreferrer"
-                onClick={() => recordRecent(doc.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  recordRecent(doc.id);
+                }}
               >
                 <Button size="sm" variant="outline">
                   {isPdf ? "開く" : "ダウンロード"}
@@ -1338,7 +1388,8 @@ export default function LibraryBrowser() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     recordRecent(doc.id);
                     window.open(doc.fileUrl, "_blank", "noopener,noreferrer");
                   }}
@@ -1350,7 +1401,10 @@ export default function LibraryBrowser() {
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => openEdit(doc)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openEdit(doc);
+                }}
                 aria-label="編集"
               >
                 ✏️
@@ -1358,7 +1412,10 @@ export default function LibraryBrowser() {
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => setDeleteTarget(doc)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeleteTarget(doc);
+                }}
                 aria-label="削除"
               >
                 🗑️
@@ -1610,30 +1667,45 @@ export default function LibraryBrowser() {
             </div>
           )}
 
-          {/* B: 最近開いた資料（localStorage・小さく・0件非表示） */}
+          {/* B: 最近開いた資料（localStorage・小さく・0件非表示）
+              100: 折りたたみ式（既定=閉・開閉は mk_library_recent_open に記憶）。チップはプレビューを開く */}
           {recentDocs.length > 0 && (
             <div className="space-y-1.5">
-              <h3 className="text-sm font-semibold">🕒 最近開いた資料</h3>
-              <div className="flex flex-wrap gap-2">
-                {recentDocs.map((doc) => {
-                  const isPdf = opensInBrowser(doc.mimeType, doc.fileName);
-                  const km = FILE_KIND_META[fileKind(doc.mimeType, doc.fileName)];
-                  return (
-                    <a
-                      key={doc.id}
-                      href={fileHref(doc)}
-                      target={isPdf ? "_blank" : undefined}
-                      rel="noreferrer"
-                      onClick={() => recordRecent(doc.id)}
-                      className="text-xs border rounded-full px-3 py-1 hover:bg-muted flex items-center gap-1 max-w-[220px]"
-                      title={doc.title}
-                    >
-                      <span>{km.icon}</span>
-                      <span className="truncate">{doc.title}</span>
-                    </a>
-                  );
-                })}
-              </div>
+              <button
+                type="button"
+                onClick={toggleRecentOpen}
+                aria-expanded={recentOpen}
+                className="text-sm font-semibold flex items-center gap-1.5 hover:opacity-70"
+              >
+                <span
+                  className={`text-xs transition-transform ${recentOpen ? "rotate-90" : ""}`}
+                >
+                  ▶
+                </span>
+                🕒 最近開いた資料
+                <span className="text-xs text-muted-foreground font-normal">
+                  {recentDocs.length}件
+                </span>
+              </button>
+              {recentOpen && (
+                <div className="flex flex-wrap gap-2">
+                  {recentDocs.map((doc) => {
+                    const km = FILE_KIND_META[fileKind(doc.mimeType, doc.fileName)];
+                    return (
+                      <button
+                        key={doc.id}
+                        type="button"
+                        onClick={() => openPreview(doc)}
+                        className="text-xs border rounded-full px-3 py-1 hover:bg-muted flex items-center gap-1 max-w-[220px]"
+                        title={doc.title}
+                      >
+                        <span>{km.icon}</span>
+                        <span className="truncate">{doc.title}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -2023,6 +2095,16 @@ export default function LibraryBrowser() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* ─── ブラウザ内プレビュー（指示書100・外部ビューアにURLを渡さない） ─── */}
+      <LibraryPreviewModal
+        doc={previewDoc}
+        onClose={() => setPreviewDoc(null)}
+        onEdit={(doc) => {
+          setPreviewDoc(null);
+          openEdit(doc);
+        }}
+      />
 
       {/* ─── 登録/編集ダイアログ（単発） ─── */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
