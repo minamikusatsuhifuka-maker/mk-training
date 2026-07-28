@@ -38,6 +38,7 @@ import {
   urgencyCardClass,
   isNewsExpired,
   formatThankyouTo,
+  normalizeThankyouName,
   type NewsItem,
   type ArchivedNewsItem,
   type NewsCategory,
@@ -87,6 +88,20 @@ import {
   saveManualDraftStore,
   type ManualDraft,
 } from "@/lib/manual-drafts";
+import {
+  loadChoreiData,
+  saveChoreiData,
+  advancePointer,
+  applyOrderEdit,
+  setPointer,
+  currentDuty,
+  EMPTY_ROTATION,
+  type ChoreiMember,
+  type ChoreiPost,
+  type ChoreiRotation,
+} from "@/lib/chorei";
+import { loadProfilesIndex } from "@/lib/staff-profiles";
+import { loadStaffMembers } from "@/lib/staff-tasks";
 import {
   LIBRARY_KEY,
   LIBRARY_CATEGORIES,
@@ -150,6 +165,7 @@ type TabKey =
   | "hiyariReport"
   | "kizuki"
   | "manualDraft"
+  | "chorei"
   | "thankyou"
   | "policy"
   | "word"
@@ -168,6 +184,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "hiyariReport", label: "🚨 ヒヤリハット報告" },
   { key: "kizuki", label: "💡 日々の気づき" },
   { key: "manualDraft", label: "✍️ マニュアル下書き" },
+  { key: "chorei", label: "🌅 朝礼サポート" },
   { key: "thankyou", label: "♥ ありがとうカード" },
   { key: "policy", label: "🎯 経営方針" },
   { key: "word", label: "💬 今日の一言" },
@@ -293,6 +310,13 @@ export default function AdminPortalPage() {
   const [librarySearch, setLibrarySearch] = useState("");
   const [libraryCatFilter, setLibraryCatFilter] = useState<string>("マニュアル");
   const [libraryDocs, setLibraryDocs] = useState<LibraryDoc[]>([]);
+
+  // 朝礼サポート（chorei_data・指示書108）: 輪番＋投稿
+  const [choreiRotation, setChoreiRotation] =
+    useState<ChoreiRotation>(EMPTY_ROTATION);
+  const [choreiPosts, setChoreiPosts] = useState<ChoreiPost[]>([]);
+  const [choreiCandidates, setChoreiCandidates] = useState<ChoreiMember[]>([]);
+  const [busyChorei, setBusyChorei] = useState(false);
   const [thankyou, setThankyou] = useState<ThankyouItem[]>([]);
   const [policies, setPolicies] = useState<PolicyItem[]>([]);
   const [todayWord, setTodayWord] = useState<TodayWord>({
@@ -433,6 +457,37 @@ export default function AdminPortalPage() {
     // 紐付け候補の資料一覧（LibraryNewsSection と同じ anon 直読み・API不要）
     loadPortalObject<unknown>(LIBRARY_KEY, null)
       .then((raw) => setLibraryDocs(normalizeLibraryStore(raw).docs))
+      .catch(() => {});
+    loadChoreiData()
+      .then((d) => {
+        setChoreiRotation(d.rotation);
+        setChoreiPosts(d.posts);
+      })
+      .catch(() => {});
+    // 当番候補 = プロフィール登録者 ∪ スタッフ名簿（thanks の宛先候補と同じ流儀・正規化名で重複除去）
+    Promise.all([
+      loadProfilesIndex().catch(() => []),
+      loadStaffMembers().catch(() => []),
+    ])
+      .then(([profiles, members]) => {
+        const seen = new Set<string>();
+        const out: ChoreiMember[] = [];
+        for (const p of profiles) {
+          const name = (p.name ?? "").trim();
+          const key = normalizeThankyouName(name);
+          if (!key || seen.has(key)) continue;
+          seen.add(key);
+          out.push({ staffId: p.userId, name });
+        }
+        for (const raw of members) {
+          const name = (raw ?? "").trim();
+          const key = normalizeThankyouName(name);
+          if (!key || seen.has(key)) continue;
+          seen.add(key);
+          out.push({ staffId: "", name }); // 名簿のみの人は staffId 空（承認済み）
+        }
+        setChoreiCandidates(out);
+      })
       .catch(() => {});
     loadWeeklyQuestions()
       .then((d) => setPool(d.pool))
@@ -1229,6 +1284,108 @@ export default function AdminPortalPage() {
     } else {
       flash("⚠ 保存に失敗しました");
     }
+  };
+
+  // ─────────────────────────────────────
+  // 朝礼サポート（chorei_data・指示書108）: 輪番編集・手動操作・投稿の論理削除/復元
+  // ─────────────────────────────────────
+  // 最新データを読み直して変換を適用し保存（輪番と投稿の同居キーを1回で更新）
+  const mutateChorei = async (
+    fn: (rotation: ChoreiRotation, posts: ChoreiPost[]) => {
+      rotation: ChoreiRotation;
+      posts: ChoreiPost[];
+    },
+    okMsg: string
+  ) => {
+    if (busyChorei) return;
+    setBusyChorei(true);
+    const data = await loadChoreiData().catch(() => null);
+    const base = data ?? { rotation: choreiRotation, posts: choreiPosts };
+    const next = fn(base.rotation, base.posts);
+    const ok = await saveChoreiData(next);
+    setBusyChorei(false);
+    if (ok) {
+      setChoreiRotation(next.rotation);
+      setChoreiPosts(next.posts);
+      flash(okMsg);
+    } else {
+      flash("⚠ 保存に失敗しました");
+    }
+  };
+
+  // 当番順の編集（追加・↑↓・削除）。ポインタは applyOrderEdit が現在当番に追随させる
+  const editChoreiOrder = (
+    edit: (order: ChoreiMember[]) => ChoreiMember[],
+    okMsg: string
+  ) =>
+    mutateChorei(
+      (rotation, posts) => ({
+        rotation: applyOrderEdit(rotation, edit(rotation.order)),
+        posts,
+      }),
+      okMsg
+    );
+
+  const choreiMemberKey = (m: ChoreiMember) =>
+    m.staffId || `name:${normalizeThankyouName(m.name)}`;
+
+  const addChoreiMember = (m: ChoreiMember) =>
+    editChoreiOrder(
+      (order) =>
+        order.some((x) => choreiMemberKey(x) === choreiMemberKey(m))
+          ? order
+          : [...order, m],
+      `➕ ${m.name}さんを当番順に追加しました`
+    );
+
+  const moveChoreiMember = (index: number, dir: -1 | 1) =>
+    editChoreiOrder((order) => {
+      const to = index + dir;
+      if (to < 0 || to >= order.length) return order;
+      const next = [...order];
+      [next[index], next[to]] = [next[to], next[index]];
+      return next;
+    }, "💾 並び順を変更しました");
+
+  const removeChoreiMember = (index: number) =>
+    editChoreiOrder(
+      (order) => order.filter((_, i) => i !== index),
+      "🗑️ 当番順から外しました"
+    );
+
+  // ⏭ 次へ送る（ポインタ前進のみ・投稿なし）
+  const advanceChorei = () =>
+    mutateChorei(
+      (rotation, posts) => ({ rotation: advancePointer(rotation), posts }),
+      "⏭ 当番を次へ送りました"
+    );
+
+  // この人を当番にする（任意位置へジャンプ）
+  const jumpChorei = (index: number, name: string) =>
+    mutateChorei(
+      (rotation, posts) => ({ rotation: setPointer(rotation, index), posts }),
+      `🎤 ${name}さんを当番にしました`
+    );
+
+  // 投稿の論理削除/復元（ポインタは巻き戻さない＝rotation はそのまま）
+  const setChoreiPostDeleted = (id: string, deleted: boolean) => {
+    if (
+      deleted &&
+      !confirm("この記録を削除しますか？（あとで復元できます。当番は巻き戻りません）")
+    ) {
+      return;
+    }
+    mutateChorei(
+      (rotation, posts) => ({
+        rotation,
+        posts: posts.map((p) =>
+          p.id === id
+            ? { ...p, deleted, updatedAt: new Date().toISOString() }
+            : p
+        ),
+      }),
+      deleted ? "🗑️ 削除しました（復元できます）" : "♻️ 復元しました"
+    );
   };
 
   // ─────────────────────────────────────
@@ -2631,6 +2788,200 @@ export default function AdminPortalPage() {
               まだ下書きがありません
             </p>
           )}
+        </div>
+      )}
+
+      {/* 朝礼サポート（chorei_data・指示書108）: 当番順リスト編集・手動操作・投稿管理 */}
+      {tab === "chorei" && (
+        <div className="space-y-6">
+          {/* 当番順リストの編集（質問プールのUIパターン流用） */}
+          <section className="space-y-3">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">
+                🎤 当番順リスト
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                スタッフ側で「当番を次へ進める」チェック付きの投稿があると自動で次の人へ進みます。
+                シフト等でズレたときは「⏭ 次へ送る」「この人を当番にする」で調整してください。
+              </p>
+            </div>
+            {choreiRotation.order.length === 0 ? (
+              <p className="text-xs text-gray-500">
+                当番はまだ設定されていません。下の候補から追加してください。
+              </p>
+            ) : (
+              <ul className="space-y-1">
+                {choreiRotation.order.map((m, i) => {
+                  const isCurrent = i === choreiRotation.pointer;
+                  return (
+                    <li
+                      key={`${m.staffId || m.name}_${i}`}
+                      className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 ${
+                        isCurrent
+                          ? "border-orange-300 bg-orange-50"
+                          : "border-gray-100 bg-gray-50"
+                      }`}
+                    >
+                      <span className="text-xs text-gray-400 tabular-nums w-5 shrink-0">
+                        {i + 1}.
+                      </span>
+                      <span className="text-sm flex-1 min-w-0 truncate">
+                        {m.name}
+                        {isCurrent && (
+                          <span className="ml-2 text-[10px] font-medium bg-orange-200 text-orange-900 rounded-full px-2 py-0.5">
+                            🎤 現在の当番
+                          </span>
+                        )}
+                      </span>
+                      {!isCurrent && (
+                        <button
+                          type="button"
+                          onClick={() => jumpChorei(i, m.name)}
+                          disabled={busyChorei}
+                          className="text-xs px-2 py-1 border border-orange-200 text-orange-700 rounded hover:bg-orange-50 disabled:opacity-30"
+                        >
+                          この人を当番に
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => moveChoreiMember(i, -1)}
+                        disabled={busyChorei || i === 0}
+                        className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-white disabled:opacity-30"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveChoreiMember(i, 1)}
+                        disabled={busyChorei || i === choreiRotation.order.length - 1}
+                        className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-white disabled:opacity-30"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeChoreiMember(i)}
+                        disabled={busyChorei}
+                        className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50 disabled:opacity-30"
+                      >
+                        削除
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {choreiRotation.order.length > 0 && (
+              <button
+                type="button"
+                onClick={advanceChorei}
+                disabled={busyChorei}
+                className="text-sm px-4 py-2 rounded-lg bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50"
+              >
+                ⏭ 次へ送る（投稿なしで前進）
+              </button>
+            )}
+            {/* 未追加者チップ（プロフィール ∪ 名簿・タップで追加） */}
+            {(() => {
+              const inOrder = new Set(
+                choreiRotation.order.map((m) => choreiMemberKey(m))
+              );
+              const rest = choreiCandidates.filter(
+                (c) => !inOrder.has(choreiMemberKey(c))
+              );
+              if (rest.length === 0) return null;
+              return (
+                <div className="space-y-1">
+                  <p className="text-xs text-gray-500">
+                    候補から追加（タップで当番順の末尾に入ります）:
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {rest.map((c) => (
+                      <button
+                        key={choreiMemberKey(c)}
+                        type="button"
+                        onClick={() => addChoreiMember(c)}
+                        disabled={busyChorei}
+                        className="px-2.5 py-1 rounded-full text-xs border bg-white border-gray-200 text-gray-700 hover:bg-orange-50 disabled:opacity-50"
+                      >
+                        ＋ {c.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+          </section>
+
+          {/* 投稿の一覧・論理削除・復元 */}
+          <section className="space-y-2 border-t border-gray-200 pt-6">
+            <h2 className="text-sm font-semibold text-gray-800">
+              🌅 共有の記録
+            </h2>
+            {[...choreiPosts]
+              .sort((a, b) =>
+                (b.createdAt || "").localeCompare(a.createdAt || "")
+              )
+              .map((p) => (
+                <div
+                  key={p.id}
+                  className={`border rounded-xl p-4 ${
+                    p.deleted
+                      ? "bg-gray-50 border-gray-200 opacity-70"
+                      : "bg-white border-gray-200"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-gray-800">
+                        {p.authorName || "名前未設定"}
+                      </span>
+                      {p.onDutyName && (
+                        <span className="text-[10px] font-medium bg-orange-100 text-orange-800 rounded-full px-2 py-0.5">
+                          🎤 当番: {p.onDutyName}
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-600">
+                        {formatDateTime(p.createdAt)}
+                      </span>
+                      {p.deleted && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 font-medium">
+                          削除済み
+                        </span>
+                      )}
+                    </div>
+                    {p.deleted ? (
+                      <button
+                        type="button"
+                        onClick={() => setChoreiPostDeleted(p.id, false)}
+                        disabled={busyChorei}
+                        className="text-xs px-2 py-1 border border-teal-200 text-teal-700 rounded hover:bg-teal-50 disabled:opacity-50"
+                      >
+                        ♻️ 復元
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setChoreiPostDeleted(p.id, true)}
+                        disabled={busyChorei}
+                        className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50 disabled:opacity-50"
+                      >
+                        削除
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                    {p.body}
+                  </p>
+                </div>
+              ))}
+            {choreiPosts.length === 0 && (
+              <p className="text-sm text-gray-600 text-center py-8">
+                まだ記録がありません
+              </p>
+            )}
+          </section>
         </div>
       )}
 

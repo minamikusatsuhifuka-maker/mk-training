@@ -69,6 +69,7 @@ export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
   "thanks", // 指示書105: サンクスカード全件一覧（/thanks・既存 portal_thankyou を核に拡張）
   "hiyari", // 指示書106: ヒヤリハット報告（/hiyari-report・既存 portal_hiyari とは別物）
   "manual_draft", // 指示書107: マニュアル下書き（/manual-drafts・資料庫昇格はステータス+リンク紐付け）
+  "chorei", // 指示書108: 朝礼サポート（/chorei・投稿駆動の輪番つき）
 ]);
 
 type StoredFeatureFlags = {
