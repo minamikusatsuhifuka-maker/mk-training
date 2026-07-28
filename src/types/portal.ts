@@ -287,6 +287,9 @@ export const HOME_SECTION_LABELS: Record<HomeSectionKey, string> = {
   gantt_summary: "🎯 クリニック目標（進行中）",
   clinic_metrics: "📈 クリニックの歩み",
   weekly_question: "❓ みんなへの質問",
+  // ⚠ この "kizuki" はホームの既存「気づきシェア」（portal_hiyari）セクションのレイアウトキー。
+  //   指示書104の機能ID kizuki（日々の気づき /kizuki）とは同名の別物（歴史的経緯）。
+  //   portal_home_layout の保存データ互換のため改名しない（指示書106で確認済み）。
   kizuki: "💛 気づきシェア",
   thanks: "♥ ありがとうカード",
   policy: "🎯 経営方針",

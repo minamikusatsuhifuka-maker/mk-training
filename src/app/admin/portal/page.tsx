@@ -76,6 +76,11 @@ import {
   type KizukiPost,
 } from "@/lib/kizuki";
 import {
+  loadHiyariStore,
+  saveHiyariStore,
+  type HiyariReport,
+} from "@/lib/hiyari-reports";
+import {
   loadClinicMetrics,
   saveClinicMetrics,
   emptyClinicMetrics,
@@ -129,6 +134,7 @@ type TabKey =
   | "history"
   | "contrib"
   | "hiyari"
+  | "hiyariReport"
   | "kizuki"
   | "thankyou"
   | "policy"
@@ -145,6 +151,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "history", label: "🕘 共有履歴" },
   { key: "contrib", label: "📊 共有ログ・貢献" },
   { key: "hiyari", label: "💛 気づきシェア" },
+  { key: "hiyariReport", label: "🚨 ヒヤリハット報告" },
   { key: "kizuki", label: "💡 日々の気づき" },
   { key: "thankyou", label: "♥ ありがとうカード" },
   { key: "policy", label: "🎯 経営方針" },
@@ -255,6 +262,11 @@ export default function AdminPortalPage() {
   // 日々の気づき（kizuki_posts・指示書104）。既存「気づきシェア」（hiyari）とは別物
   const [kizukiPosts, setKizukiPosts] = useState<KizukiPost[]>([]);
   const [busyKizukiId, setBusyKizukiId] = useState<string | null>(null);
+  // ヒヤリハット報告（hiyari_reports・指示書106）。既存「気づきシェア」（portal_hiyari）とは別物
+  const [hiyariReports, setHiyariReports] = useState<HiyariReport[]>([]);
+  const [busyHiyariReportId, setBusyHiyariReportId] = useState<string | null>(
+    null
+  );
   const [thankyou, setThankyou] = useState<ThankyouItem[]>([]);
   const [policies, setPolicies] = useState<PolicyItem[]>([]);
   const [todayWord, setTodayWord] = useState<TodayWord>({
@@ -385,6 +397,9 @@ export default function AdminPortalPage() {
     getFeatureFlags().then(setFeatureFlags).catch(() => {});
     loadKizukiStore()
       .then((s) => setKizukiPosts(s.posts))
+      .catch(() => {});
+    loadHiyariStore()
+      .then((s) => setHiyariReports(s.posts))
       .catch(() => {});
     loadWeeklyQuestions()
       .then((d) => setPool(d.pool))
@@ -1074,6 +1089,30 @@ export default function AdminPortalPage() {
     setBusyKizukiId(null);
     if (ok) {
       setKizukiPosts(next);
+      flash(deleted ? "🗑️ 削除しました（復元できます）" : "♻️ 復元しました");
+    } else {
+      flash("⚠ 保存に失敗しました");
+    }
+  };
+
+  // ─────────────────────────────────────
+  // ヒヤリハット報告（hiyari_reports・指示書106）: 論理削除・復元
+  // ─────────────────────────────────────
+  const setHiyariReportDeleted = async (id: string, deleted: boolean) => {
+    if (busyHiyariReportId) return;
+    if (deleted && !confirm("この報告を削除しますか？（あとで復元できます）")) {
+      return;
+    }
+    setBusyHiyariReportId(id);
+    const store = await loadHiyariStore().catch(() => null);
+    const base = store ? store.posts : hiyariReports;
+    const next = base.map((p) =>
+      p.id === id ? { ...p, deleted, updatedAt: new Date().toISOString() } : p
+    );
+    const ok = await saveHiyariStore(next);
+    setBusyHiyariReportId(null);
+    if (ok) {
+      setHiyariReports(next);
       flash(deleted ? "🗑️ 削除しました（復元できます）" : "♻️ 復元しました");
     } else {
       flash("⚠ 保存に失敗しました");
@@ -2240,6 +2279,72 @@ export default function AdminPortalPage() {
           {kizukiPosts.length === 0 && (
             <p className="text-sm text-gray-600 text-center py-8">
               まだ投稿がありません
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ヒヤリハット報告（hiyari_reports・指示書106）: 一覧・論理削除・復元。
+          「💛 気づきシェア」タブ（既存 portal_hiyari）とは別機能 */}
+      {tab === "hiyariReport" && (
+        <div className="space-y-2">
+          <p className="text-sm text-gray-600">
+            「🚨 ヒヤリハット報告」（/hiyari-report）の一覧です（報告はスタッフ画面から）。
+            匿名報告は誰が書いたか記録されていません。削除は非表示化で、ここからいつでも復元できます。
+          </p>
+          {[...hiyariReports]
+            .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
+            .map((p) => (
+              <div
+                key={p.id}
+                className={`border rounded-xl p-4 ${
+                  p.deleted
+                    ? "bg-gray-50 border-gray-200 opacity-70"
+                    : "bg-white border-gray-200"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-gray-800">
+                      {p.authorId ? p.authorName || "名前未設定" : "匿名"}
+                    </span>
+                    <span className="text-xs text-gray-600">
+                      {formatDateTime(p.createdAt)}
+                    </span>
+                    {p.deleted && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 font-medium">
+                        削除済み
+                      </span>
+                    )}
+                  </div>
+                  {p.deleted ? (
+                    <button
+                      type="button"
+                      onClick={() => setHiyariReportDeleted(p.id, false)}
+                      disabled={busyHiyariReportId === p.id}
+                      className="text-xs px-2 py-1 border border-teal-200 text-teal-700 rounded hover:bg-teal-50 disabled:opacity-50"
+                    >
+                      ♻️ 復元
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setHiyariReportDeleted(p.id, true)}
+                      disabled={busyHiyariReportId === p.id}
+                      className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50 disabled:opacity-50"
+                    >
+                      削除
+                    </button>
+                  )}
+                </div>
+                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                  {p.body}
+                </p>
+              </div>
+            ))}
+          {hiyariReports.length === 0 && (
+            <p className="text-sm text-gray-600 text-center py-8">
+              まだ報告がありません
             </p>
           )}
         </div>

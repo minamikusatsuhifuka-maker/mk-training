@@ -67,6 +67,8 @@ export const MASTER_ITEMS: MasterItem[] = [
   { key: "/kizuki", href: "/kizuki", label: "💡 日々の気づき", categoryId: "work", featureId: "kizuki" },
   // サンクスカード全件一覧（指示書105・A案=既存 portal_thankyou を核に拡張）
   { key: "/thanks", href: "/thanks", label: "💌 ありがとうカード", categoryId: "work", featureId: "thanks" },
+  // ヒヤリハット報告（指示書106。既存「気づきシェア」portal_hiyari とは別機能・別キー hiyari_reports）
+  { key: "/hiyari-report", href: "/hiyari-report", label: "🚨 ヒヤリハット報告", categoryId: "work", featureId: "hiyari" },
   { key: "/operations", href: "/operations", label: "📋 業務チェックリスト", categoryId: "work" },
   { key: "/library", href: "/library", label: "🗂️ 資料庫", categoryId: "work" },
   // マニュアル＝資料庫のカテゴリ絞り込み済みビュー（別ページは作らない・指示書101。key は一意IDで可＝59の流儀）

@@ -67,6 +67,7 @@ export const FEATURE_META: FeatureMeta[] = [
 export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
   "kizuki", // 指示書104: 日々の気づき投稿（/kizuki）
   "thanks", // 指示書105: サンクスカード全件一覧（/thanks・既存 portal_thankyou を核に拡張）
+  "hiyari", // 指示書106: ヒヤリハット報告（/hiyari-report・既存 portal_hiyari とは別物）
 ]);
 
 type StoredFeatureFlags = {

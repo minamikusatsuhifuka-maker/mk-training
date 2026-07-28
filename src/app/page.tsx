@@ -13,6 +13,7 @@ import CharacterNotification from "@/components/CharacterNotification";
 import { loadTasks, taskCounts } from "@/lib/staff-tasks";
 import { getCurrentActorName, monthlyTopContributors } from "@/lib/news-log";
 import { ThankyouFormModal } from "@/components/ThankyouFormModal";
+import { useFeatureFlags } from "@/lib/use-feature-flags";
 import {
   useNewsReactions,
   ReactionBar,
@@ -331,6 +332,10 @@ export default function PortalHome() {
   // 新着情報カードの列数（既定2列・1〜4列・localStorage保持）
   const { columns, effectiveCols, changeColumns } = useNewsColumns();
 
+  // 106: hiyari フラグON時、気づきシェアを「✨良いこと共有」専用に縮小
+  //（見出し・種別2択・クイックアクセス・投稿typeを連動。OFF時は従来と完全に同一表示）
+  const { flags: featureFlags } = useFeatureFlags();
+
   // 気づきシェア投稿フォーム
   const [showHiyariForm, setShowHiyariForm] = useState(false);
   const [hiyariType, setHiyariType] = useState<HiyariType>("hiyari");
@@ -540,7 +545,8 @@ export default function PortalHome() {
       const current = await loadPortalItems<HiyariItem>(PORTAL_KEYS.hiyari, []);
       const newItem: HiyariItem = {
         id: `hi_${Date.now()}`,
-        type: hiyariType,
+        // 106: hiyari フラグON時、このフォームは「良いこと共有」専用（ヒヤリは /hiyari-report へ）
+        type: featureFlags.hiyari ? "good" : hiyariType,
         text: hiyariText.trim(),
         role: hiyariRole,
         isAnonymous,
@@ -680,7 +686,20 @@ export default function PortalHome() {
           クイックアクセス
         </h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
-          {quickLinks.map((link) => {
+          {(featureFlags.hiyari
+            ? // 106: ヒヤリハット報告の分離後は「良いこと共有」のリンクとして表示（OFF時は無変化）
+              quickLinks.map((link) =>
+                link.href === "#hiyari"
+                  ? {
+                      ...link,
+                      icon: "✨",
+                      name: "良いこと共有",
+                      sub: "今日の小さなGood",
+                    }
+                  : link
+              )
+            : quickLinks
+          ).map((link) => {
             const cardClass = link.highlight
               ? "p-4 bg-teal-50 border border-teal-200 rounded-xl cursor-pointer hover:bg-teal-100 transition-colors text-center min-h-[100px] flex flex-col justify-center"
               : "p-4 bg-white border border-gray-100 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors text-center min-h-[100px] flex flex-col justify-center";
@@ -725,7 +744,7 @@ export default function PortalHome() {
       <section id="hiyari" className="px-4 py-5 border-b border-gray-100">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xs font-medium text-gray-800 uppercase tracking-wider">
-            気づきシェア
+            {featureFlags.hiyari ? "✨ 良いこと共有" : "気づきシェア"}
           </h2>
           <button
             type="button"
@@ -790,36 +809,51 @@ export default function PortalHome() {
                   ✕
                 </button>
               </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setHiyariType("hiyari")}
-                  className={`flex-1 py-2 rounded-lg text-sm border transition-colors ${
-                    hiyariType === "hiyari"
-                      ? "bg-amber-50 border-amber-300 text-amber-800"
-                      : "border-gray-200 text-gray-600"
-                  }`}
-                >
-                  ⚡ ヒヤリハット
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setHiyariType("good")}
-                  className={`flex-1 py-2 rounded-lg text-sm border transition-colors ${
-                    hiyariType === "good"
-                      ? "bg-green-50 border-green-300 text-green-800"
-                      : "border-gray-200 text-gray-600"
-                  }`}
-                >
-                  ✨ 良いこと共有
-                </button>
-              </div>
+              {featureFlags.hiyari ? (
+                // 106: ヒヤリハットは専用ページへ分離（このフォームは良いこと共有専用）
+                <p className="text-xs text-gray-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                  ⚡ ヒヤリハットの報告は
+                  <Link
+                    href="/hiyari-report"
+                    className="text-amber-700 underline font-medium mx-1"
+                    onClick={() => setShowHiyariForm(false)}
+                  >
+                    「ヒヤリハット報告」ページ
+                  </Link>
+                  へ
+                </p>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setHiyariType("hiyari")}
+                    className={`flex-1 py-2 rounded-lg text-sm border transition-colors ${
+                      hiyariType === "hiyari"
+                        ? "bg-amber-50 border-amber-300 text-amber-800"
+                        : "border-gray-200 text-gray-600"
+                    }`}
+                  >
+                    ⚡ ヒヤリハット
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHiyariType("good")}
+                    className={`flex-1 py-2 rounded-lg text-sm border transition-colors ${
+                      hiyariType === "good"
+                        ? "bg-green-50 border-green-300 text-green-800"
+                        : "border-gray-200 text-gray-600"
+                    }`}
+                  >
+                    ✨ 良いこと共有
+                  </button>
+                </div>
+              )}
               <textarea
                 value={hiyariText}
                 onChange={(e) => setHiyariText(e.target.value)}
                 rows={5}
                 placeholder={
-                  hiyariType === "hiyari"
+                  !featureFlags.hiyari && hiyariType === "hiyari"
                     ? "気づいたヒヤリハットを共有してください..."
                     : "良かったこと・嬉しかったことを共有してください..."
                 }
