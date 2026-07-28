@@ -293,7 +293,10 @@ export default function LibraryBrowser() {
 
   // 101: サイドバー「📖 マニュアル」等からの ?category= で初期カテゴリを設定
   // （パラメータなしは従来どおり全件。同一ページ内でのクエリ変化にも追随する）
-  const categoryParam = useSearchParams().get("category");
+  const searchParams = useSearchParams();
+  const categoryParam = searchParams.get("category");
+  // 107: ?doc=<id> で該当資料のプレビューを直接開く（マニュアル下書きの libraryRef リンク先）
+  const docParam = searchParams.get("doc");
   useEffect(() => {
     if (
       categoryParam &&
@@ -506,6 +509,20 @@ export default function LibraryBrowser() {
     },
     [recordRecent]
   );
+
+  // 107: ?doc=<id> のディープリンク解決（docs ロード後に1回だけプレビューを開く）。
+  // 削除済み資料は store.docs に存在しない（物理削除・ゴミ箱=log snapshot のみ）ため、
+  // find で見つからない＝「見つからない」扱いになり、通常の一覧をそのまま表示する。
+  const openedDocParamRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!docParam || loading) return;
+    if (openedDocParamRef.current === docParam) return; // 同一IDは再度開かない
+    const doc = docs.find((d) => d.id === docParam);
+    if (doc) {
+      openedDocParamRef.current = docParam;
+      openPreview(doc);
+    }
+  }, [docParam, loading, docs, openPreview]);
 
   // A: ★トグル（楽観更新＋失敗ロールバック）。指示書99: { favoriteDocIds } だけを部分更新PUT
   // （プロフィール全体は送らない＝別画面で編集した自己紹介・価値観・サーベイ等を古い値で上書きしない）

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   loadPortalItems,
   savePortalItems,
+  loadPortalObject,
   loadTodayWord,
   saveTodayWord,
   loadCharacterSettings,
@@ -81,6 +82,18 @@ import {
   type HiyariReport,
 } from "@/lib/hiyari-reports";
 import {
+  MANUAL_DRAFT_STATUS_META,
+  loadManualDraftStore,
+  saveManualDraftStore,
+  type ManualDraft,
+} from "@/lib/manual-drafts";
+import {
+  LIBRARY_KEY,
+  LIBRARY_CATEGORIES,
+  normalizeStore as normalizeLibraryStore,
+  type LibraryDoc,
+} from "@/lib/library";
+import {
   loadClinicMetrics,
   saveClinicMetrics,
   emptyClinicMetrics,
@@ -136,6 +149,7 @@ type TabKey =
   | "hiyari"
   | "hiyariReport"
   | "kizuki"
+  | "manualDraft"
   | "thankyou"
   | "policy"
   | "word"
@@ -153,6 +167,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "hiyari", label: "💛 気づきシェア" },
   { key: "hiyariReport", label: "🚨 ヒヤリハット報告" },
   { key: "kizuki", label: "💡 日々の気づき" },
+  { key: "manualDraft", label: "✍️ マニュアル下書き" },
   { key: "thankyou", label: "♥ ありがとうカード" },
   { key: "policy", label: "🎯 経営方針" },
   { key: "word", label: "💬 今日の一言" },
@@ -267,6 +282,17 @@ export default function AdminPortalPage() {
   const [busyHiyariReportId, setBusyHiyariReportId] = useState<string | null>(
     null
   );
+
+  // マニュアル下書き（manual_drafts・指示書107）
+  const [manualDrafts, setManualDrafts] = useState<ManualDraft[]>([]);
+  const [busyManualDraftId, setBusyManualDraftId] = useState<string | null>(
+    null
+  );
+  // 「📗 資料庫登録済みにする」の資料選択パネル（開いている下書きID・検索・カテゴリフィルタ）
+  const [linkTargetId, setLinkTargetId] = useState<string | null>(null);
+  const [librarySearch, setLibrarySearch] = useState("");
+  const [libraryCatFilter, setLibraryCatFilter] = useState<string>("マニュアル");
+  const [libraryDocs, setLibraryDocs] = useState<LibraryDoc[]>([]);
   const [thankyou, setThankyou] = useState<ThankyouItem[]>([]);
   const [policies, setPolicies] = useState<PolicyItem[]>([]);
   const [todayWord, setTodayWord] = useState<TodayWord>({
@@ -400,6 +426,13 @@ export default function AdminPortalPage() {
       .catch(() => {});
     loadHiyariStore()
       .then((s) => setHiyariReports(s.posts))
+      .catch(() => {});
+    loadManualDraftStore()
+      .then((s) => setManualDrafts(s.posts))
+      .catch(() => {});
+    // 紐付け候補の資料一覧（LibraryNewsSection と同じ anon 直読み・API不要）
+    loadPortalObject<unknown>(LIBRARY_KEY, null)
+      .then((raw) => setLibraryDocs(normalizeLibraryStore(raw).docs))
       .catch(() => {});
     loadWeeklyQuestions()
       .then((d) => setPool(d.pool))
@@ -1114,6 +1147,85 @@ export default function AdminPortalPage() {
     if (ok) {
       setHiyariReports(next);
       flash(deleted ? "🗑️ 削除しました（復元できます）" : "♻️ 復元しました");
+    } else {
+      flash("⚠ 保存に失敗しました");
+    }
+  };
+
+  // ─────────────────────────────────────
+  // マニュアル下書き（manual_drafts・指示書107）: 論理削除・復元・資料庫紐付け
+  // 運用フロー想定: スタッフが下書き → 院長が内容確認 → 正式マニュアルを作成し
+  // 資料庫に登録（従来の資料庫の登録手順） → このタブで下書きに紐付け（📗登録済みにする）
+  // ─────────────────────────────────────
+  const setManualDraftDeleted = async (id: string, deleted: boolean) => {
+    if (busyManualDraftId) return;
+    if (deleted && !confirm("この下書きを削除しますか？（あとで復元できます）")) {
+      return;
+    }
+    setBusyManualDraftId(id);
+    const store = await loadManualDraftStore().catch(() => null);
+    const base = store ? store.posts : manualDrafts;
+    const next = base.map((p) =>
+      p.id === id ? { ...p, deleted, updatedAt: new Date().toISOString() } : p
+    );
+    const ok = await saveManualDraftStore(next);
+    setBusyManualDraftId(null);
+    if (ok) {
+      setManualDrafts(next);
+      flash(deleted ? "🗑️ 削除しました（復元できます）" : "♻️ 復元しました");
+    } else {
+      flash("⚠ 保存に失敗しました");
+    }
+  };
+
+  // 資料選択で status: "registered" ＋ libraryRef を設定（docId 参照方式）
+  const registerManualDraft = async (id: string, doc: LibraryDoc) => {
+    if (busyManualDraftId) return;
+    setBusyManualDraftId(id);
+    const store = await loadManualDraftStore().catch(() => null);
+    const base = store ? store.posts : manualDrafts;
+    const next = base.map((p) =>
+      p.id === id
+        ? {
+            ...p,
+            status: "registered" as const,
+            libraryRef: { docId: doc.id },
+            updatedAt: new Date().toISOString(),
+          }
+        : p
+    );
+    const ok = await saveManualDraftStore(next);
+    setBusyManualDraftId(null);
+    if (ok) {
+      setManualDrafts(next);
+      setLinkTargetId(null);
+      setLibrarySearch("");
+      flash(`📗 「${doc.title}」に紐付けて登録済みにしました`);
+    } else {
+      flash("⚠ 保存に失敗しました");
+    }
+  };
+
+  // 執筆中に戻す（libraryRef はフィールドごと除去）
+  const unregisterManualDraft = async (id: string) => {
+    if (busyManualDraftId) return;
+    setBusyManualDraftId(id);
+    const store = await loadManualDraftStore().catch(() => null);
+    const base = store ? store.posts : manualDrafts;
+    const next = base.map((p) => {
+      if (p.id !== id) return p;
+      const { libraryRef: _drop, ...rest } = p;
+      return {
+        ...rest,
+        status: "draft" as const,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+    const ok = await saveManualDraftStore(next);
+    setBusyManualDraftId(null);
+    if (ok) {
+      setManualDrafts(next);
+      flash("✏️ 執筆中に戻しました");
     } else {
       flash("⚠ 保存に失敗しました");
     }
@@ -2345,6 +2457,178 @@ export default function AdminPortalPage() {
           {hiyariReports.length === 0 && (
             <p className="text-sm text-gray-600 text-center py-8">
               まだ報告がありません
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* マニュアル下書き（manual_drafts・指示書107）: 一覧・論理削除・復元・資料庫紐付け */}
+      {tab === "manualDraft" && (
+        <div className="space-y-2">
+          <p className="text-sm text-gray-600">
+            「✍️ マニュアル下書き」（/manual-drafts）の一覧です（投稿・編集はスタッフ画面から）。
+            正式マニュアルを資料庫に登録したら「📗 登録済みにする」で下書きに紐付けてください。
+          </p>
+          {[...manualDrafts]
+            .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
+            .map((p) => {
+              const meta = MANUAL_DRAFT_STATUS_META[p.status];
+              const refDoc = p.libraryRef
+                ? libraryDocs.find((d) => d.id === p.libraryRef!.docId)
+                : undefined;
+              const linking = linkTargetId === p.id;
+              const q = librarySearch.trim().toLowerCase();
+              const candidates = linking
+                ? libraryDocs.filter(
+                    (d) =>
+                      (libraryCatFilter === "all" ||
+                        d.category === libraryCatFilter) &&
+                      (!q || d.title.toLowerCase().includes(q))
+                  )
+                : [];
+              return (
+                <div
+                  key={p.id}
+                  className={`border rounded-xl p-4 space-y-2 ${
+                    p.deleted
+                      ? "bg-gray-50 border-gray-200 opacity-70"
+                      : "bg-white border-gray-200"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <span className="text-sm font-semibold text-gray-900 break-words">
+                        {p.title}
+                      </span>
+                      <span
+                        className={`text-[10px] font-medium rounded-full px-2 py-0.5 shrink-0 ${meta.className}`}
+                      >
+                        {meta.label}
+                      </span>
+                      {p.deleted && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 font-medium">
+                          削除済み
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs text-gray-600 shrink-0">
+                      {p.authorName || "名前未設定"}・{formatDateTime(p.createdAt)}
+                    </span>
+                  </div>
+
+                  {refDoc && (
+                    <p className="text-xs text-emerald-700">
+                      📗 紐付け先: {refDoc.title}（{refDoc.category}）
+                    </p>
+                  )}
+                  {p.libraryRef && !refDoc && (
+                    <p className="text-xs text-amber-700">
+                      ⚠ 紐付け先の資料が見つかりません（削除された可能性があります）
+                    </p>
+                  )}
+
+                  <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                    {p.body}
+                  </p>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {!p.deleted && p.status === "draft" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLinkTargetId(linking ? null : p.id);
+                          setLibrarySearch("");
+                          setLibraryCatFilter("マニュアル");
+                        }}
+                        disabled={busyManualDraftId === p.id}
+                        className="text-xs px-2 py-1 border border-emerald-200 text-emerald-700 rounded hover:bg-emerald-50 disabled:opacity-50"
+                      >
+                        {linking ? "選択をやめる" : "📗 資料庫登録済みにする"}
+                      </button>
+                    )}
+                    {!p.deleted && p.status === "registered" && (
+                      <button
+                        type="button"
+                        onClick={() => unregisterManualDraft(p.id)}
+                        disabled={busyManualDraftId === p.id}
+                        className="text-xs px-2 py-1 border border-amber-200 text-amber-700 rounded hover:bg-amber-50 disabled:opacity-50"
+                      >
+                        ↩ 執筆中に戻す
+                      </button>
+                    )}
+                    {p.deleted ? (
+                      <button
+                        type="button"
+                        onClick={() => setManualDraftDeleted(p.id, false)}
+                        disabled={busyManualDraftId === p.id}
+                        className="text-xs px-2 py-1 border border-teal-200 text-teal-700 rounded hover:bg-teal-50 disabled:opacity-50"
+                      >
+                        ♻️ 復元
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setManualDraftDeleted(p.id, true)}
+                        disabled={busyManualDraftId === p.id}
+                        className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50 disabled:opacity-50"
+                      >
+                        削除
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 資料選択パネル（検索付き・カテゴリ「マニュアル」既定フィルタ） */}
+                  {linking && (
+                    <div className="border border-emerald-200 bg-emerald-50/40 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <input
+                          value={librarySearch}
+                          onChange={(e) => setLibrarySearch(e.target.value)}
+                          placeholder="資料タイトルで検索"
+                          className="flex-1 min-w-[160px] border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
+                        />
+                        <select
+                          value={libraryCatFilter}
+                          onChange={(e) => setLibraryCatFilter(e.target.value)}
+                          className="text-xs border border-gray-200 rounded-lg px-2 py-1.5"
+                        >
+                          <option value="all">すべてのカテゴリ</option>
+                          {LIBRARY_CATEGORIES.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto space-y-1">
+                        {candidates.map((d) => (
+                          <button
+                            key={d.id}
+                            type="button"
+                            onClick={() => registerManualDraft(p.id, d)}
+                            disabled={busyManualDraftId === p.id}
+                            className="w-full text-left text-sm bg-white border border-gray-200 rounded-lg px-3 py-2 hover:bg-emerald-50 disabled:opacity-50"
+                          >
+                            {d.title}
+                            <span className="text-xs text-gray-500 ml-2">
+                              {d.category}
+                            </span>
+                          </button>
+                        ))}
+                        {candidates.length === 0 && (
+                          <p className="text-xs text-gray-500 py-3 text-center">
+                            該当する資料がありません（カテゴリを「すべて」に切り替えるか、先に資料庫へ登録してください）
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          {manualDrafts.length === 0 && (
+            <p className="text-sm text-gray-600 text-center py-8">
+              まだ下書きがありません
             </p>
           )}
         </div>
