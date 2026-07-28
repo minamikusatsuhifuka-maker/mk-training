@@ -77,6 +77,8 @@ export const MASTER_ITEMS: MasterItem[] = [
   { key: "library-manual", href: "/library?category=マニュアル", label: "📖 マニュアル", categoryId: "work" },
   // マニュアル下書き（指示書107）。資料庫系の並びに置く
   { key: "/manual-drafts", href: "/manual-drafts", label: "✍️ マニュアル下書き", categoryId: "work", featureId: "manual_draft" },
+  // 勉強会アーカイブ（指示書109・資料は資料庫参照 libraryRefs）
+  { key: "/benkyokai", href: "/benkyokai", label: "📖 勉強会アーカイブ", categoryId: "work", featureId: "benkyokai" },
   { key: "/medical-fees", href: "/medical-fees", label: "💴 算定・点数表", categoryId: "work" },
   { key: "/expert", href: "/expert", label: "⭐ エキスパートの働き方", categoryId: "work" },
   { key: "/growth-builder", href: "/growth-builder", label: "🚀 成長ロードマップ", categoryId: "work" },

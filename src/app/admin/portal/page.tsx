@@ -103,8 +103,15 @@ import {
 import { loadProfilesIndex } from "@/lib/staff-profiles";
 import { loadStaffMembers } from "@/lib/staff-tasks";
 import {
+  loadBenkyokaiStore,
+  saveBenkyokaiStore,
+  normalizeLibraryRefs,
+  formatHeldOn,
+  type BenkyokaiPost,
+} from "@/lib/benkyokai";
+import { LibraryDocPicker } from "@/components/LibraryDocPicker";
+import {
   LIBRARY_KEY,
-  LIBRARY_CATEGORIES,
   normalizeStore as normalizeLibraryStore,
   type LibraryDoc,
 } from "@/lib/library";
@@ -166,6 +173,7 @@ type TabKey =
   | "kizuki"
   | "manualDraft"
   | "chorei"
+  | "benkyokai"
   | "thankyou"
   | "policy"
   | "word"
@@ -185,6 +193,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "kizuki", label: "💡 日々の気づき" },
   { key: "manualDraft", label: "✍️ マニュアル下書き" },
   { key: "chorei", label: "🌅 朝礼サポート" },
+  { key: "benkyokai", label: "📖 勉強会アーカイブ" },
   { key: "thankyou", label: "♥ ありがとうカード" },
   { key: "policy", label: "🎯 経営方針" },
   { key: "word", label: "💬 今日の一言" },
@@ -305,11 +314,15 @@ export default function AdminPortalPage() {
   const [busyManualDraftId, setBusyManualDraftId] = useState<string | null>(
     null
   );
-  // 「📗 資料庫登録済みにする」の資料選択パネル（開いている下書きID・検索・カテゴリフィルタ）
+  // 「📗 資料庫登録済みにする」の資料選択パネル（開いている下書きID。検索/フィルタは LibraryDocPicker 内）
   const [linkTargetId, setLinkTargetId] = useState<string | null>(null);
-  const [librarySearch, setLibrarySearch] = useState("");
-  const [libraryCatFilter, setLibraryCatFilter] = useState<string>("マニュアル");
   const [libraryDocs, setLibraryDocs] = useState<LibraryDoc[]>([]);
+
+  // 勉強会アーカイブ（benkyokai_posts・指示書109）
+  const [benkyokaiPosts, setBenkyokaiPosts] = useState<BenkyokaiPost[]>([]);
+  const [busyBenkyokaiId, setBusyBenkyokaiId] = useState<string | null>(null);
+  // 紐付け編集パネルを開いている記録ID
+  const [benkyokaiLinkId, setBenkyokaiLinkId] = useState<string | null>(null);
 
   // 朝礼サポート（chorei_data・指示書108）: 輪番＋投稿
   const [choreiRotation, setChoreiRotation] =
@@ -463,6 +476,9 @@ export default function AdminPortalPage() {
         setChoreiRotation(d.rotation);
         setChoreiPosts(d.posts);
       })
+      .catch(() => {});
+    loadBenkyokaiStore()
+      .then((s) => setBenkyokaiPosts(s.posts))
       .catch(() => {});
     // 当番候補 = プロフィール登録者 ∪ スタッフ名簿（thanks の宛先候補と同じ流儀・正規化名で重複除去）
     Promise.all([
@@ -1254,7 +1270,6 @@ export default function AdminPortalPage() {
     if (ok) {
       setManualDrafts(next);
       setLinkTargetId(null);
-      setLibrarySearch("");
       flash(`📗 「${doc.title}」に紐付けて登録済みにしました`);
     } else {
       flash("⚠ 保存に失敗しました");
@@ -1285,6 +1300,80 @@ export default function AdminPortalPage() {
       flash("⚠ 保存に失敗しました");
     }
   };
+
+  // ─────────────────────────────────────
+  // 勉強会アーカイブ（benkyokai_posts・指示書109）: 論理削除・復元・紐付け編集（全投稿対象）
+  // ─────────────────────────────────────
+  const mutateBenkyokai = async (
+    fn: (posts: BenkyokaiPost[]) => BenkyokaiPost[],
+    okMsg: string,
+    id: string
+  ) => {
+    if (busyBenkyokaiId) return;
+    setBusyBenkyokaiId(id);
+    const store = await loadBenkyokaiStore().catch(() => null);
+    const base = store ? store.posts : benkyokaiPosts;
+    const next = fn(base);
+    const ok = await saveBenkyokaiStore(next);
+    setBusyBenkyokaiId(null);
+    if (ok) {
+      setBenkyokaiPosts(next);
+      flash(okMsg);
+    } else {
+      flash("⚠ 保存に失敗しました");
+    }
+  };
+
+  const setBenkyokaiDeleted = (id: string, deleted: boolean) => {
+    if (deleted && !confirm("この記録を削除しますか？（あとで復元できます）")) {
+      return;
+    }
+    mutateBenkyokai(
+      (posts) =>
+        posts.map((p) =>
+          p.id === id
+            ? { ...p, deleted, updatedAt: new Date().toISOString() }
+            : p
+        ),
+      deleted ? "🗑️ 削除しました（復元できます）" : "♻️ 復元しました",
+      id
+    );
+  };
+
+  const benkyokaiAddRef = (id: string, doc: LibraryDoc) =>
+    mutateBenkyokai(
+      (posts) =>
+        posts.map((p) =>
+          p.id === id
+            ? {
+                ...p,
+                libraryRefs: normalizeLibraryRefs([
+                  ...p.libraryRefs,
+                  { docId: doc.id },
+                ]),
+                updatedAt: new Date().toISOString(),
+              }
+            : p
+        ),
+      `📎 「${doc.title}」を紐付けました`,
+      id
+    );
+
+  const benkyokaiRemoveRef = (id: string, docId: string) =>
+    mutateBenkyokai(
+      (posts) =>
+        posts.map((p) =>
+          p.id === id
+            ? {
+                ...p,
+                libraryRefs: p.libraryRefs.filter((r) => r.docId !== docId),
+                updatedAt: new Date().toISOString(),
+              }
+            : p
+        ),
+      "📎 紐付けを外しました",
+      id
+    );
 
   // ─────────────────────────────────────
   // 朝礼サポート（chorei_data・指示書108）: 輪番編集・手動操作・投稿の論理削除/復元
@@ -2634,15 +2723,6 @@ export default function AdminPortalPage() {
                 ? libraryDocs.find((d) => d.id === p.libraryRef!.docId)
                 : undefined;
               const linking = linkTargetId === p.id;
-              const q = librarySearch.trim().toLowerCase();
-              const candidates = linking
-                ? libraryDocs.filter(
-                    (d) =>
-                      (libraryCatFilter === "all" ||
-                        d.category === libraryCatFilter) &&
-                      (!q || d.title.toLowerCase().includes(q))
-                  )
-                : [];
               return (
                 <div
                   key={p.id}
@@ -2692,11 +2772,7 @@ export default function AdminPortalPage() {
                     {!p.deleted && p.status === "draft" && (
                       <button
                         type="button"
-                        onClick={() => {
-                          setLinkTargetId(linking ? null : p.id);
-                          setLibrarySearch("");
-                          setLibraryCatFilter("マニュアル");
-                        }}
+                        onClick={() => setLinkTargetId(linking ? null : p.id)}
                         disabled={busyManualDraftId === p.id}
                         className="text-xs px-2 py-1 border border-emerald-200 text-emerald-700 rounded hover:bg-emerald-50 disabled:opacity-50"
                       >
@@ -2734,51 +2810,13 @@ export default function AdminPortalPage() {
                     )}
                   </div>
 
-                  {/* 資料選択パネル（検索付き・カテゴリ「マニュアル」既定フィルタ） */}
+                  {/* 資料選択パネル（109で LibraryDocPicker に共有化・マニュアル既定フィルタは維持） */}
                   {linking && (
-                    <div className="border border-emerald-200 bg-emerald-50/40 rounded-xl p-3 space-y-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <input
-                          value={librarySearch}
-                          onChange={(e) => setLibrarySearch(e.target.value)}
-                          placeholder="資料タイトルで検索"
-                          className="flex-1 min-w-[160px] border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
-                        />
-                        <select
-                          value={libraryCatFilter}
-                          onChange={(e) => setLibraryCatFilter(e.target.value)}
-                          className="text-xs border border-gray-200 rounded-lg px-2 py-1.5"
-                        >
-                          <option value="all">すべてのカテゴリ</option>
-                          {LIBRARY_CATEGORIES.map((c) => (
-                            <option key={c} value={c}>
-                              {c}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="max-h-48 overflow-y-auto space-y-1">
-                        {candidates.map((d) => (
-                          <button
-                            key={d.id}
-                            type="button"
-                            onClick={() => registerManualDraft(p.id, d)}
-                            disabled={busyManualDraftId === p.id}
-                            className="w-full text-left text-sm bg-white border border-gray-200 rounded-lg px-3 py-2 hover:bg-emerald-50 disabled:opacity-50"
-                          >
-                            {d.title}
-                            <span className="text-xs text-gray-500 ml-2">
-                              {d.category}
-                            </span>
-                          </button>
-                        ))}
-                        {candidates.length === 0 && (
-                          <p className="text-xs text-gray-500 py-3 text-center">
-                            該当する資料がありません（カテゴリを「すべて」に切り替えるか、先に資料庫へ登録してください）
-                          </p>
-                        )}
-                      </div>
-                    </div>
+                    <LibraryDocPicker
+                      onPick={(d) => registerManualDraft(p.id, d)}
+                      defaultCategory="マニュアル"
+                      disabled={busyManualDraftId === p.id}
+                    />
                   )}
                 </div>
               );
@@ -2982,6 +3020,139 @@ export default function AdminPortalPage() {
               </p>
             )}
           </section>
+        </div>
+      )}
+
+      {/* 勉強会アーカイブ（benkyokai_posts・指示書109）: 一覧・論理削除・復元・紐付け編集 */}
+      {tab === "benkyokai" && (
+        <div className="space-y-2">
+          <p className="text-sm text-gray-600">
+            「📖 勉強会アーカイブ」（/benkyokai）の記録一覧です（投稿・編集はスタッフ画面から）。
+            資料の紐付けはここからも編集できます。削除は非表示化で、いつでも復元できます。
+          </p>
+          {[...benkyokaiPosts]
+            .sort(
+              (a, b) =>
+                (b.heldOn || "").localeCompare(a.heldOn || "") ||
+                (b.createdAt || "").localeCompare(a.createdAt || "")
+            )
+            .map((p) => {
+              const linking = benkyokaiLinkId === p.id;
+              return (
+                <div
+                  key={p.id}
+                  className={`border rounded-xl p-4 space-y-2 ${
+                    p.deleted
+                      ? "bg-gray-50 border-gray-200 opacity-70"
+                      : "bg-white border-gray-200"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <span className="text-[10px] font-medium bg-sky-100 text-sky-800 rounded-full px-2 py-0.5 shrink-0">
+                        📅 {formatHeldOn(p.heldOn)}
+                      </span>
+                      <span className="text-sm font-semibold text-gray-900 break-words">
+                        {p.title}
+                      </span>
+                      {p.deleted && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 font-medium">
+                          削除済み
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs text-gray-600 shrink-0">
+                      {p.authorName || "名前未設定"}・{formatDateTime(p.createdAt)}
+                    </span>
+                  </div>
+
+                  {/* 紐付け資料（タイトル解決は libraryDocs・× で解除） */}
+                  {p.libraryRefs.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {p.libraryRefs.map((r) => {
+                        const doc = libraryDocs.find((d) => d.id === r.docId);
+                        return (
+                          <span
+                            key={r.docId}
+                            className={`inline-flex items-center gap-1 text-xs rounded-full px-3 py-1 border ${
+                              doc
+                                ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                                : "text-amber-700 bg-amber-50 border-amber-200"
+                            }`}
+                          >
+                            {doc ? `📄 ${doc.title}` : "⚠ 資料が見つかりません"}
+                            {!p.deleted && (
+                              <button
+                                type="button"
+                                onClick={() => benkyokaiRemoveRef(p.id, r.docId)}
+                                disabled={busyBenkyokaiId === p.id}
+                                aria-label="紐付けを外す"
+                                className="text-gray-400 hover:text-red-600 leading-none disabled:opacity-50"
+                              >
+                                ×
+                              </button>
+                            )}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {p.body && (
+                    <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                      {p.body}
+                    </p>
+                  )}
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {!p.deleted && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setBenkyokaiLinkId(linking ? null : p.id)
+                        }
+                        disabled={busyBenkyokaiId === p.id}
+                        className="text-xs px-2 py-1 border border-emerald-200 text-emerald-700 rounded hover:bg-emerald-50 disabled:opacity-50"
+                      >
+                        {linking ? "選択をやめる" : "📎 資料を紐付ける"}
+                      </button>
+                    )}
+                    {p.deleted ? (
+                      <button
+                        type="button"
+                        onClick={() => setBenkyokaiDeleted(p.id, false)}
+                        disabled={busyBenkyokaiId === p.id}
+                        className="text-xs px-2 py-1 border border-teal-200 text-teal-700 rounded hover:bg-teal-50 disabled:opacity-50"
+                      >
+                        ♻️ 復元
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setBenkyokaiDeleted(p.id, true)}
+                        disabled={busyBenkyokaiId === p.id}
+                        className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50 disabled:opacity-50"
+                      >
+                        削除
+                      </button>
+                    )}
+                  </div>
+
+                  {linking && (
+                    <LibraryDocPicker
+                      onPick={(d) => benkyokaiAddRef(p.id, d)}
+                      excludeIds={p.libraryRefs.map((r) => r.docId)}
+                      disabled={busyBenkyokaiId === p.id}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          {benkyokaiPosts.length === 0 && (
+            <p className="text-sm text-gray-600 text-center py-8">
+              まだ記録がありません
+            </p>
+          )}
         </div>
       )}
 
