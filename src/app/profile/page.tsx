@@ -177,6 +177,7 @@ export default function ProfilePage() {
           setMyThanks(
             all
               .filter((t) => {
+                if (t.deleted) return false; // 論理削除済みは非表示（指示書105）
                 const d = new Date(t.createdAt);
                 // 宛先が複数（配列）の場合は自分の名前が含まれていれば「自分宛」
                 return (

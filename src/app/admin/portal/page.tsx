@@ -1083,15 +1083,19 @@ export default function AdminPortalPage() {
   // ─────────────────────────────────────
   // ありがとうカード
   // ─────────────────────────────────────
-  const deleteThankyou = async (id: string) => {
-    if (!confirm("このカードを削除しますか？")) return;
+  // 指示書105: 物理削除から論理削除に変更（deleted: true・復元可）。
+  // ホーム/profile/専用ページの表示側は deleted を除外する。
+  const setThankyouDeleted = async (id: string, deleted: boolean) => {
+    if (deleted && !confirm("このカードを削除しますか？（あとで復元できます）")) {
+      return;
+    }
     setSaving(true);
-    const next = thankyou.filter((t) => t.id !== id);
+    const next = thankyou.map((t) => (t.id === id ? { ...t, deleted } : t));
     const ok = await savePortalItems(PORTAL_KEYS.thankyou, next);
     setSaving(false);
     if (ok) {
       setThankyou(next);
-      flash("🗑️ 削除しました");
+      flash(deleted ? "🗑️ 削除しました（復元できます）" : "♻️ 復元しました");
     }
   };
 
@@ -2244,24 +2248,48 @@ export default function AdminPortalPage() {
       {tab === "thankyou" && (
         <div className="space-y-2">
           <p className="text-sm text-gray-600">
-            ありがとうカードの一覧です（投稿はスタッフ画面から行います）
+            ありがとうカードの一覧です（投稿はスタッフ画面から行います）。
+            削除は非表示化で、ここからいつでも復元できます（指示書105）。
           </p>
           {thankyou.map((t) => (
             <div
               key={t.id}
-              className="bg-white border border-gray-200 rounded-xl p-4"
+              className={`border rounded-xl p-4 ${
+                t.deleted
+                  ? "bg-gray-50 border-gray-200 opacity-70"
+                  : "bg-white border-gray-200"
+              }`}
             >
               <div className="flex items-start justify-between mb-2 gap-2">
                 <p className="text-sm text-gray-800 leading-relaxed flex-1 whitespace-pre-wrap">
                   {t.message}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => deleteThankyou(t.id)}
-                  className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50"
-                >
-                  削除
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  {t.deleted && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 font-medium">
+                      削除済み
+                    </span>
+                  )}
+                  {t.deleted ? (
+                    <button
+                      type="button"
+                      onClick={() => setThankyouDeleted(t.id, false)}
+                      disabled={saving}
+                      className="text-xs px-2 py-1 border border-teal-200 text-teal-700 rounded hover:bg-teal-50 disabled:opacity-50"
+                    >
+                      ♻️ 復元
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setThankyouDeleted(t.id, true)}
+                      disabled={saving}
+                      className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50 disabled:opacity-50"
+                    >
+                      削除
+                    </button>
+                  )}
+                </div>
               </div>
               <p className="text-xs text-gray-600 mt-2">
                 {t.fromName} → {formatThankyouTo(t)} ·{" "}

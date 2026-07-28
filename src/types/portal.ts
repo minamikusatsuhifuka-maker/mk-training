@@ -163,6 +163,8 @@ export type ThankyouItem = {
   toName: string | string[];
   message: string;
   createdAt: string;
+  /** 論理削除（指示書105。未定義=表示。管理画面から復元できる。既存データは無改変） */
+  deleted?: boolean;
 };
 
 /** 宛先を常に配列で取り出す（旧データの単一文字列と新データの配列の両対応） */

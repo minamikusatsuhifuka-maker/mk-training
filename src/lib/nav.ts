@@ -65,6 +65,8 @@ export const MASTER_ITEMS: MasterItem[] = [
   { key: "/news-history", href: "/news-history", label: "📜 お知らせ履歴", categoryId: "work" },
   // 日々の気づき投稿（指示書104）。フラグOFFの間はナビ非表示（featureId 連動・指示書103）
   { key: "/kizuki", href: "/kizuki", label: "💡 日々の気づき", categoryId: "work", featureId: "kizuki" },
+  // サンクスカード全件一覧（指示書105・A案=既存 portal_thankyou を核に拡張）
+  { key: "/thanks", href: "/thanks", label: "💌 ありがとうカード", categoryId: "work", featureId: "thanks" },
   { key: "/operations", href: "/operations", label: "📋 業務チェックリスト", categoryId: "work" },
   { key: "/library", href: "/library", label: "🗂️ 資料庫", categoryId: "work" },
   // マニュアル＝資料庫のカテゴリ絞り込み済みビュー（別ページは作らない・指示書101。key は一意IDで可＝59の流儀）

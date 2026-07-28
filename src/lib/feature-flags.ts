@@ -66,6 +66,7 @@ export const FEATURE_META: FeatureMeta[] = [
 // ここに無いIDは管理画面に「未実装」バッジが付く（トグル自体は保存できる）。
 export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
   "kizuki", // 指示書104: 日々の気づき投稿（/kizuki）
+  "thanks", // 指示書105: サンクスカード全件一覧（/thanks・既存 portal_thankyou を核に拡張）
 ]);
 
 type StoredFeatureFlags = {
