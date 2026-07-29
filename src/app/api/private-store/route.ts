@@ -21,8 +21,8 @@ import { RECORD_KEY_RE } from "@/lib/private-store-client";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// content_type ホワイトリスト（当面の2種。追加は各フェーズの指示書で）
-const CONTENT_TYPES = ["self_review", "one_on_one"] as const;
+// content_type ホワイトリスト（追加は各フェーズの指示書で。onboarding は指示書113）
+const CONTENT_TYPES = ["self_review", "one_on_one", "onboarding"] as const;
 type PrivateContentType = (typeof CONTENT_TYPES)[number];
 const DATA_MAX_BYTES = 200 * 1024; // 1レコード 200KB（JSON文字列長）
 

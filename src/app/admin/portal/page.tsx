@@ -136,6 +136,16 @@ import {
   ONE_ON_ONE_SECTIONS,
 } from "@/lib/one-on-one";
 import {
+  loadOnboardingTemplate,
+  saveOnboardingTemplate,
+  normalizeOnboardingProgress,
+  emptyOnboardingTemplate,
+  genOnboardingId,
+  type OnboardingTemplate,
+  type OnboardingSection,
+  type OnboardingItem,
+} from "@/lib/onboarding";
+import {
   LIBRARY_KEY,
   normalizeStore as normalizeLibraryStore,
   type LibraryDoc,
@@ -201,6 +211,7 @@ type TabKey =
   | "benkyokai"
   | "selfReview"
   | "oneOnOne"
+  | "onboarding"
   | "thankyou"
   | "policy"
   | "word"
@@ -223,6 +234,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "benkyokai", label: "📖 勉強会アーカイブ" },
   { key: "selfReview", label: "📝 自己評価" },
   { key: "oneOnOne", label: "🤝 1on1ノート" },
+  { key: "onboarding", label: "✅ オンボーディング" },
   { key: "thankyou", label: "♥ ありがとうカード" },
   { key: "policy", label: "🎯 経営方針" },
   { key: "word", label: "💬 今日の一言" },
@@ -370,6 +382,26 @@ export default function AdminPortalPage() {
   const [oneOnOneLoadError, setOneOnOneLoadError] = useState("");
   const [openOneOnOneId, setOpenOneOnOneId] = useState<string | null>(null);
   const [busyOneOnOneId, setBusyOneOnOneId] = useState<string | null>(null);
+
+  // オンボーディング（テンプレ=content_store・進捗=private_store onboarding・指示書113）
+  const [onbTemplate, setOnbTemplate] = useState<OnboardingTemplate>(
+    emptyOnboardingTemplate()
+  );
+  const [onbLoaded, setOnbLoaded] = useState(false);
+  const [savingOnb, setSavingOnb] = useState(false);
+  const [onbPickItemId, setOnbPickItemId] = useState<string | null>(null);
+  const [newOnbSectionTitle, setNewOnbSectionTitle] = useState("");
+  const [newOnbItemLabels, setNewOnbItemLabels] = useState<
+    Record<string, string>
+  >({});
+  const [onbProgressList, setOnbProgressList] = useState<PrivateRecord[]>([]);
+  const [onbProgressLoadError, setOnbProgressLoadError] = useState("");
+  const [openOnbProgressId, setOpenOnbProgressId] = useState<string | null>(
+    null
+  );
+  const [busyOnbProgressId, setBusyOnbProgressId] = useState<string | null>(
+    null
+  );
 
   // 朝礼サポート（chorei_data・指示書108）: 輪番＋投稿
   const [choreiRotation, setChoreiRotation] =
@@ -557,6 +589,23 @@ export default function AdminPortalPage() {
           e instanceof PrivateStoreError
             ? e.message
             : "1on1ノートの読み込みに失敗しました"
+        );
+      });
+    // オンボーディング（指示書113）: テンプレ＋進捗一覧
+    loadOnboardingTemplate()
+      .then(setOnbTemplate)
+      .catch(() => {})
+      .finally(() => setOnbLoaded(true));
+    listAllPrivate("onboarding")
+      .then((records) => {
+        setOnbProgressList(records);
+        setOnbProgressLoadError("");
+      })
+      .catch((e) => {
+        setOnbProgressLoadError(
+          e instanceof PrivateStoreError
+            ? e.message
+            : "進捗の読み込みに失敗しました"
         );
       });
     // 当番候補 = プロフィール登録者 ∪ スタッフ名簿（thanks の宛先候補と同じ流儀・正規化名で重複除去）
@@ -1462,6 +1511,142 @@ export default function AdminPortalPage() {
       );
     } finally {
       setBusyOneOnOneId(null);
+    }
+  };
+
+  // ─────────────────────────────────────
+  // オンボーディング（指示書113）: テンプレ2階層編集（ローカル編集→丸ごと保存）・進捗削除
+  // ─────────────────────────────────────
+  // 並べ替えヘルパ（質問プール movePoolItem と同型・隣接swap）。セクション/項目の両階層で共用
+  const moveInArray = <T,>(arr: T[], index: number, dir: -1 | 1): T[] => {
+    const to = index + dir;
+    if (to < 0 || to >= arr.length) return arr;
+    const next = [...arr];
+    [next[index], next[to]] = [next[to], next[index]];
+    return next;
+  };
+
+  const mutateOnbSections = (
+    fn: (sections: OnboardingSection[]) => OnboardingSection[]
+  ) => setOnbTemplate((t) => ({ ...t, sections: fn(t.sections) }));
+
+  const addOnbSection = () => {
+    const title = newOnbSectionTitle.trim();
+    if (!title) return;
+    // id は不変ID（改名しても変わらない。項目のチェックが id に紐づくため）
+    mutateOnbSections((ss) => [
+      ...ss,
+      { id: genOnboardingId(), title, items: [] },
+    ]);
+    setNewOnbSectionTitle("");
+  };
+
+  const renameOnbSection = (sectionId: string, title: string) =>
+    mutateOnbSections((ss) =>
+      ss.map((s) => (s.id === sectionId ? { ...s, title } : s))
+    );
+
+  const removeOnbSection = (sectionId: string) => {
+    const sec = onbTemplate.sections.find((s) => s.id === sectionId);
+    if (
+      sec &&
+      sec.items.length > 0 &&
+      !confirm(
+        `「${sec.title || "無題のセクション"}」を項目${sec.items.length}件ごと削除しますか？（保存すると反映されます）`
+      )
+    ) {
+      return;
+    }
+    mutateOnbSections((ss) => ss.filter((s) => s.id !== sectionId));
+  };
+
+  const addOnbItem = (sectionId: string) => {
+    const label = (newOnbItemLabels[sectionId] ?? "").trim();
+    if (!label) return;
+    mutateOnbSections((ss) =>
+      ss.map((s) =>
+        s.id === sectionId
+          ? {
+              ...s,
+              items: [
+                ...s.items,
+                { id: genOnboardingId(), label, note: "", docId: "" },
+              ],
+            }
+          : s
+      )
+    );
+    setNewOnbItemLabels((m) => ({ ...m, [sectionId]: "" }));
+  };
+
+  // ラベル・補足・資料紐付けの編集（id は触らない＝チェックが外れない）
+  const updateOnbItem = (
+    sectionId: string,
+    itemId: string,
+    patch: Partial<Pick<OnboardingItem, "label" | "note" | "docId">>
+  ) =>
+    mutateOnbSections((ss) =>
+      ss.map((s) =>
+        s.id === sectionId
+          ? {
+              ...s,
+              items: s.items.map((it) =>
+                it.id === itemId ? { ...it, ...patch } : it
+              ),
+            }
+          : s
+      )
+    );
+
+  const moveOnbItem = (sectionId: string, index: number, dir: -1 | 1) =>
+    mutateOnbSections((ss) =>
+      ss.map((s) =>
+        s.id === sectionId ? { ...s, items: moveInArray(s.items, index, dir) } : s
+      )
+    );
+
+  const removeOnbItem = (sectionId: string, itemId: string) =>
+    mutateOnbSections((ss) =>
+      ss.map((s) =>
+        s.id === sectionId
+          ? { ...s, items: s.items.filter((it) => it.id !== itemId) }
+          : s
+      )
+    );
+
+  const handleSaveOnbTemplate = async () => {
+    if (savingOnb) return;
+    setSavingOnb(true);
+    const ok = await saveOnboardingTemplate(onbTemplate);
+    setSavingOnb(false);
+    flash(ok ? "💾 チェックリストを保存しました" : "⚠ 保存に失敗しました");
+  };
+
+  // 進捗一覧の氏名解決（selfReview と同じ流儀: プロフィール∪名簿の候補から ownerId で解決）
+  const onbOwnerName = (ownerId: string): string =>
+    choreiCandidates.find((c) => c.staffId === ownerId)?.name || "名前未設定";
+
+  // 進捗の削除（退職者整理用・確認付き物理削除）
+  const deleteOnbProgress = async (record: PrivateRecord) => {
+    if (busyOnbProgressId) return;
+    if (
+      !confirm(
+        `${onbOwnerName(record.ownerId)}さんのチェック進捗を削除しますか？（退職者の整理用です。削除すると元に戻せません）`
+      )
+    ) {
+      return;
+    }
+    setBusyOnbProgressId(record.id);
+    try {
+      await deletePrivateRecord("onboarding", record.recordKey, record.ownerId);
+      setOnbProgressList((prev) => prev.filter((r) => r.id !== record.id));
+      flash("🗑️ 削除しました");
+    } catch (e) {
+      flash(
+        e instanceof PrivateStoreError ? `⚠ ${e.message}` : "⚠ 削除に失敗しました"
+      );
+    } finally {
+      setBusyOnbProgressId(null);
     }
   };
 
@@ -3584,6 +3769,380 @@ export default function AdminPortalPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* オンボーディング（指示書113）: テンプレ2階層編集＋進捗一覧。
+          禁止事項: 一覧に進捗率の列を横並びにしない（111の「ランク列を並べない」と同じ思想） */}
+      {tab === "onboarding" && (
+        <div className="space-y-6">
+          {/* テンプレ編集 */}
+          <section className="space-y-3">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">
+                ✅ チェックリストの編集
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                スタッフ画面「✅ はじめてガイド」（/onboarding）に表示される項目です。
+                項目のIDは編集で変わらないため、名前や補足を直してもスタッフのチェックは外れません。
+                「💾 チェックリストを保存」で全体を反映します。
+              </p>
+            </div>
+            {!onbLoaded ? (
+              <p className="text-sm text-gray-500 animate-pulse">
+                読み込み中...
+              </p>
+            ) : (
+              <>
+                {onbTemplate.sections.length === 0 && (
+                  <p className="text-sm text-gray-600 text-center py-6">
+                    まだセクションがありません。下の入力欄から「最初の1週間」などの段階を追加してください。
+                  </p>
+                )}
+                {onbTemplate.sections.map((section, si) => (
+                  <div
+                    key={section.id}
+                    className="border border-gray-200 bg-white rounded-xl p-4 space-y-3"
+                  >
+                    {/* セクション: 改名・↑↓・削除 */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={section.title}
+                        onChange={(e) =>
+                          renameOnbSection(section.id, e.target.value)
+                        }
+                        placeholder="段階名（例: 最初の1週間）"
+                        className="flex-1 min-w-0 border border-gray-200 rounded-lg px-2 py-1.5 text-sm font-medium"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          mutateOnbSections((ss) => moveInArray(ss, si, -1))
+                        }
+                        disabled={si === 0}
+                        className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-30"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          mutateOnbSections((ss) => moveInArray(ss, si, 1))
+                        }
+                        disabled={si === onbTemplate.sections.length - 1}
+                        className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-30"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeOnbSection(section.id)}
+                        className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50"
+                      >
+                        削除
+                      </button>
+                    </div>
+
+                    {/* 項目: ラベル・補足・↑↓・削除・資料紐付け */}
+                    <ul className="space-y-2">
+                      {section.items.map((item, ii) => {
+                        const doc = item.docId
+                          ? libraryDocs.find((d) => d.id === item.docId)
+                          : undefined;
+                        const picking = onbPickItemId === item.id;
+                        return (
+                          <li
+                            key={item.id}
+                            className="border border-gray-100 bg-gray-50/60 rounded-lg p-2.5 space-y-2"
+                          >
+                            <div className="flex items-start gap-2">
+                              <span className="text-xs text-gray-400 tabular-nums w-5 shrink-0 mt-2">
+                                {ii + 1}.
+                              </span>
+                              <div className="flex-1 min-w-0 space-y-1.5">
+                                <input
+                                  value={item.label}
+                                  onChange={(e) =>
+                                    updateOnbItem(section.id, item.id, {
+                                      label: e.target.value,
+                                    })
+                                  }
+                                  placeholder="項目名"
+                                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white"
+                                />
+                                <input
+                                  value={item.note}
+                                  onChange={(e) =>
+                                    updateOnbItem(section.id, item.id, {
+                                      note: e.target.value,
+                                    })
+                                  }
+                                  placeholder="補足（任意）"
+                                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                                />
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0 mt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => moveOnbItem(section.id, ii, -1)}
+                                  disabled={ii === 0}
+                                  className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-white disabled:opacity-30"
+                                >
+                                  ↑
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => moveOnbItem(section.id, ii, 1)}
+                                  disabled={ii === section.items.length - 1}
+                                  className="text-xs px-2 py-1 border border-gray-200 rounded hover:bg-white disabled:opacity-30"
+                                >
+                                  ↓
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    removeOnbItem(section.id, item.id)
+                                  }
+                                  className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50"
+                                >
+                                  削除
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* 資料紐付け（LibraryDocPicker・単一選択・解除可） */}
+                            <div className="flex items-center gap-2 flex-wrap pl-7">
+                              {item.docId ? (
+                                <span
+                                  className={`inline-flex items-center gap-1 text-xs rounded-full px-3 py-1 border ${
+                                    doc
+                                      ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                                      : "text-amber-700 bg-amber-50 border-amber-200"
+                                  }`}
+                                >
+                                  {doc
+                                    ? `📄 ${doc.title}`
+                                    : "⚠ 資料が見つかりません（スタッフ側では非表示）"}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updateOnbItem(section.id, item.id, {
+                                        docId: "",
+                                      })
+                                    }
+                                    aria-label="紐付けを外す"
+                                    className="text-gray-400 hover:text-red-600 leading-none"
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setOnbPickItemId(picking ? null : item.id)
+                                  }
+                                  className="text-xs px-2 py-1 border border-emerald-200 text-emerald-700 rounded hover:bg-emerald-50"
+                                >
+                                  {picking ? "選択をやめる" : "📎 資料を紐付ける"}
+                                </button>
+                              )}
+                            </div>
+                            {picking && !item.docId && (
+                              <div className="pl-7">
+                                <LibraryDocPicker
+                                  onPick={(d) => {
+                                    updateOnbItem(section.id, item.id, {
+                                      docId: d.id,
+                                    });
+                                    setOnbPickItemId(null);
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+
+                    {/* 項目の追加 */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={newOnbItemLabels[section.id] ?? ""}
+                        onChange={(e) =>
+                          setNewOnbItemLabels((m) => ({
+                            ...m,
+                            [section.id]: e.target.value,
+                          }))
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            addOnbItem(section.id);
+                          }
+                        }}
+                        placeholder="新しい項目名を入力"
+                        className="flex-1 min-w-0 border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => addOnbItem(section.id)}
+                        disabled={!(newOnbItemLabels[section.id] ?? "").trim()}
+                        className="text-xs px-3 py-1.5 border border-teal-200 text-teal-700 rounded-lg hover:bg-teal-50 disabled:opacity-30 shrink-0"
+                      >
+                        ＋ 項目を追加
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {/* セクションの追加 */}
+                <div className="flex items-center gap-2">
+                  <input
+                    value={newOnbSectionTitle}
+                    onChange={(e) => setNewOnbSectionTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addOnbSection();
+                      }
+                    }}
+                    placeholder="新しいセクション名（例: 最初の1週間）"
+                    className="flex-1 min-w-0 border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={addOnbSection}
+                    disabled={!newOnbSectionTitle.trim()}
+                    className="text-xs px-3 py-1.5 border border-teal-200 text-teal-700 rounded-lg hover:bg-teal-50 disabled:opacity-30 shrink-0"
+                  >
+                    ＋ セクションを追加
+                  </button>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSaveOnbTemplate}
+                    disabled={savingOnb}
+                    className="text-sm px-4 py-2 rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50"
+                  >
+                    {savingOnb ? "保存中..." : "💾 チェックリストを保存"}
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+
+          {/* 進捗一覧（氏名・最終更新のみ。行展開で詳細） */}
+          <section className="space-y-2 border-t border-gray-200 pt-6">
+            <h2 className="text-sm font-semibold text-gray-800">
+              👣 スタッフの進捗
+            </h2>
+            {onbProgressLoadError && (
+              <p className="text-sm text-red-600 bg-red-50 rounded-xl p-3">
+                {onbProgressLoadError}
+                （private_store テーブルが未作成の場合は、指示書110のSQLを Supabase SQL Editor で実行してください）
+              </p>
+            )}
+            {onbProgressList.length === 0 && !onbProgressLoadError && (
+              <p className="text-sm text-gray-600 text-center py-8">
+                まだチェックした人はいません
+              </p>
+            )}
+            {onbProgressList.map((record) => {
+              const prog = normalizeOnboardingProgress(record.data);
+              const open = openOnbProgressId === record.id;
+              return (
+                <div
+                  key={record.id}
+                  className="border border-gray-200 bg-white rounded-xl p-4 space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOpenOnbProgressId(open ? null : record.id)
+                      }
+                      className="flex items-center gap-2 flex-wrap text-left hover:opacity-70"
+                    >
+                      <span
+                        className={`text-xs transition-transform ${open ? "rotate-90" : ""}`}
+                      >
+                        ▶
+                      </span>
+                      <span className="text-sm text-gray-800">
+                        {onbOwnerName(record.ownerId)}さん
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        最終更新: {formatDateTime(record.updatedAt)}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteOnbProgress(record)}
+                      disabled={busyOnbProgressId === record.id}
+                      className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50 disabled:opacity-50"
+                    >
+                      削除
+                    </button>
+                  </div>
+                  {open && (
+                    <div className="space-y-3 border-t border-gray-100 pt-3">
+                      {/* テンプレに現存する項目だけを表示＝孤児ID（削除済み項目のチェック）は無視 */}
+                      {onbTemplate.sections.map((section) => (
+                        <div key={section.id}>
+                          <p className="text-xs font-medium text-gray-600">
+                            {section.title}
+                          </p>
+                          <ul className="mt-1 space-y-0.5">
+                            {section.items.map((item) => {
+                              const checkedAt = prog.checked[item.id] || "";
+                              return (
+                                <li
+                                  key={item.id}
+                                  className="text-sm flex items-center gap-2"
+                                >
+                                  <span
+                                    className={
+                                      checkedAt
+                                        ? "text-teal-600"
+                                        : "text-gray-300"
+                                    }
+                                  >
+                                    {checkedAt ? "✓" : "・"}
+                                  </span>
+                                  <span
+                                    className={
+                                      checkedAt
+                                        ? "text-gray-800"
+                                        : "text-gray-500"
+                                    }
+                                  >
+                                    {item.label}
+                                  </span>
+                                  {checkedAt && (
+                                    <span className="text-[10px] text-gray-400 tabular-nums">
+                                      {formatDateTime(checkedAt)}
+                                    </span>
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      ))}
+                      {onbTemplate.sections.length === 0 && (
+                        <p className="text-xs text-gray-500">
+                          テンプレが未設定のため詳細を表示できません
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </section>
         </div>
       )}
 

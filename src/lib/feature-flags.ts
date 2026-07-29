@@ -73,6 +73,7 @@ export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
   "benkyokai", // 指示書109: 勉強会アーカイブ（/benkyokai・資料は資料庫参照 libraryRefs）
   "self_review", // 指示書111: 自己評価シート（/self-review・private_store 基盤・提出後ロック）
   "one_on_one", // 指示書112: 1on1ノート（/one-on-one・本人＋ペア＋管理者のみ・サーバー側判定）
+  "onboarding", // 指示書113: オンボーディングチェックリスト（/onboarding・テンプレ公開＋進捗private）
 ]);
 
 type StoredFeatureFlags = {

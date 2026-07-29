@@ -36,6 +36,8 @@ export const MASTER_CATEGORIES: MasterCategory[] = [
 export const MASTER_ITEMS: MasterItem[] = [
   { key: "/", href: "/", label: "🏠 ホーム", categoryId: "home" },
   { key: "/members", href: "/members", label: "👥 メンバー紹介", categoryId: "home" },
+  // オンボーディングチェックリスト（指示書113。スタッフ向け表示名はやわらかく「はじめてガイド」）
+  { key: "/onboarding", href: "/onboarding", label: "✅ はじめてガイド", categoryId: "home", featureId: "onboarding" },
   // 自己評価シート（指示書111・private_store 基盤・本人と院長のみ）
   { key: "/self-review", href: "/self-review", label: "📝 自己評価シート", categoryId: "home", featureId: "self_review" },
   // 1on1ノート（指示書112・private_store 基盤・本人＋ペア相手＋院長のみ）
