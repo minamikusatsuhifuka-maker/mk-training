@@ -106,6 +106,17 @@ export async function deleteRecord(
   });
 }
 
+// one_on_one 限定: 自分が記録者または相手として参加している一覧（指示書112）。
+// 他の contentType では API が 400 を返す（listMine の意味論は変えない）
+export async function listInvolved<T = unknown>(
+  contentType: "one_on_one"
+): Promise<PrivateRecord<T>[]> {
+  const j = await call<{ records: PrivateRecord<T>[] }>(
+    `${API}?contentType=${encodeURIComponent(contentType)}&involved=1`
+  );
+  return j.records;
+}
+
 // 管理者用: 全員分の一覧（非管理者は 403 = PrivateStoreError("forbidden")）
 export async function listAll<T = unknown>(
   contentType: PrivateContentType

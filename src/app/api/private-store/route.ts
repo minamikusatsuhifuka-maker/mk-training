@@ -64,9 +64,17 @@ function toRecord(row: PrivateStoreRow) {
   };
 }
 
+// one_on_one: 対象ユーザーがレコードの閲覧者（owner または participant）か（指示書112）
+function isParticipant(row: PrivateStoreRow, userId: string): boolean {
+  if (row.owner_id === userId) return true;
+  const ids = (row.data as { participantIds?: unknown } | null)?.participantIds;
+  return Array.isArray(ids) && ids.includes(userId);
+}
+
 // ─── GET: 一覧 / 単一取得 ───
 // ?contentType=<type>                     … 自分の一覧
-// ?contentType=<type>&recordKey=<key>     … 自分の単一取得（無ければ record: null）
+// ?contentType=<type>&involved=1          … one_on_one 限定: 自分が記録者または相手の一覧（指示書112）
+// ?contentType=<type>&recordKey=<key>     … 単一取得（無ければ record: null）
 // 管理者のみ: &owner=<userId> で対象者指定・&all=1 で全員分一覧
 export async function GET(req: NextRequest) {
   const { user } = await getSessionUser();
@@ -84,6 +92,14 @@ export async function GET(req: NextRequest) {
   const admin = isAdminUser(user);
   const ownerParam = sp.get("owner");
   const all = sp.get("all") === "1";
+  const involved = sp.get("involved") === "1";
+  // involved=1 は one_on_one 限定（他の content_type の意味論を広げない・指示書112）
+  if (involved && contentType !== "one_on_one") {
+    return NextResponse.json(
+      { error: "involved は one_on_one でのみ使えます" },
+      { status: 400 }
+    );
+  }
   // 非管理者が他者指定・全件を要求したら 403（黙って自分に倒さず、権限がないことを明示する）
   if (!admin && (all || (ownerParam && ownerParam !== user.id))) {
     return NextResponse.json({ error: "権限がありません" }, { status: 403 });
@@ -100,6 +116,20 @@ export async function GET(req: NextRequest) {
           { status: 400 }
         );
       }
+      // 指示書112: one_on_one の単一取得は「owner or participant or 管理者」をサーバー側で判定。
+      // 権限外・不存在はどちらも record: null（存在自体を漏らさない）
+      if (contentType === "one_on_one" && !admin && !ownerParam) {
+        const { data: rows, error } = await db
+          .from("private_store")
+          .select("*")
+          .eq("content_type", contentType)
+          .eq("record_key", recordKey);
+        if (error) throw new Error(error.message);
+        const row = ((rows ?? []) as PrivateStoreRow[]).find((r) =>
+          isParticipant(r, user.id)
+        );
+        return NextResponse.json({ record: row ? toRecord(row) : null });
+      }
       const { data, error } = await db
         .from("private_store")
         .select("*")
@@ -111,6 +141,37 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         record: data ? toRecord(data as PrivateStoreRow) : null,
       });
+    }
+
+    // 指示書112・C案: involved=1 は「owner=自分」「participantIds contains 自分」の
+    // 2クエリを並行実行し id で重複除去してマージ（.or() の JSONB パス構文の罠を避ける）
+    if (involved) {
+      const [mine, joined] = await Promise.all([
+        db
+          .from("private_store")
+          .select("*")
+          .eq("content_type", contentType)
+          .eq("owner_id", user.id),
+        db
+          .from("private_store")
+          .select("*")
+          .eq("content_type", contentType)
+          .contains("data->participantIds", JSON.stringify([user.id])),
+      ]);
+      if (mine.error) throw new Error(mine.error.message);
+      if (joined.error) throw new Error(joined.error.message);
+      const seen = new Set<string>();
+      const merged: PrivateStoreRow[] = [];
+      for (const r of [
+        ...((mine.data ?? []) as PrivateStoreRow[]),
+        ...((joined.data ?? []) as PrivateStoreRow[]),
+      ]) {
+        if (seen.has(r.id)) continue;
+        seen.add(r.id);
+        merged.push(r);
+      }
+      merged.sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
+      return NextResponse.json({ records: merged.map(toRecord) });
     }
 
     let query = db

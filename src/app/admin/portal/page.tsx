@@ -113,6 +113,7 @@ import { LibraryDocPicker } from "@/components/LibraryDocPicker";
 import {
   listAll as listAllPrivate,
   upsertRecord as upsertPrivateRecord,
+  deleteRecord as deletePrivateRecord,
   PrivateStoreError,
   RECORD_KEY_RE,
   type PrivateRecord,
@@ -129,6 +130,11 @@ import {
   DEFAULT_SELF_REVIEW_CONFIG,
   type SelfReviewConfig,
 } from "@/lib/self-review";
+import {
+  normalizeOneOnOneData,
+  sortOneOnOne,
+  ONE_ON_ONE_SECTIONS,
+} from "@/lib/one-on-one";
 import {
   LIBRARY_KEY,
   normalizeStore as normalizeLibraryStore,
@@ -194,6 +200,7 @@ type TabKey =
   | "chorei"
   | "benkyokai"
   | "selfReview"
+  | "oneOnOne"
   | "thankyou"
   | "policy"
   | "word"
@@ -215,6 +222,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "chorei", label: "🌅 朝礼サポート" },
   { key: "benkyokai", label: "📖 勉強会アーカイブ" },
   { key: "selfReview", label: "📝 自己評価" },
+  { key: "oneOnOne", label: "🤝 1on1ノート" },
   { key: "thankyou", label: "♥ ありがとうカード" },
   { key: "policy", label: "🎯 経営方針" },
   { key: "word", label: "💬 今日の一言" },
@@ -356,6 +364,12 @@ export default function AdminPortalPage() {
   const [savingSrConfig, setSavingSrConfig] = useState(false);
   const [openSelfReviewId, setOpenSelfReviewId] = useState<string | null>(null);
   const [busySelfReviewId, setBusySelfReviewId] = useState<string | null>(null);
+
+  // 1on1ノート（private_store one_on_one・指示書112）
+  const [oneOnOnes, setOneOnOnes] = useState<PrivateRecord[]>([]);
+  const [oneOnOneLoadError, setOneOnOneLoadError] = useState("");
+  const [openOneOnOneId, setOpenOneOnOneId] = useState<string | null>(null);
+  const [busyOneOnOneId, setBusyOneOnOneId] = useState<string | null>(null);
 
   // 朝礼サポート（chorei_data・指示書108）: 輪番＋投稿
   const [choreiRotation, setChoreiRotation] =
@@ -533,6 +547,18 @@ export default function AdminPortalPage() {
         setSrLabelDraft(c.label);
       })
       .catch(() => {});
+    listAllPrivate("one_on_one")
+      .then((records) => {
+        setOneOnOnes(records);
+        setOneOnOneLoadError("");
+      })
+      .catch((e) => {
+        setOneOnOneLoadError(
+          e instanceof PrivateStoreError
+            ? e.message
+            : "1on1ノートの読み込みに失敗しました"
+        );
+      });
     // 当番候補 = プロフィール登録者 ∪ スタッフ名簿（thanks の宛先候補と同じ流儀・正規化名で重複除去）
     Promise.all([
       loadProfilesIndex().catch(() => []),
@@ -1409,6 +1435,33 @@ export default function AdminPortalPage() {
       );
     } finally {
       setBusySelfReviewId(null);
+    }
+  };
+
+  // ─────────────────────────────────────
+  // 1on1ノート（private_store one_on_one・指示書112）: 全件閲覧・物理削除
+  // ─────────────────────────────────────
+  const deleteOneOnOne = async (record: PrivateRecord) => {
+    if (busyOneOnOneId) return;
+    const d = normalizeOneOnOneData(record.data);
+    if (
+      !confirm(
+        `${d.authorName || "名前未設定"}さんの1on1記録（${d.heldOn}）を削除しますか？（削除すると元に戻せません）`
+      )
+    ) {
+      return;
+    }
+    setBusyOneOnOneId(record.id);
+    try {
+      await deletePrivateRecord("one_on_one", record.recordKey, record.ownerId);
+      setOneOnOnes((prev) => prev.filter((r) => r.id !== record.id));
+      flash("🗑️ 削除しました");
+    } catch (e) {
+      flash(
+        e instanceof PrivateStoreError ? `⚠ ${e.message}` : "⚠ 削除に失敗しました"
+      );
+    } finally {
+      setBusyOneOnOneId(null);
     }
   };
 
@@ -3458,6 +3511,79 @@ export default function AdminPortalPage() {
               );
             })}
           </section>
+        </div>
+      )}
+
+      {/* 1on1ノート（private_store one_on_one・指示書112）:
+          全記録の閲覧・物理削除。集計・回数列は置かない（111と同じ思想） */}
+      {tab === "oneOnOne" && (
+        <div className="space-y-2">
+          <p className="text-sm text-gray-600">
+            「🤝 1on1ノート」（/one-on-one）の全記録です（記録・編集はスタッフ画面から。閲覧は本人・ペア相手・管理者のみ）。
+            削除は物理削除で、元に戻せません。
+          </p>
+          {oneOnOneLoadError && (
+            <p className="text-sm text-red-600 bg-red-50 rounded-xl p-3">
+              {oneOnOneLoadError}
+              （private_store テーブルが未作成の場合は、指示書110のSQLを Supabase SQL Editor で実行してください）
+            </p>
+          )}
+          {oneOnOnes.length === 0 && !oneOnOneLoadError && (
+            <p className="text-sm text-gray-600 text-center py-8">
+              まだ記録がありません
+            </p>
+          )}
+          {sortOneOnOne(oneOnOnes).map((record) => {
+            const d = normalizeOneOnOneData(record.data);
+            const open = openOneOnOneId === record.id;
+            return (
+              <div
+                key={record.id}
+                className="border border-gray-200 bg-white rounded-xl p-4 space-y-2"
+              >
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setOpenOneOnOneId(open ? null : record.id)}
+                    className="flex items-center gap-2 flex-wrap text-left hover:opacity-70"
+                  >
+                    <span
+                      className={`text-xs transition-transform ${open ? "rotate-90" : ""}`}
+                    >
+                      ▶
+                    </span>
+                    <span className="text-[10px] font-medium bg-violet-100 text-violet-800 rounded-full px-2 py-0.5">
+                      📅 {d.heldOn.replaceAll("-", "/")}
+                    </span>
+                    <span className="text-sm text-gray-800">
+                      記録: {d.authorName || "名前未設定"}さん → 相手:{" "}
+                      {d.partnerName || "名前未設定"}さん
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteOneOnOne(record)}
+                    disabled={busyOneOnOneId === record.id}
+                    className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50 disabled:opacity-50"
+                  >
+                    削除
+                  </button>
+                </div>
+                {open && (
+                  <div className="space-y-2 border-t border-gray-100 pt-3">
+                    {ONE_ON_ONE_SECTIONS.map((sec) => (
+                      <div key={sec.key}>
+                        <p className="text-xs text-gray-500">{sec.label}</p>
+                        <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                          {d.sections[sec.key] || "（未記入）"}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

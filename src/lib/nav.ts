@@ -38,6 +38,8 @@ export const MASTER_ITEMS: MasterItem[] = [
   { key: "/members", href: "/members", label: "👥 メンバー紹介", categoryId: "home" },
   // 自己評価シート（指示書111・private_store 基盤・本人と院長のみ）
   { key: "/self-review", href: "/self-review", label: "📝 自己評価シート", categoryId: "home", featureId: "self_review" },
+  // 1on1ノート（指示書112・private_store 基盤・本人＋ペア相手＋院長のみ）
+  { key: "/one-on-one", href: "/one-on-one", label: "🤝 1on1ノート", categoryId: "home", featureId: "one_on_one" },
   // 外部リンク（別タブ）。指示書59
   {
     key: "ai-incho",
