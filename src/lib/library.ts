@@ -14,13 +14,15 @@ export const LIBRARY_LOG_MAX = 200;
 // staff-photos バケット内のパス接頭辞（バケット自体は既存の public バケットを再利用）
 export const LIBRARY_PATH_PREFIX = "library";
 
-// カテゴリ（コード固定・順序固定。「マニュアル」は指示書101で追加）
+// カテゴリ（コード固定・順序固定。「マニュアル」は指示書101、「院内採用製品」「カウンセリング」は指示書115で追加）
 export const LIBRARY_CATEGORIES = [
   "同意書",
   "施術説明",
   "検査・処置",
   "院内運用",
   "マニュアル",
+  "院内採用製品",
+  "カウンセリング",
   "その他",
 ] as const;
 export type LibraryCategory = (typeof LIBRARY_CATEGORIES)[number];
