@@ -74,6 +74,7 @@ export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
   "self_review", // 指示書111: 自己評価シート（/self-review・private_store 基盤・提出後ロック）
   "one_on_one", // 指示書112: 1on1ノート（/one-on-one・本人＋ペア＋管理者のみ・サーバー側判定）
   "onboarding", // 指示書113: オンボーディングチェックリスト（/onboarding・テンプレ公開＋進捗private）
+  "calendar", // 指示書114: 院内カレンダー（/calendar・Google Calendar REST直叩き）— これで10機能すべて実装済み
 ]);
 
 type StoredFeatureFlags = {
