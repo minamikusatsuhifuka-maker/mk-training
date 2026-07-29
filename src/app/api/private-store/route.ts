@@ -16,6 +16,7 @@ import {
 } from "@/lib/supabase-admin";
 import { getSessionUser } from "@/lib/staff-profiles-server";
 import { isAdminUser } from "@/lib/admin-role";
+import { RECORD_KEY_RE } from "@/lib/private-store-client";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -23,8 +24,6 @@ export const maxDuration = 60;
 // content_type ホワイトリスト（当面の2種。追加は各フェーズの指示書で）
 const CONTENT_TYPES = ["self_review", "one_on_one"] as const;
 type PrivateContentType = (typeof CONTENT_TYPES)[number];
-
-const RECORD_KEY_RE = /^[\w.-]{1,64}$/;
 const DATA_MAX_BYTES = 200 * 1024; // 1レコード 200KB（JSON文字列長）
 
 function errorResponse(e: unknown): NextResponse {
@@ -180,6 +179,31 @@ export async function PUT(req: NextRequest) {
 
   try {
     const db = createSupabaseAdminClient();
+
+    // 指示書111: self_review 固有ルール（基盤の既定を狭める方向のみ）。
+    // 非管理者のPUTは、保存済みレコードが提出済み（data.status === "submitted"）なら 409。
+    // 本人でも上書き不可。管理者は常にPUT可（差し戻し＝status を draft に戻す管理者PUT）。
+    if (!admin && contentType === "self_review") {
+      const { data: existing, error: exErr } = await db
+        .from("private_store")
+        .select("data")
+        .eq("owner_id", ownerId)
+        .eq("content_type", contentType)
+        .eq("record_key", recordKey)
+        .maybeSingle();
+      if (exErr) throw new Error(exErr.message);
+      const st = (existing?.data as { status?: unknown } | null)?.status;
+      if (st === "submitted") {
+        return NextResponse.json(
+          {
+            error:
+              "提出済みのため編集できません。修正が必要な場合は院長にお声がけください。",
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     const { data, error } = await db
       .from("private_store")
       .upsert(

@@ -8,6 +8,9 @@
 
 export type PrivateContentType = "self_review" | "one_on_one";
 
+// record_key の形式（APIルートと共有・指示書111でlib共有化）
+export const RECORD_KEY_RE = /^[\w.-]{1,64}$/;
+
 export type PrivateRecord<T = unknown> = {
   id: string;
   ownerId: string;

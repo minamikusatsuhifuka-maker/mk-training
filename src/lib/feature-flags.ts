@@ -71,6 +71,7 @@ export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
   "manual_draft", // 指示書107: マニュアル下書き（/manual-drafts・資料庫昇格はステータス+リンク紐付け）
   "chorei", // 指示書108: 朝礼サポート（/chorei・投稿駆動の輪番つき）
   "benkyokai", // 指示書109: 勉強会アーカイブ（/benkyokai・資料は資料庫参照 libraryRefs）
+  "self_review", // 指示書111: 自己評価シート（/self-review・private_store 基盤・提出後ロック）
 ]);
 
 type StoredFeatureFlags = {

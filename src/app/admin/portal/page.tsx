@@ -111,6 +111,25 @@ import {
 } from "@/lib/benkyokai";
 import { LibraryDocPicker } from "@/components/LibraryDocPicker";
 import {
+  listAll as listAllPrivate,
+  upsertRecord as upsertPrivateRecord,
+  PrivateStoreError,
+  RECORD_KEY_RE,
+  type PrivateRecord,
+} from "@/lib/private-store-client";
+import {
+  normalizeSelfReviewData,
+  loadSelfReviewConfig,
+  saveSelfReviewConfig,
+  MINORI_ITEMS,
+  ARIKATA_ITEMS,
+  OUTPUT_ITEMS,
+  RAIKI_ITEMS,
+  RANK_REASON_LABEL,
+  DEFAULT_SELF_REVIEW_CONFIG,
+  type SelfReviewConfig,
+} from "@/lib/self-review";
+import {
   LIBRARY_KEY,
   normalizeStore as normalizeLibraryStore,
   type LibraryDoc,
@@ -174,6 +193,7 @@ type TabKey =
   | "manualDraft"
   | "chorei"
   | "benkyokai"
+  | "selfReview"
   | "thankyou"
   | "policy"
   | "word"
@@ -194,6 +214,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "manualDraft", label: "✍️ マニュアル下書き" },
   { key: "chorei", label: "🌅 朝礼サポート" },
   { key: "benkyokai", label: "📖 勉強会アーカイブ" },
+  { key: "selfReview", label: "📝 自己評価" },
   { key: "thankyou", label: "♥ ありがとうカード" },
   { key: "policy", label: "🎯 経営方針" },
   { key: "word", label: "💬 今日の一言" },
@@ -323,6 +344,18 @@ export default function AdminPortalPage() {
   const [busyBenkyokaiId, setBusyBenkyokaiId] = useState<string | null>(null);
   // 紐付け編集パネルを開いている記録ID
   const [benkyokaiLinkId, setBenkyokaiLinkId] = useState<string | null>(null);
+
+  // 自己評価シート（private_store self_review・指示書111）
+  const [selfReviews, setSelfReviews] = useState<PrivateRecord[]>([]);
+  const [selfReviewLoadError, setSelfReviewLoadError] = useState("");
+  const [srConfig, setSrConfig] = useState<SelfReviewConfig>(
+    DEFAULT_SELF_REVIEW_CONFIG
+  );
+  const [srPeriodDraft, setSrPeriodDraft] = useState("");
+  const [srLabelDraft, setSrLabelDraft] = useState("");
+  const [savingSrConfig, setSavingSrConfig] = useState(false);
+  const [openSelfReviewId, setOpenSelfReviewId] = useState<string | null>(null);
+  const [busySelfReviewId, setBusySelfReviewId] = useState<string | null>(null);
 
   // 朝礼サポート（chorei_data・指示書108）: 輪番＋投稿
   const [choreiRotation, setChoreiRotation] =
@@ -479,6 +512,26 @@ export default function AdminPortalPage() {
       .catch(() => {});
     loadBenkyokaiStore()
       .then((s) => setBenkyokaiPosts(s.posts))
+      .catch(() => {});
+    // 自己評価（管理者のみ成功。テーブル未作成・権限エラーはタブ内に表示）
+    listAllPrivate("self_review")
+      .then((records) => {
+        setSelfReviews(records);
+        setSelfReviewLoadError("");
+      })
+      .catch((e) => {
+        setSelfReviewLoadError(
+          e instanceof PrivateStoreError
+            ? e.message
+            : "自己評価の読み込みに失敗しました"
+        );
+      });
+    loadSelfReviewConfig()
+      .then((c) => {
+        setSrConfig(c);
+        setSrPeriodDraft(c.currentPeriod);
+        setSrLabelDraft(c.label);
+      })
       .catch(() => {});
     // 当番候補 = プロフィール登録者 ∪ スタッフ名簿（thanks の宛先候補と同じ流儀・正規化名で重複除去）
     Promise.all([
@@ -1298,6 +1351,64 @@ export default function AdminPortalPage() {
       flash("✏️ 執筆中に戻しました");
     } else {
       flash("⚠ 保存に失敗しました");
+    }
+  };
+
+  // ─────────────────────────────────────
+  // 自己評価シート（private_store self_review・指示書111）: 評価期設定・提出一覧・差し戻し
+  // ─────────────────────────────────────
+  const handleSaveSrConfig = async () => {
+    const currentPeriod = srPeriodDraft.trim();
+    if (!RECORD_KEY_RE.test(currentPeriod)) {
+      flash("⚠ 評価期は英数・ハイフン・ドット・アンダースコア（64字まで）で入力してください");
+      return;
+    }
+    setSavingSrConfig(true);
+    const next: SelfReviewConfig = {
+      currentPeriod,
+      label: srLabelDraft.trim() || currentPeriod,
+    };
+    const ok = await saveSelfReviewConfig(next);
+    setSavingSrConfig(false);
+    if (ok) {
+      setSrConfig(next);
+      flash("💾 評価期を保存しました");
+    } else {
+      flash("⚠ 評価期の保存に失敗しました");
+    }
+  };
+
+  // 差し戻し: status を draft に戻す（他フィールドは保持・管理者PUT・owner指定）
+  const returnSelfReview = async (record: PrivateRecord) => {
+    if (busySelfReviewId) return;
+    const data = normalizeSelfReviewData(record.data);
+    const name = data.name || "このスタッフ";
+    if (
+      !confirm(
+        `${name}さんの自己評価シートを差し戻しますか？（下書きに戻り、本人が再編集できるようになります）`
+      )
+    ) {
+      return;
+    }
+    setBusySelfReviewId(record.id);
+    try {
+      await upsertPrivateRecord(
+        "self_review",
+        record.recordKey,
+        { ...data, status: "draft" },
+        record.ownerId
+      );
+      const records = await listAllPrivate("self_review");
+      setSelfReviews(records);
+      flash("↩ 差し戻しました（本人が再編集できます）");
+    } catch (e) {
+      flash(
+        e instanceof PrivateStoreError
+          ? `⚠ ${e.message}`
+          : "⚠ 差し戻しに失敗しました"
+      );
+    } finally {
+      setBusySelfReviewId(null);
     }
   };
 
@@ -3153,6 +3264,200 @@ export default function AdminPortalPage() {
               まだ記録がありません
             </p>
           )}
+        </div>
+      )}
+
+      {/* 自己評価シート（private_store self_review・指示書111）:
+          評価期設定・提出一覧（氏名解決）・全文閲覧・差し戻し。
+          禁止事項: ランクの集計・スタッフ間の比較表示は作らない（一覧にランク列を並べない） */}
+      {tab === "selfReview" && (
+        <div className="space-y-6">
+          {/* 評価期設定 */}
+          <section className="space-y-3">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">
+                📅 評価期の設定
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                スタッフの記入対象になる評価期です。変更すると全員が新しい評価期のシート（白紙）に記入します（過去の評価期のデータは残ります）。
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="text-xs text-gray-600">
+                評価期キー
+                <input
+                  value={srPeriodDraft}
+                  onChange={(e) => setSrPeriodDraft(e.target.value)}
+                  placeholder="2026"
+                  className="block border border-gray-200 rounded-lg px-2 py-1.5 text-sm w-36"
+                />
+              </label>
+              <label className="text-xs text-gray-600">
+                表示ラベル
+                <input
+                  value={srLabelDraft}
+                  onChange={(e) => setSrLabelDraft(e.target.value)}
+                  placeholder="2026年度"
+                  className="block border border-gray-200 rounded-lg px-2 py-1.5 text-sm w-44"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={handleSaveSrConfig}
+                disabled={savingSrConfig}
+                className="text-sm px-4 py-2 rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 self-end"
+              >
+                {savingSrConfig ? "保存中..." : "💾 保存"}
+              </button>
+              <span className="text-xs text-gray-500 self-end">
+                現在: {srConfig.label}（{srConfig.currentPeriod}）
+              </span>
+            </div>
+          </section>
+
+          {/* 提出一覧 */}
+          <section className="space-y-2 border-t border-gray-200 pt-6">
+            <h2 className="text-sm font-semibold text-gray-800">
+              📝 提出一覧
+            </h2>
+            {selfReviewLoadError && (
+              <p className="text-sm text-red-600 bg-red-50 rounded-xl p-3">
+                {selfReviewLoadError}
+                （private_store テーブルが未作成の場合は、指示書110のSQLを Supabase SQL Editor で実行してください）
+              </p>
+            )}
+            {selfReviews.length === 0 && !selfReviewLoadError && (
+              <p className="text-sm text-gray-600 text-center py-8">
+                まだ記入がありません
+              </p>
+            )}
+            {selfReviews.map((record) => {
+              const data = normalizeSelfReviewData(record.data);
+              const name =
+                data.name ||
+                choreiCandidates.find((c) => c.staffId === record.ownerId)
+                  ?.name ||
+                "名前未設定";
+              const open = openSelfReviewId === record.id;
+              return (
+                <div
+                  key={record.id}
+                  className="border border-gray-200 bg-white rounded-xl p-4 space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOpenSelfReviewId(open ? null : record.id)
+                      }
+                      className="flex items-center gap-2 flex-wrap text-left hover:opacity-70"
+                    >
+                      <span
+                        className={`text-xs transition-transform ${open ? "rotate-90" : ""}`}
+                      >
+                        ▶
+                      </span>
+                      <span className="text-sm font-medium text-gray-800">
+                        {name}
+                      </span>
+                      {data.grade && (
+                        <span className="text-[10px] font-medium bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">
+                          {data.grade}
+                        </span>
+                      )}
+                      <span className="text-[10px] font-medium bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">
+                        {data.period_label || record.recordKey}
+                      </span>
+                      {data.status === "submitted" ? (
+                        <span className="text-[10px] font-medium bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5">
+                          ✅ 提出済み
+                          {data.filled_at &&
+                            `・${new Date(data.filled_at).toLocaleDateString("ja-JP")}`}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-medium bg-amber-100 text-amber-800 rounded-full px-2 py-0.5">
+                          ✏️ 下書き
+                        </span>
+                      )}
+                    </button>
+                    {data.status === "submitted" && (
+                      <button
+                        type="button"
+                        onClick={() => returnSelfReview(record)}
+                        disabled={busySelfReviewId === record.id}
+                        className="text-xs px-2 py-1 border border-amber-200 text-amber-700 rounded hover:bg-amber-50 disabled:opacity-50"
+                      >
+                        ↩ 差し戻し
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 読み取り専用のシート全文（ランクはここでのみ見える） */}
+                  {open && (
+                    <div className="space-y-4 border-t border-gray-100 pt-3">
+                      {[
+                        {
+                          heading: "1. 今期の実",
+                          rows: MINORI_ITEMS.map((it) => ({
+                            label: it.label,
+                            value: data.sections.minori[it.key],
+                          })),
+                        },
+                        {
+                          heading: "2. 在り方の振り返り",
+                          rows: ARIKATA_ITEMS.map((it) => ({
+                            label: it.label,
+                            value: data.sections.arikata[it.key],
+                          })),
+                        },
+                        {
+                          heading: "3. 分かち合い・アウトプット",
+                          rows: OUTPUT_ITEMS.map((it) => ({
+                            label: it.label,
+                            value: data.sections.output[it.key],
+                          })),
+                        },
+                        {
+                          heading: "4. 自己評価ランク",
+                          rows: [
+                            {
+                              label: "自己評価ランク",
+                              value: data.sections.rank.value || "（未選択）",
+                            },
+                            {
+                              label: RANK_REASON_LABEL,
+                              value: data.sections.rank.reason,
+                            },
+                          ],
+                        },
+                        {
+                          heading: "5. 来期に向けて",
+                          rows: RAIKI_ITEMS.map((it) => ({
+                            label: it.label,
+                            value: data.sections.raiki[it.key],
+                          })),
+                        },
+                      ].map((sec) => (
+                        <div key={sec.heading} className="space-y-2">
+                          <h3 className="text-xs font-semibold text-gray-700">
+                            {sec.heading}
+                          </h3>
+                          {sec.rows.map((row) => (
+                            <div key={row.label}>
+                              <p className="text-xs text-gray-500">{row.label}</p>
+                              <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                                {row.value || "（未記入）"}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </section>
         </div>
       )}
 
