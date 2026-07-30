@@ -4,6 +4,7 @@
 
 import { getSupabaseBrowserClient } from "./supabase-browser";
 import { newsCategoryMeta } from "./news-history";
+import { loadProfilesIndex } from "./staff-profiles";
 import {
   URGENCY_META,
   urgencyOf,
@@ -23,7 +24,9 @@ export const NEWS_LOG_ACTION_META: Record<
   restore: { label: "↩️ 復元", badge: "bg-amber-100 text-amber-700" },
 };
 
-// ログイン中ならプロフィール名（display_name→email の順）を返す。未ログインは null。
+// ログイン中の表示名を返す。未ログイン・解決不能は null。
+// 解決順: プロフィール登録名（リアクションの resolveReactorName と同じソース）→ display_name → null。
+// 指示書118: email フォールバックを廃止（送り主プリフィルやログにメールを入れない。72/73と同方針）。
 // ログインは必須にしない（段階導入②）ため、失敗はすべて null に落とす。
 export async function getCurrentActorName(): Promise<string | null> {
   try {
@@ -32,10 +35,15 @@ export async function getCurrentActorName(): Promise<string | null> {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return null;
+    const profiles = await loadProfilesIndex().catch(() => []);
+    const profileName = profiles
+      .find((p) => p.userId === user.id)
+      ?.name?.trim();
+    if (profileName) return profileName;
     const meta = user.user_metadata as Record<string, unknown> | null;
     const name =
       typeof meta?.display_name === "string" ? meta.display_name.trim() : "";
-    return name || user.email || null;
+    return name || null;
   } catch {
     return null;
   }
