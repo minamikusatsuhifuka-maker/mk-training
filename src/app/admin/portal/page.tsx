@@ -4758,7 +4758,8 @@ export default function AdminPortalPage() {
                 OFFにした機能は該当UIが非表示になります（データは保持され、ONに戻すと再表示されます）。
               </p>
             </div>
-            <div className="space-y-3">
+            {/* 117: グリッド配置（表示設定と統一・行内で高さはgrid既定のstretchで揃う） */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {PORTAL_FEATURE_META.map((m) => (
                 <div
                   key={m.key}
@@ -5221,7 +5222,8 @@ export default function AdminPortalPage() {
                 URLを直接開いても「準備中」と表示されます。既定はすべてOFFです。
               </p>
             </div>
-            <div className="space-y-3">
+            {/* 117: 1行3〜4列のグリッド配置（行内で高さはgrid既定のstretchで揃う） */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {FEATURE_META.map((m) => (
                 <div
                   key={m.id}
