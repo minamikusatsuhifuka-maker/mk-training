@@ -343,13 +343,15 @@ function ManualDraftsPageBody() {
                   </span>
                 </div>
 
-                {/* 📗 登録済み: 資料庫の該当資料へのディープリンク */}
+                {/* 📗 登録済み: 資料庫の該当資料へのディープリンク（119: 新しいタブで開く） */}
                 {p.libraryRef && (
                   <Link
                     href={`/library?doc=${encodeURIComponent(p.libraryRef.docId)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1 hover:bg-emerald-100"
                   >
-                    📗 資料庫で見る{refTitle ? `: ${refTitle}` : ""} →
+                    📗 資料庫で見る{refTitle ? `: ${refTitle}` : ""} ↗
                   </Link>
                 )}
 

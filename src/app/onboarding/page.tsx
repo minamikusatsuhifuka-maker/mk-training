@@ -265,11 +265,14 @@ function OnboardingPageBody() {
                             </p>
                           )}
                           {doc && (
+                            // 119: 新しいタブで開く（タブを閉じるだけでチェックリストに戻れる）
                             <Link
                               href={`/library?doc=${encodeURIComponent(doc.id)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
                               className="inline-flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1 hover:bg-emerald-100 mt-1"
                             >
-                              📄 {doc.title}
+                              📄 {doc.title} ↗
                             </Link>
                           )}
                         </div>

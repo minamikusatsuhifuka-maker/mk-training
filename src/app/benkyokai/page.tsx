@@ -64,20 +64,25 @@ function LibraryRefChips({
     <div className="flex flex-wrap gap-1.5">
       {refs.map((r) => {
         const title = titles.get(r.docId);
+        // 119: 新しいタブで開く（プレビューを閉じたらタブを閉じるだけで戻れる）
         const chip = title ? (
           <Link
             href={`/library?doc=${encodeURIComponent(r.docId)}`}
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1 hover:bg-emerald-100"
           >
-            📄 {title}
+            📄 {title} ↗
           </Link>
         ) : (
           // 削除済み等で解決できない資料は⚠表記で残す（リンク先は一覧にフォールバック）
           <Link
             href={`/library?doc=${encodeURIComponent(r.docId)}`}
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1 hover:bg-amber-100"
           >
-            ⚠ 資料が見つかりません
+            ⚠ 資料が見つかりません ↗
           </Link>
         );
         return (
