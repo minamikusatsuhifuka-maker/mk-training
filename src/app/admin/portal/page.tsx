@@ -522,6 +522,8 @@ export default function AdminPortalPage() {
   // 📈 クリニックの歩み（指示書80。「⚙ 機能」タブで月次・施策を入力）
   const [metrics, setMetrics] = useState<ClinicMetrics | null>(null);
   const [savingMetrics, setSavingMetrics] = useState(false);
+  // 116: セクション全体の折りたたみ（102パターン流用・既定=閉・localStorageに記憶）
+  const [clinicDataOpen, setClinicDataOpen] = useState(false);
   const [newMonth, setNewMonth] = useState<{
     ym: string;
     insurance: string;
@@ -535,6 +537,14 @@ export default function AdminPortalPage() {
   }>({ date: "", endDate: "", label: "" });
 
   useEffect(() => {
+    // 116: 折りたたみ状態の復元（102の mk_library_cleanup_open と同じ流儀・既定は閉）
+    try {
+      setClinicDataOpen(
+        localStorage.getItem("mk_admin_clinic_data_open") === "1"
+      );
+    } catch {
+      /* noop */
+    }
     loadPortalFeatures().then(setFeatures).catch(() => {});
     getFeatureFlags().then(setFeatureFlags).catch(() => {});
     loadKizukiStore()
@@ -791,6 +801,19 @@ export default function AdminPortalPage() {
     }
     setPool(cleaned);
     flash("💾 質問プールを保存しました");
+  };
+
+  // 116: 折りたたみトグル（開閉を localStorage に記憶）
+  const toggleClinicDataOpen = () => {
+    setClinicDataOpen((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("mk_admin_clinic_data_open", next ? "1" : "0");
+      } catch {
+        /* noop */
+      }
+      return next;
+    });
   };
 
   // ─── 📈 クリニックの歩み（指示書80） ───
@@ -2022,8 +2045,8 @@ export default function AdminPortalPage() {
         </div>
       )}
 
-      {/* タブ */}
-      <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 border-b border-gray-200">
+      {/* タブ（116: 横スクロール廃止・折り返しで全タブ一覧表示） */}
+      <div className="flex flex-wrap gap-2 pb-2 -mx-1 px-1 border-b border-gray-200">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -4909,17 +4932,33 @@ export default function AdminPortalPage() {
             )}
           </section>
 
-          {/* 📈 クリニックの歩み — データ入力（指示書80） */}
+          {/* 📈 クリニックの歩み — データ入力（指示書80）
+              116: セクション全体を折りたたみ（102パターン・既定=閉・件数バッジは常時表示） */}
           <section className="space-y-3 border-t border-gray-200 pt-6">
-            <div>
-              <h2 className="text-sm font-semibold text-gray-800">
-                📈 クリニックの歩み — データ入力
-              </h2>
-              <p className="text-xs text-gray-500 mt-1">
-                月別の売上（万円）とカウンセリング数（件）・施策を入力すると、ホームの「📈
-                クリニックの歩み」に反映されます。数字は目的ではなく、みなさんが質を尽くした結果を映す鏡です（個人別の数字は扱わず、チーム全体のみ）。
-              </p>
-            </div>
+            <button
+              type="button"
+              onClick={toggleClinicDataOpen}
+              aria-expanded={clinicDataOpen}
+              className="text-sm font-semibold text-gray-800 flex items-center gap-1.5 hover:opacity-70 w-full text-left"
+            >
+              <span
+                className={`text-xs transition-transform ${clinicDataOpen ? "rotate-90" : ""}`}
+              >
+                ▶
+              </span>
+              📈 クリニックの歩み — データ入力
+              {metrics && metrics.months.length > 0 && (
+                <span className="text-xs font-medium bg-teal-100 text-teal-800 rounded-full px-2 py-0.5">
+                  {metrics.months.length}ヶ月分
+                </span>
+              )}
+            </button>
+            {clinicDataOpen && (
+              <>
+            <p className="text-xs text-gray-500">
+              月別の売上（万円）とカウンセリング数（件）・施策を入力すると、ホームの「📈
+              クリニックの歩み」に反映されます。数字は目的ではなく、みなさんが質を尽くした結果を映す鏡です（個人別の数字は扱わず、チーム全体のみ）。
+            </p>
             {!metrics ? (
               <p className="text-xs text-gray-500">読み込み中...</p>
             ) : (
@@ -5165,6 +5204,8 @@ export default function AdminPortalPage() {
                     {savingMetrics ? "保存中..." : "💾 クリニックの歩みを保存"}
                   </button>
                 </div>
+              </>
+            )}
               </>
             )}
           </section>
