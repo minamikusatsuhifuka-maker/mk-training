@@ -54,27 +54,38 @@ function LibraryRefChips({
   refs,
   titles,
   onRemove,
+  link = false,
 }: {
   refs: { docId: string }[];
   titles: Map<string, string>;
   onRemove?: (docId: string) => void;
+  /** 閲覧文脈（一覧表示）のみ true = 119の新タブリンク。
+      フォーム内（新規/編集）は既定の非リンク＝クリックしても何も起きない。
+      誤タップによるページ遷移・入力消失を防ぐ（指示書120） */
+  link?: boolean;
 }) {
   if (refs.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-1.5">
       {refs.map((r) => {
         const title = titles.get(r.docId);
-        // 119: 新しいタブで開く（プレビューを閉じたらタブを閉じるだけで戻れる）
+        // 119: 閲覧文脈は新しいタブで開く（プレビューを閉じたらタブを閉じるだけで戻れる）
         const chip = title ? (
-          <Link
-            href={`/library?doc=${encodeURIComponent(r.docId)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1 hover:bg-emerald-100"
-          >
-            📄 {title} ↗
-          </Link>
-        ) : (
+          link ? (
+            <Link
+              href={`/library?doc=${encodeURIComponent(r.docId)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1 hover:bg-emerald-100"
+            >
+              📄 {title} ↗
+            </Link>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1">
+              📄 {title}
+            </span>
+          )
+        ) : link ? (
           // 削除済み等で解決できない資料は⚠表記で残す（リンク先は一覧にフォールバック）
           <Link
             href={`/library?doc=${encodeURIComponent(r.docId)}`}
@@ -84,6 +95,10 @@ function LibraryRefChips({
           >
             ⚠ 資料が見つかりません ↗
           </Link>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1">
+            ⚠ 資料が見つかりません
+          </span>
         );
         return (
           <span key={r.docId} className="inline-flex items-center gap-1">
@@ -501,7 +516,7 @@ function BenkyokaiPageBody() {
                   </div>
                 ) : (
                   <>
-                    <LibraryRefChips refs={p.libraryRefs} titles={libraryTitles} />
+                    <LibraryRefChips refs={p.libraryRefs} titles={libraryTitles} link />
                     {p.body && (
                       <div className="space-y-1">
                         <p
