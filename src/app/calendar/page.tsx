@@ -346,6 +346,26 @@ function CalendarPageBody() {
     thisM === 12 ? { y: thisY + 1, m: 1 } : { y: thisY, m: thisM + 1 },
   ];
 
+  // 日別詳細カード（JSXを1変数に共通化・指示書127）。
+  // 縦並び時=タップした月の直下（xl:hidden）／横並び時=両グリッド下に全幅1つ（hidden xl:block）
+  const dayDetail = selectedYmd ? (
+    <section className="bg-white border border-teal-200 rounded-xl p-4 space-y-2">
+      <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+        {formatDayHeading(selectedYmd)}
+        {selectedYmd === today && (
+          <span className="text-[10px] font-medium bg-teal-100 text-teal-700 rounded-full px-2 py-0.5">
+            今日
+          </span>
+        )}
+      </h2>
+      <ul className="space-y-1.5">
+        {(eventsByYmd.get(selectedYmd) ?? []).map((ev) => (
+          <EventRow key={ev.id} ev={ev} />
+        ))}
+      </ul>
+    </section>
+  ) : null;
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -419,7 +439,8 @@ function CalendarPageBody() {
           </div>
         )
       ) : (
-        <div className="space-y-4">
+        // 月表示: xl以上は2グリッド横並び（指示書127）・lg以下は従来の縦並び
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 xl:gap-6">
           {months.map(({ y, m }) => (
             <div key={`${y}-${m}`} className="space-y-4">
               <MonthGrid
@@ -432,28 +453,18 @@ function CalendarPageBody() {
                   setSelectedYmd((prev) => (prev === ymd ? null : ymd))
                 }
               />
-              {/* タップした日の詳細（タップした月のグリッド直下に表示・終日/時刻と場所はここで見せる） */}
+              {/* 縦並び時: タップした月のグリッド直下（現行UX維持） */}
               {selectedYmd &&
                 Number(selectedYmd.slice(0, 4)) === y &&
                 Number(selectedYmd.slice(5, 7)) === m && (
-                  <section className="bg-white border border-teal-200 rounded-xl p-4 space-y-2">
-                    <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-                      {formatDayHeading(selectedYmd)}
-                      {selectedYmd === today && (
-                        <span className="text-[10px] font-medium bg-teal-100 text-teal-700 rounded-full px-2 py-0.5">
-                          今日
-                        </span>
-                      )}
-                    </h2>
-                    <ul className="space-y-1.5">
-                      {(eventsByYmd.get(selectedYmd) ?? []).map((ev) => (
-                        <EventRow key={ev.id} ev={ev} />
-                      ))}
-                    </ul>
-                  </section>
+                  <div className="xl:hidden">{dayDetail}</div>
                 )}
             </div>
           ))}
+          {/* 横並び時: 両グリッドの下に全幅で1つ（どちらの月をタップしても同じ位置） */}
+          {dayDetail && (
+            <div className="hidden xl:block xl:col-span-2">{dayDetail}</div>
+          )}
         </div>
       )}
     </div>
@@ -462,7 +473,7 @@ function CalendarPageBody() {
 
 export default function CalendarPage() {
   return (
-    <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-6">
+    <div className="p-4 md:p-8 max-w-3xl xl:max-w-6xl mx-auto space-y-6">
       <NavPageHeader navKey="/calendar"
         title="🗓 院内カレンダー"
         description="勉強会・イベントの予定共有"
