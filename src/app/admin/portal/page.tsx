@@ -66,11 +66,12 @@ import {
 import {
   DEFAULT_FEATURE_FLAGS,
   FEATURE_META,
+  PAGE_FLAG_META,
   IMPLEMENTED_FEATURES,
   getFeatureFlags,
   saveFeatureFlags,
   type FeatureFlags,
-  type FeatureId,
+  type PortalFlagId,
 } from "@/lib/feature-flags";
 import {
   loadKizukiStore,
@@ -857,8 +858,9 @@ export default function AdminPortalPage() {
     flash(on ? `💾 ${label} をONにしました` : `💾 ${label} をOFFにしました`);
   };
 
-  // 機能の表示設定（指示書103）: 楽観更新＋丸ごと保存（updatedAt はlib側で現在時刻に更新）
-  const handleToggleFlag = async (id: FeatureId, on: boolean) => {
+  // 機能の表示設定（指示書103）・ページの公開設定（指示書124）共用:
+  // 楽観更新＋丸ごと保存（updatedAt はlib側で現在時刻に更新）
+  const handleToggleFlag = async (id: PortalFlagId, on: boolean) => {
     if (savingFlags) return;
     const prev = featureFlags;
     const next = { ...featureFlags, [id]: on };
@@ -871,7 +873,10 @@ export default function AdminPortalPage() {
       flash("⚠ 機能の表示設定の保存に失敗しました");
       return;
     }
-    const label = FEATURE_META.find((m) => m.id === id)?.label ?? String(id);
+    const label =
+      FEATURE_META.find((m) => m.id === id)?.label ??
+      PAGE_FLAG_META.find((m) => m.id === id)?.label ??
+      String(id);
     flash(
       on
         ? `💾 ${label} を表示（ON）にしました`
@@ -5394,6 +5399,40 @@ export default function AdminPortalPage() {
             )}
               </>
             )}
+          </section>
+
+          {/* ページの公開設定（指示書124・既定ON=公開型。解禁型の「🚀 機能の表示設定」とは分離） */}
+          <section className="space-y-4 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">
+                📄 ページの公開設定
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                既存ページの公開スイッチです。OFFにするとメニューから消え、URLを直接開いても
+                「準備中」と表示されます。既定はすべてONです。
+                （メニューに出さないだけなら「サイドバー構成」の非表示をお使いください）
+              </p>
+            </div>
+            {/* 117のグリッドスタイル踏襲（1行3〜4列） */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {PAGE_FLAG_META.map((m) => (
+                <div
+                  key={m.id}
+                  className="rounded-xl border border-gray-200 bg-white p-4 space-y-1.5"
+                >
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-800 flex-wrap">
+                    <input
+                      type="checkbox"
+                      checked={featureFlags[m.id]}
+                      disabled={savingFlags}
+                      onChange={(e) => handleToggleFlag(m.id, e.target.checked)}
+                    />
+                    {m.label}
+                  </label>
+                  <p className="text-xs text-gray-500 pl-6">{m.description}</p>
+                </div>
+              ))}
+            </div>
           </section>
 
           {/* 機能の表示設定（portal_feature_flags・指示書103） */}

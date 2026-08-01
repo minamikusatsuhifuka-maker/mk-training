@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Noto_Sans_JP } from "next/font/google";
 import { AuthProvider } from "@/components/AuthProvider";
 import { AppShell } from "@/components/AppShell";
+import PageAccessGate from "@/components/PageAccessGate";
 import "./globals.css";
 
 const notoSansJP = Noto_Sans_JP({
@@ -31,7 +32,10 @@ export default function RootLayout({
     <html lang="ja" className={`${notoSansJP.variable} h-full antialiased`}>
       <body className="min-h-full">
         <AuthProvider>
-          <AppShell>{children}</AppShell>
+          {/* PageAccessGate: 既存ページの公開スイッチ（指示書124・OFF時のみ準備中） */}
+          <AppShell>
+            <PageAccessGate>{children}</PageAccessGate>
+          </AppShell>
         </AuthProvider>
       </body>
     </html>

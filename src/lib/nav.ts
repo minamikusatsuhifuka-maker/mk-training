@@ -3,7 +3,7 @@
 // content_store(portal_nav_config) は「その上の配置情報」。設定が無い/壊れていればマスターにフォールバックする。
 
 import { AI_INCHO_URL } from "./external-links";
-import type { FeatureId, FeatureFlags } from "./feature-flags";
+import type { PortalFlagId, FeatureFlags } from "./feature-flags";
 
 export const NAV_CONFIG_KEY = "portal_nav_config";
 export const UNCATEGORIZED_ID = "uncategorized";
@@ -12,7 +12,9 @@ export const UNCATEGORIZED_LABEL = "未分類";
 // --- マスター（既定構成） ---
 export type MasterCategory = { id: string; label: string };
 // external: true の項目は外部URL（別タブで開く。key はルートでなく一意ID）。指示書59
-// featureId: 機能フラグ連動（指示書103）。指定した項目はフラグOFFのときナビに表示されない。
+// featureId: フラグ連動。指定した項目はフラグOFFのときナビに表示されない。
+//   10機能（指示書103・既定OFF）に加え、指示書124で既存ページの公開スイッチ
+//   （page_*/group_*・既定ON）も同じ仕組みに載せた。直URLガードは PageAccessGate。
 //   portal_nav_config の保存形状（key ベース）は変えない＝後方互換。
 export type MasterItem = {
   key: string;
@@ -20,7 +22,7 @@ export type MasterItem = {
   label: string;
   categoryId: string;
   external?: true;
-  featureId?: FeatureId;
+  featureId?: PortalFlagId;
 };
 
 export const MASTER_CATEGORIES: MasterCategory[] = [
@@ -35,7 +37,7 @@ export const MASTER_CATEGORIES: MasterCategory[] = [
 // key = ルート（既存メニューの安定ID）。ルートは変更しない。
 export const MASTER_ITEMS: MasterItem[] = [
   { key: "/", href: "/", label: "🏠 ホーム", categoryId: "home" },
-  { key: "/members", href: "/members", label: "👥 メンバー紹介", categoryId: "home" },
+  { key: "/members", href: "/members", label: "👥 メンバー紹介", featureId: "page_members", categoryId: "home" },
   // オンボーディングチェックリスト（指示書113。スタッフ向け表示名はやわらかく「はじめてガイド」）
   { key: "/onboarding", href: "/onboarding", label: "✅ はじめてガイド", categoryId: "home", featureId: "onboarding" },
   // 自己評価シート（指示書111・private_store 基盤・本人と院長のみ）
@@ -49,26 +51,27 @@ export const MASTER_ITEMS: MasterItem[] = [
     label: "🤖 AI院長",
     categoryId: "home",
     external: true,
+    featureId: "page_ai_incho", // 124: 外部リンクはナビ表示のみ制御
   },
 
-  { key: "/philosophy", href: "/philosophy", label: "🏛️ 理念・院長の想い", categoryId: "philosophy" },
+  { key: "/philosophy", href: "/philosophy", label: "🏛️ 理念・院長の想い", featureId: "page_philosophy", categoryId: "philosophy" },
 
-  { key: "/knowledge", href: "/knowledge", label: "🏛️ 組織知識ベース", categoryId: "medical" },
-  { key: "/diseases", href: "/diseases", label: "疾患", categoryId: "medical" },
-  { key: "/drugs", href: "/drugs", label: "薬剤", categoryId: "medical" },
-  { key: "/contraindications", href: "/contraindications", label: "禁忌・注意", categoryId: "medical" },
-  { key: "/pregnancy", href: "/pregnancy", label: "🤰 妊娠・授乳と薬剤", categoryId: "medical" },
-  { key: "/interactions", href: "/interactions", label: "⚡ 相互作用チェック", categoryId: "medical" },
-  { key: "/biologics", href: "/biologics", label: "💉 生物学的製剤", categoryId: "medical" },
-  { key: "/age-restrictions", href: "/age-restrictions", label: "👶 年齢注意薬剤", categoryId: "medical" },
+  { key: "/knowledge", href: "/knowledge", label: "🏛️ 組織知識ベース", featureId: "group_medical", categoryId: "medical" },
+  { key: "/diseases", href: "/diseases", label: "疾患", featureId: "group_medical", categoryId: "medical" },
+  { key: "/drugs", href: "/drugs", label: "薬剤", featureId: "group_medical", categoryId: "medical" },
+  { key: "/contraindications", href: "/contraindications", label: "禁忌・注意", featureId: "group_medical", categoryId: "medical" },
+  { key: "/pregnancy", href: "/pregnancy", label: "🤰 妊娠・授乳と薬剤", featureId: "group_medical", categoryId: "medical" },
+  { key: "/interactions", href: "/interactions", label: "⚡ 相互作用チェック", featureId: "group_medical", categoryId: "medical" },
+  { key: "/biologics", href: "/biologics", label: "💉 生物学的製剤", featureId: "group_medical", categoryId: "medical" },
+  { key: "/age-restrictions", href: "/age-restrictions", label: "👶 年齢注意薬剤", featureId: "group_medical", categoryId: "medical" },
 
-  { key: "/cosmetic", href: "/cosmetic", label: "美容メニュー", categoryId: "beauty" },
-  { key: "/skincare", href: "/skincare", label: "スキンケア", categoryId: "beauty" },
-  { key: "/counseling", href: "/counseling", label: "💬 カウンセリングガイド", categoryId: "beauty" },
+  { key: "/cosmetic", href: "/cosmetic", label: "美容メニュー", featureId: "group_beauty", categoryId: "beauty" },
+  { key: "/skincare", href: "/skincare", label: "スキンケア", featureId: "group_beauty", categoryId: "beauty" },
+  { key: "/counseling", href: "/counseling", label: "💬 カウンセリングガイド", featureId: "group_beauty", categoryId: "beauty" },
 
-  { key: "/tasks", href: "/tasks", label: "📋 みんなのタスク", categoryId: "work" },
-  { key: "/goals", href: "/goals", label: "🎯 クリニック目標", categoryId: "work" },
-  { key: "/news-history", href: "/news-history", label: "📜 お知らせ履歴", categoryId: "work" },
+  { key: "/tasks", href: "/tasks", label: "📋 みんなのタスク", featureId: "page_tasks", categoryId: "work" },
+  { key: "/goals", href: "/goals", label: "🎯 クリニック目標", featureId: "page_goals", categoryId: "work" },
+  { key: "/news-history", href: "/news-history", label: "📜 お知らせ履歴", featureId: "page_news_history", categoryId: "work" },
   // 日々の気づき投稿（指示書104）。フラグOFFの間はナビ非表示（featureId 連動・指示書103）
   { key: "/kizuki", href: "/kizuki", label: "💡 日々の気づき", categoryId: "work", featureId: "kizuki" },
   // サンクスカード全件一覧（指示書105・A案=既存 portal_thankyou を核に拡張）
@@ -77,29 +80,29 @@ export const MASTER_ITEMS: MasterItem[] = [
   { key: "/hiyari-report", href: "/hiyari-report", label: "🚨 ヒヤリハット報告", categoryId: "work", featureId: "hiyari" },
   // 朝礼サポート（指示書108・投稿駆動の輪番つき）
   { key: "/chorei", href: "/chorei", label: "🌅 朝礼サポート", categoryId: "work", featureId: "chorei" },
-  { key: "/operations", href: "/operations", label: "📋 業務チェックリスト", categoryId: "work" },
-  { key: "/library", href: "/library", label: "🗂️ 資料庫", categoryId: "work" },
+  { key: "/operations", href: "/operations", label: "📋 業務チェックリスト", featureId: "page_operations", categoryId: "work" },
+  { key: "/library", href: "/library", label: "🗂️ 資料庫", featureId: "page_library", categoryId: "work" },
   // マニュアル＝資料庫のカテゴリ絞り込み済みビュー（別ページは作らない・指示書101。key は一意IDで可＝59の流儀）
-  { key: "library-manual", href: "/library?category=マニュアル", label: "📖 マニュアル", categoryId: "work" },
+  { key: "library-manual", href: "/library?category=マニュアル", label: "📖 マニュアル", featureId: "page_library", categoryId: "work" },
   // マニュアル下書き（指示書107）。資料庫系の並びに置く
   { key: "/manual-drafts", href: "/manual-drafts", label: "✍️ マニュアル下書き", categoryId: "work", featureId: "manual_draft" },
   // 勉強会アーカイブ（指示書109・資料は資料庫参照 libraryRefs）
   { key: "/benkyokai", href: "/benkyokai", label: "📖 勉強会アーカイブ", categoryId: "work", featureId: "benkyokai" },
   // 院内カレンダー（指示書114・Googleカレンダー読み取り・管理はGoogle側）
   { key: "/calendar", href: "/calendar", label: "🗓 院内カレンダー", categoryId: "work", featureId: "calendar" },
-  { key: "/medical-fees", href: "/medical-fees", label: "💴 算定・点数表", categoryId: "work" },
-  { key: "/expert", href: "/expert", label: "⭐ エキスパートの働き方", categoryId: "work" },
-  { key: "/growth-builder", href: "/growth-builder", label: "🚀 成長ロードマップ", categoryId: "work" },
+  { key: "/medical-fees", href: "/medical-fees", label: "💴 算定・点数表", featureId: "page_medical_fees", categoryId: "work" },
+  { key: "/expert", href: "/expert", label: "⭐ エキスパートの働き方", featureId: "page_expert", categoryId: "work" },
+  { key: "/growth-builder", href: "/growth-builder", label: "🚀 成長ロードマップ", featureId: "page_growth_builder", categoryId: "work" },
   // 以前モバイルのみに存在した役割別ページ（消えないようマスターに保持）
-  { key: "/reception", href: "/reception", label: "🏢 受付", categoryId: "work" },
-  { key: "/clerk", href: "/clerk", label: "💻 事務", categoryId: "work" },
-  { key: "/counselor", href: "/counselor", label: "💬 カウンセラー", categoryId: "work" },
+  { key: "/reception", href: "/reception", label: "🏢 受付", featureId: "group_roles", categoryId: "work" },
+  { key: "/clerk", href: "/clerk", label: "💻 事務", featureId: "group_roles", categoryId: "work" },
+  { key: "/counselor", href: "/counselor", label: "💬 カウンセラー", featureId: "group_roles", categoryId: "work" },
 
-  { key: "/quiz", href: "/quiz", label: "クイズ", categoryId: "test" },
-  { key: "/progress", href: "/progress", label: "📊 学習進捗", categoryId: "test" },
-  { key: "/ai-chat", href: "/ai-chat", label: "🤖 AIアシスタント", categoryId: "test" },
-  { key: "/case-study", href: "/case-study", label: "🏥 症例学習", categoryId: "test" },
-  { key: "/roleplay", href: "/roleplay", label: "🎭 ロールプレイ", categoryId: "test" },
+  { key: "/quiz", href: "/quiz", label: "クイズ", featureId: "group_learning", categoryId: "test" },
+  { key: "/progress", href: "/progress", label: "📊 学習進捗", featureId: "group_learning", categoryId: "test" },
+  { key: "/ai-chat", href: "/ai-chat", label: "🤖 AIアシスタント", featureId: "group_learning", categoryId: "test" },
+  { key: "/case-study", href: "/case-study", label: "🏥 症例学習", featureId: "group_learning", categoryId: "test" },
+  { key: "/roleplay", href: "/roleplay", label: "🎭 ロールプレイ", featureId: "group_learning", categoryId: "test" },
 ];
 
 // --- 設定（content_store に保存する形） ---

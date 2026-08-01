@@ -26,8 +26,41 @@ export const FEATURE_IDS = [
 ] as const;
 export type FeatureId = (typeof FEATURE_IDS)[number];
 
-export type FeatureFlags = Record<FeatureId, boolean>;
+// ── ページの公開スイッチ（指示書124）──
+// 既存ページの「公開/非公開」制御。10機能（解禁型・既定OFF）と逆で【既定ON】。
+// 保存データにIDが欠落していてもON扱い＝デプロイ直後・設定未保存でも既存ページは
+// 従来どおり表示される（院長決定・最重要）。グループIDは複数ページで共有する。
+export const PAGE_FLAG_IDS = [
+  "page_members",
+  "page_philosophy",
+  "group_medical",
+  "group_beauty",
+  "page_tasks",
+  "page_goals",
+  "page_news_history",
+  "page_operations",
+  "page_library",
+  "page_medical_fees",
+  "page_expert",
+  "page_growth_builder",
+  "group_roles",
+  "group_learning",
+  "page_ai_incho",
+] as const;
+export type PageFlagId = (typeof PAGE_FLAG_IDS)[number];
 
+// ナビ・ゲートが扱う全フラグID（10機能＋ページ公開スイッチ）
+export type PortalFlagId = FeatureId | PageFlagId;
+export const ALL_FLAG_IDS: readonly PortalFlagId[] = [
+  ...FEATURE_IDS,
+  ...PAGE_FLAG_IDS,
+];
+
+export type FeatureFlags = Record<PortalFlagId, boolean>;
+
+// 既定値の正本（指示書124）: 10機能=false（解禁型）／page系=true（公開型）。
+// getFeatureFlags はここから開始して保存値を上書きするため、
+// 「キー未保存」「ID欠落」「取得失敗」「ロード前」のすべてがこの既定に倒れる。
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   hiyari: false,
   kizuki: false,
@@ -39,6 +72,21 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   one_on_one: false,
   onboarding: false,
   calendar: false,
+  page_members: true,
+  page_philosophy: true,
+  group_medical: true,
+  group_beauty: true,
+  page_tasks: true,
+  page_goals: true,
+  page_news_history: true,
+  page_operations: true,
+  page_library: true,
+  page_medical_fees: true,
+  page_expert: true,
+  page_growth_builder: true,
+  group_roles: true,
+  group_learning: true,
+  page_ai_incho: true,
 };
 
 // 機能定義一覧（管理画面と将来のナビ登録の両方がここを参照する。二重定義禁止）
@@ -77,12 +125,38 @@ export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
   "calendar", // 指示書114: 院内カレンダー（/calendar・Google Calendar REST直叩き）— これで10機能すべて実装済み
 ]);
 
+// ページの公開設定の管理UI用メタ（指示書124・「📄 ページの公開設定」セクション）
+export type PageFlagMeta = {
+  id: PageFlagId;
+  label: string;
+  description: string;
+};
+
+export const PAGE_FLAG_META: PageFlagMeta[] = [
+  { id: "page_members", label: "👥 メンバー紹介", description: "/members を公開します。" },
+  { id: "page_philosophy", label: "🏛️ 理念・院長の想い", description: "/philosophy を公開します。" },
+  { id: "group_medical", label: "📚 医療知識（グループ）", description: "組織知識ベース・疾患・薬剤・禁忌・妊娠授乳・相互作用・生物学的製剤・年齢注意の8ページをまとめて公開します。" },
+  { id: "group_beauty", label: "💄 美容知識（グループ）", description: "美容メニュー・スキンケア・カウンセリングガイドの3ページをまとめて公開します。" },
+  { id: "page_tasks", label: "📋 みんなのタスク", description: "/tasks（タスク履歴含む）を公開します。" },
+  { id: "page_goals", label: "🎯 クリニック目標", description: "/goals を公開します。" },
+  { id: "page_news_history", label: "📜 お知らせ履歴", description: "/news-history を公開します。" },
+  { id: "page_operations", label: "📋 業務チェックリスト", description: "/operations を公開します。" },
+  { id: "page_library", label: "🗂️ 資料庫", description: "/library を公開します（ナビの「📖 マニュアル」ビューも連動します）。" },
+  { id: "page_medical_fees", label: "💴 算定・点数表", description: "/medical-fees を公開します。" },
+  { id: "page_expert", label: "⭐ エキスパートの働き方", description: "/expert を公開します。" },
+  { id: "page_growth_builder", label: "🚀 成長ロードマップ", description: "/growth-builder を公開します。" },
+  { id: "group_roles", label: "👥 役割別ガイド（グループ）", description: "受付・事務・カウンセラーの3ページをまとめて公開します。" },
+  { id: "group_learning", label: "📝 学習・テスト（グループ）", description: "クイズ・学習進捗・AIアシスタント・症例学習・ロールプレイの5ページをまとめて公開します。" },
+  { id: "page_ai_incho", label: "🤖 AI院長（外部リンク）", description: "メニューの「AI院長」リンクを表示します（外部サイトのため直URLは制御できません）。" },
+];
+
 type StoredFeatureFlags = {
   features?: Record<string, unknown>;
   updatedAt?: string;
 };
 
-// content_store から取得してデフォルト規則を適用（未知ID無視・欠落ID/boolean以外はOFF）
+// content_store から取得してデフォルト規則を適用（未知ID無視・boolean以外は既定値）。
+// 欠落IDの倒れる向きは DEFAULT_FEATURE_FLAGS が正本: 10機能=OFF／page系=ON（指示書124）
 export async function getFeatureFlags(): Promise<FeatureFlags> {
   const obj = await loadPortalObject<StoredFeatureFlags | null>(
     FEATURE_FLAGS_KEY,
@@ -94,7 +168,7 @@ export async function getFeatureFlags(): Promise<FeatureFlags> {
       ? obj.features
       : null;
   if (src) {
-    for (const id of FEATURE_IDS) {
+    for (const id of ALL_FLAG_IDS) {
       const v = src[id];
       if (typeof v === "boolean") next[id] = v;
     }
