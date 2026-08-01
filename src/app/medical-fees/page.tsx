@@ -6,7 +6,7 @@ import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 
 const categories: (FeeCategory | "全て")[] = ["全て", "初診・再診", "医学管理", "検査", "皮膚科処置", "処置", "手術", "注射", "投薬"];
 
@@ -29,7 +29,7 @@ export default function MedicalFeesPage() {
   return (
     <div className="max-w-[1536px] mx-auto space-y-6">
       <div className="flex items-start justify-between gap-4">
-        <PageHeader
+        <NavPageHeader navKey="/medical-fees"
           title="保険診療算定項目・点数表"
           description="皮膚科外来でよく使用する診療報酬算定項目の点数一覧です"
           badge={`${items.length}項目`}

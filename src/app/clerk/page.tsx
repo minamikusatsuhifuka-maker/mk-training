@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { clerkSections as initialData, type CheckSection } from "@/data/operations";
 import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { ChecklistSection } from "@/components/ChecklistSection";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 
 export default function ClerkPage() {
   const [sections, setSections] = useState<CheckSection[]>(initialData);
@@ -17,7 +17,7 @@ export default function ClerkPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/clerk"
         title="診療クラーク（シュライバー）"
         description="記録業務・必須事項・求められる働き方"
         badge={`${totalItems}項目`}

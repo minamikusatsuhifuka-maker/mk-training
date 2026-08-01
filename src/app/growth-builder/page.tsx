@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { usePageTitle } from "@/lib/use-nav";
 import { savePortalItems, loadPortalItems } from "@/lib/portal-store";
 
 type Role = "multi-office" | "nurse" | "all" | "custom";
@@ -115,6 +116,8 @@ function getInitialMessage(role: Role, customRoleName: string): string {
 }
 
 export default function GrowthBuilderPage() {
+  const builderTitle = usePageTitle("/growth-builder", "🚀 成長ロードマップビルダー");
+  const viewTitle = usePageTitle("/growth-builder", "✨ 成長ロードマップ");
   const [mode, setMode] = useState<Mode>("select");
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [customRole, setCustomRole] = useState("");
@@ -360,7 +363,7 @@ export default function GrowthBuilderPage() {
       <div className="max-w-3xl mx-auto">
         <div className="px-4 pt-2 pb-4">
           <h1 className="text-xl md:text-2xl font-medium text-gray-900">
-            🚀 成長ロードマップビルダー
+            {builderTitle}
           </h1>
           <p className="text-sm text-gray-600 mt-2 leading-relaxed">
             AIと対話しながら、あなたのロールに必要なスキル・知識・マインドを一括生成します
@@ -638,7 +641,7 @@ export default function GrowthBuilderPage() {
         <div className="px-4 pb-2 flex items-start justify-between gap-3">
           <div>
             <h1 className="text-xl md:text-2xl font-medium text-gray-900">
-              ✨ 成長ロードマップ
+              {viewTitle}
             </h1>
             <p className="text-sm text-gray-600 mt-1">
               {getRoleName(selectedRole, customRole)} 向け

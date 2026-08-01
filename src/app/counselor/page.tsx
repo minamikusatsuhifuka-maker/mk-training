@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { counselorSections as initialData, type CheckSection } from "@/data/operations";
 import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { ChecklistSection } from "@/components/ChecklistSection";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 
 export default function CounselorPage() {
   const [sections, setSections] = useState<CheckSection[]>(initialData);
@@ -17,7 +17,7 @@ export default function CounselorPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/counselor"
         title="カウンセラー基礎スキル"
         description="美容施術カウンセリングの基本と接遇"
         badge={`${totalItems}項目`}

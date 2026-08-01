@@ -5,7 +5,7 @@ import { drugs as initialData, drugCategories, type Drug, type DrugCategory } fr
 import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 
 export default function DrugsPage() {
   const [items, setItems] = useState<Drug[]>(initialData);
@@ -41,7 +41,7 @@ export default function DrugsPage() {
   return (
     <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
       <div className="flex items-start justify-between gap-4">
-        <PageHeader
+        <NavPageHeader navKey="/drugs"
           title="薬剤規格リスト"
           description="当院で使用する主要薬剤の規格・適応を確認できます"
           badge={`収録数: ${items.length}件`}

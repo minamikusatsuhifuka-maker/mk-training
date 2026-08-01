@@ -10,7 +10,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 import FeatureGate from "@/components/FeatureGate";
 import {
   getRecord,
@@ -308,7 +308,7 @@ function OnboardingPageBody() {
 export default function OnboardingPage() {
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/onboarding"
         title="✅ はじめてガイド"
         description="新しい仲間が安心して一歩ずつ進むためのチェックリスト"
       />

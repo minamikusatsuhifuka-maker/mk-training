@@ -5,7 +5,7 @@ import { cosmeticItems as initialData, cosmeticCategories, type CosmeticItem, ty
 import { getContent, saveContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 
 export default function CosmeticPage() {
   const [items, setItems] = useState<CosmeticItem[]>(initialData);
@@ -57,7 +57,7 @@ export default function CosmeticPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/cosmetic"
         title="当院の美容施術・機器"
         description="美容皮膚科で提供している施術・機器の一覧です"
         badge={`${items.length}メニュー`}

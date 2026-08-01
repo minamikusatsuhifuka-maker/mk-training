@@ -5,7 +5,7 @@ import { skincareItems as initialData, type SkincareItem } from "@/data/skincare
 import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 
 const filterCategories = [
   "すべて",
@@ -69,7 +69,7 @@ export default function SkincarePage() {
 
   return (
     <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/skincare"
         title="スキンケア・美容内服製品"
         description="当院で取り扱うスキンケア製品・美容内服の一覧です"
         badge={`${items.length}製品`}

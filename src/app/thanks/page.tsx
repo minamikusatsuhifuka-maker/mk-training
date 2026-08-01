@@ -10,7 +10,7 @@
 //   本ページ・ナビ・リアクションの解禁のみ thanks フラグが制御する（二重スイッチの整理・確定済み）。
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 import FeatureGate from "@/components/FeatureGate";
 import { ThankyouFormModal } from "@/components/ThankyouFormModal";
 import { useNewsReactions, ReactionBar } from "@/components/NewsReactions";
@@ -199,7 +199,7 @@ function ThanksPageBody() {
 export default function ThanksPage() {
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/thanks"
         title="💌 ありがとうカード"
         description="感謝を見える形で贈り合う"
       />

@@ -8,7 +8,7 @@
 // - 個人別の投稿件数・ランキングは実装しない。雛形は /kizuki（指示書104）。
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 import FeatureGate from "@/components/FeatureGate";
 import { useNewsReactions, ReactionBar } from "@/components/NewsReactions";
 import { resolveReactorName } from "@/lib/news-reactions";
@@ -385,7 +385,7 @@ function ChoreiPageBody() {
 export default function ChoreiPage() {
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/chorei"
         title="🌅 朝礼サポート"
         description="輪番と学び共有の記録"
       />

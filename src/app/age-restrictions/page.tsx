@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { usePageTitle } from "@/lib/use-nav";
 
 type AgeRestrictionDrug = {
   id: string;
@@ -412,6 +413,7 @@ function getQuickSummary(drug: AgeRestrictionDrug): string {
 }
 
 export default function AgeRestrictionsPage() {
+  const pageTitle = usePageTitle("/age-restrictions", "👶 年齢注意が必要な薬剤");
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
 
@@ -444,7 +446,7 @@ export default function AgeRestrictionsPage() {
       {/* ヘッダー */}
       <div>
         <h1 className="text-xl md:text-2xl font-bold text-slate-800">
-          👶 年齢注意が必要な薬剤
+          {pageTitle}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
           年齢制限を誤ると薬局から疑義照会が入ったり、レセプト審査で返戻・査定となる場合があります。処方・調剤前に必ず確認してください。

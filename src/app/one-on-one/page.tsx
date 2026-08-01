@@ -8,7 +8,7 @@
 // - 一覧は listInvolved（自分が記録した回＋相手として参加した回）を実施日降順で表示。
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 import FeatureGate from "@/components/FeatureGate";
 import {
   listInvolved,
@@ -492,7 +492,7 @@ function OneOnOnePageBody() {
 export default function OneOnOnePage() {
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/one-on-one"
         title="🤝 1on1ノート"
         description="伴走の対話を記録する場"
       />

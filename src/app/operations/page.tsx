@@ -11,7 +11,7 @@ import {
 } from "@/data/operations";
 import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { ChecklistSection } from "@/components/ChecklistSection";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DetailedChecklist } from "@/components/DetailedChecklist";
 
@@ -33,7 +33,7 @@ export default function OperationsPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/operations"
         title="業務チェックリスト"
         description="各役職ごとの業務内容・接遇チェックリストです"
       />

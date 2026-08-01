@@ -11,7 +11,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 import FeatureGate from "@/components/FeatureGate";
 import { LibraryDocPicker } from "@/components/LibraryDocPicker";
 import { useNewsReactions, ReactionBar } from "@/components/NewsReactions";
@@ -579,7 +579,7 @@ function BenkyokaiPageBody() {
 export default function BenkyokaiPage() {
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/benkyokai"
         title="📖 勉強会アーカイブ"
         description="月1勉強会の資料と学びの蓄積"
       />

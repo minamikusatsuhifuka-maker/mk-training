@@ -9,7 +9,7 @@
 // - 雛形は /kizuki（指示書104）。既存「気づきシェア」（portal_hiyari）とは別物。
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 import FeatureGate from "@/components/FeatureGate";
 import { useNewsReactions, ReactionBar } from "@/components/NewsReactions";
 import { resolveReactorName } from "@/lib/news-reactions";
@@ -611,7 +611,7 @@ function HiyariReportPageBody() {
 export default function HiyariReportPage() {
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/hiyari-report"
         title="🚨 ヒヤリハット報告"
         description="気づいた人が組織を救う、安全の分かち合い"
       />

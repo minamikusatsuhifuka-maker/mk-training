@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { usePageTitle } from "@/lib/use-nav";
 import { loadPortalItems, savePortalItems } from "@/lib/portal-store";
 import {
   KNOWLEDGE_KEYS,
@@ -55,6 +56,7 @@ function formatDate(iso: string): string {
 }
 
 export default function KnowledgePage() {
+  const pageTitle = usePageTitle("/knowledge", "🏛️ 組織知識ベース");
   const [tab, setTab] = useState<StaffTab>("manuals");
 
   const [manuals, setManuals] = useState<Manual[]>([]);
@@ -220,7 +222,7 @@ export default function KnowledgePage() {
     <div className="max-w-4xl mx-auto space-y-5">
       <div>
         <h1 className="text-xl md:text-2xl font-bold text-teal">
-          🏛️ 組織知識ベース
+          {pageTitle}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
           仕事マニュアル・スキルマップ・組織ナレッジを確認できます

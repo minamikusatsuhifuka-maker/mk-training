@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { usePageTitle } from "@/lib/use-nav";
 import {
   EXPERT_ROLES,
   type ExpertRole,
@@ -58,6 +59,7 @@ function isOldFormat(roles: ExpertRole[]): boolean {
 }
 
 export default function ExpertPage() {
+  const pageTitle = usePageTitle("/expert", "⭐ エキスパートに求められる働き方");
   const [roles, setRoles] = useState<ExpertRole[]>(EXPERT_ROLES);
   const [activeRoleId, setActiveRoleId] = useState<string>(EXPERT_ROLES[0].id);
   const [openSections, setOpenSections] = useState<Set<string>>(new Set());
@@ -101,7 +103,7 @@ export default function ExpertPage() {
     <div className="max-w-[1536px] mx-auto space-y-6">
       <div>
         <h1 className="text-xl md:text-2xl font-bold text-teal">
-          ⭐ エキスパートに求められる働き方
+          {pageTitle}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
           各ロールのエキスパートとして成長するために必要な要件・スキル・マインドセット

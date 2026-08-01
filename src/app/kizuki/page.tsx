@@ -9,7 +9,7 @@
 // - 既存「気づきシェア」（ホームの portal_hiyari）とは別物・無干渉。
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 import FeatureGate from "@/components/FeatureGate";
 import {
   useNewsReactions,
@@ -328,7 +328,7 @@ function KizukiPageBody() {
 export default function KizukiPage() {
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/kizuki"
         title="💡 日々の気づき"
         description="小さな「あれ?」を言葉にする場"
       />

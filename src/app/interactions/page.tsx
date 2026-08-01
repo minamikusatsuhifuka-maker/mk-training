@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 
 const severityConfig: Record<InteractionSeverity, { label: string; icon: string; color: string; border: string }> = {
   contraindicated: { label: "絶対禁忌", icon: "🚫", color: "bg-red-100 text-red-700 border-red-200", border: "border-red-300" },
@@ -79,7 +79,7 @@ export default function InteractionsPage() {
 
   return (
     <div className="max-w-[1536px] mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/interactions"
         title="薬剤相互作用チェック"
         description="2つの薬剤を選択して相互作用を確認できます"
         badge={`${items.length}件登録`}

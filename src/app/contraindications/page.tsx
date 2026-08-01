@@ -5,7 +5,7 @@ import { contraindications as initialData, type Contraindication, type Severity 
 import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 
 const severityConfig: Record<
   Severity,
@@ -48,7 +48,7 @@ export default function ContraindicationsPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/contraindications"
         title="禁忌事項"
         description="薬剤・施術の禁忌・注意事項を確認できます（絶対禁忌 / 要注意 / 参考 の3段階）"
       />

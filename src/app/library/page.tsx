@@ -6,13 +6,13 @@
 // データは content_store（portal_library / portal_library_log）、ファイルは Supabase Storage。
 
 import { Suspense } from "react";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 import LibraryBrowser from "@/components/LibraryBrowser";
 
 export default function LibraryPage() {
   return (
     <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/library"
         title="📚 資料庫"
         description="説明資料・同意書・マニュアルを登録すると、AIが内容を読んでカテゴリ・キーワード・要約を付けます。検索とカテゴリで探せます。"
       />

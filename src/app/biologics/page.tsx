@@ -10,7 +10,7 @@ import {
   type BiologicsDiseaseCategory,
 } from "@/data/biologics";
 import { getContent, CONTENT_KEYS } from "@/lib/content-store";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
@@ -88,7 +88,7 @@ export default function BiologicsPage() {
   return (
     <div className="max-w-[1536px] mx-auto space-y-6">
       {/* ヘッダー */}
-      <PageHeader
+      <NavPageHeader navKey="/biologics"
         title="生物学的製剤 投与スケジュール"
         description="投与スケジュール・レセプト摘要欄記載事項"
         badge={`最終更新: ${lastUpdated}`}

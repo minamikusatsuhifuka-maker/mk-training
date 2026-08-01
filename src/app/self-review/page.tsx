@@ -9,7 +9,7 @@
 // - 全項目、空のまま保存・提出可（必須項目は設けない）。
 
 import { useState, useEffect, useCallback } from "react";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 import FeatureGate from "@/components/FeatureGate";
 import {
   getRecord,
@@ -477,7 +477,7 @@ function SelfReviewPageBody() {
 export default function SelfReviewPage() {
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/self-review"
         title="📝 年次 自己評価シート"
         description="半期面談・年次対話の入口"
       />

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { receptionSections as initialData, type CheckSection } from "@/data/operations";
 import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { ChecklistSection } from "@/components/ChecklistSection";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 
 export default function ReceptionPage() {
   const [sections, setSections] = useState<CheckSection[]>(initialData);
@@ -17,7 +17,7 @@ export default function ReceptionPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/reception"
         title="受付対応"
         description="来院から会計までの流れと注意点"
         badge={`${totalItems}項目`}

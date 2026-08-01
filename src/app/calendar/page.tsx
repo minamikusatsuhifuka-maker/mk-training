@@ -9,7 +9,7 @@
 //   （detail はサーバー側 isAdminUser 判定で応答に含まれる。クライアントは有無だけ見る）。
 
 import { useState, useEffect, useCallback } from "react";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 import FeatureGate from "@/components/FeatureGate";
 import { jstTodayYmd } from "@/lib/library";
 
@@ -462,7 +462,7 @@ function CalendarPageBody() {
 export default function CalendarPage() {
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/calendar"
         title="🗓 院内カレンダー"
         description="勉強会・イベントの予定共有"
       />

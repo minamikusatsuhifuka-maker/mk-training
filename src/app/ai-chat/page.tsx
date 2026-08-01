@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { usePageTitle } from "@/lib/use-nav";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +24,7 @@ const quickQuestions = [
 ];
 
 export default function AiChatPage() {
+  const pageTitle = usePageTitle("/ai-chat", "🤖 医療AIアシスタント");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -86,7 +88,7 @@ export default function AiChatPage() {
       {/* ヘッダー */}
       <div>
         <h1 className="text-xl md:text-2xl font-bold text-teal">
-          🤖 医療AIアシスタント
+          {pageTitle}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
           薬・レセプト・生物学的製剤・カウンセリングについて何でも聞けます

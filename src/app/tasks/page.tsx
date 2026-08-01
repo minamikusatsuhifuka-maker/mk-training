@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import Link from "next/link";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 import { FileImport } from "@/components/tasks/FileImport";
 import { loadPortalItems } from "@/lib/portal-store";
 import {
@@ -526,7 +526,7 @@ export default function TasksPage() {
   if (!loaded || !now) {
     return (
       <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
-        <PageHeader
+        <NavPageHeader navKey="/tasks"
           title="📋 みんなのタスク"
           description="クリニック全体のタスクを「誰が・何を・いつまで」で見える化"
         />
@@ -958,7 +958,7 @@ export default function TasksPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/tasks"
         title="📋 みんなのタスク"
         description="クリニック全体のタスクを「誰が・何を・いつまで」で見える化"
         badge={`未完了 ${tasks.filter((t) => t.status !== "done").length} 件`}

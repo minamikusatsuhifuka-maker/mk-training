@@ -223,6 +223,18 @@ function isValidConfig(cfg: unknown): cfg is NavConfig {
   return Array.isArray(c.categories) && Array.isArray(c.items);
 }
 
+// 「表示名の上書き」の解決（指示書123・正本はここ1箇所）。
+// resolveNav（ナビ）と usePageTitle（ページ見出し）の両方がこれを使う。
+// 未設定・空白のみ・不正 config は空文字＝呼び出し側の既定名にフォールバック。
+export function navLabelOverride(
+  cfg: NavConfig | null | undefined,
+  key: string
+): string {
+  if (!isValidConfig(cfg)) return "";
+  const it = cfg.items.find((i) => i && i.key === key);
+  return it?.labelOverride?.trim() ?? "";
+}
+
 // config を解決して描画用カテゴリ配列を返す。
 // 不正・未設定はマスター（既定）にフォールバック。マスターにあって config に無い項目は既定カテゴリ末尾に自動表示。
 // flags を渡すと機能フラグOFFの項目を除外する（指示書103・省略時は全項目）。
@@ -262,7 +274,8 @@ export function resolveNav(
       const resolved: ResolvedItem = {
         key: m.key,
         href: m.href,
-        label: conf?.labelOverride?.trim() || m.label,
+        // 上書き解決は navLabelOverride に一元化（指示書123）
+        label: navLabelOverride(cfg, m.key) || m.label,
         ...(m.external ? { external: true as const } : {}),
       };
 

@@ -6,7 +6,7 @@ import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 
 // カテゴリ色マップ
 const badgeColorMap: Record<Disease["badgeColor"], string> = {
@@ -187,7 +187,7 @@ export default function DiseasesPage() {
     <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-5">
       {/* ヘッダー */}
       <div className="flex items-start justify-between gap-4">
-        <PageHeader
+        <NavPageHeader navKey="/diseases"
           title="疾患一覧"
           description="当院で扱う主要な皮膚疾患の知識を確認できます"
           badge={`疾患数: ${items.length}`}

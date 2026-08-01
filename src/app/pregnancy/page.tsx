@@ -6,7 +6,7 @@ import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 
 const safetyConfig: Record<SafetyLevel, { label: string; color: string }> = {
   safe: { label: "✅ 使用可", color: "bg-green-100 text-green-700 border-green-200" },
@@ -46,7 +46,7 @@ export default function PregnancyPage() {
   return (
     <div className="max-w-[1536px] mx-auto space-y-6">
       <div className="flex items-start justify-between gap-4">
-        <PageHeader
+        <NavPageHeader navKey="/pregnancy"
           title="妊娠・授乳中の薬剤安全性"
           description="スタッフ研修用の参考情報です"
           badge={`${items.length}品目`}

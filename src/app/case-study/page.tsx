@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePageTitle } from "@/lib/use-nav";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -44,6 +45,7 @@ const categories: { value: Category; label: string; emoji: string }[] = [
 ];
 
 export default function CaseStudyPage() {
+  const pageTitle = usePageTitle("/case-study", "🏥 症例ベース学習");
   const [step, setStep] = useState<Step>("settings");
   const [difficulty, setDifficulty] = useState<Difficulty>("easy");
   const [selectedCategories, setSelectedCategories] = useState<Category[]>(["biologics"]);
@@ -123,7 +125,7 @@ export default function CaseStudyPage() {
       <div className="max-w-2xl mx-auto space-y-6">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-teal">
-            🏥 症例ベース学習
+            {pageTitle}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             AIが症例を提示 → あなたが回答 → AIが採点・解説
@@ -187,7 +189,7 @@ export default function CaseStudyPage() {
       <div className="max-w-2xl mx-auto space-y-4">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-teal">
-            🏥 症例ベース学習
+            {pageTitle}
           </h1>
         </div>
 

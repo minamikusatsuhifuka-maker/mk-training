@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 
 type QuizResult = {
   id: string;
@@ -127,7 +127,7 @@ export default function QuizPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/quiz"
         title="確認テスト"
         description="学んだ知識をクイズで確認しましょう"
         badge={`全${allQuestions.length}問`}

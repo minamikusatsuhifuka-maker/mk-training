@@ -21,7 +21,7 @@ import {
   UtensilsCrossed,
   type LucideIcon,
 } from "lucide-react";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 import {
   Dialog,
   DialogContent,
@@ -312,7 +312,7 @@ export default function MembersPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/members"
         title="👥 メンバー紹介"
         description="南草津皮フ科で働くスタッフのプロフィール"
         badge={loaded ? `${members.length} 名` : undefined}

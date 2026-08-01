@@ -5,7 +5,7 @@
 // 編集/削除の導線は出さない。クリックで中央モーダルの全文表示。
 
 import { useEffect, useMemo, useState } from "react";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 import {
   getNewsHistory,
   filterNewsHistory,
@@ -96,7 +96,7 @@ export default function NewsHistoryPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-[1536px] mx-auto space-y-5">
-      <PageHeader
+      <NavPageHeader navKey="/news-history"
         title="📜 お知らせ履歴"
         description="これまでのお知らせ（掲載中・期限切れ）を検索・グループ分けして振り返れます"
       />

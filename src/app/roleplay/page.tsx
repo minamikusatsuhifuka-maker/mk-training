@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { usePageTitle } from "@/lib/use-nav";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -67,6 +68,7 @@ const scenarios = [
 ];
 
 export default function RoleplayPage() {
+  const pageTitle = usePageTitle("/roleplay", "🎭 カウンセリングロールプレイ");
   const [step, setStep] = useState<Step>("select");
   const [scenario, setScenario] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -189,7 +191,7 @@ export default function RoleplayPage() {
       <div className="max-w-3xl mx-auto space-y-4">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-teal">
-            🎭 カウンセリングロールプレイ
+            {pageTitle}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             AIが患者役 → あなたがスタッフとして対応 → AIがフィードバック

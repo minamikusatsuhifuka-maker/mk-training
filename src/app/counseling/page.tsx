@@ -6,7 +6,7 @@ import { getContent, CONTENT_KEYS } from "@/lib/content-store";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 
 const categoryConfig: Record<string, { label: string; color: string }> = {
   contraindication: { label: "禁忌確認", color: "bg-red-100 text-red-700 border-red-200" },
@@ -43,7 +43,7 @@ export default function CounselingPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/counseling"
         title="カウンセリングガイド"
         description="美容施術のトークスクリプトとクリアチェックリスト"
         badge={`${guides.length}施術`}

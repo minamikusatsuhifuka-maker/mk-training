@@ -10,7 +10,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { PageHeader } from "@/components/PageHeader";
+import NavPageHeader from "@/components/NavPageHeader";
 import FeatureGate from "@/components/FeatureGate";
 import { useNewsReactions, ReactionBar } from "@/components/NewsReactions";
 import { resolveReactorName } from "@/lib/news-reactions";
@@ -447,7 +447,7 @@ function ManualDraftsPageBody() {
 export default function ManualDraftsPage() {
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-6">
-      <PageHeader
+      <NavPageHeader navKey="/manual-drafts"
         title="✍️ マニュアル下書き"
         description="未来の仲間への贈り物を書く場"
       />

@@ -1,6 +1,7 @@
 "use client";
 
 import { Card } from "@/components/ui/card";
+import { usePageTitle } from "@/lib/use-nav";
 import { Badge } from "@/components/ui/badge";
 
 const sankaku = [
@@ -268,12 +269,13 @@ const successPrinciples = [
 ];
 
 export default function PhilosophyPage() {
+  const pageTitle = usePageTitle("/philosophy", "🌱 クリニックの理念・哲学");
   return (
     <div className="max-w-5xl mx-auto space-y-8 md:space-y-10 pb-12">
       {/* ヘッダー */}
       <div className="text-center pt-4">
         <h1 className="text-3xl md:text-4xl font-bold text-teal-700">
-          🌱 クリニックの理念・哲学
+          {pageTitle}
         </h1>
         <p className="text-sm md:text-base text-muted-foreground mt-3">
           南草津皮フ科が大切にする理念・哲学・判断軸
