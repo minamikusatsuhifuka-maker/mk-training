@@ -181,11 +181,15 @@ export async function fetchCalendarEvents(
   inFlight = (async () => {
     try {
       const token = await getAccessToken(config);
-      // timeMin = 今日のJST 0時、timeMax = ＋60日（指示書114）
-      const timeMin = `${jstTodayYmd()}T00:00:00+09:00`;
-      const timeMax = new Date(
-        Date.parse(timeMin) + 60 * 24 * 3600 * 1000
-      ).toISOString();
+      // timeMin = 今月のJST 1日 0時（指示書121・月間グリッドに月初からの過去分が必要）。
+      // timeMax は排他的なため「翌月末日23:59」ではなく翌々月1日のJST 0時を渡す
+      // （末日終盤開始の予定の取りこぼし防止・意味は同じ）。期間は59〜62日で
+      // 従来の60日と実質同水準 → maxResults は 250 のまま（62日×1日4件でも飽和しない）。
+      const todayYmd = jstTodayYmd();
+      const y = Number(todayYmd.slice(0, 4));
+      const m = Number(todayYmd.slice(5, 7));
+      const timeMin = `${todayYmd.slice(0, 7)}-01T00:00:00+09:00`;
+      const timeMax = `${m >= 11 ? y + 1 : y}-${String(((m + 1) % 12) + 1).padStart(2, "0")}-01T00:00:00+09:00`;
       const params = new URLSearchParams({
         singleEvents: "true", // 繰り返し予定を展開（方式B・院長決定）
         orderBy: "startTime",
