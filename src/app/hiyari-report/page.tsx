@@ -15,14 +15,23 @@ import { useNewsReactions, ReactionBar } from "@/components/NewsReactions";
 import { resolveReactorName } from "@/lib/news-reactions";
 import {
   HIYARI_REACTIONS_KEY,
+  HIYARI_TIME_SLOTS,
+  HIYARI_PLACES,
+  HIYARI_FACTORS,
+  HIYARI_LEVELS,
+  HIYARI_ROLES,
+  hiyariOptionLabel,
   loadHiyariStore,
   saveHiyariStore,
   genHiyariReportId,
   visibleHiyariReports,
   type HiyariReport,
+  type HiyariLevel,
 } from "@/lib/hiyari-reports";
+import HiyariBadges from "@/components/HiyariBadges";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { isAdminUser } from "@/lib/admin-role";
+import { jstTodayYmd } from "@/lib/library";
 
 // ログイン中の管理者判定（/kizuki・LibraryBrowser と同じ流儀）
 function useIsAdmin(): boolean {
@@ -63,6 +72,20 @@ function HiyariReportPageBody() {
   const [anonymous, setAnonymous] = useState(false); // 既定はオフ=記名
   const [submitting, setSubmitting] = useState(false);
 
+  // 構造化フィールド（指示書122・必須は「状況の概要」のみ）
+  const today = jstTodayYmd();
+  const [occurredOn, setOccurredOn] = useState(today); // 既定=今日
+  const [timeSlot, setTimeSlot] = useState("");
+  const [place, setPlace] = useState("");
+  const [placeOther, setPlaceOther] = useState("");
+  const [factors, setFactors] = useState<string[]>([]);
+  const [factorOther, setFactorOther] = useState("");
+  const [level, setLevel] = useState<HiyariLevel | "">("");
+  const [countermeasure, setCountermeasure] = useState("");
+  const [role, setRole] = useState("");
+  // 長文の折りたたみ展開状態（一覧・指示書122）
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
@@ -98,6 +121,23 @@ function HiyariReportPageBody() {
     );
   }, [reactions.identity, reactions.profileNames]);
 
+  const toggleFactor = (value: string) => {
+    setFactors((prev) =>
+      prev.includes(value)
+        ? prev.filter((f) => f !== value)
+        : [...prev, value]
+    );
+  };
+
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const submit = async () => {
     const body = draft.trim();
     if (!body || !myId || submitting) return;
@@ -106,7 +146,9 @@ function HiyariReportPageBody() {
     try {
       const store = await loadHiyariStore();
       const now = new Date().toISOString();
-      // 真の匿名: 匿名選択時は authorId フィールド自体を含めない（指示書106・厳守）
+      // 真の匿名: 匿名選択時は authorId フィールド自体を含めない（指示書106・厳守）。
+      // 構造化フィールド（指示書122）は選択された時のみ含める。role は記名時のみ
+      // （匿名時はフォームで無効化＋ここで除外＋normalize でも破棄の三重ガード）。
       const post: HiyariReport = {
         id: genHiyariReportId(),
         ...(anonymous ? {} : { authorId: myId }),
@@ -115,6 +157,21 @@ function HiyariReportPageBody() {
         createdAt: now,
         updatedAt: now,
         deleted: false,
+        ...(occurredOn ? { occurredOn } : {}),
+        ...(timeSlot ? { timeSlot } : {}),
+        ...(place ? { place } : {}),
+        ...(place === "other" && placeOther.trim()
+          ? { placeOther: placeOther.trim() }
+          : {}),
+        ...(factors.length > 0 ? { factors } : {}),
+        ...(factors.includes("other") && factorOther.trim()
+          ? { factorOther: factorOther.trim() }
+          : {}),
+        ...(level ? { level } : {}),
+        ...(countermeasure.trim()
+          ? { countermeasure: countermeasure.trim() }
+          : {}),
+        ...(!anonymous && role ? { role } : {}),
       };
       const next = [...store.posts, post];
       const ok = await saveHiyariStore(next);
@@ -122,6 +179,15 @@ function HiyariReportPageBody() {
       setPosts(next);
       setDraft("");
       setAnonymous(false);
+      setOccurredOn(today);
+      setTimeSlot("");
+      setPlace("");
+      setPlaceOther("");
+      setFactors([]);
+      setFactorOther("");
+      setLevel("");
+      setCountermeasure("");
+      setRole("");
     } catch {
       setError("投稿に失敗しました。もう一度お試しください。");
     } finally {
@@ -191,15 +257,184 @@ function HiyariReportPageBody() {
         ヒヤリとした・ハッとした出来事は、誰かの責任を問うためのものではなく、仲間と組織を守るための大切な贈り物です。事実を中心に、気づいたことを教えてください。報告してくれたことそのものに、感謝のリアクションで応えましょう。
       </p>
 
-      {/* 投稿フォーム（記名基本＋匿名選択可） */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          rows={4}
-          placeholder="何が起きたか（事実）→ なぜ起きたと思うか → どうすれば防げそうか、の順で書くと伝わりやすいです"
-          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none"
-        />
+      {/* 投稿フォーム（記名基本＋匿名選択可・構造化テンプレート=指示書122。必須は概要のみ） */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">
+        {/* 1. 発生日＋時間帯 */}
+        <div className="flex items-end gap-3 flex-wrap">
+          <label className="text-xs text-gray-600 space-y-1">
+            <span className="block font-medium">発生日</span>
+            <input
+              type="date"
+              value={occurredOn}
+              max={today}
+              onChange={(e) => setOccurredOn(e.target.value)}
+              className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white"
+            />
+          </label>
+          <label className="text-xs text-gray-600 space-y-1">
+            <span className="block font-medium">時間帯</span>
+            <select
+              value={timeSlot}
+              onChange={(e) => setTimeSlot(e.target.value)}
+              className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white"
+            >
+              <option value="">未選択</option>
+              {HIYARI_TIME_SLOTS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {/* 2. 発生場所（「その他」選択時のみ自由記述） */}
+        <div className="flex items-end gap-3 flex-wrap">
+          <label className="text-xs text-gray-600 space-y-1">
+            <span className="block font-medium">発生場所</span>
+            <select
+              value={place}
+              onChange={(e) => setPlace(e.target.value)}
+              className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white"
+            >
+              <option value="">未選択</option>
+              {HIYARI_PLACES.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {place === "other" && (
+            <input
+              type="text"
+              value={placeOther}
+              onChange={(e) => setPlaceOther(e.target.value)}
+              placeholder="場所を入力"
+              className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm flex-1 min-w-[160px]"
+            />
+          )}
+        </div>
+
+        {/* 3. 状況の概要（唯一の必須項目） */}
+        <div className="space-y-1">
+          <span className="block text-xs font-medium text-gray-600">
+            状況の概要（必須）
+          </span>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={4}
+            placeholder="いつ・誰が・何をしようとして・どうなったか を簡潔に。例: 処置の直前に、別の患者様のカルテを参照していることに気づき、一時中断した。"
+            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none"
+          />
+        </div>
+
+        {/* 4. 要因（複数可・「その他」選択時のみ自由記述） */}
+        <fieldset className="space-y-1.5">
+          <legend className="text-xs font-medium text-gray-600">
+            そう思う要因（複数可・推測で構いません）
+          </legend>
+          <div className="flex flex-col gap-1.5">
+            {HIYARI_FACTORS.map((f) => (
+              <label
+                key={f.value}
+                className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={factors.includes(f.value)}
+                  onChange={() => toggleFactor(f.value)}
+                  className="rounded mt-0.5"
+                />
+                <span>
+                  {f.label}
+                  {f.hint && (
+                    <span className="text-xs text-gray-500">（{f.hint}）</span>
+                  )}
+                </span>
+              </label>
+            ))}
+          </div>
+          {factors.includes("other") && (
+            <input
+              type="text"
+              value={factorOther}
+              onChange={(e) => setFactorOther(e.target.value)}
+              placeholder="その他の要因を入力"
+              className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm w-full"
+            />
+          )}
+        </fieldset>
+
+        {/* 5. 影響の程度（注記は指示書122の指定文言そのまま） */}
+        <fieldset className="space-y-1.5">
+          <legend className="text-xs font-medium text-gray-600">
+            影響の程度
+          </legend>
+          <div className="flex flex-col gap-1.5">
+            {HIYARI_LEVELS.map((l) => (
+              <label
+                key={l.value}
+                className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer"
+              >
+                <input
+                  type="radio"
+                  name="hiyari-level"
+                  checked={level === l.value}
+                  onChange={() => setLevel(l.value)}
+                  className="mt-0.5"
+                />
+                <span>
+                  {l.badge} {l.label}＝{l.desc}
+                </span>
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-gray-500">
+            ※実害があった場合（レベル2以上）は、このフォームではなく直接院長へお知らせください。
+          </p>
+        </fieldset>
+
+        {/* 6. 当面の対策・改善案（任意） */}
+        <div className="space-y-1">
+          <span className="block text-xs font-medium text-gray-600">
+            当面の対策・改善案（気づいた点があれば・任意）
+          </span>
+          <textarea
+            value={countermeasure}
+            onChange={(e) => setCountermeasure(e.target.value)}
+            rows={2}
+            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none"
+          />
+        </div>
+
+        {/* 7. 職種（任意・匿名ON中は無効化＝匿名の安全弁。指示書122） */}
+        <div className="flex items-end gap-3 flex-wrap">
+          <label className="text-xs text-gray-600 space-y-1">
+            <span className="block font-medium">職種（任意）</span>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              disabled={anonymous}
+              className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white disabled:opacity-50 disabled:bg-gray-50"
+            >
+              <option value="">未選択</option>
+              {HIYARI_ROLES.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {anonymous && (
+            <span className="text-xs text-gray-500 pb-1.5">
+              匿名のときは職種も保存されません
+            </span>
+          )}
+        </div>
+
+        {/* 8. 匿名チェック＋送信（既存のまま） */}
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-3 flex-wrap">
             <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
@@ -253,6 +488,13 @@ function HiyariReportPageBody() {
                   reactions.profileNames
                 ) ?? "名前未設定")
               : "匿名";
+            // 職種は記名投稿の個票内でのみ表示（匿名は normalize で破棄済み）
+            const roleLabel = p.authorId
+              ? hiyariOptionLabel(HIYARI_ROLES, p.role)
+              : "";
+            const isLong =
+              p.body.length > 120 || p.body.split("\n").length > 3;
+            const expanded = expandedIds.has(p.id);
             return (
               <div
                 key={p.id}
@@ -261,6 +503,11 @@ function HiyariReportPageBody() {
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span className="text-sm font-medium text-gray-800">
                     {authorName}
+                    {roleLabel && (
+                      <span className="font-normal text-gray-500">
+                        （{roleLabel}）
+                      </span>
+                    )}
                   </span>
                   <span className="text-xs text-gray-500">
                     {formatDateTime(p.createdAt)}
@@ -298,9 +545,31 @@ function HiyariReportPageBody() {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
-                    {p.body}
-                  </p>
+                  <div className="space-y-2">
+                    {/* 構造化バッジ（旧形式の投稿は何も出ない=従来どおり） */}
+                    <HiyariBadges report={p} />
+                    <p
+                      className={`text-sm text-gray-800 leading-relaxed whitespace-pre-wrap ${
+                        isLong && !expanded ? "line-clamp-3" : ""
+                      }`}
+                    >
+                      {p.body}
+                    </p>
+                    {isLong && (
+                      <button
+                        type="button"
+                        onClick={() => toggleExpanded(p.id)}
+                        className="text-xs text-teal-700 hover:underline"
+                      >
+                        {expanded ? "▲ たたむ" : "▼ 全文を読む"}
+                      </button>
+                    )}
+                    {p.countermeasure && (
+                      <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap bg-teal-50/60 border border-teal-100 rounded-lg px-3 py-2">
+                        💡 対策案: {p.countermeasure}
+                      </p>
+                    )}
+                  </div>
                 )}
 
                 <div className="flex items-center justify-between gap-2 flex-wrap">

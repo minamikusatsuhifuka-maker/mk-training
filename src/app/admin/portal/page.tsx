@@ -78,10 +78,16 @@ import {
   type KizukiPost,
 } from "@/lib/kizuki";
 import {
+  HIYARI_PLACES,
+  HIYARI_FACTORS,
+  HIYARI_LEVELS,
+  HIYARI_ROLES,
+  hiyariOptionLabel,
   loadHiyariStore,
   saveHiyariStore,
   type HiyariReport,
 } from "@/lib/hiyari-reports";
+import HiyariBadges from "@/components/HiyariBadges";
 import {
   MANUAL_DRAFT_STATUS_META,
   loadManualDraftStore,
@@ -148,6 +154,7 @@ import {
 import {
   LIBRARY_KEY,
   normalizeStore as normalizeLibraryStore,
+  jstTodayYmd,
   type LibraryDoc,
 } from "@/lib/library";
 import {
@@ -242,6 +249,119 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "layout", label: "🧩 レイアウト" },
   { key: "features", label: "⚙ 機能" },
 ];
+
+// ── ヒヤリハット傾向集計（指示書122・チーム全体のみ。個人別・職種別は作らない） ──
+
+type HiyariTrendRow = { label: string; count: number };
+type HiyariTrendRange = "all" | "90d";
+
+// 期間判定の基準日: 発生日（occurredOn）優先・無ければ投稿日時のJST暦日
+function hiyariTrendDate(p: HiyariReport): string {
+  if (p.occurredOn) return p.occurredOn;
+  const d = new Date(p.createdAt);
+  return Number.isNaN(d.getTime()) ? "" : jstTodayYmd(d);
+}
+
+// 論理削除済みは集計から除外。該当フィールドの無い投稿（旧形式含む）は
+// 各軸で「未分類」として件数のみ数える（指示書122）
+function buildHiyariTrend(
+  posts: HiyariReport[],
+  range: HiyariTrendRange
+): {
+  total: number;
+  factors: HiyariTrendRow[];
+  places: HiyariTrendRow[];
+  levels: HiyariTrendRow[];
+} {
+  const alive = posts.filter((p) => !p.deleted);
+  const cutoff =
+    range === "90d"
+      ? jstTodayYmd(new Date(Date.now() - 90 * 24 * 3600 * 1000))
+      : "";
+  const target = cutoff
+    ? alive.filter((p) => hiyariTrendDate(p) >= cutoff)
+    : alive;
+
+  const factorMap = new Map<string, number>();
+  const placeMap = new Map<string, number>();
+  const levelMap = new Map<string, number>();
+  let factorNone = 0;
+  let placeNone = 0;
+  let levelNone = 0;
+  for (const p of target) {
+    if (p.factors && p.factors.length > 0) {
+      // 複数選択はそれぞれの要因に1件ずつ数える
+      for (const f of p.factors) {
+        factorMap.set(f, (factorMap.get(f) ?? 0) + 1);
+      }
+    } else {
+      factorNone++;
+    }
+    if (p.place) placeMap.set(p.place, (placeMap.get(p.place) ?? 0) + 1);
+    else placeNone++;
+    if (p.level) levelMap.set(p.level, (levelMap.get(p.level) ?? 0) + 1);
+    else levelNone++;
+  }
+  const rows = (
+    options: readonly { value: string; label: string }[],
+    map: Map<string, number>,
+    none: number
+  ): HiyariTrendRow[] => [
+    ...options
+      .filter((o) => (map.get(o.value) ?? 0) > 0)
+      .map((o) => ({ label: o.label, count: map.get(o.value) ?? 0 })),
+    ...(none > 0 ? [{ label: "未分類", count: none }] : []),
+  ];
+  return {
+    total: target.length,
+    factors: rows(HIYARI_FACTORS, factorMap, factorNone),
+    places: rows(HIYARI_PLACES, placeMap, placeNone),
+    levels: rows(
+      HIYARI_LEVELS.map((l) => ({
+        value: l.value,
+        label: `${l.badge} ${l.label}`,
+      })),
+      levelMap,
+      levelNone
+    ),
+  };
+}
+
+function HiyariTrendBlock({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: HiyariTrendRow[];
+}) {
+  const max = rows.reduce((m, r) => Math.max(m, r.count), 0);
+  return (
+    <div className="space-y-1.5">
+      <h4 className="text-xs font-semibold text-gray-700">{title}</h4>
+      {rows.length === 0 ? (
+        <p className="text-xs text-gray-400">データなし</p>
+      ) : (
+        rows.map((r) => (
+          <div key={r.label} className="space-y-0.5">
+            <div className="flex items-center justify-between gap-2 text-xs text-gray-700">
+              <span className="truncate">{r.label}</span>
+              <span className="tabular-nums shrink-0">{r.count}件</span>
+            </div>
+            {/* 棒の幅は件数比のためインラインstyle（NewsColumnsのgridTemplateColumnsと同じ流儀） */}
+            <div className="h-1.5 bg-gray-100 rounded">
+              <div
+                className="h-1.5 bg-amber-400 rounded"
+                style={{
+                  width: `${max > 0 ? Math.round((r.count / max) * 100) : 0}%`,
+                }}
+              />
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
 
 const CHARACTER_EMOJIS = [
   "🐈",
@@ -346,6 +466,9 @@ export default function AdminPortalPage() {
   const [busyKizukiId, setBusyKizukiId] = useState<string | null>(null);
   // ヒヤリハット報告（hiyari_reports・指示書106）。既存「気づきシェア」（portal_hiyari）とは別物
   const [hiyariReports, setHiyariReports] = useState<HiyariReport[]>([]);
+  // 傾向集計の期間セグメント（全期間|直近90日・指示書122）
+  const [hiyariTrendRange, setHiyariTrendRange] =
+    useState<HiyariTrendRange>("all");
   const [busyHiyariReportId, setBusyHiyariReportId] = useState<string | null>(
     null
   );
@@ -3022,6 +3145,53 @@ export default function AdminPortalPage() {
             「🚨 ヒヤリハット報告」（/hiyari-report）の一覧です（報告はスタッフ画面から）。
             匿名報告は誰が書いたか記録されていません。削除は非表示化で、ここからいつでも復元できます。
           </p>
+
+          {/* 📊 傾向（チーム全体・指示書122）。個人別・職種別の集計は作らない */}
+          {(() => {
+            const trend = buildHiyariTrend(hiyariReports, hiyariTrendRange);
+            return (
+              <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3 mb-4">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <h3 className="text-sm font-semibold text-gray-800">
+                    📊 傾向（チーム全体）
+                  </h3>
+                  <div className="flex rounded-full border border-gray-200 overflow-hidden text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setHiyariTrendRange("all")}
+                      className={
+                        hiyariTrendRange === "all"
+                          ? "px-3 py-1 bg-teal-600 text-white"
+                          : "px-3 py-1 text-gray-600 hover:bg-gray-50"
+                      }
+                    >
+                      全期間
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHiyariTrendRange("90d")}
+                      className={
+                        hiyariTrendRange === "90d"
+                          ? "px-3 py-1 bg-teal-600 text-white"
+                          : "px-3 py-1 text-gray-600 hover:bg-gray-50"
+                      }
+                    >
+                      直近90日
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500">
+                  対象 {trend.total} 件（削除済みを除く・要因は複数選択をそれぞれ集計）。個人別の集計は表示しません。
+                </p>
+                <div className="grid md:grid-cols-3 gap-4">
+                  <HiyariTrendBlock title="要因別" rows={trend.factors} />
+                  <HiyariTrendBlock title="場所別" rows={trend.places} />
+                  <HiyariTrendBlock title="レベル別" rows={trend.levels} />
+                </div>
+              </div>
+            );
+          })()}
+
           {[...hiyariReports]
             .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
             .map((p) => (
@@ -3037,6 +3207,12 @@ export default function AdminPortalPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-medium text-gray-800">
                       {p.authorId ? p.authorName || "名前未設定" : "匿名"}
+                      {/* 職種は個票内でのみ表示（記名時のみ・集計には使わない） */}
+                      {p.authorId && p.role && (
+                        <span className="font-normal text-gray-500">
+                          （{hiyariOptionLabel(HIYARI_ROLES, p.role)}）
+                        </span>
+                      )}
                     </span>
                     <span className="text-xs text-gray-600">
                       {formatDateTime(p.createdAt)}
@@ -3067,9 +3243,18 @@ export default function AdminPortalPage() {
                     </button>
                   )}
                 </div>
-                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
-                  {p.body}
-                </p>
+                <div className="space-y-2">
+                  {/* 構造化バッジ（旧形式の投稿は何も出ない=従来どおり） */}
+                  <HiyariBadges report={p} />
+                  <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                    {p.body}
+                  </p>
+                  {p.countermeasure && (
+                    <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap bg-teal-50/60 border border-teal-100 rounded-lg px-3 py-2">
+                      💡 対策案: {p.countermeasure}
+                    </p>
+                  )}
+                </div>
               </div>
             ))}
           {hiyariReports.length === 0 && (
