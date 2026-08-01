@@ -4,7 +4,7 @@
 // - 予定の源泉は Google カレンダー（管理はGoogle側で直接・ポータル側に管理UIは作らない）。
 // - 取得は認証付き /api/calendar のみ（今月1日〜翌月末）。表示は2形態:
 //   📋 リスト=今日以降のみ（従来どおり）／🗓 月表示=今月＋翌月の2グリッド（121）。
-//   切替は localStorage "mk_calendar_view" に記憶（102/116の流儀・既定はリスト）。
+//   切替は localStorage "mk_calendar_view" に記憶（102/116の流儀・既定は月表示=指示書125）。
 // - env未設定・接続失敗はスタッフに「準備中」の穏やかな表示。管理者にのみ詳細
 //   （detail はサーバー側 isAdminUser 判定で応答に含まれる。クライアントは有無だけ見る）。
 
@@ -218,15 +218,16 @@ function CalendarPageBody() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [adminDetail, setAdminDetail] = useState("");
   const [reloading, setReloading] = useState(false);
-  // 表示切替（📋 リスト / 🗓 月表示・指示書121）。既定はリスト＝現行と同じ。
+  // 表示切替（📋 リスト / 🗓 月表示・指示書121）。既定は月表示（指示書125）。
+  // 保存済みの選択（mk_calendar_view）があればそれを優先＝既定変更は初回訪問者にのみ効く。
   // localStorage 不可の環境では既定のまま（102/116の流儀）
-  const [view, setView] = useState<"list" | "month">("list");
+  const [view, setView] = useState<"list" | "month">("month");
   const [selectedYmd, setSelectedYmd] = useState<string | null>(null);
 
   useEffect(() => {
     try {
-      if (localStorage.getItem(CALENDAR_VIEW_LS_KEY) === "month") {
-        setView("month");
+      if (localStorage.getItem(CALENDAR_VIEW_LS_KEY) === "list") {
+        setView("list");
       }
     } catch {
       /* 既定のまま */
