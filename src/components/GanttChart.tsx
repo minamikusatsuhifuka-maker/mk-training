@@ -11,6 +11,10 @@ import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { isAdminUser } from "@/lib/admin-role";
 import {
   GanttGoal,
+  GanttHorizon,
+  GANTT_HORIZONS,
+  ganttHorizonMeta,
+  resolveHorizon,
   MONTH_LABELS,
   GANTT_COLOR_OPTIONS,
   GANTT_CATEGORIES,
@@ -104,6 +108,10 @@ function GanttEditModal({
     initial?.achievedState ?? ""
   );
   const [memo, setMemo] = useState(initial?.memo ?? "");
+  // 期間の分類（指示書126）: "" = 自動（horizonOverride を保存しない・既定）
+  const [horizonOverride, setHorizonOverride] = useState<GanttHorizon | "">(
+    initial?.horizonOverride ?? ""
+  );
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const detailState = { purpose, background, significance, achievedState, memo };
@@ -135,6 +143,8 @@ function GanttEditModal({
       significance: trim(significance),
       achievedState: trim(achievedState),
       memo: trim(memo),
+      // 「自動」選択時は horizonOverride を保存しない（指示書126）
+      horizonOverride: horizonOverride || undefined,
     });
   };
 
@@ -234,6 +244,28 @@ function GanttEditModal({
                 </p>
               )}
             </div>
+          </div>
+          {/* 期間の分類（指示書126）: 既定=自動。自動の現在値は入力中の期間に追随 */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">
+              期間の分類
+            </label>
+            <select
+              value={horizonOverride}
+              onChange={(e) =>
+                setHorizonOverride(e.target.value as GanttHorizon | "")
+              }
+              className="w-full rounded-lg border border-gray-100 px-3 py-2 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-teal-200 bg-white"
+            >
+              <option value="">
+                自動（現在: {ganttHorizonMeta(resolveHorizon(start, end)).label}）
+              </option>
+              {GANTT_HORIZONS.map((h) => (
+                <option key={h.value} value={h.value}>
+                  {h.label}
+                </option>
+              ))}
+            </select>
           </div>
           {isEdit && (
             <div>
@@ -504,9 +536,32 @@ export default function GanttChart() {
   );
 
   // 選択年に表示すべき goal をフィルタ
-  const visibleGoals = useMemo(
+  const yearGoals = useMemo(
     () => goals.filter((g) => goalOverlapsYear(g, selectedYear)),
     [goals, selectedYear]
+  );
+
+  // 期間の分類フィルタ（指示書126・既定=すべて）。件数は選択年に表示中の目標に対する数
+  const [horizonFilter, setHorizonFilter] = useState<"all" | GanttHorizon>(
+    "all"
+  );
+  const horizonCounts = useMemo(() => {
+    const counts: Record<GanttHorizon, number> = { short: 0, mid: 0, long: 0 };
+    for (const g of yearGoals) {
+      counts[resolveHorizon(g.start, g.end, g.horizonOverride)]++;
+    }
+    return counts;
+  }, [yearGoals]);
+  const visibleGoals = useMemo(
+    () =>
+      horizonFilter === "all"
+        ? yearGoals
+        : yearGoals.filter(
+            (g) =>
+              resolveHorizon(g.start, g.end, g.horizonOverride) ===
+              horizonFilter
+          ),
+    [yearGoals, horizonFilter]
   );
 
   const persist = useCallback(
@@ -606,6 +661,37 @@ export default function GanttChart() {
         )}
       </div>
 
+      {/* 期間の分類フィルタ（指示書126・年タブの下） */}
+      <div className="flex items-center bg-white/80 backdrop-blur rounded-xl border border-gray-100 p-1 shadow-sm w-fit flex-wrap">
+        <button
+          type="button"
+          onClick={() => setHorizonFilter("all")}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            horizonFilter === "all"
+              ? "bg-teal-500 text-white shadow-sm"
+              : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+          }`}
+        >
+          すべて
+          <span className="ml-1 opacity-70">{yearGoals.length}</span>
+        </button>
+        {GANTT_HORIZONS.map((h) => (
+          <button
+            key={h.value}
+            type="button"
+            onClick={() => setHorizonFilter(h.value)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              horizonFilter === h.value
+                ? "bg-teal-500 text-white shadow-sm"
+                : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            {h.label}
+            <span className="ml-1 opacity-70">{horizonCounts[h.value]}</span>
+          </button>
+        ))}
+      </div>
+
       {/* ガントチャート本体 */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
         {/* ヘッダー */}
@@ -638,8 +724,11 @@ export default function GanttChart() {
         {/* 行 */}
         {visibleGoals.length === 0 && (
           <div className="px-6 py-10 text-center text-sm text-gray-400">
-            {selectedYear}年の目標はまだありません。
-            {isAdmin ? "「目標を追加」から作成しましょう。" : ""}
+            {horizonFilter !== "all" && yearGoals.length > 0
+              ? "この分類の目標はありません。"
+              : `${selectedYear}年の目標はまだありません。${
+                  isAdmin ? "「目標を追加」から作成しましょう。" : ""
+                }`}
           </div>
         )}
         {visibleGoals.map((goal) => {
@@ -662,7 +751,20 @@ export default function GanttChart() {
                   <p className="text-[10px] sm:text-sm font-semibold text-gray-700 truncate">
                     {goal.title}
                   </p>
-                  <div className="flex items-center gap-1 sm:gap-1.5 mt-0.5">
+                  <div className="flex items-center gap-1 sm:gap-1.5 mt-0.5 flex-wrap">
+                    {/* 期間の分類バッジ（指示書126・override ?? 自動判定） */}
+                    {(() => {
+                      const h = ganttHorizonMeta(
+                        resolveHorizon(goal.start, goal.end, goal.horizonOverride)
+                      );
+                      return (
+                        <span
+                          className={`text-[9px] sm:text-[10px] font-medium rounded-full px-1.5 border ${h.badgeClass}`}
+                        >
+                          {h.label}
+                        </span>
+                      );
+                    })()}
                     <span className="text-[9px] sm:text-[10px] text-gray-400">
                       {goal.category}
                     </span>
@@ -834,6 +936,10 @@ export default function GanttChart() {
           <div className="w-0.5 h-5 bg-gray-500" />
           <span className="text-[11px] text-gray-500">今日</span>
         </div>
+        {/* 分類の説明（指示書126の指定文言そのまま） */}
+        <p className="text-[11px] text-gray-400 w-full">
+          分類は期間から自動判定されます（〜6ヶ月=短期・〜3年=中期・それ以上=長期）。編集で手動変更もできます。
+        </p>
       </div>
 
       {/* 全目標一覧モーダル */}

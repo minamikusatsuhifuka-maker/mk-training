@@ -22,6 +22,9 @@ export const PORTAL_GANTT_KEY = "portal_gantt";
 // milestones の month は 0=1月 … 11=12月（task-matrix と同一・概念保持）
 export type Milestone = { year: number; month: number; label: string };
 
+// 期間の分類（指示書126）
+export type GanttHorizon = "short" | "mid" | "long";
+
 export type GanttGoal = {
   id: string;
   title: string;
@@ -37,6 +40,9 @@ export type GanttGoal = {
   significance?: string; // 💡 意義
   achievedState?: string; // 🌟 達成イメージ
   memo?: string; // 📝 自由メモ
+  // 期間の分類の手動上書き（指示書126・任意）。未上書きの目標には保存しない。
+  // 表示分類は常に resolveHorizon(start, end, horizonOverride) で計算する
+  horizonOverride?: GanttHorizon;
 };
 
 export type GanttData = { goals: GanttGoal[]; updatedAt: string };
@@ -176,6 +182,52 @@ export function genGanttId(): string {
   return `gantt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// ─── 期間の分類（指示書126・短期/中期/長期） ───
+
+// 表示メタ（バッジ・フィルタ・編集モーダルで共用）
+export const GANTT_HORIZONS: {
+  value: GanttHorizon;
+  label: string; // 絵文字込みの表示名
+  desc: string;
+  badgeClass: string;
+}[] = [
+  { value: "short", label: "🌱短期", desc: "〜6ヶ月", badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-100" },
+  { value: "mid", label: "🌿中期", desc: "〜3年", badgeClass: "bg-teal-50 text-teal-700 border-teal-100" },
+  { value: "long", label: "🌳長期", desc: "3年超", badgeClass: "bg-amber-50 text-amber-800 border-amber-100" },
+];
+
+export function ganttHorizonMeta(h: GanttHorizon) {
+  return GANTT_HORIZONS.find((x) => x.value === h) ?? GANTT_HORIZONS[1];
+}
+
+// 開始日に n ヶ月加算。月末の繰り上がり（例: 8/31+6ヶ月）は対象月の末日にクランプ
+function addMonthsClamped(d: Date, months: number): Date {
+  const y = d.getFullYear();
+  const m = d.getMonth() + months;
+  const lastDay = new Date(y, m + 1, 0).getDate();
+  return new Date(y, m, Math.min(d.getDate(), lastDay));
+}
+
+// 分類の解決（共有1本・指示書126）: override ?? 期間からの自動判定。
+// 自動判定は「月加算比較方式」: 終了日が 開始+6ヶ月 の日付より前（=期間がちょうど
+// 6ヶ月以内）なら短期、開始+36ヶ月より前なら中期、それ以外（3年超）は長期。
+// 1日でも超えたら次の区分。日付不正時は中期に倒す（表示が壊れない安全網）。
+export function resolveHorizon(
+  start: string,
+  end: string,
+  override?: GanttHorizon
+): GanttHorizon {
+  if (override === "short" || override === "mid" || override === "long") {
+    return override;
+  }
+  const s = parseYmd(start);
+  const e = parseYmd(end) ?? s;
+  if (!s || !e) return "mid";
+  if (e.getTime() < addMonthsClamped(s, 6).getTime()) return "short";
+  if (e.getTime() < addMonthsClamped(s, 36).getTime()) return "mid";
+  return "long";
+}
+
 // 「今日が期間内」の判定（ホーム要約・進行中の目標に使う）。日単位・終了日を含む。
 export function isGoalActive(goal: GanttGoal, now: Date = new Date()): boolean {
   const todayMid = new Date(
@@ -278,6 +330,14 @@ function normalizeGoals(raw: unknown): GanttGoal[] {
       significance: optStr(g.significance),
       achievedState: optStr(g.achievedState),
       memo: optStr(g.memo),
+      // 上書き値はホワイトリスト検証して素通し（保存経路は全件正規化→丸ごと保存の
+      // ため、ここで通さないと次の保存で上書きが消える・指示書126）
+      horizonOverride:
+        g.horizonOverride === "short" ||
+        g.horizonOverride === "mid" ||
+        g.horizonOverride === "long"
+          ? g.horizonOverride
+          : undefined,
     });
   }
   return out;
