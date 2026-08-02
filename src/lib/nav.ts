@@ -55,6 +55,9 @@ export const MASTER_ITEMS: MasterItem[] = [
   },
 
   { key: "/philosophy", href: "/philosophy", label: "🏛️ 理念・院長の想い", featureId: "page_philosophy", categoryId: "philosophy" },
+  // 人事制度ポータル（指示書116）。理念→その実装としての制度の導線（院長決定）。
+  // サブページ（/hr/*）は各ページの FeatureGate が直URLをガードする
+  { key: "/hr", href: "/hr", label: "🧭 人事制度ポータル", featureId: "hr_portal", categoryId: "philosophy" },
 
   { key: "/knowledge", href: "/knowledge", label: "🏛️ 組織知識ベース", featureId: "group_medical", categoryId: "medical" },
   { key: "/diseases", href: "/diseases", label: "疾患", featureId: "group_medical", categoryId: "medical" },

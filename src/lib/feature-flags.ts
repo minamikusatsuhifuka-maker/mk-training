@@ -23,6 +23,7 @@ export const FEATURE_IDS = [
   "one_on_one",
   "onboarding",
   "calendar",
+  "hr_portal", // 人事制度ポータル（指示書116・Phase 5）
 ] as const;
 export type FeatureId = (typeof FEATURE_IDS)[number];
 
@@ -72,6 +73,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   one_on_one: false,
   onboarding: false,
   calendar: false,
+  hr_portal: false, // 初期OFF（院長検証→ONでスタッフ公開・指示書116）
   page_members: true,
   page_philosophy: true,
   group_medical: true,
@@ -94,7 +96,7 @@ export type FeatureMeta = {
   id: FeatureId;
   label: string;
   description: string;
-  phase: 1 | 2 | 3 | 4;
+  phase: 1 | 2 | 3 | 4 | 5;
 };
 
 export const FEATURE_META: FeatureMeta[] = [
@@ -108,6 +110,7 @@ export const FEATURE_META: FeatureMeta[] = [
   { id: "one_on_one", label: "1on1ノート", description: "伴走の対話を記録する場", phase: 3 },
   { id: "onboarding", label: "オンボーディング", description: "新しい仲間の最初の道しるべ", phase: 4 },
   { id: "calendar", label: "院内カレンダー", description: "勉強会・イベントの予定共有", phase: 4 },
+  { id: "hr_portal", label: "人事制度ポータル", description: "等級・評価・給与・ステージ移行の閲覧とFAQ・検索", phase: 5 },
 ];
 
 // 実装済み機能の集合。各フェーズの実装指示書でIDを追加していく。
@@ -123,6 +126,7 @@ export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
   "one_on_one", // 指示書112: 1on1ノート（/one-on-one・本人＋ペア＋管理者のみ・サーバー側判定）
   "onboarding", // 指示書113: オンボーディングチェックリスト（/onboarding・テンプレ公開＋進捗private）
   "calendar", // 指示書114: 院内カレンダー（/calendar・Google Calendar REST直叩き）— これで10機能すべて実装済み
+  "hr_portal", // 指示書116: 人事制度ポータル（/hr 配下6ページ・静的コンテンツ＋検索）
 ]);
 
 // ページの公開設定の管理UI用メタ（指示書124・「📄 ページの公開設定」セクション）
