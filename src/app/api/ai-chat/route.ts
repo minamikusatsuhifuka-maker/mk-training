@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildFullKnowledgeContext } from "@/lib/knowledge-server";
 import { getAiBackgroundBlock } from "@/lib/ai-background";
 import { callAI } from "@/lib/ai-provider";
+import { getFeatureFlags } from "@/lib/feature-flags";
+import { buildHrChatKnowledge } from "@/lib/hr-chat-knowledge";
 
 export const maxDuration = 60;
 
@@ -58,7 +60,18 @@ export async function POST(req: NextRequest) {
   // 理念 + 追加ドキュメント（Supabase）を結合してフルプロンプトを構築
   const knowledgeContext = await buildFullKnowledgeContext();
   const bgBlock = await getAiBackgroundBlock();
-  const systemPrompt = bgBlock + baseSystemPrompt + knowledgeContext;
+
+  // 指示書129: 人事制度ポータル公開中（hr_portal ON）のみ人事制度知識・定型・/hrリンクを注入。
+  // OFF・取得失敗時は一切注入しない（fail-close・従来どおりの応答）
+  let hrBlock = "";
+  try {
+    const flags = await getFeatureFlags();
+    if (flags.hr_portal) hrBlock = buildHrChatKnowledge();
+  } catch {
+    /* 注入なしのまま */
+  }
+
+  const systemPrompt = bgBlock + baseSystemPrompt + knowledgeContext + hrBlock;
 
   const result = await callAI({
     system: systemPrompt,

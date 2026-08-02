@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { usePageTitle } from "@/lib/use-nav";
+import { useFeatureFlags } from "@/lib/use-feature-flags";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,12 +24,24 @@ const quickQuestions = [
   "イブグリースは何歳から使える？",
 ];
 
+// 人事制度のクイック質問（指示書129・hr_portal ON時のみ表示＝OFF時は知識未注入のため出さない）
+const hrQuickQuestions = [
+  "G2からG3に上がるには何が必要？",
+  "給与はどう上がりますか？",
+  "この制度はいつできましたか？",
+];
+
 export default function AiChatPage() {
   const pageTitle = usePageTitle("/ai-chat", "🤖 医療AIアシスタント");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // 人事制度クイック質問の表示判定（指示書129・OFF時は非表示）
+  const { flags } = useFeatureFlags();
+  const visibleQuickQuestions = flags.hr_portal
+    ? [...quickQuestions, ...hrQuickQuestions]
+    : quickQuestions;
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -172,7 +185,7 @@ export default function AiChatPage() {
           よくある質問
         </p>
         <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap scrollbar-hide">
-          {quickQuestions.map((q) => (
+          {visibleQuickQuestions.map((q) => (
             <button
               key={q}
               onClick={() => sendMessage(q)}
