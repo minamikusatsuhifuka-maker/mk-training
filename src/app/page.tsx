@@ -597,7 +597,8 @@ export default function PortalHome() {
           <h2 className="text-xs font-medium text-gray-800 uppercase tracking-wider">
             新着情報
           </h2>
-          <div className="flex items-center gap-2">
+          {/* 130: 投稿導線の視認性向上（ボタン拡大+最濃階調+影）。flex-wrapは375pxはみ出し防止 */}
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-gray-600">
               {news.length}件表示中
             </span>
@@ -605,7 +606,7 @@ export default function PortalHome() {
             <button
               type="button"
               onClick={openNewsForm}
-              className="text-xs px-2.5 py-1 rounded-full bg-teal-600 text-white hover:bg-teal-700 transition-colors"
+              className="text-sm font-medium px-4 py-2 rounded-full bg-teal-700 text-white shadow-md hover:bg-teal-800 hover:shadow-lg transition-colors"
             >
               ＋ お知らせを共有
             </button>
