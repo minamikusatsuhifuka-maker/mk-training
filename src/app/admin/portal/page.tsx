@@ -400,6 +400,13 @@ const CHARACTER_EMOJIS = [
   "🦋",
   "🐝",
   "🐙",
+  // 133-A: かわいい系の追加6種（🐻‍❄️しろくまはZWJ合字の分解表示リスク回避のため🦝に置換・委任判断）
+  "🐨",
+  "🐥",
+  "🐷",
+  "🦦",
+  "🦭",
+  "🦝",
 ];
 
 const CHARACTER_SVGS: { type: CharacterSvgType; label: string }[] = [
