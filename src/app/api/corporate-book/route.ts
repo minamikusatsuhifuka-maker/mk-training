@@ -1,23 +1,21 @@
-// コーポレートブックPDFの認証付き配信（131-補）
-// - 実体は public ではなく private/corporate-design-book.pdf（リポジトリ内・CDN直配信されない）。
-//   Vercel Functions へのバンドルは next.config.ts の outputFileTracingIncludes で保証。
-// - ログイン済みスタッフのみ配信（未ログイン401）。?download=1 で添付ダウンロード。
-// - 改訂時は private/ のPDFを差し替える1コミットのみ（版管理・指示書131の原則を維持）。
+// コーポレートブックのページ画像配信（131-補2・閲覧専用化）
+// - PDFファイルは一切配信しない（131-補のPDF配信・?download=1 は廃止）。
+//   実体は private/corporate-book-pages/page-001..053.jpg（事前生成・
+//   scripts/generate-corporate-book-pages.js で再生成）。
+// - ログイン済みスタッフのみ（未ログイン401＝画像URL直叩きにも認証が効く）。
+// - キャッシュは private（本人ブラウザのみ1時間）。CDN・共有キャッシュには載せない。
+// - 改訂手順: private/のPDF差し替え → 生成スクリプト実行 → 生成物コミット（版管理）。
 
 import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
 import { getSessionUser } from "@/lib/staff-profiles-server";
+import { CORPORATE_BOOK_PAGE_COUNT } from "@/lib/corporate-book";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-const PDF_FILE = path.join(
-  process.cwd(),
-  "private",
-  "corporate-design-book.pdf"
-);
-const DOWNLOAD_NAME = "コーポレートデザインブック_2026年7月版.pdf";
+const PAGES_DIR = path.join(process.cwd(), "private", "corporate-book-pages");
 
 export async function GET(req: NextRequest) {
   const { user } = await getSessionUser();
@@ -28,23 +26,35 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  const pageParam = new URL(req.url).searchParams.get("page");
+  const page = Number(pageParam);
+  if (
+    !Number.isInteger(page) ||
+    page < 1 ||
+    page > CORPORATE_BOOK_PAGE_COUNT
+  ) {
+    return NextResponse.json(
+      { error: `page は 1〜${CORPORATE_BOOK_PAGE_COUNT} で指定してください` },
+      { status: 400 }
+    );
+  }
+
   try {
-    const buf = await fs.readFile(PDF_FILE);
-    const download =
-      new URL(req.url).searchParams.get("download") === "1";
+    const file = path.join(
+      PAGES_DIR,
+      `page-${String(page).padStart(3, "0")}.jpg`
+    );
+    const buf = await fs.readFile(file);
     return new NextResponse(new Uint8Array(buf), {
       headers: {
-        "Content-Type": "application/pdf",
-        // 認証付き配信のためCDN・共有キャッシュに載せない
-        "Cache-Control": "private, no-store",
-        "Content-Disposition": download
-          ? `attachment; filename*=UTF-8''${encodeURIComponent(DOWNLOAD_NAME)}`
-          : "inline",
+        "Content-Type": "image/jpeg",
+        // 認証付き配信: 本人ブラウザのみ1時間（ページ送りの再表示を高速化）
+        "Cache-Control": "private, max-age=3600",
       },
     });
   } catch {
     return NextResponse.json(
-      { error: "PDFの読み込みに失敗しました" },
+      { error: "ページ画像の読み込みに失敗しました" },
       { status: 500 }
     );
   }

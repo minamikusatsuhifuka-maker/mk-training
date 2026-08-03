@@ -1,68 +1,131 @@
 "use client";
 
-// 📕 コーポレートブック閲覧（指示書131・公開スイッチ page_corporate_book=公開型・既定ON）
-// - 実体はリポジトリ内の public/corporate-design-book.pdf の1ファイルのみ。
-//   資料庫側はリンク型カード（本ページへのリンク）＝二重アップロードなし。
-//   改訂時はこのPDFファイルを差し替える1コミットで両導線が更新される（版管理・指示書131）。
-// - 表示方式（STEP0承認・c案）: iOS SafariのPDFインライン表示制約（iframeは1ページ目のみ）を
-//   回避するため、md以上=iframe埋め込みプレビュー／モバイル=新タブで開く大ボタンに出し分け。
-// - 直URLガードは PageAccessGate（124基盤・page系フラグ）が担当。
-// - 131-補: PDF実体は認証付きAPI（/api/corporate-book・ログイン必須）経由でのみ配信。
+// 📕 コーポレートブック 閲覧専用ビューア（131-補2）
+// - PDFは一切配信しない（ファイル持ち出し経路の遮断が目的・スクショは原理的に防止不可=承認済み前提）。
+//   各ページは認証付きAPI /api/corporate-book?page=n（ログイン必須）から画像で取得する。
+// - ページ送り: 前後ボタン＋スワイプ＋キーボード←→。タップで拡大トグル・モバイルはピンチも可。
+// - 前後1ページを先読みして体感速度を確保。版管理表記は lib/corporate-book.ts の定数から。
+// - 直URLガードは PageAccessGate（page_corporate_book・公開型既定ON）が担当。
 
+import { useState, useEffect, useCallback, useRef } from "react";
 import NavPageHeader from "@/components/NavPageHeader";
+import {
+  CORPORATE_BOOK_PAGE_COUNT,
+  CORPORATE_BOOK_VERSION,
+  CORPORATE_BOOK_API,
+} from "@/lib/corporate-book";
 
-const PDF_PATH = "/api/corporate-book";
-const PDF_VERSION = "2026年7月版";
+const pageSrc = (n: number) => `${CORPORATE_BOOK_API}?page=${n}`;
 
 export default function CorporateBookPage() {
+  const [page, setPage] = useState(1);
+  const [zoomed, setZoomed] = useState(false);
+  const touchStartX = useRef<number | null>(null);
+
+  const go = useCallback((delta: number) => {
+    setPage((p) =>
+      Math.min(CORPORATE_BOOK_PAGE_COUNT, Math.max(1, p + delta))
+    );
+    setZoomed(false);
+  }, []);
+
+  // キーボード ←→ でページ送り
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") go(-1);
+      if (e.key === "ArrowRight") go(1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [go]);
+
+  // 前後1ページの先読み
+  useEffect(() => {
+    [page - 1, page + 1]
+      .filter((n) => n >= 1 && n <= CORPORATE_BOOK_PAGE_COUNT)
+      .forEach((n) => {
+        const img = new Image();
+        img.src = pageSrc(n);
+      });
+  }, [page]);
+
+  // スワイプでページ送り（横方向のみ・50px以上）
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0]?.clientX ?? null;
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || zoomed) return;
+    const dx = (e.changedTouches[0]?.clientX ?? 0) - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(dx) < 50) return;
+    go(dx < 0 ? 1 : -1);
+  };
+
+  const pager = (
+    <div className="flex items-center justify-center gap-3">
+      <button
+        type="button"
+        onClick={() => go(-1)}
+        disabled={page === 1}
+        className="text-sm px-4 py-2 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+      >
+        ← 前へ
+      </button>
+      <span className="text-sm text-gray-600 tabular-nums min-w-[64px] text-center">
+        {page} / {CORPORATE_BOOK_PAGE_COUNT}
+      </span>
+      <button
+        type="button"
+        onClick={() => go(1)}
+        disabled={page === CORPORATE_BOOK_PAGE_COUNT}
+        className="text-sm px-4 py-2 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+      >
+        次へ →
+      </button>
+    </div>
+  );
+
   return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6">
+    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-4">
       <NavPageHeader
         navKey="/corporate-book"
         title="📕 コーポレートブック"
-        description={`Corporate Design Book（${PDF_VERSION}）`}
+        description={`Corporate Design Book（${CORPORATE_BOOK_VERSION}・全${CORPORATE_BOOK_PAGE_COUNT}ページ）`}
       />
 
-      {/* 紹介文（STEP0提案のまま）＋版表記 */}
-      <div className="space-y-2">
-        <p className="text-sm text-gray-600 leading-relaxed bg-teal-50/60 border border-teal-100 rounded-xl px-4 py-3">
-          当院の理念・ビジョン・人事制度のすべてがまとまった一冊です。困ったとき・迷ったときは、いつでもここに戻ってきてください。
-        </p>
-        <p className="text-xs text-gray-500 px-1">
-          {PDF_VERSION}（全53ページ）。内容は毎年ブラッシュアップされます。
-        </p>
-      </div>
-
-      {/* 操作ボタン（全幅共通）。ダウンロードは同一オリジンのため download 属性が有効 */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <a
-          href={PDF_PATH}
-          target="_blank"
-          rel="noreferrer"
-          className="text-sm font-medium px-5 py-3 rounded-full bg-teal-700 text-white shadow-md hover:bg-teal-800 hover:shadow-lg transition-colors"
-        >
-          📖 ブックを開く（新しいタブ）
-        </a>
-        <a
-          href={`${PDF_PATH}?download=1`}
-          className="text-sm px-4 py-3 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50"
-        >
-          ⬇️ ダウンロード
-        </a>
-      </div>
-
-      {/* モバイル向けの案内（埋め込みはmd以上のみ） */}
-      <p className="md:hidden text-xs text-gray-500 leading-relaxed">
-        スマートフォンでは「📖 ブックを開く」から全ページをご覧いただけます（ピンチで拡大できます）。
+      <p className="text-sm text-gray-600 leading-relaxed bg-teal-50/60 border border-teal-100 rounded-xl px-4 py-3">
+        当院の理念・ビジョン・人事制度のすべてがまとまった一冊です。困ったとき・迷ったときは、いつでもここに戻ってきてください。
       </p>
 
-      {/* 埋め込みプレビュー（md以上のみ・iOS Safariのiframe制約回避のためモバイルでは出さない） */}
-      <iframe
-        src={PDF_PATH}
-        title={`Corporate Design Book ${PDF_VERSION}`}
-        className="hidden md:block w-full rounded-xl border border-gray-200 bg-white"
-        style={{ height: "75vh" }}
-      />
+      {pager}
+
+      {/* ページ画像（タップで拡大トグル・スワイプでページ送り・ピンチも可） */}
+      <div
+        className={`bg-white border border-gray-200 rounded-xl p-2 ${
+          zoomed ? "overflow-auto" : "overflow-hidden"
+        }`}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={pageSrc(page)}
+          alt={`コーポレートデザインブック ${page}ページ`}
+          onClick={() => setZoomed((z) => !z)}
+          className={`select-none mx-auto rounded ${
+            zoomed
+              ? "max-w-none w-[170%] cursor-zoom-out"
+              : "w-full cursor-zoom-in"
+          }`}
+          draggable={false}
+        />
+      </div>
+
+      {pager}
+
+      <p className="text-[11px] text-gray-400 text-center">
+        {CORPORATE_BOOK_VERSION}。内容は毎年ブラッシュアップされます。
+      </p>
     </div>
   );
 }
