@@ -7,12 +7,12 @@
 // - 表示方式（STEP0承認・c案）: iOS SafariのPDFインライン表示制約（iframeは1ページ目のみ）を
 //   回避するため、md以上=iframe埋め込みプレビュー／モバイル=新タブで開く大ボタンに出し分け。
 // - 直URLガードは PageAccessGate（124基盤・page系フラグ）が担当。
+// - 131-補: PDF実体は認証付きAPI（/api/corporate-book・ログイン必須）経由でのみ配信。
 
 import NavPageHeader from "@/components/NavPageHeader";
 
-const PDF_PATH = "/corporate-design-book.pdf";
+const PDF_PATH = "/api/corporate-book";
 const PDF_VERSION = "2026年7月版";
-const DOWNLOAD_NAME = "コーポレートデザインブック_2026年7月版.pdf";
 
 export default function CorporateBookPage() {
   return (
@@ -44,8 +44,7 @@ export default function CorporateBookPage() {
           📖 ブックを開く（新しいタブ）
         </a>
         <a
-          href={PDF_PATH}
-          download={DOWNLOAD_NAME}
+          href={`${PDF_PATH}?download=1`}
           className="text-sm px-4 py-3 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50"
         >
           ⬇️ ダウンロード
