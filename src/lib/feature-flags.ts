@@ -35,6 +35,7 @@ export type FeatureId = (typeof FEATURE_IDS)[number];
 export const PAGE_FLAG_IDS = [
   "page_members",
   "page_philosophy",
+  "page_corporate_book", // コーポレートブック閲覧（指示書131・理念系=初日公開想定）
   "group_medical",
   "group_beauty",
   "page_tasks",
@@ -78,6 +79,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   events: false, // 初期OFF（解禁型・指示書132）
   page_members: true,
   page_philosophy: true,
+  page_corporate_book: true,
   group_medical: true,
   group_beauty: true,
   page_tasks: true,
@@ -143,6 +145,7 @@ export type PageFlagMeta = {
 export const PAGE_FLAG_META: PageFlagMeta[] = [
   { id: "page_members", label: "👥 メンバー紹介", description: "/members を公開します。" },
   { id: "page_philosophy", label: "🏛️ 理念・院長の想い", description: "/philosophy を公開します。" },
+  { id: "page_corporate_book", label: "📕 コーポレートブック", description: "/corporate-book（Corporate Design Book の閲覧）を公開します。" },
   { id: "group_medical", label: "📚 医療知識（グループ）", description: "組織知識ベース・疾患・薬剤・禁忌・妊娠授乳・相互作用・生物学的製剤・年齢注意の8ページをまとめて公開します。" },
   { id: "group_beauty", label: "💄 美容知識（グループ）", description: "美容メニュー・スキンケア・カウンセリングガイドの3ページをまとめて公開します。" },
   { id: "page_tasks", label: "📋 みんなのタスク", description: "/tasks（タスク履歴含む）を公開します。" },

@@ -14,7 +14,8 @@ export const LIBRARY_LOG_MAX = 200;
 // staff-photos バケット内のパス接頭辞（バケット自体は既存の public バケットを再利用）
 export const LIBRARY_PATH_PREFIX = "library";
 
-// カテゴリ（コード固定・順序固定。「マニュアル」は指示書101、「院内採用製品」「カウンセリング」は指示書115で追加）
+// カテゴリ（コード固定・順序固定。「マニュアル」は指示書101、「院内採用製品」「カウンセリング」は
+// 指示書115、「理念・制度」は指示書131で追加=CDB・就業規則・人事制度資料などの置き場）
 export const LIBRARY_CATEGORIES = [
   "同意書",
   "施術説明",
@@ -23,6 +24,7 @@ export const LIBRARY_CATEGORIES = [
   "マニュアル",
   "院内採用製品",
   "カウンセリング",
+  "理念・制度",
   "その他",
 ] as const;
 export type LibraryCategory = (typeof LIBRARY_CATEGORIES)[number];

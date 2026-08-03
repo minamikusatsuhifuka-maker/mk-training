@@ -55,6 +55,8 @@ export const MASTER_ITEMS: MasterItem[] = [
   },
 
   { key: "/philosophy", href: "/philosophy", label: "🏛️ 理念・院長の想い", featureId: "page_philosophy", categoryId: "philosophy" },
+  // コーポレートブック閲覧（指示書131・理念浸透の中核文書。実体は public/corporate-design-book.pdf）
+  { key: "/corporate-book", href: "/corporate-book", label: "📕 コーポレートブック", featureId: "page_corporate_book", categoryId: "philosophy" },
   // 人事制度ポータル（指示書116）。理念→その実装としての制度の導線（院長決定）。
   // サブページ（/hr/*）は各ページの FeatureGate が直URLをガードする
   { key: "/hr", href: "/hr", label: "🧭 人事制度ポータル", featureId: "hr_portal", categoryId: "philosophy" },
