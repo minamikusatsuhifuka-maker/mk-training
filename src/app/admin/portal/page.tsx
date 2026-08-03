@@ -57,6 +57,13 @@ import {
 import { CharacterSVG } from "@/components/CharacterNotification";
 import { SectionLayoutEditor } from "@/components/admin/SectionLayoutEditor";
 import {
+  useBulkSelection,
+  bulkConfirmMessage,
+  BulkCheckbox,
+  BulkSelectAllButton,
+  BulkActionBar,
+} from "@/components/admin/BulkSelection";
+import {
   DEFAULT_PORTAL_FEATURES,
   PORTAL_FEATURE_META,
   loadPortalFeatures,
@@ -454,6 +461,15 @@ function defaultNoticeLocal(days: number): string {
 
 export default function AdminPortalPage() {
   const [tab, setTab] = useState<TabKey>("news");
+
+  // 一括選択・一括削除（指示書128・共通部品1本を全対象タブで使用）
+  const bulk = useBulkSelection();
+  const [bulkBusy, setBulkBusy] = useState(false);
+  // タブ切替で選択を必ずリセット（持ち越さない）
+  const bulkClear = bulk.clear;
+  useEffect(() => {
+    bulkClear();
+  }, [tab, bulkClear]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -1997,6 +2013,224 @@ export default function AdminPortalPage() {
   };
 
   // ─────────────────────────────────────
+  // 一括削除（指示書128）
+  // - n件を必ず「1回の保存」にまとめる（共有履歴のみ現行/アーカイブの2群で最大2回）。
+  // - 削除の意味は各タブの現行挙動を踏襲（論理削除タブは復元可のまま・完全削除タブは不可逆）。
+  // - store系は現行の単発ハンドラと同じく、保存直前に最新storeを再取得してから反映。
+  // ─────────────────────────────────────
+
+  // アーカイブ完全削除時のリアクション後始末（n件まとめて1回保存）
+  const cleanupReactionsBulk = async (ids: string[]) => {
+    try {
+      const rx = await loadNewsReactions();
+      const nextRx = { ...rx };
+      let changed = false;
+      for (const id of ids) {
+        if (nextRx[id]) {
+          delete nextRx[id];
+          changed = true;
+        }
+      }
+      if (changed && (await saveNewsReactions(nextRx))) setNewsReactions(nextRx);
+    } catch {
+      // 後始末失敗は無視（現行の単発完全削除と同じ扱い・削除自体は成立）
+    }
+  };
+
+  const runBulkDelete = async () => {
+    const idSet = new Set(bulk.selected);
+    const n = idSet.size;
+    if (n === 0 || bulkBusy) return;
+
+    const finish = (ok: boolean, okMsg: string) => {
+      if (ok) {
+        bulk.clear();
+        flash(okMsg);
+      } else {
+        flash("⚠ 一括削除に失敗しました");
+      }
+    };
+    const stamp = () => new Date().toISOString();
+
+    setBulkBusy(true);
+    try {
+      switch (tab) {
+        case "news": {
+          if (!confirm(bulkConfirmMessage(n, "hard"))) return;
+          const targets = news.filter((x) => idSet.has(x.id));
+          const next = news.filter((x) => !idSet.has(x.id));
+          const ok = await savePortalItems(PORTAL_KEYS.news, next);
+          if (ok) {
+            setNews(next);
+            // 共有ログは集約1エントリ（n回書き込みしない・指示書128）
+            await trackNewsLog({
+              action: "delete",
+              newsId: targets[0]?.id ?? "",
+              newsTitle: `一括削除（${n}件）`,
+              actor: actorName,
+              source: "admin",
+              detail: `対象: ${targets.map((t) => t.title).join("／")}`,
+            });
+          }
+          finish(ok, `🗑️ ${n}件を削除しました`);
+          break;
+        }
+        case "archive": {
+          if (!confirm(bulkConfirmMessage(n, "hard"))) return;
+          const targets = newsArchive.filter((x) => idSet.has(x.id));
+          const next = newsArchive.filter((x) => !idSet.has(x.id));
+          const ok = await savePortalItems(PORTAL_KEYS.newsArchive, next);
+          if (ok) {
+            setNewsArchive(next);
+            await cleanupReactionsBulk(targets.map((t) => t.id));
+            await trackNewsLog({
+              action: "delete",
+              newsId: targets[0]?.id ?? "",
+              newsTitle: `一括削除（${n}件）`,
+              actor: actorName,
+              source: "admin",
+              detail: `アーカイブから一括完全削除: ${targets.map((t) => t.title).join("／")}`,
+            });
+          }
+          finish(ok, `🗑️ ${n}件を完全に削除しました`);
+          break;
+        }
+        case "history": {
+          // 横断ビュー: 現行=削除／アーカイブ=完全削除 の2群に分けて各キー1回保存
+          const currentTargets = news.filter((x) => idSet.has(x.id));
+          const archiveTargets = newsArchive.filter((x) => idSet.has(x.id));
+          const cN = currentTargets.length;
+          const aN = archiveTargets.length;
+          const msg =
+            cN > 0 && aN > 0
+              ? `現行 ${cN}件 を削除・アーカイブ ${aN}件 を⚠️完全削除します。よろしいですか？（アーカイブ分は復元できません）`
+              : aN > 0
+                ? bulkConfirmMessage(aN, "hard")
+                : bulkConfirmMessage(cN, "hard");
+          if (!confirm(msg)) return;
+          let ok = true;
+          if (cN > 0) {
+            const nextNews = news.filter((x) => !idSet.has(x.id));
+            ok = (await savePortalItems(PORTAL_KEYS.news, nextNews)) && ok;
+            if (ok) setNews(nextNews);
+          }
+          if (ok && aN > 0) {
+            const nextArchive = newsArchive.filter((x) => !idSet.has(x.id));
+            ok =
+              (await savePortalItems(PORTAL_KEYS.newsArchive, nextArchive)) &&
+              ok;
+            if (ok) {
+              setNewsArchive(nextArchive);
+              await cleanupReactionsBulk(archiveTargets.map((t) => t.id));
+            }
+          }
+          if (ok) {
+            await trackNewsLog({
+              action: "delete",
+              newsId: (currentTargets[0] ?? archiveTargets[0])?.id ?? "",
+              newsTitle: `一括削除（${n}件）`,
+              actor: actorName,
+              source: "admin",
+              detail: `現行${cN}件・アーカイブ完全削除${aN}件: ${[...currentTargets, ...archiveTargets].map((t) => t.title).join("／")}`,
+            });
+          }
+          finish(ok, `🗑️ ${n}件を削除しました`);
+          break;
+        }
+        case "hiyari": {
+          if (!confirm(bulkConfirmMessage(n, "hard"))) return;
+          const next = hiyari.filter((h) => !idSet.has(h.id));
+          const ok = await savePortalItems(PORTAL_KEYS.hiyari, next);
+          if (ok) setHiyari(next);
+          finish(ok, `🗑️ ${n}件を削除しました`);
+          break;
+        }
+        case "thankyou": {
+          if (!confirm(bulkConfirmMessage(n, "logical"))) return;
+          const next = thankyou.map((t) =>
+            idSet.has(t.id) ? { ...t, deleted: true } : t
+          );
+          const ok = await savePortalItems(PORTAL_KEYS.thankyou, next);
+          if (ok) setThankyou(next);
+          finish(ok, `🗑️ ${n}件を削除しました（復元できます）`);
+          break;
+        }
+        case "kizuki": {
+          if (!confirm(bulkConfirmMessage(n, "logical"))) return;
+          const store = await loadKizukiStore().catch(() => null);
+          const base = store ? store.posts : kizukiPosts;
+          const next = base.map((p) =>
+            idSet.has(p.id) ? { ...p, deleted: true, updatedAt: stamp() } : p
+          );
+          const ok = await saveKizukiStore(next);
+          if (ok) setKizukiPosts(next);
+          finish(ok, `🗑️ ${n}件を削除しました（復元できます）`);
+          break;
+        }
+        case "hiyariReport": {
+          if (!confirm(bulkConfirmMessage(n, "logical"))) return;
+          const store = await loadHiyariStore().catch(() => null);
+          const base = store ? store.posts : hiyariReports;
+          const next = base.map((p) =>
+            idSet.has(p.id) ? { ...p, deleted: true, updatedAt: stamp() } : p
+          );
+          const ok = await saveHiyariStore(next);
+          if (ok) setHiyariReports(next);
+          finish(ok, `🗑️ ${n}件を削除しました（復元できます）`);
+          break;
+        }
+        case "manualDraft": {
+          if (!confirm(bulkConfirmMessage(n, "logical"))) return;
+          const store = await loadManualDraftStore().catch(() => null);
+          const base = store ? store.posts : manualDrafts;
+          const next = base.map((p) =>
+            idSet.has(p.id) ? { ...p, deleted: true, updatedAt: stamp() } : p
+          );
+          const ok = await saveManualDraftStore(next);
+          if (ok) setManualDrafts(next);
+          finish(ok, `🗑️ ${n}件を削除しました（復元できます）`);
+          break;
+        }
+        case "chorei": {
+          if (!confirm(bulkConfirmMessage(n, "logical"))) return;
+          // 当番ポインタは巻き戻さない（現行の単発削除と同じ・rotationはそのまま）
+          const data = await loadChoreiData().catch(() => null);
+          const base = data ?? { rotation: choreiRotation, posts: choreiPosts };
+          const nextPosts = base.posts.map((p) =>
+            idSet.has(p.id) ? { ...p, deleted: true, updatedAt: stamp() } : p
+          );
+          const ok = await saveChoreiData({
+            rotation: base.rotation,
+            posts: nextPosts,
+          });
+          if (ok) {
+            setChoreiRotation(base.rotation);
+            setChoreiPosts(nextPosts);
+          }
+          finish(ok, `🗑️ ${n}件を削除しました（復元できます）`);
+          break;
+        }
+        case "benkyokai": {
+          if (!confirm(bulkConfirmMessage(n, "logical"))) return;
+          const store = await loadBenkyokaiStore().catch(() => null);
+          const base = store ? store.posts : benkyokaiPosts;
+          const next = base.map((p) =>
+            idSet.has(p.id) ? { ...p, deleted: true, updatedAt: stamp() } : p
+          );
+          const ok = await saveBenkyokaiStore(next);
+          if (ok) setBenkyokaiPosts(next);
+          finish(ok, `🗑️ ${n}件を削除しました（復元できます）`);
+          break;
+        }
+        default:
+          break;
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  // ─────────────────────────────────────
   // 経営方針
   // ─────────────────────────────────────
   const resetPolicyForm = () => {
@@ -2370,9 +2604,13 @@ export default function AdminPortalPage() {
 
           {/* 一覧 */}
           <div className="space-y-2">
-            <h2 className="text-base font-semibold text-gray-800">
-              一覧（{news.length}件）
-            </h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-base font-semibold text-gray-800">
+                一覧（{news.length}件）
+              </h2>
+              {/* 128: 一括選択 */}
+              <BulkSelectAllButton ids={news.map((x) => x.id)} ctl={bulk} />
+            </div>
             {news.map((n) => (
               <div
                 key={n.id}
@@ -2381,6 +2619,7 @@ export default function AdminPortalPage() {
                 }`}
               >
                 <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <BulkCheckbox id={n.id} ctl={bulk} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-medium text-gray-900">
@@ -2501,9 +2740,16 @@ export default function AdminPortalPage() {
           <p className="text-sm text-gray-600">
             通知期限が過ぎたお知らせです。復元すると新着情報の一覧に戻ります（データは削除されません）。
           </p>
-          <h2 className="text-base font-semibold text-gray-800">
-            アーカイブ（{newsArchive.length}件）
-          </h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-base font-semibold text-gray-800">
+              アーカイブ（{newsArchive.length}件）
+            </h2>
+            {/* 128: 一括選択（完全削除） */}
+            <BulkSelectAllButton
+              ids={newsArchive.map((x) => x.id)}
+              ctl={bulk}
+            />
+          </div>
           {[...newsArchive]
             .sort((a, b) => (a.archivedAt < b.archivedAt ? 1 : -1))
             .map((n) => (
@@ -2512,6 +2758,7 @@ export default function AdminPortalPage() {
                 className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-2"
               >
                 <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <BulkCheckbox id={n.id} ctl={bulk} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-medium text-gray-900">
@@ -2683,6 +2930,11 @@ export default function AdminPortalPage() {
                 表示中 {newsHistoryFiltered.length}件 ／ 全
                 {newsHistoryAll.length}件
               </p>
+              {/* 128: 一括選択（表示中の項目が対象・現行=削除/アーカイブ=完全削除の両操作） */}
+              <BulkSelectAllButton
+                ids={newsHistoryFiltered.map((x) => x.id)}
+                ctl={bulk}
+              />
               {historyFilterActive && (
                 <button
                   type="button"
@@ -2731,6 +2983,7 @@ export default function AdminPortalPage() {
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <BulkCheckbox id={item.id} ctl={bulk} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-medium text-gray-900">
@@ -3030,9 +3283,12 @@ export default function AdminPortalPage() {
 
       {tab === "hiyari" && (
         <div className="space-y-2">
-          <p className="text-sm text-gray-600">
-            気づきシェアの一覧です（投稿はスタッフ画面から行います）
-          </p>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-sm text-gray-600">
+              気づきシェアの一覧です（投稿はスタッフ画面から行います）
+            </p>
+            <BulkSelectAllButton ids={hiyari.map((x) => x.id)} ctl={bulk} />
+          </div>
           {hiyari.map((h) => (
             <div
               key={h.id}
@@ -3040,6 +3296,7 @@ export default function AdminPortalPage() {
             >
               <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
+                  <BulkCheckbox id={h.id} ctl={bulk} />
                   <span
                     className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                       h.type === "hiyari"
@@ -3080,10 +3337,16 @@ export default function AdminPortalPage() {
       {/* 日々の気づき（kizuki_posts・指示書104）: 一覧・論理削除・復元 */}
       {tab === "kizuki" && (
         <div className="space-y-2">
-          <p className="text-sm text-gray-600">
-            「💡 日々の気づき」（/kizuki）の投稿一覧です（投稿・編集はスタッフ画面から）。
-            削除は非表示化で、ここからいつでも復元できます。
-          </p>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-sm text-gray-600">
+              「💡 日々の気づき」（/kizuki）の投稿一覧です（投稿・編集はスタッフ画面から）。
+              削除は非表示化で、ここからいつでも復元できます。
+            </p>
+            <BulkSelectAllButton
+              ids={kizukiPosts.map((x) => x.id)}
+              ctl={bulk}
+            />
+          </div>
           {[...kizukiPosts]
             .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
             .map((p) => (
@@ -3097,6 +3360,7 @@ export default function AdminPortalPage() {
               >
                 <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
                   <div className="flex items-center gap-2 flex-wrap">
+                    <BulkCheckbox id={p.id} ctl={bulk} />
                     <span className="text-sm font-medium text-gray-800">
                       {p.authorName || "名前未設定"}
                     </span>
@@ -3146,10 +3410,16 @@ export default function AdminPortalPage() {
           「💛 気づきシェア」タブ（既存 portal_hiyari）とは別機能 */}
       {tab === "hiyariReport" && (
         <div className="space-y-2">
-          <p className="text-sm text-gray-600">
-            「🚨 ヒヤリハット報告」（/hiyari-report）の一覧です（報告はスタッフ画面から）。
-            匿名報告は誰が書いたか記録されていません。削除は非表示化で、ここからいつでも復元できます。
-          </p>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-sm text-gray-600">
+              「🚨 ヒヤリハット報告」（/hiyari-report）の一覧です（報告はスタッフ画面から）。
+              匿名報告は誰が書いたか記録されていません。削除は非表示化で、ここからいつでも復元できます。
+            </p>
+            <BulkSelectAllButton
+              ids={hiyariReports.map((x) => x.id)}
+              ctl={bulk}
+            />
+          </div>
 
           {/* 📊 傾向（チーム全体・指示書122）。個人別・職種別の集計は作らない */}
           {(() => {
@@ -3210,6 +3480,7 @@ export default function AdminPortalPage() {
               >
                 <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
                   <div className="flex items-center gap-2 flex-wrap">
+                    <BulkCheckbox id={p.id} ctl={bulk} />
                     <span className="text-sm font-medium text-gray-800">
                       {p.authorId ? p.authorName || "名前未設定" : "匿名"}
                       {/* 職種は個票内でのみ表示（記名時のみ・集計には使わない） */}
@@ -3273,10 +3544,16 @@ export default function AdminPortalPage() {
       {/* マニュアル下書き（manual_drafts・指示書107）: 一覧・論理削除・復元・資料庫紐付け */}
       {tab === "manualDraft" && (
         <div className="space-y-2">
-          <p className="text-sm text-gray-600">
-            「✍️ マニュアル下書き」（/manual-drafts）の一覧です（投稿・編集はスタッフ画面から）。
-            正式マニュアルを資料庫に登録したら「📗 登録済みにする」で下書きに紐付けてください。
-          </p>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-sm text-gray-600">
+              「✍️ マニュアル下書き」（/manual-drafts）の一覧です（投稿・編集はスタッフ画面から）。
+              正式マニュアルを資料庫に登録したら「📗 登録済みにする」で下書きに紐付けてください。
+            </p>
+            <BulkSelectAllButton
+              ids={manualDrafts.map((x) => x.id)}
+              ctl={bulk}
+            />
+          </div>
           {[...manualDrafts]
             .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
             .map((p) => {
@@ -3296,6 +3573,7 @@ export default function AdminPortalPage() {
                 >
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <BulkCheckbox id={p.id} ctl={bulk} />
                       <span className="text-sm font-semibold text-gray-900 break-words">
                         {p.title}
                       </span>
@@ -3516,9 +3794,15 @@ export default function AdminPortalPage() {
 
           {/* 投稿の一覧・論理削除・復元 */}
           <section className="space-y-2 border-t border-gray-200 pt-6">
-            <h2 className="text-sm font-semibold text-gray-800">
-              🌅 共有の記録
-            </h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-gray-800">
+                🌅 共有の記録
+              </h2>
+              <BulkSelectAllButton
+                ids={choreiPosts.map((x) => x.id)}
+                ctl={bulk}
+              />
+            </div>
             {[...choreiPosts]
               .sort((a, b) =>
                 (b.createdAt || "").localeCompare(a.createdAt || "")
@@ -3534,6 +3818,7 @@ export default function AdminPortalPage() {
                 >
                   <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
                     <div className="flex items-center gap-2 flex-wrap">
+                      <BulkCheckbox id={p.id} ctl={bulk} />
                       <span className="text-sm font-medium text-gray-800">
                         {p.authorName || "名前未設定"}
                       </span>
@@ -3588,10 +3873,16 @@ export default function AdminPortalPage() {
       {/* 勉強会アーカイブ（benkyokai_posts・指示書109）: 一覧・論理削除・復元・紐付け編集 */}
       {tab === "benkyokai" && (
         <div className="space-y-2">
-          <p className="text-sm text-gray-600">
-            「📖 勉強会アーカイブ」（/benkyokai）の記録一覧です（投稿・編集はスタッフ画面から）。
-            資料の紐付けはここからも編集できます。削除は非表示化で、いつでも復元できます。
-          </p>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-sm text-gray-600">
+              「📖 勉強会アーカイブ」（/benkyokai）の記録一覧です（投稿・編集はスタッフ画面から）。
+              資料の紐付けはここからも編集できます。削除は非表示化で、いつでも復元できます。
+            </p>
+            <BulkSelectAllButton
+              ids={benkyokaiPosts.map((x) => x.id)}
+              ctl={bulk}
+            />
+          </div>
           {[...benkyokaiPosts]
             .sort(
               (a, b) =>
@@ -3611,6 +3902,7 @@ export default function AdminPortalPage() {
                 >
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <BulkCheckbox id={p.id} ctl={bulk} />
                       <span className="text-[10px] font-medium bg-sky-100 text-sky-800 rounded-full px-2 py-0.5 shrink-0">
                         📅 {formatHeldOn(p.heldOn)}
                       </span>
@@ -4361,10 +4653,13 @@ export default function AdminPortalPage() {
 
       {tab === "thankyou" && (
         <div className="space-y-2">
-          <p className="text-sm text-gray-600">
-            ありがとうカードの一覧です（投稿はスタッフ画面から行います）。
-            削除は非表示化で、ここからいつでも復元できます（指示書105）。
-          </p>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-sm text-gray-600">
+              ありがとうカードの一覧です（投稿はスタッフ画面から行います）。
+              削除は非表示化で、ここからいつでも復元できます（指示書105）。
+            </p>
+            <BulkSelectAllButton ids={thankyou.map((x) => x.id)} ctl={bulk} />
+          </div>
           {thankyou.map((t) => (
             <div
               key={t.id}
@@ -4375,6 +4670,7 @@ export default function AdminPortalPage() {
               }`}
             >
               <div className="flex items-start justify-between mb-2 gap-2">
+                <BulkCheckbox id={t.id} ctl={bulk} />
                 <p className="text-sm text-gray-800 leading-relaxed flex-1 whitespace-pre-wrap">
                   {t.message}
                 </p>
@@ -5477,6 +5773,9 @@ export default function AdminPortalPage() {
           </section>
         </div>
       )}
+
+      {/* 一括削除バー（指示書128・選択中のみ表示・全対象タブ共通） */}
+      <BulkActionBar ctl={bulk} busy={bulkBusy} onDelete={runBulkDelete} />
     </div>
   );
 }
