@@ -21,11 +21,14 @@ import {
   fetchEvents,
   createEvent,
   updateEvent,
+  uploadEventPhotos,
+  removeEventPhoto,
   groupEventsByYear,
   type ClinicEvent,
   type EventLibraryRef,
 } from "@/lib/clinic-events";
 import { jstTodayYmd } from "@/lib/library";
+import { resizeImageToJpeg, PHOTO_MAX_EDGE } from "@/lib/image-resize";
 
 // 開催日「2026/8/3（月）」（TZ非依存・カレンダーページと同じ流儀）
 function formatHeldOn(ymd: string): string {
@@ -55,6 +58,55 @@ function EventsPageBody() {
   const [refs, setRefs] = useState<EventLibraryRef[]>([]);
   const [showPicker, setShowPicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // 写真（132-B）: アップロード中のイベントID・ライトボックス（イベントID＋表示中index）
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{
+    eventId: string;
+    index: number;
+  } | null>(null);
+
+  // 写真アップロード（送信前に既存libで長辺1600px・JPEGに圧縮）
+  const handlePhotoUpload = async (ev: ClinicEvent, files: FileList) => {
+    if (uploadingId) return;
+    setUploadingId(ev.id);
+    setError("");
+    try {
+      const blobs: Blob[] = [];
+      for (const f of Array.from(files).slice(0, 20)) {
+        try {
+          blobs.push(await resizeImageToJpeg(f, PHOTO_MAX_EDGE, 0.8));
+        } catch {
+          blobs.push(f); // 圧縮不能な形式は元ファイル送信（サーバー側8MB上限で強制）
+        }
+      }
+      const updated = await uploadEventPhotos(ev.id, blobs);
+      setEvents((prev) => prev.map((e) => (e.id === ev.id ? updated : e)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "写真の追加に失敗しました");
+    } finally {
+      setUploadingId(null);
+    }
+  };
+
+  // 写真の付け外し（実体も即削除・復元不可を明示）
+  const handlePhotoRemove = async (ev: ClinicEvent, path: string) => {
+    if (uploadingId) return;
+    if (!confirm("この写真を外しますか？（実体ファイルも削除され、元に戻せません）")) {
+      return;
+    }
+    setUploadingId(ev.id);
+    setError("");
+    try {
+      const updated = await removeEventPhoto(ev.id, path);
+      setEvents((prev) => prev.map((e) => (e.id === ev.id ? updated : e)));
+      setLightbox(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "写真の削除に失敗しました");
+    } finally {
+      setUploadingId(null);
+    }
+  };
 
   const refresh = useCallback(async () => {
     try {
@@ -323,12 +375,136 @@ function EventsPageBody() {
                       })}
                     </div>
                   )}
+
+                  {/* 写真ギャラリー（132-B・署名URL表示・タップで拡大） */}
+                  {(ev.photos.length > 0 || canEdit) && (
+                    <div className="space-y-1.5">
+                      {ev.photos.length > 0 && (
+                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
+                          {ev.photos.map((p, idx) =>
+                            p.signedUrl ? (
+                              <div key={p.path} className="relative group">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={p.signedUrl}
+                                  alt={`${ev.title} の写真`}
+                                  loading="lazy"
+                                  onClick={() =>
+                                    setLightbox({ eventId: ev.id, index: idx })
+                                  }
+                                  className="aspect-square w-full object-cover rounded-lg cursor-zoom-in bg-gray-100"
+                                />
+                                {canEdit && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handlePhotoRemove(ev, p.path)}
+                                    disabled={uploadingId === ev.id}
+                                    aria-label="この写真を外す"
+                                    className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[10px] leading-none opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-30"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                            ) : null
+                          )}
+                        </div>
+                      )}
+                      {canEdit && (
+                        <label className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 border border-gray-200 rounded-full text-gray-600 hover:bg-gray-50 cursor-pointer">
+                          {uploadingId === ev.id
+                            ? "アップロード中…"
+                            : "📷 写真を追加（複数可）"}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="hidden"
+                            disabled={uploadingId === ev.id}
+                            onChange={(e) => {
+                              if (e.target.files?.length) {
+                                handlePhotoUpload(ev, e.target.files);
+                                e.target.value = "";
+                              }
+                            }}
+                          />
+                        </label>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </section>
           ))}
         </div>
       )}
+
+      {/* 簡易ライトボックス（132-B・前後送り＋閉じる。fixed系のため最上位に配置） */}
+      {(() => {
+        if (!lightbox) return null;
+        const ev = events.find((e) => e.id === lightbox.eventId);
+        const photos = (ev?.photos ?? []).filter((p) => p.signedUrl);
+        const photo = photos[lightbox.index];
+        if (!ev || !photo) return null;
+        const move = (d: number) =>
+          setLightbox({
+            eventId: ev.id,
+            index: (lightbox.index + d + photos.length) % photos.length,
+          });
+        return (
+          <div
+            className="fixed inset-0 z-[300] bg-black/85 flex items-center justify-center p-4"
+            onClick={() => setLightbox(null)}
+            role="dialog"
+            aria-label="写真の拡大表示"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={photo.signedUrl}
+              alt={`${ev.title} の写真 ${lightbox.index + 1}/${photos.length}`}
+              onClick={(e) => e.stopPropagation()}
+              className="max-h-[85vh] max-w-full rounded-lg object-contain"
+            />
+            <button
+              type="button"
+              onClick={() => setLightbox(null)}
+              aria-label="閉じる"
+              className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/20 text-white text-lg hover:bg-white/30"
+            >
+              ✕
+            </button>
+            {photos.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    move(-1);
+                  }}
+                  aria-label="前の写真"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/20 text-white text-lg hover:bg-white/30"
+                >
+                  ←
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    move(1);
+                  }}
+                  aria-label="次の写真"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/20 text-white text-lg hover:bg-white/30"
+                >
+                  →
+                </button>
+                <span className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/80 text-xs tabular-nums">
+                  {lightbox.index + 1} / {photos.length}
+                </span>
+              </>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

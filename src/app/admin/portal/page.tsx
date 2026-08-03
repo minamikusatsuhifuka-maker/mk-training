@@ -4274,9 +4274,12 @@ export default function AdminPortalPage() {
                     {ev.description}
                   </p>
                 )}
-                {ev.libraryRefs.length > 0 && (
+                {(ev.libraryRefs.length > 0 || ev.photos.length > 0) && (
                   <p className="text-xs text-gray-500">
-                    📄 資料 {ev.libraryRefs.length}件
+                    {ev.libraryRefs.length > 0 && (
+                      <>📄 資料 {ev.libraryRefs.length}件　</>
+                    )}
+                    {ev.photos.length > 0 && <>📷 写真 {ev.photos.length}件</>}
                   </p>
                 )}
               </div>

@@ -9,9 +9,10 @@
 export const EVENT_CONFIG_ID = "__config__";
 
 export type EventPhoto = {
-  path: string; // Storage パス（完全削除時の実体掃除に使う）
-  url: string; // 公開URL
+  path: string; // Storage パス（非公開バケット event-photos・実体掃除にも使う）
   uploadedAt: string;
+  // 期限つき署名URL（GET時にAPIが都度発行・DBには保存しない=担保案1・132-B）
+  signedUrl?: string;
 };
 
 export type EventLibraryRef = { docId: string };
@@ -58,9 +59,9 @@ export function normalizeEventPhotos(input: unknown): EventPhoto[] {
     if (!raw || typeof raw !== "object") continue;
     const g = raw as Record<string, unknown>;
     const path = str(g.path);
-    const url = str(g.url);
-    if (!path || !url) continue;
-    out.push({ path, url, uploadedAt: str(g.uploadedAt) });
+    if (!path) continue;
+    // signedUrl はDBに保存しない（GET時にAPIが付与するだけ・保存経路では捨てる）
+    out.push({ path, uploadedAt: str(g.uploadedAt) });
   }
   return out;
 }
@@ -189,6 +190,45 @@ export async function deleteEventForever(id: string): Promise<void> {
     method: "DELETE",
     query: `?id=${encodeURIComponent(id)}`,
   });
+}
+
+// 写真アップロード（132-B・multipart。圧縮済みBlobを渡す）
+export async function uploadEventPhotos(
+  eventId: string,
+  blobs: Blob[]
+): Promise<ClinicEvent> {
+  const form = new FormData();
+  form.append("eventId", eventId);
+  blobs.forEach((b, i) => form.append("files", b, `photo-${i}.jpg`));
+  const res = await fetch("/api/events/photos", { method: "POST", body: form });
+  const j = (await res.json().catch(() => ({}))) as {
+    event?: ClinicEvent;
+    error?: string;
+  };
+  if (!res.ok || !j.event) {
+    throw new Error(j.error || `写真のアップロードに失敗しました (${res.status})`);
+  }
+  return j.event;
+}
+
+// 写真の付け外し（Storage実体も即削除・元に戻せない）
+export async function removeEventPhoto(
+  eventId: string,
+  path: string
+): Promise<ClinicEvent> {
+  const res = await fetch("/api/events/photos", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ eventId, path }),
+  });
+  const j = (await res.json().catch(() => ({}))) as {
+    event?: ClinicEvent;
+    error?: string;
+  };
+  if (!res.ok || !j.event) {
+    throw new Error(j.error || `写真の削除に失敗しました (${res.status})`);
+  }
+  return j.event;
 }
 
 // 編集メンバー設定（取得は一覧APIとは別に管理タブで使用・管理者のみ）

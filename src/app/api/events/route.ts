@@ -1,20 +1,25 @@
-// イベント機能API（指示書132-A・機能ID events）
+// イベント機能API（指示書132-A/132-B・機能ID events）
 // - データは clinic_events テーブル（RLS有効＋ポリシーなし＝直アクセス全拒否）。
 //   読み書きは本API（Service Role）経由のみ＝サーバー側で権限を強制する（110基盤と同方式）。
 // - 権限: 閲覧=ログイン済みスタッフ全員（401）。
 //   書き込み=管理者 or 指定メンバー（config行 editorUserIds）。
 //   fail-close: config行なし・取得失敗・空リスト → 管理者のみ書き込み可。
-// - 完全削除=管理者のみ。写真実体（Storage）を先に掃除してからDB行を削除（孤児ゼロ原則）。
-// - 編集メンバー設定（config）の閲覧・保存=管理者のみ。
+// - 写真は非公開バケット event-photos。一覧GETで期限つき署名URLを都度発行（担保案1・
+//   恒久URLはDBに保存しない＝ログインスタッフがAPIを通らない限り画像URLが得られない）。
+// - 完全削除=管理者のみ。写真実体（Storage）→DB行の順で孤児ゼロ。
+// - 認可・行アクセスの共通部は lib/events-server.ts（/api/events/photos と共用）。
 
 import { NextRequest, NextResponse } from "next/server";
+import { ServiceRoleMissingError } from "@/lib/supabase-admin";
 import {
-  createSupabaseAdminClient,
-  ServiceRoleMissingError,
-} from "@/lib/supabase-admin";
-import { getSessionUser } from "@/lib/staff-profiles-server";
-import { isAdminUser } from "@/lib/admin-role";
-import { STAFF_PHOTOS_BUCKET } from "@/lib/staff-profiles";
+  EVENTS_TABLE,
+  EVENT_PHOTOS_BUCKET,
+  authorizeEvents,
+  loadEditorUserIds,
+  fetchEventRow,
+  saveEventRow,
+  attachSignedUrls,
+} from "@/lib/events-server";
 import {
   EVENT_CONFIG_ID,
   normalizeClinicEvent,
@@ -26,14 +31,11 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const TABLE = "clinic_events";
-
 function errorResponse(e: unknown): NextResponse {
   if (e instanceof ServiceRoleMissingError) {
     return NextResponse.json({ error: e.message }, { status: 503 });
   }
   const msg = e instanceof Error ? e.message : "処理に失敗しました";
-  // テーブル未作成（SQL実行前）を分かりやすく返す
   if (/clinic_events.*(does not exist|schema cache)/i.test(msg)) {
     return NextResponse.json(
       { error: "イベント用テーブル（clinic_events）が未作成です。指示書132AのSQLを実行してください。" },
@@ -52,83 +54,15 @@ function ymd(v: unknown): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
 }
 
-// 編集メンバー設定の取得（無い・壊れている場合は空＝fail-close）
-async function loadEditorUserIds(
-  admin: ReturnType<typeof createSupabaseAdminClient>
-): Promise<string[]> {
-  try {
-    const { data } = await admin
-      .from(TABLE)
-      .select("data")
-      .eq("id", EVENT_CONFIG_ID)
-      .maybeSingle();
-    const ids = (data?.data as { editorUserIds?: unknown } | null)
-      ?.editorUserIds;
-    return Array.isArray(ids)
-      ? ids.filter((v): v is string => typeof v === "string" && v !== "")
-      : [];
-  } catch {
-    return []; // fail-close（管理者のみ書き込み可になる）
-  }
-}
-
-// 認証＋権限の共通前段
-async function authorize() {
-  const { user } = await getSessionUser();
-  if (!user) {
-    return { user: null, admin: null, isAdmin: false, canEdit: false } as const;
-  }
-  const admin = createSupabaseAdminClient();
-  const isAdmin = isAdminUser(user);
-  const editors = await loadEditorUserIds(admin);
-  const canEdit = isAdmin || editors.includes(user.id);
-  return { user, admin, isAdmin, canEdit } as const;
-}
-
 function genEventId(): string {
   return `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-async function fetchEventRow(
-  admin: NonNullable<Awaited<ReturnType<typeof authorize>>["admin"]>,
-  id: string
-): Promise<ClinicEvent | null> {
-  const { data } = await admin
-    .from(TABLE)
-    .select("id, data")
-    .eq("id", id)
-    .eq("record_type", "event")
-    .maybeSingle();
-  if (!data) return null;
-  return normalizeClinicEvent(data.id, data.data);
-}
-
-async function saveEventRow(
-  admin: NonNullable<Awaited<ReturnType<typeof authorize>>["admin"]>,
-  ev: ClinicEvent,
-  isNew: boolean
-): Promise<void> {
-  const { id, ...data } = ev;
-  if (isNew) {
-    const { error } = await admin
-      .from(TABLE)
-      .insert({ id, record_type: "event", data });
-    if (error) throw new Error(error.message);
-  } else {
-    const { error } = await admin
-      .from(TABLE)
-      .update({ data, updated_at: new Date().toISOString() })
-      .eq("id", id)
-      .eq("record_type", "event");
-    if (error) throw new Error(error.message);
-  }
 }
 
 // ─── GET: 一覧（?all=1で削除済み含む）／?config=1 で編集メンバー（管理者のみ） ───
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await authorize();
+    const auth = await authorizeEvents();
     if (!auth.user || !auth.admin) {
       return NextResponse.json({ error: "ログインが必要です" }, { status: 401 });
     }
@@ -144,7 +78,7 @@ export async function GET(req: NextRequest) {
 
     const all = searchParams.get("all") === "1";
     const { data, error } = await auth.admin
-      .from(TABLE)
+      .from(EVENTS_TABLE)
       .select("id, data")
       .eq("record_type", "event");
     if (error) throw new Error(error.message);
@@ -154,8 +88,11 @@ export async function GET(req: NextRequest) {
       .filter((e): e is ClinicEvent => e !== null);
     if (!all) events = events.filter((e) => !e.deleted);
 
+    // 写真の署名URLを付与（132-B・担保案1）
+    const signed = await attachSignedUrls(auth.admin, sortEventsByHeldOn(events));
+
     return NextResponse.json({
-      events: sortEventsByHeldOn(events),
+      events: signed,
       canEdit: auth.canEdit,
       isAdmin: auth.isAdmin,
     });
@@ -168,7 +105,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const auth = await authorize();
+    const auth = await authorizeEvents();
     if (!auth.user || !auth.admin) {
       return NextResponse.json({ error: "ログインが必要です" }, { status: 401 });
     }
@@ -191,7 +128,7 @@ export async function POST(req: NextRequest) {
       heldOn,
       description: str(body.description),
       libraryRefs: normalizeEventLibraryRefs(body.libraryRefs),
-      photos: [], // 写真は132-B
+      photos: [],
       deleted: false,
       createdAt: now,
       updatedAt: now,
@@ -207,7 +144,7 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const auth = await authorize();
+    const auth = await authorizeEvents();
     if (!auth.user || !auth.admin) {
       return NextResponse.json({ error: "ログインが必要です" }, { status: 401 });
     }
@@ -266,7 +203,7 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const auth = await authorize();
+    const auth = await authorizeEvents();
     if (!auth.user || !auth.admin) {
       return NextResponse.json({ error: "ログインが必要です" }, { status: 401 });
     }
@@ -281,11 +218,11 @@ export async function DELETE(req: NextRequest) {
     if (!ev) {
       return NextResponse.json({ error: "イベントが見つかりません" }, { status: 404 });
     }
-    // 写真実体を先に削除（132-Bで写真が付いた後も孤児を残さない・失敗時は中断して明示）
+    // 写真実体を先に削除（非公開バケット event-photos・失敗時は中断して明示＝孤児ゼロ）
     const paths = ev.photos.map((p) => p.path).filter(Boolean);
     if (paths.length > 0) {
       const { error: rmError } = await auth.admin.storage
-        .from(STAFF_PHOTOS_BUCKET)
+        .from(EVENT_PHOTOS_BUCKET)
         .remove(paths);
       if (rmError) {
         return NextResponse.json(
@@ -295,7 +232,7 @@ export async function DELETE(req: NextRequest) {
       }
     }
     const { error } = await auth.admin
-      .from(TABLE)
+      .from(EVENTS_TABLE)
       .delete()
       .eq("id", id)
       .eq("record_type", "event");
@@ -310,7 +247,7 @@ export async function DELETE(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const auth = await authorize();
+    const auth = await authorizeEvents();
     if (!auth.user || !auth.admin) {
       return NextResponse.json({ error: "ログインが必要です" }, { status: 401 });
     }
@@ -323,7 +260,7 @@ export async function PUT(req: NextRequest) {
           (v): v is string => typeof v === "string" && v !== ""
         )
       : [];
-    const { error } = await auth.admin.from(TABLE).upsert({
+    const { error } = await auth.admin.from(EVENTS_TABLE).upsert({
       id: EVENT_CONFIG_ID,
       record_type: "config",
       data: { editorUserIds },
