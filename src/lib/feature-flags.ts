@@ -24,6 +24,7 @@ export const FEATURE_IDS = [
   "onboarding",
   "calendar",
   "hr_portal", // 人事制度ポータル（指示書116・Phase 5）
+  "events", // イベント機能（指示書132・Phase 5）
 ] as const;
 export type FeatureId = (typeof FEATURE_IDS)[number];
 
@@ -74,6 +75,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   onboarding: false,
   calendar: false,
   hr_portal: false, // 初期OFF（院長検証→ONでスタッフ公開・指示書116）
+  events: false, // 初期OFF（解禁型・指示書132）
   page_members: true,
   page_philosophy: true,
   group_medical: true,
@@ -111,6 +113,7 @@ export const FEATURE_META: FeatureMeta[] = [
   { id: "onboarding", label: "オンボーディング", description: "新しい仲間の最初の道しるべ", phase: 4 },
   { id: "calendar", label: "院内カレンダー", description: "勉強会・イベントの予定共有", phase: 4 },
   { id: "hr_portal", label: "人事制度ポータル", description: "等級・評価・給与・ステージ移行の閲覧とFAQ・検索", phase: 5 },
+  { id: "events", label: "イベント", description: "行事・思い出の記録（資料と写真をクリニックの歴史として蓄積）", phase: 5 },
 ];
 
 // 実装済み機能の集合。各フェーズの実装指示書でIDを追加していく。
@@ -127,6 +130,7 @@ export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
   "onboarding", // 指示書113: オンボーディングチェックリスト（/onboarding・テンプレ公開＋進捗private）
   "calendar", // 指示書114: 院内カレンダー（/calendar・Google Calendar REST直叩き）— これで10機能すべて実装済み
   "hr_portal", // 指示書116: 人事制度ポータル（/hr 配下6ページ・静的コンテンツ＋検索）
+  "events", // 指示書132-A: イベント機能（/events・clinic_eventsテーブル・指定メンバー制）
 ]);
 
 // ページの公開設定の管理UI用メタ（指示書124・「📄 ページの公開設定」セクション）

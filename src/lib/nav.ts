@@ -91,6 +91,8 @@ export const MASTER_ITEMS: MasterItem[] = [
   { key: "/manual-drafts", href: "/manual-drafts", label: "✍️ マニュアル下書き", categoryId: "work", featureId: "manual_draft" },
   // 勉強会アーカイブ（指示書109・資料は資料庫参照 libraryRefs）
   { key: "/benkyokai", href: "/benkyokai", label: "📖 勉強会アーカイブ", categoryId: "work", featureId: "benkyokai" },
+  // イベント（指示書132・行事・思い出の記録。勉強会アーカイブ=学びの記録とは別機能）
+  { key: "/events", href: "/events", label: "🎪 イベント", categoryId: "work", featureId: "events" },
   // 院内カレンダー（指示書114・Googleカレンダー読み取り・管理はGoogle側）
   { key: "/calendar", href: "/calendar", label: "🗓 院内カレンダー", categoryId: "work", featureId: "calendar" },
   { key: "/medical-fees", href: "/medical-fees", label: "💴 算定・点数表", featureId: "page_medical_fees", categoryId: "work" },

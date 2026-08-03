@@ -115,6 +115,16 @@ import {
   type ChoreiRotation,
 } from "@/lib/chorei";
 import { loadProfilesIndex } from "@/lib/staff-profiles";
+import type { StaffProfileIndexEntry } from "@/lib/staff-profiles";
+import {
+  fetchEvents,
+  updateEvent,
+  bulkSetEventsDeleted,
+  deleteEventForever,
+  fetchEventEditors,
+  saveEventEditors,
+  type ClinicEvent,
+} from "@/lib/clinic-events";
 import { loadStaffMembers } from "@/lib/staff-tasks";
 import {
   loadBenkyokaiStore,
@@ -224,6 +234,7 @@ type TabKey =
   | "manualDraft"
   | "chorei"
   | "benkyokai"
+  | "clinicEvents"
   | "selfReview"
   | "oneOnOne"
   | "onboarding"
@@ -247,6 +258,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "manualDraft", label: "✍️ マニュアル下書き" },
   { key: "chorei", label: "🌅 朝礼サポート" },
   { key: "benkyokai", label: "📖 勉強会アーカイブ" },
+  { key: "clinicEvents", label: "🎪 イベント" },
   { key: "selfReview", label: "📝 自己評価" },
   { key: "oneOnOne", label: "🤝 1on1ノート" },
   { key: "onboarding", label: "✅ オンボーディング" },
@@ -2013,6 +2025,102 @@ export default function AdminPortalPage() {
   };
 
   // ─────────────────────────────────────
+  // イベント（clinic_events・指示書132-A）: 管理一覧・論理削除/復元・完全削除・編集メンバー
+  // ─────────────────────────────────────
+  const [clinicEvents, setClinicEvents] = useState<ClinicEvent[]>([]);
+  const [eventEditors, setEventEditors] = useState<string[]>([]);
+  const [eventStaff, setEventStaff] = useState<StaffProfileIndexEntry[]>([]);
+  const [eventsLoaded, setEventsLoaded] = useState(false);
+  const [eventsError, setEventsError] = useState("");
+  const [busyEventId, setBusyEventId] = useState<string | null>(null);
+  const [savingEventEditors, setSavingEventEditors] = useState(false);
+
+  // タブを開いたときに遅延ロード（RLS全拒否テーブルのためAPI経由）
+  useEffect(() => {
+    if (tab !== "clinicEvents" || eventsLoaded) return;
+    (async () => {
+      try {
+        const [res, editors, staff] = await Promise.all([
+          fetchEvents(true),
+          fetchEventEditors().catch(() => [] as string[]),
+          loadProfilesIndex().catch(() => [] as StaffProfileIndexEntry[]),
+        ]);
+        setClinicEvents(res.events);
+        setEventEditors(editors);
+        setEventStaff(staff);
+        setEventsError("");
+      } catch (e) {
+        setEventsError(
+          e instanceof Error ? e.message : "読み込みに失敗しました"
+        );
+      } finally {
+        setEventsLoaded(true);
+      }
+    })();
+  }, [tab, eventsLoaded]);
+
+  const setEventDeleted = async (id: string, deleted: boolean) => {
+    if (busyEventId) return;
+    if (
+      deleted &&
+      !confirm("このイベントを削除しますか？（あとで復元できます）")
+    ) {
+      return;
+    }
+    setBusyEventId(id);
+    try {
+      const updated = await updateEvent(id, { deleted });
+      setClinicEvents((prev) => prev.map((e) => (e.id === id ? updated : e)));
+      flash(deleted ? "🗑️ 削除しました（復元できます）" : "♻️ 復元しました");
+    } catch {
+      flash("⚠ 保存に失敗しました");
+    } finally {
+      setBusyEventId(null);
+    }
+  };
+
+  const deleteEventHard = async (id: string) => {
+    if (busyEventId) return;
+    if (
+      !confirm(
+        "⚠️ このイベントを完全に削除しますか？（写真の実体ファイルも削除され、復元できません）"
+      )
+    ) {
+      return;
+    }
+    setBusyEventId(id);
+    try {
+      await deleteEventForever(id);
+      setClinicEvents((prev) => prev.filter((e) => e.id !== id));
+      flash("🗑️ 完全に削除しました");
+    } catch (e) {
+      flash(e instanceof Error ? `⚠ ${e.message}` : "⚠ 削除に失敗しました");
+    } finally {
+      setBusyEventId(null);
+    }
+  };
+
+  const toggleEventEditor = (userId: string) =>
+    setEventEditors((prev) =>
+      prev.includes(userId)
+        ? prev.filter((x) => x !== userId)
+        : [...prev, userId]
+    );
+
+  const saveEventEditorsNow = async () => {
+    if (savingEventEditors) return;
+    setSavingEventEditors(true);
+    try {
+      await saveEventEditors(eventEditors);
+      flash("💾 イベント編集メンバーを保存しました");
+    } catch {
+      flash("⚠ 保存に失敗しました");
+    } finally {
+      setSavingEventEditors(false);
+    }
+  };
+
+  // ─────────────────────────────────────
   // 一括削除（指示書128）
   // - n件を必ず「1回の保存」にまとめる（共有履歴のみ現行/アーカイブの2群で最大2回）。
   // - 削除の意味は各タブの現行挙動を踏襲（論理削除タブは復元可のまま・完全削除タブは不可逆）。
@@ -2220,6 +2328,22 @@ export default function AdminPortalPage() {
           const ok = await saveBenkyokaiStore(next);
           if (ok) setBenkyokaiPosts(next);
           finish(ok, `🗑️ ${n}件を削除しました（復元できます）`);
+          break;
+        }
+        case "clinicEvents": {
+          // イベントはAPI経由（1リクエストで一括論理削除・132-A）
+          if (!confirm(bulkConfirmMessage(n, "logical"))) return;
+          try {
+            await bulkSetEventsDeleted([...idSet], true);
+            setClinicEvents((prev) =>
+              prev.map((e) =>
+                idSet.has(e.id) ? { ...e, deleted: true } : e
+              )
+            );
+            finish(true, `🗑️ ${n}件を削除しました（復元できます）`);
+          } catch {
+            finish(false, "");
+          }
           break;
         }
         default:
@@ -4007,6 +4131,148 @@ export default function AdminPortalPage() {
               まだ記録がありません
             </p>
           )}
+        </div>
+      )}
+
+      {/* イベント（clinic_events・指示書132-A）: 編集メンバー指名・一覧・論理削除/復元・完全削除 */}
+      {tab === "clinicEvents" && (
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            「🎪 イベント」（/events）の管理です。投稿・編集は下で指名した編集メンバーと管理者のみができます
+            （サーバー側で強制・未指定のときは管理者のみ）。
+          </p>
+          {eventsError && (
+            <p className="text-sm text-red-600 bg-red-50 rounded-xl p-3">
+              {eventsError}
+            </p>
+          )}
+
+          {/* 編集メンバーの指名（config行・保存はAPI・管理者のみ） */}
+          <section className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+            <h2 className="text-sm font-semibold text-gray-800">
+              👥 イベント編集メンバー
+            </h2>
+            {eventStaff.length === 0 ? (
+              <p className="text-xs text-gray-500">
+                スタッフのプロフィールがまだありません。
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {eventStaff.map((s) => (
+                  <label
+                    key={s.userId}
+                    className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border cursor-pointer ${
+                      eventEditors.includes(s.userId)
+                        ? "bg-orange-50 border-orange-200 text-orange-800"
+                        : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={eventEditors.includes(s.userId)}
+                      onChange={() => toggleEventEditor(s.userId)}
+                      className="rounded"
+                    />
+                    {s.name || "名前未設定"}
+                  </label>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={saveEventEditorsNow}
+              disabled={savingEventEditors}
+              className="text-xs px-3 py-1.5 bg-teal-600 text-white rounded-full hover:bg-teal-700 disabled:opacity-50"
+            >
+              {savingEventEditors ? "保存中…" : "💾 編集メンバーを保存"}
+            </button>
+          </section>
+
+          {/* 一覧（削除済み含む・一括選択対応） */}
+          <section className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-gray-800">
+                🎪 イベント一覧（{clinicEvents.length}件）
+              </h2>
+              <BulkSelectAllButton
+                ids={clinicEvents.map((x) => x.id)}
+                ctl={bulk}
+              />
+            </div>
+            {clinicEvents.map((ev) => (
+              <div
+                key={ev.id}
+                className={`border rounded-xl p-4 space-y-2 ${
+                  ev.deleted
+                    ? "bg-gray-50 border-gray-200 opacity-70"
+                    : "bg-white border-gray-200"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <BulkCheckbox id={ev.id} ctl={bulk} />
+                    <span className="text-[10px] font-medium bg-orange-100 text-orange-800 rounded-full px-2 py-0.5 shrink-0">
+                      📅 {ev.heldOn}
+                    </span>
+                    <span className="text-sm font-semibold text-gray-900 break-words">
+                      {ev.title}
+                    </span>
+                    {ev.deleted && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 font-medium">
+                        削除済み
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {ev.deleted ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setEventDeleted(ev.id, false)}
+                          disabled={busyEventId === ev.id}
+                          className="text-xs px-2 py-1 border border-teal-200 text-teal-700 rounded hover:bg-teal-50 disabled:opacity-50"
+                        >
+                          ♻️ 復元
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteEventHard(ev.id)}
+                          disabled={busyEventId === ev.id}
+                          className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50 disabled:opacity-50"
+                        >
+                          完全削除
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setEventDeleted(ev.id, true)}
+                        disabled={busyEventId === ev.id}
+                        className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50 disabled:opacity-50"
+                      >
+                        削除
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {ev.description && (
+                  <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                    {ev.description}
+                  </p>
+                )}
+                {ev.libraryRefs.length > 0 && (
+                  <p className="text-xs text-gray-500">
+                    📄 資料 {ev.libraryRefs.length}件
+                  </p>
+                )}
+              </div>
+            ))}
+            {eventsLoaded && clinicEvents.length === 0 && !eventsError && (
+              <p className="text-sm text-gray-600 text-center py-8">
+                まだイベントの記録がありません
+              </p>
+            )}
+          </section>
         </div>
       )}
 
