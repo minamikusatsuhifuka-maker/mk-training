@@ -60,6 +60,13 @@ const SVG_POOL: CharacterSvgType[] = [
   "note",
   "clover",
   "butterfly",
+  // 133-B: オリジナル6体も「おまかせ」循環に含める
+  "mochi",
+  "happa",
+  "kumopi",
+  "piyomaru",
+  "kogumaro",
+  "azaran",
 ];
 
 // オーバーラップ再生の係数。INTERVAL = 横切り時間D × この値。
@@ -649,6 +656,97 @@ export function CharacterSVG({
           fill="none"
           strokeLinecap="round"
         />
+      </svg>
+    ),
+    // ─── 133-B: オリジナル6体（院長採用・サンプルHTMLどおりのデザイン） ───
+    mochi: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <ellipse cx="50" cy="62" rx="30" ry="26" fill="#FDF6F0" />
+        <ellipse cx="50" cy="62" rx="30" ry="26" fill="none" stroke="#E8D5C4" strokeWidth="1.5" />
+        <ellipse cx="33" cy="34" rx="8" ry="15" fill="#FDF6F0" stroke="#E8D5C4" strokeWidth="1.5" transform="rotate(-18 33 34)" />
+        <ellipse cx="67" cy="34" rx="8" ry="15" fill="#FDF6F0" stroke="#E8D5C4" strokeWidth="1.5" transform="rotate(18 67 34)" />
+        <ellipse cx="33" cy="36" rx="3.5" ry="9" fill="#F7CBD4" transform="rotate(-18 33 36)" />
+        <ellipse cx="67" cy="36" rx="3.5" ry="9" fill="#F7CBD4" transform="rotate(18 67 36)" />
+        <circle cx="41" cy="58" r="3.4" fill="#4a3f38" />
+        <circle cx="59" cy="58" r="3.4" fill="#4a3f38" />
+        <circle cx="33" cy="66" r="5" fill="#F9C8CE" opacity="0.8" />
+        <circle cx="67" cy="66" r="5" fill="#F9C8CE" opacity="0.8" />
+        <path d="M46 66 Q50 70 54 66" stroke="#4a3f38" strokeWidth="2" fill="none" strokeLinecap="round" />
+      </svg>
+    ),
+    happa: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <path d="M50 34 C42 20 28 18 22 24 C26 34 38 40 48 38 Z" fill="#1D9E75" />
+        <path d="M52 32 C56 16 70 12 78 18 C76 30 64 38 54 36 Z" fill="#35B389" />
+        <path d="M50 40 L50 30" stroke="#1D9E75" strokeWidth="3" strokeLinecap="round" />
+        <ellipse cx="50" cy="66" rx="27" ry="24" fill="#DFF2E9" />
+        <ellipse cx="50" cy="66" rx="27" ry="24" fill="none" stroke="#BCE0D0" strokeWidth="1.5" />
+        <circle cx="42" cy="62" r="3.4" fill="#3e4a44" />
+        <circle cx="58" cy="62" r="3.4" fill="#3e4a44" />
+        <circle cx="35" cy="70" r="4.5" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="65" cy="70" r="4.5" fill="#F9C8CE" opacity="0.85" />
+        <path d="M46 70 Q50 74 54 70" stroke="#3e4a44" strokeWidth="2" fill="none" strokeLinecap="round" />
+      </svg>
+    ),
+    kumopi: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <circle cx="32" cy="60" r="16" fill="#DCEBFB" />
+        <circle cx="68" cy="60" r="16" fill="#DCEBFB" />
+        <circle cx="50" cy="48" r="20" fill="#DCEBFB" />
+        <rect x="26" y="58" width="48" height="18" rx="9" fill="#DCEBFB" />
+        <circle cx="42" cy="56" r="3" fill="#4a5568" />
+        <circle cx="58" cy="56" r="3" fill="#4a5568" />
+        <circle cx="34" cy="63" r="4.5" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="66" cy="63" r="4.5" fill="#F9C8CE" opacity="0.85" />
+        <path d="M46 63 Q50 67 54 63" stroke="#4a5568" strokeWidth="2" fill="none" strokeLinecap="round" />
+      </svg>
+    ),
+    piyomaru: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <circle cx="50" cy="58" r="28" fill="#FBEFC9" />
+        <circle cx="50" cy="58" r="28" fill="none" stroke="#EFD9A0" strokeWidth="1.5" />
+        <path d="M24 56 Q16 50 20 64 Q24 60 28 62 Z" fill="#F5E3AE" />
+        <ellipse cx="70" cy="60" rx="9" ry="13" fill="#F5E3AE" transform="rotate(20 70 60)" />
+        <circle cx="42" cy="52" r="3.4" fill="#57493a" />
+        <circle cx="58" cy="52" r="3.4" fill="#57493a" />
+        <path d="M46 58 L54 58 L50 64 Z" fill="#F2A25C" />
+        <circle cx="34" cy="60" r="5" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="66" cy="60" r="5" fill="#F9C8CE" opacity="0.85" />
+        <path d="M42 82 L42 87 M50 84 L50 89 M58 82 L58 87" stroke="#F2A25C" strokeWidth="2.5" strokeLinecap="round" />
+      </svg>
+    ),
+    kogumaro: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <circle cx="30" cy="36" r="9" fill="#F3E3CE" />
+        <circle cx="70" cy="36" r="9" fill="#F3E3CE" />
+        <circle cx="30" cy="36" r="4.5" fill="#E8CBA4" />
+        <circle cx="70" cy="36" r="4.5" fill="#E8CBA4" />
+        <ellipse cx="50" cy="58" rx="28" ry="26" fill="#F3E3CE" />
+        <ellipse cx="50" cy="58" rx="28" ry="26" fill="none" stroke="#E0C49C" strokeWidth="1.5" />
+        <circle cx="42" cy="54" r="3.4" fill="#544434" />
+        <circle cx="58" cy="54" r="3.4" fill="#544434" />
+        <ellipse cx="50" cy="62" rx="7" ry="5.5" fill="#FBF3E6" />
+        <ellipse cx="50" cy="60.5" rx="3" ry="2.2" fill="#544434" />
+        <path d="M47 64.5 Q50 67 53 64.5" stroke="#544434" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="33" cy="61" r="4.5" fill="#F5B8BF" opacity="0.8" />
+        <circle cx="67" cy="61" r="4.5" fill="#F5B8BF" opacity="0.8" />
+        <path d="M28 76 Q50 86 72 76 L72 82 Q50 92 28 82 Z" fill="#1D9E75" />
+        <rect x="60" y="78" width="9" height="14" rx="4" fill="#1D9E75" />
+      </svg>
+    ),
+    azaran: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <ellipse cx="50" cy="60" rx="32" ry="25" fill="#F1F4F6" />
+        <ellipse cx="50" cy="60" rx="32" ry="25" fill="none" stroke="#D5DEE4" strokeWidth="1.5" />
+        <ellipse cx="30" cy="76" rx="9" ry="5" fill="#E2E9ED" transform="rotate(-18 30 76)" />
+        <ellipse cx="70" cy="76" rx="9" ry="5" fill="#E2E9ED" transform="rotate(18 70 76)" />
+        <circle cx="41" cy="54" r="3.2" fill="#46525c" />
+        <circle cx="59" cy="54" r="3.2" fill="#46525c" />
+        <path d="M37 49 L41 47 M63 49 L59 47" stroke="#46525c" strokeWidth="1.6" strokeLinecap="round" />
+        <ellipse cx="50" cy="61" rx="4" ry="3" fill="#46525c" />
+        <path d="M46 66 Q50 69 54 66" stroke="#46525c" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="33" cy="62" r="4.5" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="67" cy="62" r="4.5" fill="#F9C8CE" opacity="0.85" />
       </svg>
     ),
   };

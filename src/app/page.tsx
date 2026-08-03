@@ -87,6 +87,13 @@ const NEWS_CHARACTER_CHOICES: { value: CharacterSvgType; label: string }[] = [
   { value: "note", label: "おんぷ" },
   { value: "clover", label: "クローバー" },
   { value: "butterfly", label: "ちょうちょ" },
+  // 133-B: オリジナル6体（院長採用）
+  { value: "mochi", label: "もちうさ" },
+  { value: "happa", label: "はっぱまる" },
+  { value: "kumopi", label: "くもぴ" },
+  { value: "piyomaru", label: "ぴよまる" },
+  { value: "kogumaro", label: "こぐまろ" },
+  { value: "azaran", label: "あざらん" },
 ];
 
 // ─── 初期データ（Supabaseが空のときのフォールバック） ───

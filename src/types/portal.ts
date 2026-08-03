@@ -224,7 +224,14 @@ export type CharacterSvgType =
   | "rainbow"
   | "note"
   | "clover"
-  | "butterfly";
+  | "butterfly"
+  // 133-B: オリジナル6体（院長採用・既存IDは不変で追加のみ）
+  | "mochi"
+  | "happa"
+  | "kumopi"
+  | "piyomaru"
+  | "kogumaro"
+  | "azaran";
 
 export type CharacterSettings = {
   enabled: boolean;

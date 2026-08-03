@@ -427,6 +427,13 @@ const CHARACTER_SVGS: { type: CharacterSvgType; label: string }[] = [
   { type: "note", label: "おんぷ" },
   { type: "clover", label: "クローバー" },
   { type: "butterfly", label: "ちょうちょ" },
+  // 133-B: オリジナル6体（院長採用）
+  { type: "mochi", label: "もちうさ" },
+  { type: "happa", label: "はっぱまる" },
+  { type: "kumopi", label: "くもぴ" },
+  { type: "piyomaru", label: "ぴよまる" },
+  { type: "kogumaro", label: "こぐまろ" },
+  { type: "azaran", label: "あざらん" },
 ];
 
 const NEWS_CATEGORIES: { value: NewsCategory; label: string }[] = [
