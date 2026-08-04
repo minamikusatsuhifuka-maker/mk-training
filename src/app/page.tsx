@@ -26,6 +26,10 @@ import {
 } from "@/components/NewsColumns";
 import { NEWS_AUTHOR_LS_KEY } from "@/lib/news-reactions";
 import { AI_INCHO_URL } from "@/lib/external-links";
+import {
+  CHARACTER_CHOICES,
+  loadCharacterOrderedChoices,
+} from "@/lib/character-order";
 import { WeeklyQuestionSection } from "@/components/WeeklyQuestionSection";
 import { GanttSummarySection } from "@/components/GanttSummarySection";
 import { ClinicMetricsSection } from "@/components/ClinicMetricsSection";
@@ -69,33 +73,7 @@ const NEWS_CATEGORY_CHOICES: { value: NewsCategory; label: string }[] = [
   { value: "event", label: "イベント" },
 ];
 
-const NEWS_CHARACTER_CHOICES: { value: CharacterSvgType; label: string }[] = [
-  { value: "cat", label: "ねこ" },
-  { value: "dog", label: "いぬ" },
-  { value: "rabbit", label: "うさぎ" },
-  { value: "bird", label: "とり" },
-  { value: "chihuahua", label: "ブラックタンチワワ" },
-  { value: "sakura", label: "さくら" },
-  { value: "sprout", label: "ふたば" },
-  { value: "star", label: "ほし" },
-  { value: "moon", label: "つき" },
-  { value: "shiba", label: "しばいぬ" },
-  { value: "panda", label: "ぱんだ" },
-  { value: "penguin", label: "ぺんぎん" },
-  { value: "hedgehog", label: "はりねずみ" },
-  { value: "rainbow", label: "にじ" },
-  { value: "note", label: "おんぷ" },
-  { value: "clover", label: "クローバー" },
-  { value: "butterfly", label: "ちょうちょ" },
-  // 133-B: オリジナル6体（院長採用）
-  { value: "mochi", label: "もちうさ" },
-  { value: "happa", label: "はっぱまる" },
-  { value: "kumopi", label: "くもぴ" },
-  { value: "piyomaru", label: "ぴよまる" },
-  { value: "kogumaro", label: "こぐまろ" },
-  { value: "azaran", label: "あざらん" },
-  { value: "rakkon", label: "らっこん" },
-];
+// キャラ選択肢は lib/character-order.ts に集約（指示書137・並び順は管理画面で変更可能）
 
 // ─── 初期データ（Supabaseが空のときのフォールバック） ───
 const DEFAULT_NEWS: NewsItem[] = [
@@ -287,6 +265,13 @@ const quickLinks: QuickLink[] = [
 export default function PortalHome() {
   // データ
   const [news, setNews] = useState<NewsItem[]>(DEFAULT_NEWS);
+  // キャラ選択肢（表示順は管理画面の character_order・失敗時は既定順のまま）
+  const [characterChoices, setCharacterChoices] = useState(CHARACTER_CHOICES);
+  useEffect(() => {
+    loadCharacterOrderedChoices()
+      .then(setCharacterChoices)
+      .catch(() => {});
+  }, []);
   const [hiyariItems, setHiyariItems] = useState<HiyariItem[]>([]);
   const [thankyouItems, setThankyouItems] = useState<ThankyouItem[]>([]);
   const [activePolicy, setActivePolicy] = useState<PolicyItem | null>(
@@ -1219,8 +1204,8 @@ export default function PortalHome() {
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white"
                   >
                     <option value="">おまかせ</option>
-                    {NEWS_CHARACTER_CHOICES.map((c) => (
-                      <option key={c.value} value={c.value}>
+                    {characterChoices.map((c) => (
+                      <option key={c.type} value={c.type}>
                         {c.label}
                       </option>
                     ))}

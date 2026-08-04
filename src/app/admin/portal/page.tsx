@@ -54,7 +54,21 @@ import {
   type CharacterSvgType,
   type HomeSectionConfig,
 } from "@/types/portal";
-import { CharacterSVG } from "@/components/CharacterNotification";
+import {
+  CharacterSVG,
+  MotionCharacter,
+} from "@/components/CharacterNotification";
+import {
+  NewsColumnsSelector,
+  NewsGrid,
+  type NewsColumnCount,
+} from "@/components/NewsColumns";
+import { useEffectiveColumns } from "@/lib/use-effective-columns";
+import {
+  CHARACTER_CHOICES,
+  loadCharacterOrderedChoices,
+  saveCharacterOrder,
+} from "@/lib/character-order";
 import { SectionLayoutEditor } from "@/components/admin/SectionLayoutEditor";
 import {
   useBulkSelection,
@@ -409,33 +423,7 @@ const CHARACTER_EMOJIS = [
   "🦝",
 ];
 
-const CHARACTER_SVGS: { type: CharacterSvgType; label: string }[] = [
-  { type: "cat", label: "ねこ" },
-  { type: "dog", label: "いぬ" },
-  { type: "rabbit", label: "うさぎ" },
-  { type: "bird", label: "とり" },
-  { type: "chihuahua", label: "ブラックタンチワワ" },
-  { type: "sakura", label: "さくら" },
-  { type: "sprout", label: "ふたば" },
-  { type: "star", label: "ほし" },
-  { type: "moon", label: "つき" },
-  { type: "shiba", label: "しばいぬ" },
-  { type: "panda", label: "ぱんだ" },
-  { type: "penguin", label: "ぺんぎん" },
-  { type: "hedgehog", label: "はりねずみ" },
-  { type: "rainbow", label: "にじ" },
-  { type: "note", label: "おんぷ" },
-  { type: "clover", label: "クローバー" },
-  { type: "butterfly", label: "ちょうちょ" },
-  // 133-B: オリジナル6体（院長採用）
-  { type: "mochi", label: "もちうさ" },
-  { type: "happa", label: "はっぱまる" },
-  { type: "kumopi", label: "くもぴ" },
-  { type: "piyomaru", label: "ぴよまる" },
-  { type: "kogumaro", label: "こぐまろ" },
-  { type: "azaran", label: "あざらん" },
-  { type: "rakkon", label: "らっこん" },
-];
+// キャラ選択肢は lib/character-order.ts に集約（指示書137・並び順カスタマイズ対応）
 
 const NEWS_CATEGORIES: { value: NewsCategory; label: string }[] = [
   { value: "important", label: "重要" },
@@ -497,6 +485,63 @@ export default function AdminPortalPage() {
   useEffect(() => {
     bulkClear();
   }, [tab, bulkClear]);
+
+  // お知らせ系3タブのコンパクト表示＋列切替（指示20260804・リロードで既定に戻る軽量仕様）
+  const [adminNewsCols, setAdminNewsCols] = useState<NewsColumnCount>(2);
+  const adminEffectiveCols = useEffectiveColumns(adminNewsCols);
+  const [expandedAdminNews, setExpandedAdminNews] = useState<Set<string>>(
+    new Set()
+  );
+  const toggleAdminNewsExpand = (id: string) =>
+    setExpandedAdminNews((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  // 137: キャラ表示順（character_order・欠落/失敗は既定順）＋モーションプレビュー
+  const [characterChoices, setCharacterChoices] = useState(CHARACTER_CHOICES);
+  const [charOrderDirty, setCharOrderDirty] = useState(false);
+  const [savingCharOrder, setSavingCharOrder] = useState(false);
+  const [charPreview, setCharPreview] = useState<{
+    svgType?: CharacterSvgType;
+    emoji?: string;
+  } | null>(null);
+  const [charPreviewKey, setCharPreviewKey] = useState(0);
+  useEffect(() => {
+    loadCharacterOrderedChoices()
+      .then(setCharacterChoices)
+      .catch(() => {});
+  }, []);
+  // ボタンを押したキャラを本番と同じモーションでその場再生（連打は最後のキャラ）
+  const previewCharacter = (p: { svgType?: CharacterSvgType; emoji?: string }) => {
+    setCharPreview(p);
+    setCharPreviewKey((k) => k + 1);
+  };
+  const moveCharacter = (index: number, delta: number) => {
+    setCharacterChoices((prev) => {
+      const to = index + delta;
+      if (to < 0 || to >= prev.length) return prev;
+      const next = prev.slice();
+      const [item] = next.splice(index, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
+    setCharOrderDirty(true);
+  };
+  const saveCharacterOrderNow = async () => {
+    if (savingCharOrder) return;
+    setSavingCharOrder(true);
+    const ok = await saveCharacterOrder(characterChoices.map((c) => c.type));
+    setSavingCharOrder(false);
+    if (ok) {
+      setCharOrderDirty(false);
+      flash("💾 キャラクターの並び順を保存しました");
+    } else {
+      flash("⚠ 並び順の保存に失敗しました");
+    }
+  };
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -2696,7 +2741,7 @@ export default function AdminPortalPage() {
                     <span className="text-xl leading-none">🎲</span>
                     おまかせ
                   </button>
-                  {CHARACTER_SVGS.map((item) => (
+                  {characterChoices.map((item) => (
                     <button
                       type="button"
                       key={item.type}
@@ -2747,9 +2792,16 @@ export default function AdminPortalPage() {
               <h2 className="text-base font-semibold text-gray-800">
                 一覧（{news.length}件）
               </h2>
-              {/* 128: 一括選択 */}
-              <BulkSelectAllButton ids={news.map((x) => x.id)} ctl={bulk} />
+              <div className="flex items-center gap-2">
+                <NewsColumnsSelector
+                  columns={adminNewsCols}
+                  onChange={setAdminNewsCols}
+                />
+                {/* 128: 一括選択 */}
+                <BulkSelectAllButton ids={news.map((x) => x.id)} ctl={bulk} />
+              </div>
             </div>
+            <NewsGrid cols={adminEffectiveCols}>
             {news.map((n) => (
               <div
                 key={n.id}
@@ -2779,6 +2831,13 @@ export default function AdminPortalPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleAdminNewsExpand(n.id)}
+                      className="text-xs px-2 py-1 border border-gray-200 text-gray-500 rounded hover:bg-gray-50"
+                    >
+                      {expandedAdminNews.has(n.id) ? "▲" : "▼"}
+                    </button>
                     <label className="flex items-center gap-1 text-xs text-gray-600">
                       <input
                         type="checkbox"
@@ -2798,6 +2857,8 @@ export default function AdminPortalPage() {
                     </button>
                   </div>
                 </div>
+                {expandedAdminNews.has(n.id) && (
+                  <>
                 {n.content && (
                   <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">
                     {n.content}
@@ -2853,7 +2914,7 @@ export default function AdminPortalPage() {
                     className="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white"
                   >
                     <option value="">おまかせ（自動）</option>
-                    {CHARACTER_SVGS.map((c) => (
+                    {characterChoices.map((c) => (
                       <option key={c.type} value={c.type}>
                         {c.label}
                       </option>
@@ -2863,8 +2924,11 @@ export default function AdminPortalPage() {
                     <CharacterSVG type={n.character} size={24} />
                   )}
                 </div>
+                  </>
+                )}
               </div>
             ))}
+            </NewsGrid>
             {news.length === 0 && (
               <p className="text-sm text-gray-600 text-center py-8">
                 まだお知らせがありません
@@ -2883,12 +2947,19 @@ export default function AdminPortalPage() {
             <h2 className="text-base font-semibold text-gray-800">
               アーカイブ（{newsArchive.length}件）
             </h2>
-            {/* 128: 一括選択（完全削除） */}
-            <BulkSelectAllButton
-              ids={newsArchive.map((x) => x.id)}
-              ctl={bulk}
-            />
+            <div className="flex items-center gap-2">
+              <NewsColumnsSelector
+                columns={adminNewsCols}
+                onChange={setAdminNewsCols}
+              />
+              {/* 128: 一括選択（完全削除） */}
+              <BulkSelectAllButton
+                ids={newsArchive.map((x) => x.id)}
+                ctl={bulk}
+              />
+            </div>
           </div>
+          <NewsGrid cols={adminEffectiveCols}>
           {[...newsArchive]
             .sort((a, b) => (a.archivedAt < b.archivedAt ? 1 : -1))
             .map((n) => (
@@ -2921,6 +2992,13 @@ export default function AdminPortalPage() {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
+                      onClick={() => toggleAdminNewsExpand(n.id)}
+                      className="text-xs px-2 py-1 border border-gray-200 text-gray-500 rounded hover:bg-gray-50"
+                    >
+                      {expandedAdminNews.has(n.id) ? "▲" : "▼"}
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => restoreArchivedNews(n.id)}
                       className="text-xs px-2 py-1 border border-teal-200 text-teal-600 rounded hover:bg-teal-50"
                     >
@@ -2935,13 +3013,14 @@ export default function AdminPortalPage() {
                     </button>
                   </div>
                 </div>
-                {n.content && (
+                {expandedAdminNews.has(n.id) && n.content && (
                   <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">
                     {n.content}
                   </p>
                 )}
               </div>
             ))}
+          </NewsGrid>
           {newsArchive.length === 0 && (
             <p className="text-sm text-gray-600 text-center py-8">
               アーカイブはありません
@@ -3070,10 +3149,16 @@ export default function AdminPortalPage() {
                 {newsHistoryAll.length}件
               </p>
               {/* 128: 一括選択（表示中の項目が対象・現行=削除/アーカイブ=完全削除の両操作） */}
-              <BulkSelectAllButton
-                ids={newsHistoryFiltered.map((x) => x.id)}
-                ctl={bulk}
-              />
+              <div className="flex items-center gap-2">
+                <NewsColumnsSelector
+                  columns={adminNewsCols}
+                  onChange={setAdminNewsCols}
+                />
+                <BulkSelectAllButton
+                  ids={newsHistoryFiltered.map((x) => x.id)}
+                  ctl={bulk}
+                />
+              </div>
               {historyFilterActive && (
                 <button
                   type="button"
@@ -3111,6 +3196,7 @@ export default function AdminPortalPage() {
                   {g.items.length}件
                 </span>
               </h2>
+              <NewsGrid cols={adminEffectiveCols}>
               {g.items.map((item) => (
                 <div
                   key={`${item.status}_${item.id}`}
@@ -3159,6 +3245,13 @@ export default function AdminPortalPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => toggleAdminNewsExpand(item.id)}
+                        className="text-xs px-2 py-1 border border-gray-200 text-gray-500 rounded hover:bg-gray-50"
+                      >
+                        {expandedAdminNews.has(item.id) ? "▲" : "▼"}
+                      </button>
                       {item.status === "live" ? (
                         <>
                           <button
@@ -3197,13 +3290,14 @@ export default function AdminPortalPage() {
                       )}
                     </div>
                   </div>
-                  {item.content && (
+                  {expandedAdminNews.has(item.id) && item.content && (
                     <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">
                       {item.content}
                     </p>
                   )}
                 </div>
               ))}
+              </NewsGrid>
             </div>
           ))}
         </div>
@@ -5307,6 +5401,39 @@ export default function AdminPortalPage() {
             </div>
           </div>
 
+          {/* 137: モーションプレビュー（押したキャラが本番と同じ動きで1回横切る） */}
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">
+              モーションプレビュー
+            </label>
+            <div className="relative overflow-hidden h-28 rounded-xl border border-gray-100 bg-gradient-to-b from-sky-50/50 to-white">
+              {charPreview ? (
+                <div
+                  key={charPreviewKey}
+                  className="absolute"
+                  style={
+                    {
+                      top: 26,
+                      left: 0,
+                      animation: `charPreviewWalk ${charSettings.speed}s linear forwards`,
+                      "--char-walk-to": "calc(100% - 70px)",
+                    } as React.CSSProperties
+                  }
+                >
+                  <MotionCharacter
+                    svgType={charPreview.svgType}
+                    emoji={charPreview.emoji}
+                    size={Math.min(charSettings.size, 64)}
+                  />
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 text-center pt-12">
+                  下のキャラクターを押すと、ここで本番と同じ動きを再生します
+                </p>
+              )}
+            </div>
+          </div>
+
           {/* 絵文字選択 */}
           {charSettings.characterStyle === "emoji" && (
             <div>
@@ -5318,7 +5445,10 @@ export default function AdminPortalPage() {
                   <button
                     type="button"
                     key={emoji}
-                    onClick={() => setCharSettings({ ...charSettings, emoji })}
+                    onClick={() => {
+                      setCharSettings({ ...charSettings, emoji });
+                      previewCharacter({ emoji });
+                    }}
                     className={`text-2xl p-2 rounded-lg border ${
                       charSettings.emoji === emoji
                         ? "bg-teal-50 border-teal-300"
@@ -5339,13 +5469,14 @@ export default function AdminPortalPage() {
                 イラストを選択
               </label>
               <div className="grid grid-cols-4 gap-2">
-                {CHARACTER_SVGS.map((item) => (
+                {characterChoices.map((item) => (
                   <button
                     type="button"
                     key={item.type}
-                    onClick={() =>
-                      setCharSettings({ ...charSettings, svgType: item.type })
-                    }
+                    onClick={() => {
+                      setCharSettings({ ...charSettings, svgType: item.type });
+                      previewCharacter({ svgType: item.type });
+                    }}
                     className={`flex flex-col items-center gap-1 p-3 rounded-xl border text-sm ${
                       charSettings.svgType === item.type
                         ? "bg-teal-50 border-teal-300 text-teal-800"
@@ -5359,6 +5490,65 @@ export default function AdminPortalPage() {
               </div>
             </div>
           )}
+
+          {/* 137: キャラクター表示順の並び替え（全選択欄に反映・おまかせは常に先頭固定） */}
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">
+              キャラクターの並び順
+            </label>
+            <p className="text-xs text-gray-500 mb-2">
+              ▲▼で入れ替え → 保存。ホームと管理のキャラ選択に反映されます（「おまかせ」は常に先頭）。キャラを押すと上のプレビューで動きます。
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              {characterChoices.map((c, i) => (
+                <div
+                  key={c.type}
+                  className="flex items-center gap-2 border border-gray-100 rounded-lg px-2 py-1 bg-white"
+                >
+                  <button
+                    type="button"
+                    onClick={() => previewCharacter({ svgType: c.type })}
+                    className="flex items-center gap-2 flex-1 min-w-0 text-left hover:bg-gray-50 rounded px-1"
+                  >
+                    <CharacterSVG type={c.type} size={26} />
+                    <span className="text-xs text-gray-700 truncate">
+                      {c.label}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveCharacter(i, -1)}
+                    disabled={i === 0}
+                    className="text-xs px-1.5 py-0.5 border border-gray-200 rounded text-gray-500 hover:bg-gray-50 disabled:opacity-30"
+                    aria-label="上へ"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveCharacter(i, 1)}
+                    disabled={i === characterChoices.length - 1}
+                    className="text-xs px-1.5 py-0.5 border border-gray-200 rounded text-gray-500 hover:bg-gray-50 disabled:opacity-30"
+                    aria-label="下へ"
+                  >
+                    ▼
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={saveCharacterOrderNow}
+              disabled={!charOrderDirty || savingCharOrder}
+              className="mt-2 text-xs px-3 py-1.5 bg-teal-600 text-white rounded-full hover:bg-teal-700 disabled:opacity-40"
+            >
+              {savingCharOrder
+                ? "保存中…"
+                : charOrderDirty
+                  ? "💾 並び順を保存"
+                  : "保存済み"}
+            </button>
+          </div>
 
           {/* サイズ調整 */}
           <div>

@@ -225,6 +225,46 @@ function MotionDecoration({
   return null;
 }
 
+// 固有モーション＋装飾つきのキャラ本体（137: 通知アニメ本体と管理画面プレビューで共用）。
+// svgType か emoji のどちらかを渡す。対応表に無いキャラは静止（従来の横切りのみ）。
+export function MotionCharacter({
+  svgType,
+  emoji,
+  size,
+}: {
+  svgType?: CharacterSvgType;
+  emoji?: string;
+  size: number;
+}) {
+  const motion = svgType
+    ? SVG_MOTIONS[svgType]
+    : emoji
+      ? EMOJI_MOTIONS[emoji]
+      : undefined;
+  const body = svgType ? (
+    <CharacterSVG type={svgType} size={size} />
+  ) : (
+    <div style={{ fontSize: size, lineHeight: 1 }} className="select-none">
+      {emoji}
+    </div>
+  );
+  if (!motion) return body;
+  return (
+    <div className="relative">
+      {/* 波・虹はキャラの揺れと独立（外側）。風船はキャラと一緒に揺れる（内側） */}
+      {(motion === "swim" || motion === "rainbowSlide") && (
+        <MotionDecoration motion={motion} size={size} />
+      )}
+      <div className="relative" style={{ animation: MOTION_ANIMATION[motion] }}>
+        {motion === "balloon" && (
+          <MotionDecoration motion={motion} size={size} />
+        )}
+        {body}
+      </div>
+    </div>
+  );
+}
+
 // オーバーラップ再生の係数。INTERVAL = 横切り時間D × この値。
 // D未満にすることで「前のキャラが抜けきる前に次が登場」＝複数が並走する。
 // 小さいほど密に並走（重なりやすい）。調整可能。
@@ -400,43 +440,12 @@ export default function CharacterNotification({ news, onOpenNews }: Props) {
                 />
               </div>
 
-              {/* キャラクター本体（133-C: 相性の合うキャラは固有モーションを内側ラッパーで適用） */}
-              {(() => {
-                const motion = useSvg
-                  ? SVG_MOTIONS[svgType]
-                  : EMOJI_MOTIONS[emojiChar];
-                const body = useSvg ? (
-                  <CharacterSVG type={svgType} size={settings.size} />
-                ) : (
-                  <div
-                    style={{ fontSize: settings.size, lineHeight: 1 }}
-                    className="select-none"
-                  >
-                    {emojiChar}
-                  </div>
-                );
-                if (!motion) return body; // 対応表に無いキャラは従来どおり
-                return (
-                  <div className="relative">
-                    {/* 波・虹はキャラの揺れと独立（外側）。風船はキャラと一緒に揺れる（内側） */}
-                    {(motion === "swim" || motion === "rainbowSlide") && (
-                      <MotionDecoration motion={motion} size={settings.size} />
-                    )}
-                    <div
-                      className="relative"
-                      style={{ animation: MOTION_ANIMATION[motion] }}
-                    >
-                      {motion === "balloon" && (
-                        <MotionDecoration
-                          motion={motion}
-                          size={settings.size}
-                        />
-                      )}
-                      {body}
-                    </div>
-                  </div>
-                );
-              })()}
+              {/* キャラクター本体（133-C/137: 固有モーションは MotionCharacter に共通化） */}
+              <MotionCharacter
+                svgType={useSvg ? svgType : undefined}
+                emoji={useSvg ? undefined : emojiChar}
+                size={settings.size}
+              />
             </div>
           </div>
         );
