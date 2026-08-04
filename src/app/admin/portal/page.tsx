@@ -434,6 +434,7 @@ const CHARACTER_SVGS: { type: CharacterSvgType; label: string }[] = [
   { type: "piyomaru", label: "ぴよまる" },
   { type: "kogumaro", label: "こぐまろ" },
   { type: "azaran", label: "あざらん" },
+  { type: "rakkon", label: "らっこん" },
 ];
 
 const NEWS_CATEGORIES: { value: NewsCategory; label: string }[] = [

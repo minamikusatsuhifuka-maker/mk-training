@@ -94,6 +94,7 @@ const NEWS_CHARACTER_CHOICES: { value: CharacterSvgType; label: string }[] = [
   { value: "piyomaru", label: "ぴよまる" },
   { value: "kogumaro", label: "こぐまろ" },
   { value: "azaran", label: "あざらん" },
+  { value: "rakkon", label: "らっこん" },
 ];
 
 // ─── 初期データ（Supabaseが空のときのフォールバック） ───

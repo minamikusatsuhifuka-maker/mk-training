@@ -176,6 +176,13 @@ html, body {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+/* 135: 葉がそよぐようなそよそよ（はっぱまる・ふたば用） */
+@keyframes charMotionSway {
+  0%, 100% { transform: rotate(-6deg) translateY(0); }
+  25% { transform: rotate(3deg) translateY(-3px); }
+  50% { transform: rotate(6deg) translateY(0); }
+  75% { transform: rotate(-3deg) translateY(-3px); }
+}
 /* 波の横流れ（swimの装飾・キャラとは独立に揺れる） */
 @keyframes charWaveDrift {
   0%, 100% { transform: translateX(0); }

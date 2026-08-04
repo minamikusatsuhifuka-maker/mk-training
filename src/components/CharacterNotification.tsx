@@ -67,6 +67,7 @@ const SVG_POOL: CharacterSvgType[] = [
   "piyomaru",
   "kogumaro",
   "azaran",
+  "rakkon", // 135
 ];
 
 // ─── 133-C: キャラ固有モーション（相性で自動決定・投稿者の操作なし） ───
@@ -78,7 +79,8 @@ type CharMotion =
   | "hop" // ぴょんぴょんホップ
   | "balloon" // 風船でふわり（装飾: 風船）
   | "rainbowSlide" // 虹の上をゆるやかに（装飾: 虹）
-  | "roll"; // ころころ転がる
+  | "roll" // ころころ転がる
+  | "sway"; // 葉がそよぐようにそよそよ（135）
 
 const MOTION_ANIMATION: Record<CharMotion, string> = {
   swim: "charMotionSwim 1.6s ease-in-out infinite",
@@ -88,9 +90,11 @@ const MOTION_ANIMATION: Record<CharMotion, string> = {
   balloon: "charMotionBalloon 2.2s ease-in-out infinite",
   rainbowSlide: "charMotionFloat 2.8s ease-in-out infinite",
   roll: "charMotionRoll 1.6s linear infinite",
+  sway: "charMotionSway 2.6s ease-in-out infinite",
 };
 
 const SVG_MOTIONS: Partial<Record<CharacterSvgType, CharMotion>> = {
+  rakkon: "swim", // らっこん=波の上をすいすい（135・院長の当初要望）
   azaran: "swim", // あざらん=波の上をすいすい
   kumopi: "float",
   piyomaru: "flutter",
@@ -99,6 +103,8 @@ const SVG_MOTIONS: Partial<Record<CharacterSvgType, CharMotion>> = {
   kogumaro: "balloon",
   rainbow: "rainbowSlide",
   butterfly: "flutter",
+  happa: "sway", // はっぱまる=そよそよ（135）
+  sprout: "sway", // ふたば=そよそよ（135）
 };
 
 const EMOJI_MOTIONS: Record<string, CharMotion> = {
@@ -148,15 +154,15 @@ function MotionDecoration({
     );
   }
   if (motion === "balloon") {
-    // 風船: キャラの上（キャラと一緒に揺れるようモーションラッパー内で使う）
+    // 風船: キャラの左横やや上（135: 吹き出し（中央上）と競合しない位置＋z-20の背面）
     const w = size * 0.5;
     return (
       <svg
         width={w}
         height={size * 0.85}
         viewBox="0 0 50 85"
-        className="absolute left-1/2 -translate-x-1/2"
-        style={{ top: -size * 0.72 }}
+        className="absolute"
+        style={{ top: -size * 0.5, left: -size * 0.38 }}
         aria-hidden
       >
         <ellipse cx="25" cy="22" rx="16" ry="20" fill="#F7A8B8" />
@@ -346,8 +352,9 @@ export default function CharacterNotification({ news, onOpenNews }: Props) {
               {/* 吹き出し（キャラの上・新着タイトルを表示／文字切れ防止のパディング）
                   色・アイコンは緊急度連動: 緊急=赤🚨+点滅 / 準緊急=アンバー⚠️ / 通常=緑📢。
                   点滅(animate-pulse)はラッパー側に付けて本体のanimate-bounceと共存させる */}
+              {/* 135: 吹き出しは常に最前面（モーション装飾・キャラが文字に重ならない根治） */}
               <div
-                className={`absolute -top-3 left-1/2 -translate-x-1/2 -translate-y-full ${urgency.bubblePulse}`}
+                className={`absolute -top-3 left-1/2 -translate-x-1/2 -translate-y-full z-20 ${urgency.bubblePulse}`}
               >
                 <div
                   className={`${urgency.bubble} text-xs leading-none py-2 px-4 rounded-full shadow-lg animate-bounce flex items-center gap-1 max-w-[220px]`}
@@ -892,6 +899,36 @@ export function CharacterSVG({
         <path d="M46 66 Q50 69 54 66" stroke="#46525c" strokeWidth="1.8" fill="none" strokeLinecap="round" />
         <circle cx="33" cy="62" r="4.5" fill="#F9C8CE" opacity="0.85" />
         <circle cx="67" cy="62" r="4.5" fill="#F9C8CE" opacity="0.85" />
+      </svg>
+    ),
+    // 135: らっこん — 仰向けでぷかぷか浮かぶラッコ（全体像が見える・波乗りモーション担当）
+    rakkon: (
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        {/* 仰向けのからだ（横長）＋おなかの明るい毛色 */}
+        <ellipse cx="55" cy="62" rx="31" ry="16" fill="#C9A182" />
+        <ellipse cx="55" cy="62" rx="31" ry="16" fill="none" stroke="#B08A66" strokeWidth="1.5" />
+        <ellipse cx="58" cy="58" rx="20" ry="9" fill="#EBD9C3" />
+        {/* しっぽ（右）と後ろあし（ひれ） */}
+        <ellipse cx="88" cy="60" rx="8" ry="4.5" fill="#B08A66" transform="rotate(-20 88 60)" />
+        <ellipse cx="80" cy="52" rx="5" ry="3" fill="#C9A182" transform="rotate(-35 80 52)" />
+        {/* あたま（左）＋耳＋明るい顔まわり */}
+        <circle cx="24" cy="52" r="15" fill="#C9A182" />
+        <circle cx="24" cy="52" r="15" fill="none" stroke="#B08A66" strokeWidth="1.5" />
+        <circle cx="13" cy="42" r="3.5" fill="#B08A66" />
+        <circle cx="35" cy="42" r="3.5" fill="#B08A66" />
+        <circle cx="24" cy="54" r="11" fill="#EBD9C3" />
+        {/* 顔（目・鼻・くち・ほっぺ） */}
+        <circle cx="19" cy="51" r="2.8" fill="#4a3f33" />
+        <circle cx="29" cy="51" r="2.8" fill="#4a3f33" />
+        <ellipse cx="24" cy="56" rx="3" ry="2.2" fill="#4a3f33" />
+        <path d="M21 60 Q24 62.5 27 60" stroke="#4a3f33" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+        <circle cx="14" cy="57" r="3.8" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="34" cy="57" r="3.8" fill="#F9C8CE" opacity="0.85" />
+        {/* 両手でおなかの貝がらを抱える */}
+        <circle cx="47" cy="53" r="4.5" fill="#C9A182" />
+        <circle cx="59" cy="53" r="4.5" fill="#C9A182" />
+        <path d="M53 44 L48 52 L58 52 Z" fill="#F4A8B8" />
+        <path d="M53 44 L50.5 52 M53 44 L55.5 52" stroke="#E288A0" strokeWidth="1" />
       </svg>
     ),
   };

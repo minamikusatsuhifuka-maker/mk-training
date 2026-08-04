@@ -231,7 +231,9 @@ export type CharacterSvgType =
   | "kumopi"
   | "piyomaru"
   | "kogumaro"
-  | "azaran";
+  | "azaran"
+  // 135: SVG版ラッコ（波乗りモーション用・全体像が見えるデザイン）
+  | "rakkon";
 
 export type CharacterSettings = {
   enabled: boolean;
