@@ -69,6 +69,125 @@ const SVG_POOL: CharacterSvgType[] = [
   "azaran",
 ];
 
+// ─── 133-C: キャラ固有モーション（相性で自動決定・投稿者の操作なし） ───
+// 対応表に無いキャラは従来の横切りのまま。横移動(walkAcross)と固有の動き(内側ラッパー)は分離。
+type CharMotion =
+  | "swim" // 波の上をすいすい（装飾: 波）
+  | "float" // ふわふわ漂う
+  | "flutter" // ぱたぱた小刻み飛行
+  | "hop" // ぴょんぴょんホップ
+  | "balloon" // 風船でふわり（装飾: 風船）
+  | "rainbowSlide" // 虹の上をゆるやかに（装飾: 虹）
+  | "roll"; // ころころ転がる
+
+const MOTION_ANIMATION: Record<CharMotion, string> = {
+  swim: "charMotionSwim 1.6s ease-in-out infinite",
+  float: "charMotionFloat 2.4s ease-in-out infinite",
+  flutter: "charMotionFlutter 0.5s ease-in-out infinite",
+  hop: "charMotionHop 1.2s ease-in-out infinite",
+  balloon: "charMotionBalloon 2.2s ease-in-out infinite",
+  rainbowSlide: "charMotionFloat 2.8s ease-in-out infinite",
+  roll: "charMotionRoll 1.6s linear infinite",
+};
+
+const SVG_MOTIONS: Partial<Record<CharacterSvgType, CharMotion>> = {
+  azaran: "swim", // あざらん=波の上をすいすい
+  kumopi: "float",
+  piyomaru: "flutter",
+  mochi: "hop",
+  rabbit: "hop",
+  kogumaro: "balloon",
+  rainbow: "rainbowSlide",
+  butterfly: "flutter",
+};
+
+const EMOJI_MOTIONS: Record<string, CharMotion> = {
+  "🦦": "swim", // ラッコ（院長要望・全体像が見える波乗り）
+  "🦭": "swim",
+  "🐥": "flutter",
+  "🐦": "flutter",
+  "🐰": "hop",
+  "🐷": "roll",
+  "🦋": "flutter",
+};
+
+// モーション装飾（波・風船・虹）。キャラサイズ基準の小さなSVG1個
+function MotionDecoration({
+  motion,
+  size,
+}: {
+  motion: CharMotion;
+  size: number;
+}) {
+  if (motion === "swim") {
+    // 波: キャラの下に重ねる（キャラの揺れとは独立にゆらゆら）
+    const w = size * 1.5;
+    return (
+      <svg
+        width={w}
+        height={size * 0.4}
+        viewBox="0 0 150 40"
+        className="absolute left-1/2 -translate-x-1/2"
+        style={{
+          bottom: -size * 0.12,
+          animation: "charWaveDrift 2.4s ease-in-out infinite",
+        }}
+        aria-hidden
+      >
+        <path
+          d="M0 22 Q12 10 25 22 T50 22 T75 22 T100 22 T125 22 T150 22 L150 40 L0 40 Z"
+          fill="#A8D8F0"
+          opacity="0.9"
+        />
+        <path
+          d="M0 30 Q15 20 30 30 T60 30 T90 30 T120 30 T150 30 L150 40 L0 40 Z"
+          fill="#7FC3E8"
+          opacity="0.9"
+        />
+      </svg>
+    );
+  }
+  if (motion === "balloon") {
+    // 風船: キャラの上（キャラと一緒に揺れるようモーションラッパー内で使う）
+    const w = size * 0.5;
+    return (
+      <svg
+        width={w}
+        height={size * 0.85}
+        viewBox="0 0 50 85"
+        className="absolute left-1/2 -translate-x-1/2"
+        style={{ top: -size * 0.72 }}
+        aria-hidden
+      >
+        <ellipse cx="25" cy="22" rx="16" ry="20" fill="#F7A8B8" />
+        <ellipse cx="19" cy="15" rx="5" ry="7" fill="#FBD3DC" />
+        <path d="M25 42 L22 47 L28 47 Z" fill="#E88AA0" />
+        <path d="M25 47 Q20 60 25 70 Q30 78 25 85" stroke="#C97A8E" strokeWidth="1.6" fill="none" />
+      </svg>
+    );
+  }
+  if (motion === "rainbowSlide") {
+    // 虹: キャラの下の小さな弧
+    const w = size * 1.3;
+    return (
+      <svg
+        width={w}
+        height={size * 0.45}
+        viewBox="0 0 130 45"
+        className="absolute left-1/2 -translate-x-1/2"
+        style={{ bottom: -size * 0.16 }}
+        aria-hidden
+      >
+        <path d="M5 45 A60 60 0 0 1 125 45" stroke="#F49FB6" strokeWidth="7" fill="none" />
+        <path d="M13 45 A52 52 0 0 1 117 45" stroke="#F7CE84" strokeWidth="7" fill="none" />
+        <path d="M21 45 A44 44 0 0 1 109 45" stroke="#9FD8B4" strokeWidth="7" fill="none" />
+        <path d="M29 45 A36 36 0 0 1 101 45" stroke="#9EC5EC" strokeWidth="7" fill="none" />
+      </svg>
+    );
+  }
+  return null;
+}
+
 // オーバーラップ再生の係数。INTERVAL = 横切り時間D × この値。
 // D未満にすることで「前のキャラが抜けきる前に次が登場」＝複数が並走する。
 // 小さいほど密に並走（重なりやすい）。調整可能。
@@ -243,17 +362,43 @@ export default function CharacterNotification({ news, onOpenNews }: Props) {
                 />
               </div>
 
-              {/* キャラクター本体 */}
-              {useSvg ? (
-                <CharacterSVG type={svgType} size={settings.size} />
-              ) : (
-                <div
-                  style={{ fontSize: settings.size, lineHeight: 1 }}
-                  className="select-none"
-                >
-                  {emojiChar}
-                </div>
-              )}
+              {/* キャラクター本体（133-C: 相性の合うキャラは固有モーションを内側ラッパーで適用） */}
+              {(() => {
+                const motion = useSvg
+                  ? SVG_MOTIONS[svgType]
+                  : EMOJI_MOTIONS[emojiChar];
+                const body = useSvg ? (
+                  <CharacterSVG type={svgType} size={settings.size} />
+                ) : (
+                  <div
+                    style={{ fontSize: settings.size, lineHeight: 1 }}
+                    className="select-none"
+                  >
+                    {emojiChar}
+                  </div>
+                );
+                if (!motion) return body; // 対応表に無いキャラは従来どおり
+                return (
+                  <div className="relative">
+                    {/* 波・虹はキャラの揺れと独立（外側）。風船はキャラと一緒に揺れる（内側） */}
+                    {(motion === "swim" || motion === "rainbowSlide") && (
+                      <MotionDecoration motion={motion} size={settings.size} />
+                    )}
+                    <div
+                      className="relative"
+                      style={{ animation: MOTION_ANIMATION[motion] }}
+                    >
+                      {motion === "balloon" && (
+                        <MotionDecoration
+                          motion={motion}
+                          size={settings.size}
+                        />
+                      )}
+                      {body}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         );

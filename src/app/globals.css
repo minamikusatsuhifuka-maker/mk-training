@@ -147,6 +147,41 @@ html, body {
   }
 }
 
+/* 133-C: キャラ固有モーション（内側ラッパーに適用・横移動walkAcrossとは分離）
+   すべてtransformのみ＝コンポジタ処理でスマホ負荷小 */
+@keyframes charMotionSwim {
+  0%, 100% { transform: translateY(0) rotate(-4deg); }
+  50% { transform: translateY(-7px) rotate(4deg); }
+}
+@keyframes charMotionFloat {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-12px) rotate(2deg); }
+}
+@keyframes charMotionFlutter {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-5px) rotate(3deg); }
+}
+@keyframes charMotionHop {
+  0%, 20% { transform: translateY(0); }
+  40% { transform: translateY(-14px); }
+  55% { transform: translateY(0) scaleY(0.96); }
+  62% { transform: translateY(-3px); }
+  70%, 100% { transform: translateY(0); }
+}
+@keyframes charMotionBalloon {
+  0%, 100% { transform: translateY(0) rotate(2deg); }
+  50% { transform: translateY(-10px) rotate(-2deg); }
+}
+@keyframes charMotionRoll {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+/* 波の横流れ（swimの装飾・キャラとは独立に揺れる） */
+@keyframes charWaveDrift {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-12px); }
+}
+
 /* 管理画面プレビュー用：--char-walk-to で移動距離を指定 */
 @keyframes charPreviewWalk {
   0% {
