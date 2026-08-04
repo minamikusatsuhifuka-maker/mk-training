@@ -528,23 +528,33 @@ export function CharacterSVG({
     ),
     chihuahua: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <path d="M26 34 L20 14 Q32 18 38 28 Z" fill="#5A5350" stroke="#474140" strokeWidth="1.5" strokeLinejoin="round" />
-        <path d="M74 34 L80 14 Q68 18 62 28 Z" fill="#5A5350" stroke="#474140" strokeWidth="1.5" strokeLinejoin="round" />
-        <path d="M27 31 L23.5 18 Q31 21 35 27 Z" fill="#D9A56E" />
-        <path d="M73 31 L76.5 18 Q69 21 65 27 Z" fill="#D9A56E" />
-        <ellipse cx="50" cy="60" rx="28" ry="25" fill="#5A5350" />
-        <ellipse cx="50" cy="60" rx="28" ry="25" fill="none" stroke="#474140" strokeWidth="1.5" />
-        <ellipse cx="41" cy="48" rx="4.5" ry="3" fill="#D9A56E" />
-        <ellipse cx="59" cy="48" rx="4.5" ry="3" fill="#D9A56E" />
-        <circle cx="41" cy="56" r="3.2" fill="#2e2a28" />
-        <circle cx="59" cy="56" r="3.2" fill="#2e2a28" />
-        <circle cx="42" cy="55" r="1" fill="#ffffff" />
-        <circle cx="60" cy="55" r="1" fill="#ffffff" />
-        <ellipse cx="50" cy="66" rx="9" ry="7" fill="#D9A56E" />
-        <ellipse cx="50" cy="63.5" rx="3.2" ry="2.4" fill="#2e2a28" />
-        <path d="M46.5 68 Q50 70.5 53.5 68" stroke="#2e2a28" strokeWidth="1.8" fill="none" strokeLinecap="round" />
-        <circle cx="31" cy="63" r="4.5" fill="#F5A9BC" opacity="0.9" />
-        <circle cx="69" cy="63" r="4.5" fill="#F5A9BC" opacity="0.9" />
+        {/* 大きな立ち耳（先を丸く・内側タン） */}
+        <path d="M25 42 Q17 18 29 13 Q40 20 40 34 Z" fill="#6B615D" stroke="#575049" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M75 42 Q83 18 71 13 Q60 20 60 34 Z" fill="#6B615D" stroke="#575049" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M28 37 Q24 21 30 18 Q36 24 36 32 Z" fill="#E2B488" />
+        <path d="M72 37 Q76 21 70 18 Q64 24 64 32 Z" fill="#E2B488" />
+        {/* まんまる顔（やわらかチャコール） */}
+        <ellipse cx="50" cy="62" rx="28" ry="25" fill="#6B615D" />
+        <ellipse cx="50" cy="62" rx="28" ry="25" fill="none" stroke="#575049" strokeWidth="1.5" />
+        {/* タン: 眉上のポイント */}
+        <ellipse cx="40" cy="52" rx="4.2" ry="2.8" fill="#E2B488" />
+        <ellipse cx="60" cy="52" rx="4.2" ry="2.8" fill="#E2B488" />
+        {/* うるうるの丸い目（下寄り・離れ気味） */}
+        <circle cx="40" cy="60" r="3.6" fill="#2e2a28" />
+        <circle cx="60" cy="60" r="3.6" fill="#2e2a28" />
+        <circle cx="41.3" cy="58.7" r="1.3" fill="#ffffff" />
+        <circle cx="61.3" cy="58.7" r="1.3" fill="#ffffff" />
+        <circle cx="38.8" cy="61.3" r="0.7" fill="#ffffff" opacity="0.8" />
+        <circle cx="58.8" cy="61.3" r="0.7" fill="#ffffff" opacity="0.8" />
+        {/* タンのマズル＋ちいさな鼻とくち */}
+        <ellipse cx="50" cy="69" rx="8" ry="6" fill="#E2B488" />
+        <ellipse cx="50" cy="66.5" rx="2.8" ry="2.1" fill="#2e2a28" />
+        <path d="M47.5 70.5 Q50 72.5 52.5 70.5" stroke="#2e2a28" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+        {/* 頬のタンポイント＋大きめほっぺ */}
+        <ellipse cx="31" cy="66" rx="6" ry="4.5" fill="#E2B488" />
+        <ellipse cx="69" cy="66" rx="6" ry="4.5" fill="#E2B488" />
+        <circle cx="31" cy="65.5" r="4.6" fill="#F5A9BC" opacity="0.9" />
+        <circle cx="69" cy="65.5" r="4.6" fill="#F5A9BC" opacity="0.9" />
       </svg>
     ),
     sakura: (
@@ -566,16 +576,21 @@ export function CharacterSVG({
     ),
     sprout: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <path d="M50 42 L50 30" stroke="#7CBF9E" strokeWidth="3" strokeLinecap="round" />
-        <path d="M50 32 C43 18 30 15 24 21 C28 32 40 37 50 34 Z" fill="#A9DCC3" stroke="#7CBF9E" strokeWidth="1.5" />
-        <path d="M50 32 C57 18 70 15 76 21 C72 32 60 37 50 34 Z" fill="#8FD0B0" stroke="#7CBF9E" strokeWidth="1.5" />
-        <ellipse cx="50" cy="64" rx="26" ry="22" fill="#EAF6EF" />
-        <ellipse cx="50" cy="64" rx="26" ry="22" fill="none" stroke="#BFE0CE" strokeWidth="1.5" />
-        <circle cx="42" cy="61" r="3.2" fill="#3e4a44" />
-        <circle cx="58" cy="61" r="3.2" fill="#3e4a44" />
-        <path d="M46.5 67 Q50 70 53.5 67" stroke="#3e4a44" strokeWidth="1.8" fill="none" strokeLinecap="round" />
-        <circle cx="34" cy="67" r="4.5" fill="#F9C8CE" opacity="0.85" />
-        <circle cx="66" cy="67" r="4.5" fill="#F9C8CE" opacity="0.85" />
+        {/* 植木鉢からちょこんと生えた双葉の芽（はっぱまる=葉1枚 と差別化） */}
+        <path d="M50 42 L50 31" stroke="#8FC26D" strokeWidth="3" strokeLinecap="round" />
+        <path d="M50 34 C42 18 27 15 20 22 C25 34 39 39 50 36 Z" fill="#B7DD98" stroke="#8FC26D" strokeWidth="1.5" />
+        <path d="M50 34 C58 18 73 15 80 22 C75 34 61 39 50 36 Z" fill="#A2D380" stroke="#8FC26D" strokeWidth="1.5" />
+        {/* まるい芽のからだ（若草クリーム） */}
+        <ellipse cx="50" cy="58" rx="23" ry="19" fill="#F1F8E3" />
+        <ellipse cx="50" cy="58" rx="23" ry="19" fill="none" stroke="#C9E3AD" strokeWidth="1.5" />
+        <circle cx="43" cy="56" r="3.2" fill="#4a5240" />
+        <circle cx="57" cy="56" r="3.2" fill="#4a5240" />
+        <path d="M47 62 Q50 64.5 53 62" stroke="#4a5240" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="36" cy="62" r="4.2" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="64" cy="62" r="4.2" fill="#F9C8CE" opacity="0.85" />
+        {/* テラコッタの植木鉢 */}
+        <path d="M34 79 L66 79 L62 92 L38 92 Z" fill="#E8B08C" stroke="#D19570" strokeWidth="1.5" strokeLinejoin="round" />
+        <rect x="29" y="72" width="42" height="8" rx="4" fill="#F0BE9C" stroke="#D19570" strokeWidth="1.5" />
       </svg>
     ),
     star: (
@@ -753,16 +768,18 @@ export function CharacterSVG({
     ),
     happa: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <path d="M50 34 C42 20 28 18 22 24 C26 34 38 40 48 38 Z" fill="#1D9E75" />
-        <path d="M52 32 C56 16 70 12 78 18 C76 30 64 38 54 36 Z" fill="#35B389" />
-        <path d="M50 40 L50 30" stroke="#1D9E75" strokeWidth="3" strokeLinecap="round" />
-        <ellipse cx="50" cy="66" rx="27" ry="24" fill="#DFF2E9" />
-        <ellipse cx="50" cy="66" rx="27" ry="24" fill="none" stroke="#BCE0D0" strokeWidth="1.5" />
-        <circle cx="42" cy="62" r="3.4" fill="#3e4a44" />
-        <circle cx="58" cy="62" r="3.4" fill="#3e4a44" />
-        <circle cx="35" cy="70" r="4.5" fill="#F9C8CE" opacity="0.85" />
-        <circle cx="65" cy="70" r="4.5" fill="#F9C8CE" opacity="0.85" />
-        <path d="M46 70 Q50 74 54 70" stroke="#3e4a44" strokeWidth="2" fill="none" strokeLinecap="round" />
+        {/* まんまるボディに大きな葉っぱ1枚（ふたば=双葉+植木鉢 と差別化） */}
+        <path d="M50 40 Q50 34 53 30" stroke="#1D9E75" strokeWidth="3" fill="none" strokeLinecap="round" />
+        <path d="M52 34 C55 14 72 8 82 15 C80 30 66 40 53 36 Z" fill="#1D9E75" />
+        <path d="M56 32 Q66 23 77 18" stroke="#7FCBAF" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        {/* まんまるのからだ（ミントグリーン） */}
+        <circle cx="50" cy="63" r="26" fill="#D7EFE3" />
+        <circle cx="50" cy="63" r="26" fill="none" stroke="#A9D8C2" strokeWidth="1.5" />
+        <circle cx="42" cy="61" r="3.4" fill="#3e4a44" />
+        <circle cx="58" cy="61" r="3.4" fill="#3e4a44" />
+        <path d="M46 68 Q50 71.5 54 68" stroke="#3e4a44" strokeWidth="2" fill="none" strokeLinecap="round" />
+        <circle cx="34" cy="68" r="5" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="66" cy="68" r="5" fill="#F9C8CE" opacity="0.85" />
       </svg>
     ),
     kumopi: (
@@ -826,34 +843,37 @@ export function CharacterSVG({
         <circle cx="67" cy="62" r="4.5" fill="#F9C8CE" opacity="0.85" />
       </svg>
     ),
-    // 135: らっこん — 仰向けでぷかぷか浮かぶラッコ（全体像が見える・波乗りモーション担当）
+    // 135→今回: らっこん — もちうさ系比率（まんまる大きな頭・目は下寄り離れ気味）の正面向きに描き直し。
+    // 仰向けぷかぷか＋おなかのピンク貝は維持（swimモーション担当）。体色はミルクベージュ。
     rakkon: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        {/* 仰向けのからだ（横長）＋おなかの明るい毛色 */}
-        <ellipse cx="55" cy="62" rx="31" ry="16" fill="#C9A182" />
-        <ellipse cx="55" cy="62" rx="31" ry="16" fill="none" stroke="#B08A66" strokeWidth="1.5" />
-        <ellipse cx="58" cy="58" rx="20" ry="9" fill="#EBD9C3" />
-        {/* しっぽ（右）と後ろあし（ひれ） */}
-        <ellipse cx="88" cy="60" rx="8" ry="4.5" fill="#B08A66" transform="rotate(-20 88 60)" />
-        <ellipse cx="80" cy="52" rx="5" ry="3" fill="#C9A182" transform="rotate(-35 80 52)" />
-        {/* あたま（左）＋耳＋明るい顔まわり */}
-        <circle cx="24" cy="52" r="15" fill="#C9A182" />
-        <circle cx="24" cy="52" r="15" fill="none" stroke="#B08A66" strokeWidth="1.5" />
-        <circle cx="13" cy="42" r="3.5" fill="#B08A66" />
-        <circle cx="35" cy="42" r="3.5" fill="#B08A66" />
-        <circle cx="24" cy="54" r="11" fill="#EBD9C3" />
-        {/* 顔（目・鼻・くち・ほっぺ） */}
-        <circle cx="19" cy="51" r="2.8" fill="#4a3f33" />
-        <circle cx="29" cy="51" r="2.8" fill="#4a3f33" />
-        <ellipse cx="24" cy="56" rx="3" ry="2.2" fill="#4a3f33" />
-        <path d="M21 60 Q24 62.5 27 60" stroke="#4a3f33" strokeWidth="1.6" fill="none" strokeLinecap="round" />
-        <circle cx="14" cy="57" r="3.8" fill="#F9C8CE" opacity="0.85" />
-        <circle cx="34" cy="57" r="3.8" fill="#F9C8CE" opacity="0.85" />
-        {/* 両手でおなかの貝がらを抱える */}
-        <circle cx="47" cy="53" r="4.5" fill="#C9A182" />
-        <circle cx="59" cy="53" r="4.5" fill="#C9A182" />
-        <path d="M53 44 L48 52 L58 52 Z" fill="#F4A8B8" />
-        <path d="M53 44 L50.5 52 M53 44 L55.5 52" stroke="#E288A0" strokeWidth="1" />
+        {/* ちいさな丸耳 */}
+        <circle cx="29" cy="26" r="6" fill="#DDBE94" stroke="#CBA97C" strokeWidth="1.5" />
+        <circle cx="71" cy="26" r="6" fill="#DDBE94" stroke="#CBA97C" strokeWidth="1.5" />
+        <circle cx="29" cy="26" r="2.8" fill="#C9A578" />
+        <circle cx="71" cy="26" r="2.8" fill="#C9A578" />
+        {/* まんまるの大きな頭（ミルクベージュ） */}
+        <ellipse cx="50" cy="46" rx="27" ry="24" fill="#EFDBBB" />
+        <ellipse cx="50" cy="46" rx="27" ry="24" fill="none" stroke="#D9BC91" strokeWidth="1.5" />
+        <ellipse cx="50" cy="52" rx="15" ry="11" fill="#FAF0DE" />
+        {/* 顔（目は下寄り・離れ気味、ちいさな鼻とくち、大きめほっぺ） */}
+        <circle cx="41" cy="48" r="3.4" fill="#4a3f33" />
+        <circle cx="59" cy="48" r="3.4" fill="#4a3f33" />
+        <ellipse cx="50" cy="53" rx="2.8" ry="2.1" fill="#4a3f33" />
+        <path d="M47 57 Q50 59.5 53 57" stroke="#4a3f33" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="32" cy="56" r="5" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="68" cy="56" r="5" fill="#F9C8CE" opacity="0.85" />
+        {/* 仰向けのおなか＋後ろあし（ひれ） */}
+        <ellipse cx="34" cy="89" rx="7" ry="4" fill="#DDBE94" transform="rotate(20 34 89)" />
+        <ellipse cx="66" cy="89" rx="7" ry="4" fill="#DDBE94" transform="rotate(-20 66 89)" />
+        <ellipse cx="50" cy="78" rx="21" ry="13" fill="#EFDBBB" />
+        <ellipse cx="50" cy="78" rx="21" ry="13" fill="none" stroke="#D9BC91" strokeWidth="1.5" />
+        <ellipse cx="50" cy="77" rx="14" ry="9" fill="#FAF0DE" />
+        {/* おなかの上のピンクの貝がらを両手で抱える */}
+        <path d="M50 66 L44.5 76 L55.5 76 Z" fill="#F6B8C6" stroke="#E29AAE" strokeWidth="1" strokeLinejoin="round" />
+        <path d="M50 66 L47 76 M50 66 L53 76" stroke="#E29AAE" strokeWidth="1" />
+        <circle cx="42" cy="73" r="4.2" fill="#EFDBBB" stroke="#D9BC91" strokeWidth="1.2" />
+        <circle cx="58" cy="73" r="4.2" fill="#EFDBBB" stroke="#D9BC91" strokeWidth="1.2" />
       </svg>
     ),
   };
