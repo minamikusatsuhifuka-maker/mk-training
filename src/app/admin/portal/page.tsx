@@ -248,7 +248,7 @@ type TabKey =
 // 「💛 気づきシェア」(hiyari=既存のヒヤリハット/良いこと複合) と
 // 「💡 日々の気づき」(kizuki=指示書104・記名投稿) は別機能。混同注意。
 const TABS: { key: TabKey; label: string }[] = [
-  { key: "news", label: "📢 新着情報" },
+  { key: "news", label: "📢 お知らせ" },
   { key: "archive", label: "🗄️ アーカイブ" },
   { key: "history", label: "🕘 共有履歴" },
   { key: "contrib", label: "📊 共有ログ・貢献" },
@@ -1383,7 +1383,7 @@ export default function AdminPortalPage() {
   };
 
   const deleteNewsItem = async (id: string) => {
-    if (!confirm("この新着情報を削除しますか？")) return;
+    if (!confirm("このお知らせを削除しますか？")) return;
     setSaving(true);
     const target = news.find((n) => n.id === id);
     const next = news.filter((n) => n.id !== id);
@@ -2582,7 +2582,7 @@ export default function AdminPortalPage() {
                   onChange={(e) =>
                     setNewsForm({ ...newsForm, title: e.target.value })
                   }
-                  placeholder="新着情報のタイトル"
+                  placeholder="お知らせのタイトル"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
                 />
               </div>
@@ -2867,7 +2867,7 @@ export default function AdminPortalPage() {
             ))}
             {news.length === 0 && (
               <p className="text-sm text-gray-600 text-center py-8">
-                まだ新着情報がありません
+                まだお知らせがありません
               </p>
             )}
           </div>
@@ -2877,7 +2877,7 @@ export default function AdminPortalPage() {
       {tab === "archive" && (
         <div className="space-y-2">
           <p className="text-sm text-gray-600">
-            通知期限が過ぎたお知らせです。復元すると新着情報の一覧に戻ります（データは削除されません）。
+            通知期限が過ぎたお知らせです。復元するとお知らせの一覧に戻ります（データは削除されません）。
           </p>
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold text-gray-800">
@@ -3165,9 +3165,9 @@ export default function AdminPortalPage() {
                             type="button"
                             onClick={() => setTab("news")}
                             className="text-xs px-2 py-1 border border-teal-200 text-teal-600 rounded hover:bg-teal-50"
-                            title="新着情報タブで通知期限・緊急度などを編集"
+                            title="お知らせタブで通知期限・緊急度などを編集"
                           >
-                            📢 編集（新着情報タブへ）
+                            📢 編集（お知らせタブへ）
                           </button>
                           <button
                             type="button"
@@ -5268,7 +5268,7 @@ export default function AdminPortalPage() {
               </span>
             </label>
             <p className="text-xs text-gray-600 mt-1 ml-6">
-              表示期間内の新着情報がある時、キャラクターが画面上方を横切ります
+              表示期間内のお知らせがある時、キャラクターが画面上方を横切ります
             </p>
           </div>
 

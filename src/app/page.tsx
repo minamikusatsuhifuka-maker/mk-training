@@ -603,7 +603,7 @@ export default function PortalHome() {
       >
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xs font-medium text-gray-800 uppercase tracking-wider">
-            新着情報
+            お知らせ
           </h2>
           {/* 130: 投稿導線の視認性向上（ボタン拡大+最濃階調+影）。flex-wrapは375pxはみ出し防止 */}
           <div className="flex items-center gap-2 flex-wrap">
@@ -669,7 +669,7 @@ export default function PortalHome() {
         </NewsGrid>
         {news.length === 0 && (
           <p className="text-xs text-gray-600 py-4 text-center">
-            新着情報はありません
+            お知らせはありません
           </p>
         )}
 
