@@ -80,7 +80,11 @@ type CharMotion =
   | "balloon" // 風船でふわり（装飾: 風船）
   | "rainbowSlide" // 虹の上をゆるやかに（装飾: 虹）
   | "roll" // ころころ転がる
-  | "sway"; // 葉がそよぐようにそよそよ（135）
+  | "sway" // 葉がそよぐようにそよそよ（135）
+  | "trot" // とことこ小走り（136）
+  | "waddle" // よちよち（136）
+  | "twinkle" // きらきら瞬き（136）
+  | "flit"; // ひらひら蛇行（136）
 
 const MOTION_ANIMATION: Record<CharMotion, string> = {
   swim: "charMotionSwim 1.6s ease-in-out infinite",
@@ -91,20 +95,47 @@ const MOTION_ANIMATION: Record<CharMotion, string> = {
   rainbowSlide: "charMotionFloat 2.8s ease-in-out infinite",
   roll: "charMotionRoll 1.6s linear infinite",
   sway: "charMotionSway 2.6s ease-in-out infinite",
+  trot: "charMotionTrot 0.4s ease-in-out infinite",
+  waddle: "charMotionWaddle 0.55s ease-in-out infinite",
+  twinkle: "charMotionTwinkle 1.4s ease-in-out infinite",
+  flit: "charMotionFlit 2.2s ease-in-out infinite",
 };
 
-const SVG_MOTIONS: Partial<Record<CharacterSvgType, CharMotion>> = {
-  rakkon: "swim", // らっこん=波の上をすいすい（135・院長の当初要望）
-  azaran: "swim", // あざらん=波の上をすいすい
+// 136: 全24キャラに割当（横切りのみのキャラをなくす）
+const SVG_MOTIONS: Record<CharacterSvgType, CharMotion> = {
+  // 波乗り
+  rakkon: "swim", // らっこん（135・院長の当初要望）
+  azaran: "swim",
+  // ふわふわ
   kumopi: "float",
+  moon: "float",
+  // ぱたぱた
   piyomaru: "flutter",
+  bird: "flutter",
+  // ぴょんぴょん
   mochi: "hop",
   rabbit: "hop",
+  note: "hop", // 音符はリズムに乗って跳ねる
+  // 風船・虹
   kogumaro: "balloon",
   rainbow: "rainbowSlide",
-  butterfly: "flutter",
-  happa: "sway", // はっぱまる=そよそよ（135）
-  sprout: "sway", // ふたば=そよそよ（135）
+  // そよそよ
+  happa: "sway",
+  sprout: "sway",
+  sakura: "sway",
+  clover: "sway",
+  // ころころ
+  panda: "roll",
+  hedgehog: "roll", // まるまって転がる
+  // とことこ
+  cat: "trot",
+  dog: "trot",
+  shiba: "trot",
+  chihuahua: "trot",
+  // 専用
+  star: "twinkle",
+  penguin: "waddle",
+  butterfly: "flit",
 };
 
 const EMOJI_MOTIONS: Record<string, CharMotion> = {
@@ -423,391 +454,276 @@ export function CharacterSVG({
   size: number;
 }) {
   const svgs: Record<CharacterSvgType, React.ReactElement> = {
+    // ─── 136: 既存17種の全面リデザイン（オリジナル6体テイスト: 丸・パステル・ほっぺ） ───
     cat: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <ellipse cx="50" cy="60" rx="28" ry="25" fill="#F0997B" />
-        <path d="M30 40 L25 20 L40 35 Z" fill="#F0997B" />
-        <path d="M70 40 L75 20 L60 35 Z" fill="#F0997B" />
-        <circle cx="40" cy="55" r="4" fill="#333" />
-        <circle cx="60" cy="55" r="4" fill="#333" />
-        <path
-          d="M45 65 Q50 70 55 65"
-          stroke="#333"
-          strokeWidth="2"
-          fill="none"
-        />
-        <path d="M48 62 L52 62" stroke="#333" strokeWidth="2" />
+        <path d="M30 38 L24 20 Q34 24 40 32 Z" fill="#F8DDC0" stroke="#E5BE94" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M70 38 L76 20 Q66 24 60 32 Z" fill="#F8DDC0" stroke="#E5BE94" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M30 36 L26.5 24 Q33 27 37 32 Z" fill="#F7C1CC" />
+        <path d="M70 36 L73.5 24 Q67 27 63 32 Z" fill="#F7C1CC" />
+        <ellipse cx="50" cy="60" rx="29" ry="26" fill="#F8DDC0" />
+        <ellipse cx="50" cy="60" rx="29" ry="26" fill="none" stroke="#E5BE94" strokeWidth="1.5" />
+        <circle cx="41" cy="56" r="3.2" fill="#4a4038" />
+        <circle cx="59" cy="56" r="3.2" fill="#4a4038" />
+        <ellipse cx="50" cy="61" rx="2.4" ry="1.8" fill="#E58FA3" />
+        <path d="M47 64 Q48.5 66 50 64 Q51.5 66 53 64" stroke="#4a4038" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="33" cy="64" r="4.5" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="67" cy="64" r="4.5" fill="#F9C8CE" opacity="0.85" />
+        <path d="M20 60 L28 61 M20 66 L28 65 M80 60 L72 61 M80 66 L72 65" stroke="#D9B48C" strokeWidth="1.3" strokeLinecap="round" />
       </svg>
     ),
     dog: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <ellipse cx="50" cy="58" rx="28" ry="26" fill="#BA7517" />
-        <ellipse cx="28" cy="45" rx="10" ry="18" fill="#854F0B" />
-        <ellipse cx="72" cy="45" rx="10" ry="18" fill="#854F0B" />
-        <circle cx="40" cy="55" r="4" fill="#333" />
-        <circle cx="60" cy="55" r="4" fill="#333" />
-        <ellipse cx="50" cy="65" rx="5" ry="4" fill="#333" />
-        <path d="M50 69 L50 74" stroke="#333" strokeWidth="2" />
+        <ellipse cx="26" cy="46" rx="9" ry="16" fill="#D9A96E" transform="rotate(14 26 46)" />
+        <ellipse cx="74" cy="46" rx="9" ry="16" fill="#D9A96E" transform="rotate(-14 74 46)" />
+        <ellipse cx="50" cy="60" rx="29" ry="26" fill="#EFD3AC" />
+        <ellipse cx="50" cy="60" rx="29" ry="26" fill="none" stroke="#DBB782" strokeWidth="1.5" />
+        <circle cx="41" cy="55" r="3.2" fill="#4a4038" />
+        <circle cx="59" cy="55" r="3.2" fill="#4a4038" />
+        <ellipse cx="50" cy="63" rx="8" ry="6" fill="#FBF1DF" />
+        <ellipse cx="50" cy="61" rx="3.2" ry="2.4" fill="#4a4038" />
+        <path d="M46.5 65.5 Q50 68 53.5 65.5" stroke="#4a4038" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="32" cy="62" r="4.5" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="68" cy="62" r="4.5" fill="#F9C8CE" opacity="0.85" />
       </svg>
     ),
     rabbit: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <ellipse cx="50" cy="62" rx="26" ry="24" fill="#F4C0D1" />
-        <ellipse cx="40" cy="30" rx="7" ry="22" fill="#F4C0D1" />
-        <ellipse cx="60" cy="30" rx="7" ry="22" fill="#F4C0D1" />
-        <ellipse cx="40" cy="30" rx="3" ry="16" fill="#ED93B1" />
-        <ellipse cx="60" cy="30" rx="3" ry="16" fill="#ED93B1" />
-        <circle cx="42" cy="58" r="4" fill="#333" />
-        <circle cx="58" cy="58" r="4" fill="#333" />
-        <ellipse cx="50" cy="66" rx="4" ry="3" fill="#D4537E" />
+        <ellipse cx="40" cy="28" rx="7.5" ry="19" fill="#FBEFF2" stroke="#EDCAD4" strokeWidth="1.5" transform="rotate(-6 40 28)" />
+        <ellipse cx="60" cy="28" rx="7.5" ry="19" fill="#FBEFF2" stroke="#EDCAD4" strokeWidth="1.5" transform="rotate(6 60 28)" />
+        <ellipse cx="40" cy="30" rx="3.2" ry="12" fill="#F6BFCE" transform="rotate(-6 40 30)" />
+        <ellipse cx="60" cy="30" rx="3.2" ry="12" fill="#F6BFCE" transform="rotate(6 60 30)" />
+        <ellipse cx="50" cy="63" rx="27" ry="24" fill="#FBEFF2" />
+        <ellipse cx="50" cy="63" rx="27" ry="24" fill="none" stroke="#EDCAD4" strokeWidth="1.5" />
+        <circle cx="42" cy="59" r="3.2" fill="#4a4044" />
+        <circle cx="58" cy="59" r="3.2" fill="#4a4044" />
+        <ellipse cx="50" cy="65" rx="2.6" ry="2" fill="#E58FA3" />
+        <path d="M46.5 68.5 Q50 71 53.5 68.5" stroke="#4a4044" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="34" cy="66" r="4.5" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="66" cy="66" r="4.5" fill="#F9C8CE" opacity="0.85" />
       </svg>
     ),
     bird: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <ellipse cx="50" cy="58" rx="25" ry="22" fill="#85B7EB" />
-        <circle cx="50" cy="35" r="16" fill="#85B7EB" />
-        <circle cx="45" cy="32" r="3" fill="#333" />
-        <circle cx="55" cy="32" r="3" fill="#333" />
-        <path d="M48 38 L52 38 L50 42 Z" fill="#EF9F27" />
-        <path d="M25 60 Q15 55 20 68" fill="#378ADD" />
-        <path d="M75 60 Q85 55 80 68" fill="#378ADD" />
+        <circle cx="50" cy="58" r="27" fill="#CFE4F7" />
+        <circle cx="50" cy="58" r="27" fill="none" stroke="#A9CBE8" strokeWidth="1.5" />
+        <path d="M25 58 Q14 52 18 66 Q22 62 27 64 Z" fill="#B4D4EE" />
+        <path d="M75 58 Q86 52 82 66 Q78 62 73 64 Z" fill="#B4D4EE" />
+        <path d="M44 31 Q50 23 56 31 Q53 28 50 29 Q47 28 44 31 Z" fill="#B4D4EE" />
+        <circle cx="42" cy="53" r="3.2" fill="#44505c" />
+        <circle cx="58" cy="53" r="3.2" fill="#44505c" />
+        <path d="M46 59 L54 59 L50 65 Z" fill="#F2B25C" />
+        <circle cx="34" cy="61" r="4.5" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="66" cy="61" r="4.5" fill="#F9C8CE" opacity="0.85" />
       </svg>
     ),
     chihuahua: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <path d="M22 16 L17 54 L43 41 Z" fill="#2b2622" />
-        <path d="M78 16 L83 54 L57 41 Z" fill="#2b2622" />
-        <path d="M27 24 L24 47 L39 40 Z" fill="#b9793f" />
-        <path d="M73 24 L76 47 L61 40 Z" fill="#b9793f" />
-        <path
-          d="M50 26 C30 26 24 42 24 57 C24 77 36 87 50 87 C64 87 76 77 76 57 C76 42 70 26 50 26 Z"
-          fill="#2b2622"
-        />
-        <path
-          d="M50 57 C37 57 31 65 31 73 C31 82 40 89 50 89 C60 89 69 82 69 73 C69 65 63 57 50 57 Z"
-          fill="#c98a4b"
-        />
-        <ellipse cx="39" cy="46" rx="4.5" ry="3.4" fill="#b9793f" />
-        <ellipse cx="61" cy="46" rx="4.5" ry="3.4" fill="#b9793f" />
-        <circle cx="39" cy="53" r="4.2" fill="#15110d" />
-        <circle cx="61" cy="53" r="4.2" fill="#15110d" />
-        <circle cx="40.4" cy="51.6" r="1.2" fill="#fff" />
-        <circle cx="62.4" cy="51.6" r="1.2" fill="#fff" />
-        <ellipse cx="50" cy="69" rx="5" ry="3.6" fill="#15110d" />
-        <path
-          d="M50 72 L50 77 M50 77 C46 80 43 79 42 77 M50 77 C54 80 57 79 58 77"
-          stroke="#6b4423"
-          strokeWidth="1.6"
-          fill="none"
-          strokeLinecap="round"
-        />
+        <path d="M26 34 L20 14 Q32 18 38 28 Z" fill="#5A5350" stroke="#474140" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M74 34 L80 14 Q68 18 62 28 Z" fill="#5A5350" stroke="#474140" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M27 31 L23.5 18 Q31 21 35 27 Z" fill="#D9A56E" />
+        <path d="M73 31 L76.5 18 Q69 21 65 27 Z" fill="#D9A56E" />
+        <ellipse cx="50" cy="60" rx="28" ry="25" fill="#5A5350" />
+        <ellipse cx="50" cy="60" rx="28" ry="25" fill="none" stroke="#474140" strokeWidth="1.5" />
+        <ellipse cx="41" cy="48" rx="4.5" ry="3" fill="#D9A56E" />
+        <ellipse cx="59" cy="48" rx="4.5" ry="3" fill="#D9A56E" />
+        <circle cx="41" cy="56" r="3.2" fill="#2e2a28" />
+        <circle cx="59" cy="56" r="3.2" fill="#2e2a28" />
+        <circle cx="42" cy="55" r="1" fill="#ffffff" />
+        <circle cx="60" cy="55" r="1" fill="#ffffff" />
+        <ellipse cx="50" cy="66" rx="9" ry="7" fill="#D9A56E" />
+        <ellipse cx="50" cy="63.5" rx="3.2" ry="2.4" fill="#2e2a28" />
+        <path d="M46.5 68 Q50 70.5 53.5 68" stroke="#2e2a28" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="31" cy="63" r="4.5" fill="#F5A9BC" opacity="0.9" />
+        <circle cx="69" cy="63" r="4.5" fill="#F5A9BC" opacity="0.9" />
       </svg>
     ),
     sakura: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <g fill="#f7a8c8">
-          <path d="M50 48 C41 40 39 27 45 18 C46.5 21 48 22 50 22 C52 22 53.5 21 55 18 C61 27 59 40 50 48 Z" />
-          <g transform="rotate(72 50 50)">
-            <path d="M50 48 C41 40 39 27 45 18 C46.5 21 48 22 50 22 C52 22 53.5 21 55 18 C61 27 59 40 50 48 Z" />
-          </g>
-          <g transform="rotate(144 50 50)">
-            <path d="M50 48 C41 40 39 27 45 18 C46.5 21 48 22 50 22 C52 22 53.5 21 55 18 C61 27 59 40 50 48 Z" />
-          </g>
-          <g transform="rotate(216 50 50)">
-            <path d="M50 48 C41 40 39 27 45 18 C46.5 21 48 22 50 22 C52 22 53.5 21 55 18 C61 27 59 40 50 48 Z" />
-          </g>
-          <g transform="rotate(288 50 50)">
-            <path d="M50 48 C41 40 39 27 45 18 C46.5 21 48 22 50 22 C52 22 53.5 21 55 18 C61 27 59 40 50 48 Z" />
-          </g>
+        <g fill="#F9D5E0" stroke="#F0B7C8" strokeWidth="1.5">
+          <ellipse cx="50" cy="24" rx="12" ry="15" />
+          <ellipse cx="75" cy="42" rx="12" ry="15" transform="rotate(72 75 42)" />
+          <ellipse cx="65" cy="71" rx="12" ry="15" transform="rotate(144 65 71)" />
+          <ellipse cx="35" cy="71" rx="12" ry="15" transform="rotate(216 35 71)" />
+          <ellipse cx="25" cy="42" rx="12" ry="15" transform="rotate(288 25 42)" />
         </g>
-        <circle cx="50" cy="50" r="7.5" fill="#fcd7e6" />
-        <g stroke="#e0648f" strokeWidth="1.3" strokeLinecap="round">
-          <line x1="50" y1="50" x2="50" y2="43" />
-          <line x1="50" y1="50" x2="56.5" y2="46.5" />
-          <line x1="50" y1="50" x2="56.5" y2="53.5" />
-          <line x1="50" y1="50" x2="43.5" y2="53.5" />
-          <line x1="50" y1="50" x2="43.5" y2="46.5" />
-        </g>
-        <g fill="#e0648f">
-          <circle cx="50" cy="42" r="1.5" />
-          <circle cx="57.5" cy="46" r="1.5" />
-          <circle cx="57.5" cy="54" r="1.5" />
-          <circle cx="42.5" cy="54" r="1.5" />
-          <circle cx="42.5" cy="46" r="1.5" />
-        </g>
+        <circle cx="50" cy="50" r="17" fill="#FBE3EA" stroke="#F0B7C8" strokeWidth="1.5" />
+        <circle cx="44" cy="48" r="2.8" fill="#4a4044" />
+        <circle cx="56" cy="48" r="2.8" fill="#4a4044" />
+        <path d="M46.5 54 Q50 57 53.5 54" stroke="#4a4044" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="38" cy="53" r="3.8" fill="#F49FB6" opacity="0.8" />
+        <circle cx="62" cy="53" r="3.8" fill="#F49FB6" opacity="0.8" />
       </svg>
     ),
     sprout: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <path
-          d="M50 88 L50 54"
-          stroke="#3f9b54"
-          strokeWidth="4"
-          strokeLinecap="round"
-        />
-        <path
-          d="M50 60 C36 60 26 52 24 39 C39 37 50 45 50 60 Z"
-          fill="#5cc06f"
-        />
-        <path
-          d="M50 54 C64 54 74 46 76 33 C61 31 50 39 50 54 Z"
-          fill="#7ad28a"
-        />
-        <path
-          d="M50 60 C42 56 35 50 28 42"
-          stroke="#358a49"
-          strokeWidth="1.4"
-          fill="none"
-          strokeLinecap="round"
-        />
-        <path
-          d="M50 54 C58 50 65 44 72 35"
-          stroke="#4cae62"
-          strokeWidth="1.4"
-          fill="none"
-          strokeLinecap="round"
-        />
-        <path d="M30 88 C36 82 64 82 70 88 Z" fill="#c7a06d" />
+        <path d="M50 42 L50 30" stroke="#7CBF9E" strokeWidth="3" strokeLinecap="round" />
+        <path d="M50 32 C43 18 30 15 24 21 C28 32 40 37 50 34 Z" fill="#A9DCC3" stroke="#7CBF9E" strokeWidth="1.5" />
+        <path d="M50 32 C57 18 70 15 76 21 C72 32 60 37 50 34 Z" fill="#8FD0B0" stroke="#7CBF9E" strokeWidth="1.5" />
+        <ellipse cx="50" cy="64" rx="26" ry="22" fill="#EAF6EF" />
+        <ellipse cx="50" cy="64" rx="26" ry="22" fill="none" stroke="#BFE0CE" strokeWidth="1.5" />
+        <circle cx="42" cy="61" r="3.2" fill="#3e4a44" />
+        <circle cx="58" cy="61" r="3.2" fill="#3e4a44" />
+        <path d="M46.5 67 Q50 70 53.5 67" stroke="#3e4a44" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="34" cy="67" r="4.5" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="66" cy="67" r="4.5" fill="#F9C8CE" opacity="0.85" />
       </svg>
     ),
     star: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <path
-          d="M50 14 L61 39 L88 42 L67 60 L73 87 L50 73 L27 87 L33 60 L12 42 L39 39 Z"
-          fill="#ffd24a"
-        />
-        <path
-          d="M50 14 L61 39 L88 42 L67 60 L73 87 L50 73 Z"
-          fill="#fbbf24"
-        />
-        <circle cx="43" cy="43" r="3.6" fill="#fff" opacity="0.55" />
+        <path d="M50 14 L59 36 L83 38 L64 54 L71 78 L50 64 L29 78 L36 54 L17 38 L41 36 Z" fill="#FBE7A9" stroke="#FBE7A9" strokeWidth="12" strokeLinejoin="round" />
+        <circle cx="44" cy="48" r="2.8" fill="#5a4c30" />
+        <circle cx="56" cy="48" r="2.8" fill="#5a4c30" />
+        <path d="M46.5 54 Q50 57 53.5 54" stroke="#5a4c30" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="38" cy="53" r="3.8" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="62" cy="53" r="3.8" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="80" cy="18" r="2" fill="#FBE7A9" />
+        <circle cx="20" cy="16" r="1.5" fill="#FBE7A9" />
       </svg>
     ),
     moon: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <path
-          d="M70 16 C48 16 30 33 30 53 C30 73 48 90 70 90 C58 82 51 68 51 53 C51 38 58 24 70 16 Z"
-          fill="#ffd45e"
-        />
-        <path
-          d="M77 28 l1.8 4.6 4.6 1.8 -4.6 1.8 -1.8 4.6 -1.8 -4.6 -4.6 -1.8 4.6 -1.8 z"
-          fill="#ffe08a"
-        />
+        <path d="M60 12 A40 40 0 1 0 60 88 A33 33 0 1 1 60 12 Z" fill="#FBEBB4" stroke="#EAD188" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M30 45 Q33 42 36 45 M44 45 Q47 42 50 45" stroke="#5a4c30" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <path d="M37 55 Q40 58 43 55" stroke="#5a4c30" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="27" cy="52" r="3.8" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="53" cy="52" r="3.8" fill="#F9C8CE" opacity="0.85" />
+        <path d="M74 30 L76 35 L81 37 L76 39 L74 44 L72 39 L67 37 L72 35 Z" fill="#FBEBB4" />
       </svg>
     ),
     shiba: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <path d="M25 22 L20 46 L40 36 Z" fill="#d99a4e" />
-        <path d="M75 22 L80 46 L60 36 Z" fill="#d99a4e" />
-        <path d="M28 27 L25 42 L37 36 Z" fill="#f3e0c8" />
-        <path d="M72 27 L75 42 L63 36 Z" fill="#f3e0c8" />
-        <circle cx="50" cy="56" r="30" fill="#d99a4e" />
-        <path
-          d="M50 44 C36 44 27 55 27 66 C27 77 37 86 50 86 C63 86 73 77 73 66 C73 55 64 44 50 44 Z"
-          fill="#f7ecd9"
-        />
-        <circle cx="39" cy="52" r="3.8" fill="#2c2119" />
-        <circle cx="61" cy="52" r="3.8" fill="#2c2119" />
-        <circle cx="40.2" cy="50.8" r="1" fill="#fff" />
-        <circle cx="62.2" cy="50.8" r="1" fill="#fff" />
-        <ellipse cx="50" cy="63" rx="4.6" ry="3.4" fill="#2c2119" />
-        <path
-          d="M50 66 L50 70 M50 70 C46.5 73 44 72 43 70 M50 70 C53.5 73 56 72 57 70"
-          stroke="#8a6238"
-          strokeWidth="1.6"
-          fill="none"
-          strokeLinecap="round"
-        />
+        <path d="M28 36 L24 18 Q34 22 39 30 Z" fill="#F0BE8A" stroke="#D9A167" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M72 36 L76 18 Q66 22 61 30 Z" fill="#F0BE8A" stroke="#D9A167" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M28.5 33 L26 22 Q32 25 35.5 30 Z" fill="#F7E1C8" />
+        <path d="M71.5 33 L74 22 Q68 25 64.5 30 Z" fill="#F7E1C8" />
+        <ellipse cx="50" cy="60" rx="29" ry="26" fill="#F0BE8A" />
+        <ellipse cx="50" cy="60" rx="29" ry="26" fill="none" stroke="#D9A167" strokeWidth="1.5" />
+        <ellipse cx="50" cy="66" rx="13" ry="10" fill="#FBF0DF" />
+        <ellipse cx="41" cy="48.5" rx="3" ry="1.8" fill="#F7E1C8" />
+        <ellipse cx="59" cy="48.5" rx="3" ry="1.8" fill="#F7E1C8" />
+        <circle cx="41" cy="54" r="3.2" fill="#4a4038" />
+        <circle cx="59" cy="54" r="3.2" fill="#4a4038" />
+        <ellipse cx="50" cy="62" rx="3.2" ry="2.4" fill="#4a4038" />
+        <path d="M46.5 66.5 Q50 69 53.5 66.5" stroke="#4a4038" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="31" cy="62" r="4.5" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="69" cy="62" r="4.5" fill="#F9C8CE" opacity="0.85" />
       </svg>
     ),
     panda: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <circle cx="28" cy="30" r="12" fill="#2c2c2c" />
-        <circle cx="72" cy="30" r="12" fill="#2c2c2c" />
-        <circle cx="50" cy="56" r="30" fill="#fbfbf8" />
-        <ellipse
-          cx="38"
-          cy="52"
-          rx="8"
-          ry="10"
-          transform="rotate(-18 38 52)"
-          fill="#2c2c2c"
-        />
-        <ellipse
-          cx="62"
-          cy="52"
-          rx="8"
-          ry="10"
-          transform="rotate(18 62 52)"
-          fill="#2c2c2c"
-        />
-        <circle cx="39.5" cy="52" r="3" fill="#fff" />
-        <circle cx="60.5" cy="52" r="3" fill="#fff" />
-        <circle cx="40" cy="52.5" r="1.6" fill="#1a1a1a" />
-        <circle cx="60" cy="52.5" r="1.6" fill="#1a1a1a" />
-        <ellipse cx="50" cy="66" rx="4.4" ry="3.2" fill="#2c2c2c" />
-        <path
-          d="M46 74 C48 76 52 76 54 74"
-          stroke="#2c2c2c"
-          strokeWidth="1.8"
-          fill="none"
-          strokeLinecap="round"
-        />
+        <circle cx="28" cy="34" r="10" fill="#6B6560" />
+        <circle cx="72" cy="34" r="10" fill="#6B6560" />
+        <ellipse cx="50" cy="58" rx="29" ry="26" fill="#FDFBF7" />
+        <ellipse cx="50" cy="58" rx="29" ry="26" fill="none" stroke="#DDD5CB" strokeWidth="1.5" />
+        <ellipse cx="40" cy="53" rx="6.5" ry="8" fill="#6B6560" transform="rotate(-14 40 53)" />
+        <ellipse cx="60" cy="53" rx="6.5" ry="8" fill="#6B6560" transform="rotate(14 60 53)" />
+        <circle cx="41" cy="54" r="2.6" fill="#FDFBF7" />
+        <circle cx="41" cy="54" r="1.4" fill="#332f2c" />
+        <circle cx="59" cy="54" r="2.6" fill="#FDFBF7" />
+        <circle cx="59" cy="54" r="1.4" fill="#332f2c" />
+        <ellipse cx="50" cy="63" rx="3" ry="2.2" fill="#332f2c" />
+        <path d="M46.5 67 Q50 69.5 53.5 67" stroke="#332f2c" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="31" cy="63" r="4.5" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="69" cy="63" r="4.5" fill="#F9C8CE" opacity="0.85" />
       </svg>
     ),
     penguin: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <ellipse cx="50" cy="55" rx="27" ry="33" fill="#37474f" />
-        <ellipse cx="50" cy="63" rx="18" ry="23" fill="#fbfbf8" />
-        <path
-          d="M23 48 C18 58 20 70 26 76 C29 68 28 56 27 50 Z"
-          fill="#37474f"
-        />
-        <path
-          d="M77 48 C82 58 80 70 74 76 C71 68 72 56 73 50 Z"
-          fill="#37474f"
-        />
-        <circle cx="42" cy="42" r="3.4" fill="#0f1a1f" />
-        <circle cx="58" cy="42" r="3.4" fill="#0f1a1f" />
-        <circle cx="43" cy="41" r="0.9" fill="#fff" />
-        <circle cx="59" cy="41" r="0.9" fill="#fff" />
-        <path d="M50 46 L45 52 L55 52 Z" fill="#f6a13c" />
-        <ellipse cx="42" cy="86" rx="6" ry="3" fill="#f6a13c" />
-        <ellipse cx="58" cy="86" rx="6" ry="3" fill="#f6a13c" />
+        <ellipse cx="24" cy="58" rx="6" ry="13" fill="#A9C3DC" stroke="#87A8C8" strokeWidth="1.5" transform="rotate(16 24 58)" />
+        <ellipse cx="76" cy="58" rx="6" ry="13" fill="#A9C3DC" stroke="#87A8C8" strokeWidth="1.5" transform="rotate(-16 76 58)" />
+        <ellipse cx="41" cy="86" rx="7" ry="3.5" fill="#F2B25C" />
+        <ellipse cx="59" cy="86" rx="7" ry="3.5" fill="#F2B25C" />
+        <ellipse cx="50" cy="56" rx="27" ry="30" fill="#A9C3DC" />
+        <ellipse cx="50" cy="56" rx="27" ry="30" fill="none" stroke="#87A8C8" strokeWidth="1.5" />
+        <ellipse cx="50" cy="63" rx="18" ry="20" fill="#FDFBF7" />
+        <circle cx="42" cy="46" r="3.2" fill="#3c4650" />
+        <circle cx="58" cy="46" r="3.2" fill="#3c4650" />
+        <path d="M46 52 L54 52 L50 58 Z" fill="#F2B25C" />
+        <circle cx="34" cy="53" r="4.5" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="66" cy="53" r="4.5" fill="#F9C8CE" opacity="0.85" />
       </svg>
     ),
     hedgehog: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <path
-          d="M50 18 L58 30 L70 24 L72 38 L86 38 L80 50 L90 58 L76 62 L80 76 L66 72 L60 84 L50 74 L40 84 L34 72 L20 76 L24 62 L10 58 L20 50 L14 38 L28 38 L30 24 L42 30 Z"
-          fill="#8d6e63"
-        />
-        <circle cx="50" cy="58" r="24" fill="#a1887f" />
-        <path
-          d="M50 46 C39 46 31 55 31 64 C31 73 39 80 50 80 C61 80 69 73 69 64 C69 55 61 46 50 46 Z"
-          fill="#f3e5dc"
-        />
-        <circle cx="42" cy="58" r="3.2" fill="#3e2723" />
-        <circle cx="58" cy="58" r="3.2" fill="#3e2723" />
-        <ellipse cx="50" cy="67" rx="3.8" ry="3" fill="#3e2723" />
-        <path
-          d="M45 73 C47 75 53 75 55 73"
-          stroke="#6d4c41"
-          strokeWidth="1.5"
-          fill="none"
-          strokeLinecap="round"
-        />
+        <path d="M50 16 L58 28 L70 22 L72 36 L86 38 L78 48 L90 56 L78 62 L82 76 L68 72 L62 84 L52 74 L42 84 L34 76 L30 70 L18 72 L24 58 L12 54 L24 46 L16 36 L30 36 L32 22 L44 28 Z" fill="#C9AB8B" stroke="#C9AB8B" strokeWidth="9" strokeLinejoin="round" />
+        <ellipse cx="50" cy="60" rx="22" ry="19" fill="#F7E8D6" />
+        <ellipse cx="50" cy="60" rx="22" ry="19" fill="none" stroke="#E2C9AC" strokeWidth="1.5" />
+        <circle cx="43" cy="57" r="3" fill="#4a4038" />
+        <circle cx="57" cy="57" r="3" fill="#4a4038" />
+        <ellipse cx="50" cy="64" rx="3" ry="2.4" fill="#4a4038" />
+        <path d="M46.5 68 Q50 70.5 53.5 68" stroke="#4a4038" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="35" cy="64" r="4" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="65" cy="64" r="4" fill="#F9C8CE" opacity="0.85" />
       </svg>
     ),
     rainbow: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <path
-          d="M14 78 A36 36 0 0 1 86 78 L76 78 A26 26 0 0 0 24 78 Z"
-          fill="#ef6c6c"
-        />
-        <path
-          d="M24 78 A26 26 0 0 1 76 78 L68 78 A18 18 0 0 0 32 78 Z"
-          fill="#f6b04e"
-        />
-        <path
-          d="M32 78 A18 18 0 0 1 68 78 L60 78 A10 10 0 0 0 40 78 Z"
-          fill="#5cc06f"
-        />
-        <path
-          d="M40 78 A10 10 0 0 1 60 78 L52 78 A2 2 0 0 0 48 78 Z"
-          fill="#5b9bd5"
-        />
-        <circle cx="18" cy="76" r="7" fill="#eef2f5" />
-        <circle cx="26" cy="79" r="6" fill="#f7f9fa" />
-        <circle cx="82" cy="76" r="7" fill="#eef2f5" />
-        <circle cx="74" cy="79" r="6" fill="#f7f9fa" />
+        <path d="M18 66 A32 32 0 0 1 82 66" stroke="#F4A9BD" strokeWidth="8" fill="none" strokeLinecap="round" />
+        <path d="M26 66 A24 24 0 0 1 74 66" stroke="#F8D48E" strokeWidth="8" fill="none" strokeLinecap="round" />
+        <path d="M34 66 A16 16 0 0 1 66 66" stroke="#A5D8B9" strokeWidth="8" fill="none" strokeLinecap="round" />
+        <path d="M42 66 A8 8 0 0 1 58 66" stroke="#A9C7ED" strokeWidth="8" fill="none" strokeLinecap="round" />
+        <circle cx="20" cy="68" r="9" fill="#FDFBF7" stroke="#E4E9EE" strokeWidth="1.5" />
+        <circle cx="17" cy="67" r="1.6" fill="#4a5058" />
+        <circle cx="23" cy="67" r="1.6" fill="#4a5058" />
+        <path d="M18 70.5 Q20 72 22 70.5" stroke="#4a5058" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+        <circle cx="80" cy="68" r="9" fill="#FDFBF7" stroke="#E4E9EE" strokeWidth="1.5" />
+        <circle cx="77" cy="67" r="1.6" fill="#4a5058" />
+        <circle cx="83" cy="67" r="1.6" fill="#4a5058" />
+        <path d="M78 70.5 Q80 72 82 70.5" stroke="#4a5058" strokeWidth="1.3" fill="none" strokeLinecap="round" />
       </svg>
     ),
     note: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <path
-          d="M62 18 L62 66 M62 18 C70 22 76 26 76 34"
-          stroke="#5e60ce"
-          strokeWidth="6"
-          fill="none"
-          strokeLinecap="round"
-        />
-        <ellipse
-          cx="52"
-          cy="68"
-          rx="12"
-          ry="9"
-          transform="rotate(-20 52 68)"
-          fill="#5e60ce"
-        />
-        <path
-          d="M28 40 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2 z"
-          fill="#9fa8ff"
-        />
-        <path
-          d="M80 54 l1.5 4 4 1.5 -4 1.5 -1.5 4 -1.5 -4 -4 -1.5 4 -1.5 z"
-          fill="#9fa8ff"
-        />
+        <path d="M62 22 L62 62" stroke="#B9A6D9" strokeWidth="6" strokeLinecap="round" />
+        <path d="M62 22 Q80 26 78 42 Q72 34 62 34 Z" fill="#B9A6D9" />
+        <ellipse cx="46" cy="68" rx="17" ry="14" fill="#CDBCE8" />
+        <ellipse cx="46" cy="68" rx="17" ry="14" fill="none" stroke="#B9A6D9" strokeWidth="1.5" />
+        <circle cx="40" cy="66" r="2.8" fill="#4c4258" />
+        <circle cx="52" cy="66" r="2.8" fill="#4c4258" />
+        <path d="M43 72 Q46 74.5 49 72" stroke="#4c4258" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="33" cy="71" r="3.8" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="59" cy="71" r="3.8" fill="#F9C8CE" opacity="0.85" />
       </svg>
     ),
     clover: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <g fill="#4caf6d">
-          <path
-            d="M50 52 C42 44 30 44 26 36 C22 28 30 20 38 24 C40 16 52 16 54 24 C62 20 70 28 66 36 C62 44 58 44 50 52 Z"
-            transform="rotate(0 50 50)"
-          />
-          <path
-            d="M50 52 C42 44 30 44 26 36 C22 28 30 20 38 24 C40 16 52 16 54 24 C62 20 70 28 66 36 C62 44 58 44 50 52 Z"
-            transform="rotate(90 50 50)"
-          />
-          <path
-            d="M50 52 C42 44 30 44 26 36 C22 28 30 20 38 24 C40 16 52 16 54 24 C62 20 70 28 66 36 C62 44 58 44 50 52 Z"
-            transform="rotate(180 50 50)"
-          />
-          <path
-            d="M50 52 C42 44 30 44 26 36 C22 28 30 20 38 24 C40 16 52 16 54 24 C62 20 70 28 66 36 C62 44 58 44 50 52 Z"
-            transform="rotate(270 50 50)"
-          />
+        <path d="M52 74 Q54 84 60 88" stroke="#8FC7A5" strokeWidth="3" fill="none" strokeLinecap="round" />
+        <g fill="#B7DFC5" stroke="#8FC7A5" strokeWidth="1.5">
+          <circle cx="38" cy="36" r="14" />
+          <circle cx="62" cy="36" r="14" />
+          <circle cx="38" cy="60" r="14" />
+          <circle cx="62" cy="60" r="14" />
         </g>
-        <path
-          d="M50 54 C52 66 56 76 62 84"
-          stroke="#388e54"
-          strokeWidth="3.5"
-          fill="none"
-          strokeLinecap="round"
-        />
-        <circle cx="50" cy="50" r="4" fill="#7bd096" />
+        <circle cx="50" cy="48" r="15" fill="#DFF2E6" stroke="#B7DFC5" strokeWidth="1.5" />
+        <circle cx="44" cy="46" r="2.8" fill="#3e4a44" />
+        <circle cx="56" cy="46" r="2.8" fill="#3e4a44" />
+        <path d="M46.5 52 Q50 55 53.5 52" stroke="#3e4a44" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="39" cy="51" r="3.8" fill="#F9C8CE" opacity="0.85" />
+        <circle cx="61" cy="51" r="3.8" fill="#F9C8CE" opacity="0.85" />
       </svg>
     ),
     butterfly: (
       <svg width={size} height={size} viewBox="0 0 100 100">
-        <path
-          d="M50 50 C36 30 18 26 14 40 C11 52 28 60 46 56 Z"
-          fill="#f48fb1"
-        />
-        <path
-          d="M50 50 C64 30 82 26 86 40 C89 52 72 60 54 56 Z"
-          fill="#f48fb1"
-        />
-        <path
-          d="M50 54 C40 66 26 70 22 62 C19 55 32 50 46 54 Z"
-          fill="#f8bbd0"
-        />
-        <path
-          d="M50 54 C60 66 74 70 78 62 C81 55 68 50 54 54 Z"
-          fill="#f8bbd0"
-        />
-        <circle cx="42" cy="42" r="3" fill="#fce4ec" />
-        <circle cx="58" cy="42" r="3" fill="#fce4ec" />
-        <ellipse cx="50" cy="52" rx="4" ry="12" fill="#7b4a63" />
-        <path
-          d="M47 40 C44 34 40 32 38 30 M53 40 C56 34 60 32 62 30"
-          stroke="#7b4a63"
-          strokeWidth="1.6"
-          fill="none"
-          strokeLinecap="round"
-        />
+        <g fill="#F5C1D3" stroke="#E79FB8" strokeWidth="1.5">
+          <ellipse cx="30" cy="38" rx="17" ry="14" transform="rotate(-24 30 38)" />
+          <ellipse cx="70" cy="38" rx="17" ry="14" transform="rotate(24 70 38)" />
+        </g>
+        <g fill="#CBB7E8" stroke="#AE95D6" strokeWidth="1.5">
+          <ellipse cx="34" cy="62" rx="12" ry="10" transform="rotate(18 34 62)" />
+          <ellipse cx="66" cy="62" rx="12" ry="10" transform="rotate(-18 66 62)" />
+        </g>
+        <circle cx="31" cy="37" r="4" fill="#FBE3EC" />
+        <circle cx="69" cy="37" r="4" fill="#FBE3EC" />
+        <path d="M46 40 Q42 32 38 30 M54 40 Q58 32 62 30" stroke="#AE95D6" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+        <circle cx="38" cy="29" r="2" fill="#CBB7E8" />
+        <circle cx="62" cy="29" r="2" fill="#CBB7E8" />
+        <ellipse cx="50" cy="52" rx="9" ry="15" fill="#F7EBDD" stroke="#E4CDB4" strokeWidth="1.5" />
+        <circle cx="46.5" cy="49" r="2.4" fill="#4a4044" />
+        <circle cx="53.5" cy="49" r="2.4" fill="#4a4044" />
+        <path d="M47 55 Q50 57.5 53 55" stroke="#4a4044" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+        <circle cx="43" cy="53" r="2.8" fill="#F9C8CE" opacity="0.9" />
+        <circle cx="57" cy="53" r="2.8" fill="#F9C8CE" opacity="0.9" />
       </svg>
     ),
     // ─── 133-B: オリジナル6体（院長採用・サンプルHTMLどおりのデザイン） ───

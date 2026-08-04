@@ -176,6 +176,29 @@ html, body {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+/* 136: とことこ（犬・猫系の小走り） */
+@keyframes charMotionTrot {
+  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+  50% { transform: translateY(-4px) rotate(1.5deg); }
+}
+/* 136: よちよち（ぺんぎん） */
+@keyframes charMotionWaddle {
+  0%, 100% { transform: rotate(-7deg) translateY(0); }
+  50% { transform: rotate(7deg) translateY(-2px); }
+}
+/* 136: きらきら瞬き（ほし） */
+@keyframes charMotionTwinkle {
+  0%, 100% { transform: scale(1) rotate(-4deg); opacity: 0.88; }
+  50% { transform: scale(1.12) rotate(4deg); opacity: 1; }
+}
+/* 136: ひらひら蛇行（ちょうちょ） */
+@keyframes charMotionFlit {
+  0% { transform: translate(0, 0) rotate(-6deg); }
+  25% { transform: translate(8px, -9px) rotate(4deg); }
+  50% { transform: translate(0, -15px) rotate(-4deg); }
+  75% { transform: translate(-8px, -7px) rotate(6deg); }
+  100% { transform: translate(0, 0) rotate(-6deg); }
+}
 /* 135: 葉がそよぐようなそよそよ（はっぱまる・ふたば用） */
 @keyframes charMotionSway {
   0%, 100% { transform: rotate(-6deg) translateY(0); }
