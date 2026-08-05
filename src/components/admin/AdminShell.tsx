@@ -6,6 +6,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { FontSwitcher } from "@/components/FontSwitcher";
 
 const adminNav = [
   { label: "📊 ダッシュボード", href: "/admin" },
@@ -54,17 +55,27 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </button>
           <span className="text-base md:text-lg font-bold">南草津皮フ科 管理画面</span>
         </div>
-        <Link
-          href="/"
-          className="text-xs md:text-sm text-slate-300 hover:text-white transition-colors"
-        >
-          ← スタッフ画面
-        </Link>
+        <div className="flex items-center gap-4">
+          {/* フォント切り替え（139・デスクトップのみ。モバイルは☰内） */}
+          <div className="hidden md:block w-[230px]">
+            <FontSwitcher dark showLabel={false} />
+          </div>
+          <Link
+            href="/"
+            className="text-xs md:text-sm text-slate-300 hover:text-white transition-colors"
+          >
+            ← スタッフ画面
+          </Link>
+        </div>
       </header>
 
       {/* Mobile nav dropdown */}
       {menuOpen && (
         <div className="md:hidden bg-slate-700 px-4 py-2 space-y-1">
+          {/* フォント切り替え（139・モバイル管理画面用） */}
+          <div className="py-1.5">
+            <FontSwitcher dark />
+          </div>
           {adminNav.map((item) => {
             const isActive = pathname === item.href;
             return (

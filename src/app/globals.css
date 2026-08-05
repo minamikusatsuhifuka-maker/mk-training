@@ -7,9 +7,10 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-noto-sans-jp);
+  /* 139: フォントは --app-font 経由（FontSwitcherで切替・既定=Noto Sans JP） */
+  --font-sans: var(--app-font);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-noto-sans-jp);
+  --font-heading: var(--app-font);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -51,42 +52,97 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* ─── 139: 全体UIリデザイン（パステル基調・高コントラスト文字） ───
+   Tailwindの既定パレットトークンを再定義し、全画面のリテラルクラスを一括で変換する。
+   - 文字: gray/slateの「文字用の段」を一段濃くリマップ（薄いグレー文字の多用をやめる・黒基調）
+   - 下地: gray/slateの50〜200をミント寄りのやわらかいパステルへ
+   - 機能色（red/amber/green/緊急色）は意味を持つため一切触らない
+   - 影: 緑がかったグレー・低アルファ・広めブラーでやわらかく */
+@theme {
+  /* 文字（高コントラスト化）: 旧の一段濃い値へ */
+  --color-gray-400: #6b7280;
+  --color-gray-500: #4b5563;
+  --color-gray-600: #374151;
+  --color-gray-700: #1f2937;
+  --color-gray-800: #111827;
+  --color-slate-400: #64748b;
+  --color-slate-500: #475569;
+  --color-slate-600: #334155;
+  --color-slate-700: #1e293b;
+  /* 下地（ミント寄りパステル） */
+  --color-gray-50: #f5f8f6;
+  --color-gray-100: #ecf2ee;
+  --color-gray-200: #dfe8e2;
+  --color-slate-50: #f4f8f6;
+  --color-slate-100: #e9f0ec;
+  /* やわらかい影 */
+  --shadow-2xs: 0 1px 2px 0 rgb(23 60 48 / 0.04);
+  --shadow-xs: 0 1px 3px 0 rgb(23 60 48 / 0.05);
+  --shadow-sm: 0 2px 6px -1px rgb(23 60 48 / 0.07), 0 1px 3px -1px rgb(23 60 48 / 0.05);
+  --shadow-md: 0 6px 16px -4px rgb(23 60 48 / 0.09), 0 2px 6px -2px rgb(23 60 48 / 0.05);
+  --shadow-lg: 0 12px 28px -8px rgb(23 60 48 / 0.12), 0 4px 10px -4px rgb(23 60 48 / 0.06);
+  --shadow-xl: 0 20px 40px -12px rgb(23 60 48 / 0.16);
+  --shadow-2xl: 0 28px 56px -16px rgb(23 60 48 / 0.20);
+}
+
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  /* 139: フォント切替（FontSwitcher・html[data-font] で上書き） */
+  --app-font: var(--font-noto-sans-jp);
+  /* 139: 下地はミント寄りのやわらかいクリーム・文字は黒基調（WCAG AA担保） */
+  --background: #fafcfa;
+  --foreground: #1f2937;
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: #1f2937;
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
+  --popover-foreground: #1f2937;
   --primary: #1D9E75;
   --primary-foreground: #ffffff;
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.446 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --secondary: #f0f6f2;
+  --secondary-foreground: #1f2937;
+  --muted: #f0f6f2;
+  --muted-foreground: #4b5563;
+  --accent: #e9f4ee;
+  --accent-foreground: #1f2937;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
+  --border: #dee9e3;
+  --input: #dee9e3;
   --ring: #1D9E75;
   --chart-1: #1D9E75;
   --chart-2: #16a085;
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: #f8fafb;
-  --sidebar-foreground: oklch(0.145 0 0);
+  --radius: 0.75rem;
+  --sidebar: #f3f8f5;
+  --sidebar-foreground: #1f2937;
   --sidebar-primary: #1D9E75;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #e6f7f1;
   --sidebar-accent-foreground: #145f48;
-  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-border: #dee9e3;
   --sidebar-ring: #1D9E75;
   --teal: #1D9E75;
   --teal-foreground: #ffffff;
   --teal-light: #e6f7f1;
+}
+
+/* 139: フォント切替（localStorage "app_font" → layout.tsx の初期化スクリプトが data-font を設定） */
+html[data-font="biz"] {
+  --app-font: var(--font-biz-udp);
+}
+html[data-font="rounded"] {
+  --app-font: var(--font-mplus-rounded);
+}
+
+/* FontSwitcher のボタンを各フォント自身でプレビュー表示するためのユーティリティ */
+.font-preview-noto {
+  font-family: var(--font-noto-sans-jp), sans-serif;
+}
+.font-preview-biz {
+  font-family: var(--font-biz-udp), sans-serif;
+}
+.font-preview-rounded {
+  font-family: var(--font-mplus-rounded), sans-serif;
 }
 
 @layer base {

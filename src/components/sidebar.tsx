@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { useResolvedNav } from "@/lib/use-nav";
 import { UserMenu } from "@/components/UserMenu";
 import { AdminOnly } from "@/components/AdminOnly";
+import { FontSwitcher } from "@/components/FontSwitcher";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -66,6 +67,12 @@ export function Sidebar() {
           ))}
         </nav>
       </ScrollArea>
+
+      {/* フォント切り替え（139） */}
+      <Separator />
+      <div className="px-3 py-2.5">
+        <FontSwitcher />
+      </div>
 
       {/* ログイン状態 */}
       <Separator />

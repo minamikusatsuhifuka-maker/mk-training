@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/sidebar";
 import { useResolvedNav } from "@/lib/use-nav";
 import { UserMenu } from "@/components/UserMenu";
 import { AdminOnly } from "@/components/AdminOnly";
+import { FontSwitcher } from "@/components/FontSwitcher";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -84,6 +85,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   </div>
                 ))}
               </nav>
+              <div className="px-3 py-2.5 border-t">
+                <FontSwitcher />
+              </div>
               <div className="px-3 py-2 border-t">
                 <UserMenu onNavigate={() => setMenuOpen(false)} />
               </div>
