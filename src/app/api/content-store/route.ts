@@ -19,23 +19,20 @@ import {
   serverPutContentRow,
 } from "@/lib/content-store-server";
 
-const UNAUTH = NextResponse.json(
-  { error: "ログインが必要です" },
-  { status: 401 }
-);
-const FORBIDDEN = NextResponse.json(
-  { error: "権限がありません" },
-  { status: 403 }
-);
+// Response のボディは一度しか読めないため、使い回さず毎回生成する
+const unauth = () =>
+  NextResponse.json({ error: "ログインが必要です" }, { status: 401 });
+const forbidden = () =>
+  NextResponse.json({ error: "権限がありません" }, { status: 403 });
 
 export async function GET(req: Request) {
   const { user } = await getSessionUser();
-  if (!user) return UNAUTH;
+  if (!user) return unauth();
 
   const url = new URL(req.url);
   const prefix = url.searchParams.get("prefix");
   if (prefix !== null) {
-    if (!isAllowedContentPrefix(prefix)) return FORBIDDEN;
+    if (!isAllowedContentPrefix(prefix)) return forbidden();
     const rows = await serverGetContentRowsByPrefix(prefix);
     return NextResponse.json({ rows });
   }
@@ -50,7 +47,7 @@ export async function GET(req: Request) {
 
 export async function PUT(req: Request) {
   const { user } = await getSessionUser();
-  if (!user) return UNAUTH;
+  if (!user) return unauth();
 
   let body: { key?: unknown; contentType?: unknown; data?: unknown };
   try {
@@ -66,7 +63,7 @@ export async function PUT(req: Request) {
   if (data === undefined) {
     return NextResponse.json({ error: "dataが必要です" }, { status: 400 });
   }
-  if (isAdminOnlyContentKey(key) && !isAdminUser(user)) return FORBIDDEN;
+  if (isAdminOnlyContentKey(key) && !isAdminUser(user)) return forbidden();
 
   const type =
     typeof contentType === "string" && contentType
@@ -81,7 +78,7 @@ export async function PUT(req: Request) {
 
 export async function DELETE(req: Request) {
   const { user } = await getSessionUser();
-  if (!user) return UNAUTH;
+  if (!user) return unauth();
 
   let body: { key?: unknown };
   try {
@@ -94,7 +91,7 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: "キーが不正です" }, { status: 400 });
   }
   // 削除は「設定を既定に戻す」用途。書き込みと同じ権限で判定する。
-  if (isAdminOnlyContentKey(key) && !isAdminUser(user)) return FORBIDDEN;
+  if (isAdminOnlyContentKey(key) && !isAdminUser(user)) return forbidden();
 
   const ok = await serverDeleteContentRow(key);
   if (!ok) {
