@@ -32,6 +32,14 @@ import {
 } from "@/lib/character-order";
 import { WeeklyQuestionSection } from "@/components/WeeklyQuestionSection";
 import { MonthlySloganSection } from "@/components/MonthlySloganSection";
+import { MonthOpeningShow } from "@/components/MonthOpeningShow";
+import { CharacterSVG } from "@/components/CharacterNotification";
+import {
+  currentYm as currentMascotYm,
+  loadMascotDuty,
+  mascotForYm,
+  mascotLabel,
+} from "@/lib/mascot-duty";
 import { GanttSummarySection } from "@/components/GanttSummarySection";
 import { ClinicMetricsSection } from "@/components/ClinicMetricsSection";
 import { LibraryNewsSection } from "@/components/LibraryNewsSection";
@@ -329,6 +337,25 @@ export default function PortalHome() {
   // 106: hiyari フラグON時、気づきシェアを「✨良いこと共有」専用に縮小
   //（見出し・種別2択・クイックアクセス・投稿typeを連動。OFF時は従来と完全に同一表示）
   const { flags: featureFlags } = useFeatureFlags();
+  // 146-A: 当月の当番マスコット（フラグOFFなら読み込まない）
+  const [dutyMascot, setDutyMascot] = useState<CharacterSvgType | null>(null);
+  useEffect(() => {
+    if (!featureFlags.mascot_duty) {
+      setDutyMascot(null);
+      return;
+    }
+    let cancelled = false;
+    loadMascotDuty()
+      .then((store) => {
+        if (!cancelled) setDutyMascot(mascotForYm(store, currentMascotYm()));
+      })
+      .catch(() => {
+        /* 取得失敗時は非表示のまま（ホームは壊さない） */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [featureFlags.mascot_duty]);
 
   // 気づきシェア投稿フォーム
   const [showHiyariForm, setShowHiyariForm] = useState(false);
@@ -566,12 +593,27 @@ export default function PortalHome() {
   const sectionNodes: Record<HomeSectionKey, React.ReactNode> = {
     today_word: (
       <section className="px-4 py-5 border-b border-gray-100">
-        <p className="text-xl font-medium text-gray-900 leading-snug">
-          おはようございます
-        </p>
-        <p className="text-sm text-gray-600 mt-1">
-          本日の診療も、四方よしの精神で。
-        </p>
+        {/* 146-A: 当番マスコットはあいさつの横に常駐（文字に重ねない） */}
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-xl font-medium text-gray-900 leading-snug">
+              おはようございます
+            </p>
+            <p className="text-sm text-gray-600 mt-1">
+              本日の診療も、四方よしの精神で。
+            </p>
+          </div>
+          {featureFlags.mascot_duty && dutyMascot && (
+            <div className="shrink-0 text-center">
+              <CharacterSVG type={dutyMascot} size={44} />
+              <p className="text-[10px] text-gray-600 mt-0.5 leading-tight">
+                今月の当番
+                <br />
+                {mascotLabel(dutyMascot)}
+              </p>
+            </div>
+          )}
+        </div>
 
         <div className="mt-4 p-4 bg-teal-50 rounded-xl border border-teal-100">
           <p className="text-xs font-medium text-teal-600 mb-2">今日の一言</p>
@@ -985,6 +1027,12 @@ export default function PortalHome() {
 
   return (
     <div className="max-w-[1536px] mx-auto -m-3 md:-m-6 bg-white min-h-screen">
+      {/* 146-A/B: 月初の初回アクセス時に1回だけ（行進→今月の意識目標） */}
+      <MonthOpeningShow
+        mascotEnabled={featureFlags.mascot_duty}
+        sloganEnabled={featureFlags.slogan_show}
+      />
+
       {/* キャラクター通知（投稿から一定期間内は毎回再生／クリックで中央モーダル） */}
       <CharacterNotification news={news} onOpenNews={setSelectedNews} />
 

@@ -25,6 +25,12 @@ export const FEATURE_IDS = [
   "calendar",
   "hr_portal", // 人事制度ポータル（指示書116・Phase 5）
   "events", // イベント機能（指示書132・Phase 5）
+  // ── お楽しみ演出パック（指示書146・5演出それぞれ独立フラグ・既定OFF）──
+  "mascot_duty", // 146-A: 月替わりマスコット当番
+  "slogan_show", // 146-B: 月初のスローガン発表演出
+  "monthly_digest", // 146-C: 分かち愛マンスリーダイジェスト
+  "seasonal_skin", // 146-D: 季節の装飾
+  "anniversary", // 146-E: 入職記念日・誕生日のお祝い
 ] as const;
 export type FeatureId = (typeof FEATURE_IDS)[number];
 
@@ -77,6 +83,11 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   calendar: false,
   hr_portal: false, // 初期OFF（院長検証→ONでスタッフ公開・指示書116）
   events: false, // 初期OFF（解禁型・指示書132）
+  mascot_duty: false, // 146-A
+  slogan_show: false, // 146-B
+  monthly_digest: false, // 146-C
+  seasonal_skin: false, // 146-D
+  anniversary: false, // 146-E
   page_members: true,
   page_philosophy: true,
   page_corporate_book: true,
@@ -116,6 +127,11 @@ export const FEATURE_META: FeatureMeta[] = [
   { id: "calendar", label: "院内カレンダー", description: "勉強会・イベントの予定共有", phase: 4 },
   { id: "hr_portal", label: "人事制度ポータル", description: "等級・評価・給与・ステージ移行の閲覧とFAQ・検索", phase: 5 },
   { id: "events", label: "イベント", description: "行事・思い出の記録（資料と写真をクリニックの歴史として蓄積）", phase: 5 },
+  { id: "mascot_duty", label: "月替わりマスコット当番", description: "毎月の当番キャラをホームに常駐表示（月初に1回お披露目）", phase: 5 },
+  { id: "slogan_show", label: "月間スローガン発表演出", description: "月初の初回アクセス時にキャラが今月の意識目標を運んでくる", phase: 5 },
+  { id: "monthly_digest", label: "分かち愛マンスリーダイジェスト", description: "前月のありがとう・気づき・良いこと共有を1枚に（実投稿の抜粋のみ）", phase: 5 },
+  { id: "seasonal_skin", label: "季節の装飾", description: "月ごとのささやかな飾り（桜・あじさい・紅葉・雪など）", phase: 5 },
+  { id: "anniversary", label: "記念日のお祝い", description: "入職記念日・誕生日に本人のホームだけでお祝い（誕生日は本人が設定した場合のみ）", phase: 5 },
 ];
 
 // 実装済み機能の集合。各フェーズの実装指示書でIDを追加していく。
@@ -133,6 +149,11 @@ export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
   "calendar", // 指示書114: 院内カレンダー（/calendar・Google Calendar REST直叩き）— これで10機能すべて実装済み
   "hr_portal", // 指示書116: 人事制度ポータル（/hr 配下6ページ・静的コンテンツ＋検索）
   "events", // 指示書132-A: イベント機能（/events・clinic_eventsテーブル・指定メンバー制）
+  "mascot_duty", // 指示書146-A
+  "slogan_show", // 指示書146-B
+  "monthly_digest", // 指示書146-C
+  "seasonal_skin", // 指示書146-D
+  "anniversary", // 指示書146-E
 ]);
 
 // ページの公開設定の管理UI用メタ（指示書124・「📄 ページの公開設定」セクション）

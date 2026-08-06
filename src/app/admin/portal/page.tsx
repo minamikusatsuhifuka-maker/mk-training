@@ -65,6 +65,15 @@ import {
 } from "@/components/NewsColumns";
 import { useEffectiveColumns } from "@/lib/use-effective-columns";
 import {
+  autoMascotForYm,
+  currentYm as currentMascotYm,
+  loadMascotDuty,
+  mascotForYm,
+  mascotLabel,
+  saveMascotDuty,
+  type MascotDutyStore,
+} from "@/lib/mascot-duty";
+import {
   CHARACTER_CHOICES,
   loadCharacterOrderedChoices,
   saveCharacterOrder,
@@ -508,6 +517,14 @@ export default function AdminPortalPage() {
       return next;
     });
 
+  // 146-A: 月替わりマスコット当番（自動選出＋月ごとの手動上書き）
+  const [mascotDuty, setMascotDuty] = useState<MascotDutyStore>({
+    overrides: {},
+    updatedAt: "",
+  });
+  const [mascotYm, setMascotYm] = useState<string>(() => currentMascotYm());
+  const [savingMascot, setSavingMascot] = useState(false);
+
   // 137: キャラ表示順（character_order・欠落/失敗は既定順）＋モーションプレビュー
   const [characterChoices, setCharacterChoices] = useState(CHARACTER_CHOICES);
   const [charOrderDirty, setCharOrderDirty] = useState(false);
@@ -521,7 +538,41 @@ export default function AdminPortalPage() {
     loadCharacterOrderedChoices()
       .then(setCharacterChoices)
       .catch(() => {});
+    // 146-A: 当番の手動上書き設定
+    loadMascotDuty()
+      .then(setMascotDuty)
+      .catch(() => {});
   }, []);
+
+  // 146-A: 当番キャラの上書き（type=null で自動選出に戻す）
+  const setMascotOverride = async (
+    ym: string,
+    type: CharacterSvgType | null
+  ) => {
+    if (savingMascot) return;
+    setSavingMascot(true);
+    const overrides = { ...mascotDuty.overrides };
+    if (type) overrides[ym] = type;
+    else delete overrides[ym];
+    const next: MascotDutyStore = { overrides, updatedAt: "" };
+    const ok = await saveMascotDuty(next);
+    setSavingMascot(false);
+    if (ok) {
+      setMascotDuty({ ...next, updatedAt: new Date().toISOString() });
+      flash(type ? "💾 当番キャラを設定しました" : "↩ 自動選出に戻しました");
+    } else {
+      flash("⚠ 当番キャラの保存に失敗しました");
+    }
+  };
+
+  // 上書き対象として選べる月（今月から6ヶ月先まで）
+  const mascotYmChoices = (() => {
+    const base = new Date();
+    return Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(base.getFullYear(), base.getMonth() + i, 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    });
+  })();
   // ボタンを押したキャラを本番と同じモーションでその場再生（連打は最後のキャラ）
   const previewCharacter = (p: { svgType?: CharacterSvgType; emoji?: string }) => {
     setCharPreview(p);
@@ -5790,6 +5841,74 @@ export default function AdminPortalPage() {
                   ? "💾 並び順を保存"
                   : "保存済み"}
             </button>
+          </div>
+
+          {/* 146-A: 月替わりマスコット当番（自動が基本・必要なときだけ上書き） */}
+          <div className="pt-4 border-t border-gray-100">
+            <label className="text-sm font-medium text-gray-700 mb-2 block">
+              月替わりマスコット当番
+            </label>
+            <p className="text-xs text-gray-500 mb-2">
+              当番は毎月自動で入れ替わります（設定不要）。特定の月だけ指定したいときに上書きしてください。
+              ホームへの表示は「⚙ 機能」タブの「月替わりマスコット当番」がONのときだけです。
+            </p>
+
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <select
+                value={mascotYm}
+                onChange={(e) => setMascotYm(e.target.value)}
+                className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
+              >
+                {mascotYmChoices.map((ym) => (
+                  <option key={ym} value={ym}>
+                    {ym.replace("-", "年")}月
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs text-gray-600">
+                現在:{" "}
+                <span className="font-medium text-gray-800">
+                  {mascotLabel(mascotForYm(mascotDuty, mascotYm))}
+                </span>
+                {mascotDuty.overrides[mascotYm] ? (
+                  <span className="ml-1 text-teal-700">（手動）</span>
+                ) : (
+                  <span className="ml-1 text-gray-500">（自動）</span>
+                )}
+              </span>
+              {mascotDuty.overrides[mascotYm] && (
+                <button
+                  type="button"
+                  onClick={() => setMascotOverride(mascotYm, null)}
+                  disabled={savingMascot}
+                  className="text-xs px-2 py-1 border border-gray-200 rounded-full text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                >
+                  ↩ 自動に戻す（{mascotLabel(autoMascotForYm(mascotYm))}）
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-4 gap-2">
+              {characterChoices.map((item) => {
+                const active = mascotForYm(mascotDuty, mascotYm) === item.type;
+                return (
+                  <button
+                    type="button"
+                    key={item.type}
+                    onClick={() => setMascotOverride(mascotYm, item.type)}
+                    disabled={savingMascot}
+                    className={`flex flex-col items-center gap-1 p-2 rounded-xl border text-xs disabled:opacity-40 ${
+                      active
+                        ? "bg-teal-50 border-teal-300 text-teal-800"
+                        : "border-gray-200 text-gray-700"
+                    }`}
+                  >
+                    <CharacterSVG type={item.type} size={32} />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* サイズ調整 */}

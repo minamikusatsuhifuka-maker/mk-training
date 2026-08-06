@@ -31,6 +31,8 @@ const ADMIN_ONLY_KEYS = new Set<string>([
   "self_review_config",
   "onboarding_template",
   "portal_question_schedule",
+  // 146: 月替わりマスコット当番の手動上書き
+  "portal_mascot_duty",
   // 経営情報（lib 境界で管理者チェック済みだったもの）
   "portal_monthly_slogan",
   "portal_metrics",

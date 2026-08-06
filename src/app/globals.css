@@ -358,3 +358,59 @@ html, body {
 .doc-preview strong {
   font-weight: 700;
 }
+
+/* ─── お楽しみ演出パック（指示書146） ─── */
+
+/* 146-A/B: 月初お披露目の行進。左端から右端へ流れつつ上下に軽く弾む */
+@keyframes mascotParade {
+  0% {
+    left: -70px;
+    transform: translateY(0);
+  }
+  100% {
+    left: calc(100% + 10px);
+    transform: translateY(0);
+  }
+}
+@keyframes mascotParadeHop {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.mascot-parade {
+  animation:
+    mascotParade 4.2s linear forwards,
+    mascotParadeHop 0.62s ease-in-out infinite;
+}
+
+/* 146-B: スローガンカードの登場 */
+@keyframes mascotCardIn {
+  0% { opacity: 0; transform: translateY(14px) scale(0.97); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.mascot-card-in {
+  animation: mascotCardIn 0.42s ease-out both;
+}
+@keyframes mascotCardBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.mascot-card-bounce {
+  animation: mascotCardBounce 1.6s ease-in-out infinite;
+}
+
+/* 146: OSの「視差効果を減らす」がONの端末では演出の動きを止める
+   （表示自体は残す。文字が読めなくなる方が困るため） */
+@media (prefers-reduced-motion: reduce) {
+  .mascot-parade,
+  .mascot-card-in,
+  .mascot-card-bounce,
+  .seasonal-sway,
+  .seasonal-fall {
+    animation: none !important;
+  }
+  .mascot-parade {
+    /* 行進は流さず等間隔で静止表示 */
+    position: static !important;
+    display: inline-block;
+  }
+}
