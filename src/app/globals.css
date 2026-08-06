@@ -414,3 +414,12 @@ html, body {
     display: inline-block;
   }
 }
+
+/* 146-D: 季節の装飾。ゆっくり揺れる程度に留める（ちらつかせない） */
+@keyframes seasonalSway {
+  0%, 100% { transform: translateY(0) rotate(-4deg); }
+  50% { transform: translateY(3px) rotate(4deg); }
+}
+.seasonal-sway {
+  animation: seasonalSway 4.5s ease-in-out infinite;
+}

@@ -33,6 +33,8 @@ import {
 import { WeeklyQuestionSection } from "@/components/WeeklyQuestionSection";
 import { MonthlySloganSection } from "@/components/MonthlySloganSection";
 import { MonthOpeningShow } from "@/components/MonthOpeningShow";
+import { MonthlyDigestSection } from "@/components/MonthlyDigestSection";
+import { seasonalThemeFor } from "@/lib/seasonal";
 import { CharacterSVG } from "@/components/CharacterNotification";
 import {
   currentYm as currentMascotYm,
@@ -337,6 +339,9 @@ export default function PortalHome() {
   // 106: hiyari フラグON時、気づきシェアを「✨良いこと共有」専用に縮小
   //（見出し・種別2択・クイックアクセス・投稿typeを連動。OFF時は従来と完全に同一表示）
   const { flags: featureFlags } = useFeatureFlags();
+  // 146-D: 当月の季節テーマ（純粋計算・データ取得なし）
+  const seasonal = seasonalThemeFor();
+
   // 146-A: 当月の当番マスコット（フラグOFFなら読み込まない）
   const [dutyMascot, setDutyMascot] = useState<CharacterSvgType | null>(null);
   useEffect(() => {
@@ -626,6 +631,10 @@ export default function PortalHome() {
     ),
     // 141: 当月未設定なら null（カードごと非表示）
     monthly_slogan: <MonthlySloganSection />,
+    // 146-C: 前月分の分かち愛ダイジェスト（投稿0件なら null）
+    monthly_digest: featureFlags.monthly_digest ? (
+      <MonthlyDigestSection />
+    ) : null,
     news: (
       <section
         ref={newsSectionRef}
@@ -1037,12 +1046,33 @@ export default function PortalHome() {
       <CharacterNotification news={news} onOpenNews={setSelectedNews} />
 
       {/* ① ヘッダーバー（並び替え対象外・常に先頭固定） */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-gray-100 sticky top-0 bg-white z-10">
-        <div>
+      <header className="relative overflow-hidden flex items-center justify-between px-4 py-3 border-b border-gray-100 sticky top-0 bg-white z-10">
+        {/* 146-D: 季節の装飾。文字に重ならないようヘッダー帯の背面だけに置く */}
+        {featureFlags.seasonal_skin && (
+          <div
+            aria-hidden="true"
+            className={`pointer-events-none absolute inset-0 bg-gradient-to-r ${seasonal.bandClass}`}
+          >
+            {seasonal.marks.slice(0, 4).map((mark, i) => (
+              <span
+                key={`${mark}-${i}`}
+                className="absolute text-base opacity-40 seasonal-sway"
+                style={{
+                  right: `${8 + i * 22}px`,
+                  top: i % 2 === 0 ? "6px" : "26px",
+                  animationDelay: `${i * 0.7}s`,
+                }}
+              >
+                {mark}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="relative">
           <p className="text-base font-medium text-gray-900">南草津皮フ科</p>
           <p className="text-xs text-gray-600">スタッフポータル</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="relative flex items-center gap-3">
           <span className="text-xs text-gray-600">{todayStr}</span>
           <div className="w-8 h-8 rounded-full bg-teal-50 flex items-center justify-center text-xs font-medium text-teal-700">
             あ
