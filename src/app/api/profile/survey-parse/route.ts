@@ -4,7 +4,6 @@
 // Gemini 3.x は PDF を inline_data(mime_type:"application/pdf") でそのまま読める（複数ページ可）。
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import {
   getSelectedGeminiModel,
   GEMINI_THINKING_CONFIG,
@@ -105,11 +104,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "画像がありません" }, { status: 400 });
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-    const model = await getSelectedGeminiModel(supabase);
+    const model = await getSelectedGeminiModel();
 
     const detailList = NEED_DETAIL_ITEMS.map(
       (i) => `"${i.key}"（${i.label}／${NEED_LABELS[i.need]}）`

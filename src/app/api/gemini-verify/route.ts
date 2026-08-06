@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { getSelectedGeminiModel, GEMINI_THINKING_CONFIG } from '@/lib/gemini-models'
 
 export const maxDuration = 60
@@ -34,11 +33,7 @@ export async function POST(req: NextRequest) {
     if (!apiKey) return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 })
 
     // 管理画面で選択中のGeminiモデルを取得（未設定時はデフォルト）
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-    const model = await getSelectedGeminiModel(supabase)
+    const model = await getSelectedGeminiModel()
 
     // 一括評価の場合
     if (body.items && Array.isArray(body.items)) {

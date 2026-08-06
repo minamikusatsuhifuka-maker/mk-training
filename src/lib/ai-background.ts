@@ -1,7 +1,8 @@
 // AI共通の背景情報（理念・方針）— 唯一の編集場所
 // content_store キー ai_background_context（{ text } 形式で保存）に集約し、
 // スタッフ向け主要AI機能のシステムプロンプト冒頭へ共通注入する。
-import { createClient } from "@supabase/supabase-js";
+// 145: content_store は RLS 有効のため service-role で読む（サーバー専用）。
+import { createSupabaseAdminClient } from "./supabase-admin";
 
 export const AI_BACKGROUND_KEY = "ai_background_context";
 
@@ -10,11 +11,8 @@ const MAX_BG_CHARS = 6000;
 
 // 背景情報の本文（Markdown）を取得。未設定・失敗時は空文字。
 export async function getAiBackgroundContext(): Promise<string> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return "";
   try {
-    const supabase = createClient(url, key);
+    const supabase = createSupabaseAdminClient();
     const { data } = await supabase
       .from("content_store")
       .select("data")

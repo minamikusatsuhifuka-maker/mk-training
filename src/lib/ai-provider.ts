@@ -2,10 +2,10 @@
 // 管理トグル（content_store キー ai_provider_setting）に応じて Claude / Gemini を切替える。
 // 既定は 'gemini'（DEFAULT_GEMINI_MODEL）。保存値があればそれを優先（トグルで claude に戻せる）。
 // プロンプト本文・理念注入・出力整形は各 route 側に残す。
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { createSupabaseAdminClient } from "./supabase-admin";
 import {
   getSelectedGeminiModel,
-  DEFAULT_GEMINI_MODEL,
   GEMINI_THINKING_CONFIG,
 } from "./gemini-models";
 
@@ -20,11 +20,13 @@ export const DEFAULT_AI_PROVIDER: AiProvider = "gemini";
 // Claude の既定モデル（各 route の従来モデルを尊重するため override 可能）
 const DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-5";
 
+// 145: content_store は RLS 有効のため anon では読めない。service-role で読む（サーバー専用）。
 function serverSupabase(): SupabaseClient | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key);
+  try {
+    return createSupabaseAdminClient();
+  } catch {
+    return null;
+  }
 }
 
 // 現在のプロバイダ設定を content_store から取得（未設定・失敗時は既定 gemini）。
@@ -140,10 +142,7 @@ async function callGemini(opts: CallAIOptions): Promise<CallAIResult> {
     };
 
   // 管理画面で選択中の Gemini モデル（3.6-flash / 3.1-pro）を使用
-  const supabase = serverSupabase();
-  const model = supabase
-    ? await getSelectedGeminiModel(supabase)
-    : DEFAULT_GEMINI_MODEL;
+  const model = await getSelectedGeminiModel();
 
   // messages を Gemini の contents にマッピング（assistant → model）
   const contents = opts.messages.map((m) => ({

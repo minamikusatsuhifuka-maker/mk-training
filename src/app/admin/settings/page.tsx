@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
 import {
   GEMINI_MODELS,
   DEFAULT_GEMINI_MODEL,
@@ -13,11 +12,8 @@ import {
   DEFAULT_AI_PROVIDER,
   type AiProvider,
 } from "@/lib/ai-provider";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// 145: anon 直アクセスを廃止し認証必須APIへ
+import { getContentRow, putContentRow } from "@/lib/content-store-core";
 
 const AI_PROVIDERS: { id: AiProvider; label: string; desc: string }[] = [
   {
@@ -42,24 +38,16 @@ export default function SettingsPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const { data } = await supabase
-          .from("content_store")
-          .select("data")
-          .eq("id", GEMINI_MODEL_SETTING_KEY)
-          .single();
-        const model = (data?.data as { model?: string } | null)?.model;
+        const row = await getContentRow(GEMINI_MODEL_SETTING_KEY);
+        const model = (row?.data as { model?: string } | null)?.model;
         // 保存値が候補外（廃止済みモデルID）の場合はデフォルト表示のまま
         if (model && isKnownGeminiModel(model)) setSelectedModel(model);
       } catch {
         /* 未設定時はデフォルトのまま */
       }
       try {
-        const { data } = await supabase
-          .from("content_store")
-          .select("data")
-          .eq("id", AI_PROVIDER_SETTING_KEY)
-          .single();
-        const p = (data?.data as { provider?: string } | null)?.provider;
+        const row = await getContentRow(AI_PROVIDER_SETTING_KEY);
+        const p = (row?.data as { provider?: string } | null)?.provider;
         if (p === "gemini" || p === "claude") setProvider(p);
       } catch {
         /* 未設定時は claude のまま */
@@ -71,13 +59,12 @@ export default function SettingsPage() {
   const handleSaveProvider = async () => {
     setSavingProvider(true);
     try {
-      const { error } = await supabase.from("content_store").upsert({
-        id: AI_PROVIDER_SETTING_KEY,
-        content_type: "ai_provider_setting",
-        data: { provider },
-        updated_at: new Date().toISOString(),
-      });
-      if (error) throw error;
+      const ok = await putContentRow(
+        AI_PROVIDER_SETTING_KEY,
+        "ai_provider_setting",
+        { provider }
+      );
+      if (!ok) throw new Error("save failed");
       alert("✅ AIプロバイダ設定を保存しました");
     } catch {
       alert("保存に失敗しました");
@@ -89,13 +76,12 @@ export default function SettingsPage() {
   const handleSaveModel = async () => {
     setSavingModel(true);
     try {
-      const { error } = await supabase.from("content_store").upsert({
-        id: GEMINI_MODEL_SETTING_KEY,
-        content_type: "gemini_model_setting",
-        data: { model: selectedModel },
-        updated_at: new Date().toISOString(),
-      });
-      if (error) throw error;
+      const ok = await putContentRow(
+        GEMINI_MODEL_SETTING_KEY,
+        "gemini_model_setting",
+        { model: selectedModel }
+      );
+      if (!ok) throw new Error("save failed");
       alert("✅ モデル設定を保存しました");
     } catch {
       alert("保存に失敗しました");

@@ -5,9 +5,13 @@
 // 全文を持つ本体レコードを分離する（大量保存でも肥大化しない）。
 //   - deep_research_index : { items: ResearchIndexItem[] } … 一覧用・軽量メタのみ
 //   - deep_research:<id>  : ResearchResult … 本体（全文・sources）
-// ※ Supabase は既存 lib/supabase.ts の anon クライアントを共有（service-role 不使用）。
+// ※ 145: anon 直アクセスを廃止し content-store-core 経由（ブラウザ=認証必須API／サーバー=service-role）。
 
-import { supabase } from "@/lib/supabase";
+import {
+  deleteContentRow,
+  getContentRow,
+  putContentRow,
+} from "@/lib/content-store-core";
 import { loadPortalItems, savePortalItems } from "@/lib/portal-store";
 import {
   KNOWLEDGE_DOCS_KEY,
@@ -45,25 +49,16 @@ export type ResearchIndexItem = {
 
 /** インデックス（メタ配列）を取得 */
 async function loadResearchIndex(): Promise<ResearchIndexItem[]> {
-  const { data, error } = await supabase
-    .from("content_store")
-    .select("data")
-    .eq("id", RESEARCH_INDEX_KEY)
-    .single();
-  if (error || !data) return [];
-  const payload = data.data as { items?: ResearchIndexItem[] } | null;
+  const row = await getContentRow(RESEARCH_INDEX_KEY);
+  if (!row) return [];
+  const payload = row.data as { items?: ResearchIndexItem[] } | null;
   return Array.isArray(payload?.items) ? payload.items : [];
 }
 
 /** インデックスを保存 */
 async function saveResearchIndex(items: ResearchIndexItem[]): Promise<void> {
-  const { error } = await supabase.from("content_store").upsert({
-    id: RESEARCH_INDEX_KEY,
-    content_type: CONTENT_TYPE,
-    data: { items } as unknown as Record<string, unknown>,
-    updated_at: new Date().toISOString(),
-  });
-  if (error) throw new Error(`インデックス保存に失敗: ${error.message}`);
+  const ok = await putContentRow(RESEARCH_INDEX_KEY, CONTENT_TYPE, { items });
+  if (!ok) throw new Error("インデックス保存に失敗: 保存に失敗しました");
 }
 
 /** 一覧取得（新しい順） */
@@ -74,13 +69,9 @@ export async function listResearch(): Promise<ResearchIndexItem[]> {
 
 /** 本体（全文）取得。見つからなければ null */
 export async function getResearch(id: string): Promise<ResearchResult | null> {
-  const { data, error } = await supabase
-    .from("content_store")
-    .select("data")
-    .eq("id", RESEARCH_PREFIX + id)
-    .single();
-  if (error || !data) return null;
-  return (data.data as ResearchResult) ?? null;
+  const row = await getContentRow(RESEARCH_PREFIX + id);
+  if (!row) return null;
+  return (row.data as ResearchResult) ?? null;
 }
 
 /** 保存（本体を upsert ＋ インデックスに追加）。保存した本体を返す */
@@ -104,13 +95,8 @@ export async function saveResearch(input: {
   };
 
   // 1) 本体を保存（全文はここだけに持たせる）
-  const { error: bodyErr } = await supabase.from("content_store").upsert({
-    id: RESEARCH_PREFIX + id,
-    content_type: CONTENT_TYPE,
-    data: record as unknown as Record<string, unknown>,
-    updated_at: createdAt,
-  });
-  if (bodyErr) throw new Error(`本体保存に失敗: ${bodyErr.message}`);
+  const ok = await putContentRow(RESEARCH_PREFIX + id, CONTENT_TYPE, record);
+  if (!ok) throw new Error("本体保存に失敗: 保存に失敗しました");
 
   // 2) インデックスに軽量メタを先頭追加
   const indexItem: ResearchIndexItem = {
@@ -131,11 +117,8 @@ export async function saveResearch(input: {
 export async function deleteResearch(id: string): Promise<void> {
   const items = await loadResearchIndex();
   await saveResearchIndex(items.filter((it) => it.id !== id));
-  const { error } = await supabase
-    .from("content_store")
-    .delete()
-    .eq("id", RESEARCH_PREFIX + id);
-  if (error) throw new Error(`本体削除に失敗: ${error.message}`);
+  const ok = await deleteContentRow(RESEARCH_PREFIX + id);
+  if (!ok) throw new Error("本体削除に失敗: 削除に失敗しました");
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -154,25 +137,16 @@ const MATERIAL_PREFIX = "derived_material:";
 
 /** 学習資料インデックス（メタ配列）を取得 */
 async function loadMaterialIndex(): Promise<DerivedMaterialIndexItem[]> {
-  const { data, error } = await supabase
-    .from("content_store")
-    .select("data")
-    .eq("id", MATERIAL_INDEX_KEY)
-    .single();
-  if (error || !data) return [];
-  const payload = data.data as { items?: DerivedMaterialIndexItem[] } | null;
+  const row = await getContentRow(MATERIAL_INDEX_KEY);
+  if (!row) return [];
+  const payload = row.data as { items?: DerivedMaterialIndexItem[] } | null;
   return Array.isArray(payload?.items) ? payload.items : [];
 }
 
 /** 学習資料インデックスを保存 */
 async function saveMaterialIndex(items: DerivedMaterialIndexItem[]): Promise<void> {
-  const { error } = await supabase.from("content_store").upsert({
-    id: MATERIAL_INDEX_KEY,
-    content_type: MATERIAL_CONTENT_TYPE,
-    data: { items } as unknown as Record<string, unknown>,
-    updated_at: new Date().toISOString(),
-  });
-  if (error) throw new Error(`学習資料インデックスの保存に失敗: ${error.message}`);
+  const ok = await putContentRow(MATERIAL_INDEX_KEY, MATERIAL_CONTENT_TYPE, { items });
+  if (!ok) throw new Error("学習資料インデックスの保存に失敗: 保存に失敗しました");
 }
 
 /** 学習資料の一覧取得（新しい順） */
@@ -183,13 +157,9 @@ export async function listDerivedMaterials(): Promise<DerivedMaterialIndexItem[]
 
 /** 学習資料の本体（全文）取得。見つからなければ null */
 export async function getDerivedMaterial(id: string): Promise<DerivedMaterial | null> {
-  const { data, error } = await supabase
-    .from("content_store")
-    .select("data")
-    .eq("id", MATERIAL_PREFIX + id)
-    .single();
-  if (error || !data) return null;
-  return (data.data as DerivedMaterial) ?? null;
+  const row = await getContentRow(MATERIAL_PREFIX + id);
+  if (!row) return null;
+  return (row.data as DerivedMaterial) ?? null;
 }
 
 /** 学習資料を保存（本体を upsert ＋ インデックスに追加）。保存した本体を返す */
@@ -213,13 +183,8 @@ export async function saveDerivedMaterial(input: {
   };
 
   // 1) 本体を保存（全文はここだけに持たせる）
-  const { error: bodyErr } = await supabase.from("content_store").upsert({
-    id: MATERIAL_PREFIX + id,
-    content_type: MATERIAL_CONTENT_TYPE,
-    data: record as unknown as Record<string, unknown>,
-    updated_at: createdAt,
-  });
-  if (bodyErr) throw new Error(`学習資料の保存に失敗: ${bodyErr.message}`);
+  const ok = await putContentRow(MATERIAL_PREFIX + id, MATERIAL_CONTENT_TYPE, record);
+  if (!ok) throw new Error("学習資料の保存に失敗: 保存に失敗しました");
 
   // 2) インデックスに軽量メタを先頭追加
   const indexItem: DerivedMaterialIndexItem = {
@@ -240,11 +205,8 @@ export async function saveDerivedMaterial(input: {
 export async function deleteDerivedMaterial(id: string): Promise<void> {
   const items = await loadMaterialIndex();
   await saveMaterialIndex(items.filter((it) => it.id !== id));
-  const { error } = await supabase
-    .from("content_store")
-    .delete()
-    .eq("id", MATERIAL_PREFIX + id);
-  if (error) throw new Error(`学習資料の削除に失敗: ${error.message}`);
+  const ok = await deleteContentRow(MATERIAL_PREFIX + id);
+  if (!ok) throw new Error("学習資料の削除に失敗: 削除に失敗しました");
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -265,12 +227,8 @@ export async function addKnowledgeDoc(input: {
   fileType?: string;
 }): Promise<KnowledgeDoc> {
   // 既存形式は { docs: KnowledgeDoc[] }（portal の { items } とは別形式）
-  const { data } = await supabase
-    .from("content_store")
-    .select("data")
-    .eq("id", KNOWLEDGE_DOCS_KEY)
-    .single();
-  const raw = (data?.data as { docs?: KnowledgeDoc[] } | undefined) || {};
+  const row = await getContentRow(KNOWLEDGE_DOCS_KEY);
+  const raw = (row?.data as { docs?: KnowledgeDoc[] } | undefined) || {};
   const docs = raw.docs || [];
 
   const now = new Date().toISOString();
@@ -287,13 +245,8 @@ export async function addKnowledgeDoc(input: {
   };
   docs.push(doc);
 
-  const { error } = await supabase.from("content_store").upsert({
-    id: KNOWLEDGE_DOCS_KEY,
-    content_type: "knowledge_docs",
-    data: { docs } as unknown as Record<string, unknown>,
-    updated_at: now,
-  });
-  if (error) throw new Error(`AI参照資料の保存に失敗: ${error.message}`);
+  const ok = await putContentRow(KNOWLEDGE_DOCS_KEY, "knowledge_docs", { docs });
+  if (!ok) throw new Error("AI参照資料の保存に失敗: 保存に失敗しました");
   return doc;
 }
 

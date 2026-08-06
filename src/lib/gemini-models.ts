@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+// 145: content_store は RLS 有効のため service-role 経由で読む（サーバー専用）。
+import { serverGetContentRow } from "./content-store-server";
 
 // 管理画面の評価・分析機能で使用する Gemini モデル候補
 export const GEMINI_MODELS = [
@@ -34,16 +35,10 @@ export function isKnownGeminiModel(model: string): boolean {
 
 // 現在選択中のモデルを content_store から取得（未設定・失敗時はデフォルト）
 // 保存値が候補外（例: 廃止済みの gemini-3.5-flash）の場合もデフォルトへフォールバックする
-export async function getSelectedGeminiModel(
-  supabase: SupabaseClient
-): Promise<string> {
+export async function getSelectedGeminiModel(): Promise<string> {
   try {
-    const { data } = await supabase
-      .from("content_store")
-      .select("data")
-      .eq("id", GEMINI_MODEL_SETTING_KEY)
-      .single();
-    const model = (data?.data as { model?: string } | null)?.model;
+    const row = await serverGetContentRow(GEMINI_MODEL_SETTING_KEY);
+    const model = (row?.data as { model?: string } | null)?.model;
     return model && isKnownGeminiModel(model) ? model : DEFAULT_GEMINI_MODEL;
   } catch {
     return DEFAULT_GEMINI_MODEL;

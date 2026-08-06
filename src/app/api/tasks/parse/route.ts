@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { getSelectedGeminiModel, GEMINI_THINKING_CONFIG } from "@/lib/gemini-models";
 import { normalizeParsedTask, type ParsedTask } from "@/lib/staff-tasks";
 
@@ -110,11 +109,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ tasks: [] });
 
     // 選択中の Gemini モデル
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-    const model = await getSelectedGeminiModel(supabase);
+    const model = await getSelectedGeminiModel();
 
     // 今日（Asia/Tokyo）
     const today = new Date().toLocaleDateString("en-CA", {

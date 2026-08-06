@@ -1,5 +1,6 @@
 // AI APIから呼び出されるサーバー側の知識ベース取得ヘルパー
-import { createClient } from "@supabase/supabase-js";
+// 145: content_store は RLS 有効のため service-role で読む（サーバー専用）。
+import { createSupabaseAdminClient } from "./supabase-admin";
 import {
   buildPhilosophyContext,
   KNOWLEDGE_DOCS_KEY,
@@ -11,13 +12,9 @@ import {
 export async function buildFullKnowledgeContext(): Promise<string> {
   const philosophy = buildPhilosophyContext();
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return philosophy;
-
   let additionalKnowledge = "";
   try {
-    const supabase = createClient(url, key);
+    const supabase = createSupabaseAdminClient();
     const { data } = await supabase
       .from("content_store")
       .select("data")

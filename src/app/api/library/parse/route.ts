@@ -6,7 +6,6 @@
 // - 抽出不能・破損・その他形式: fallback:true を返す（UIで手入力に誘導。登録は止めない）。
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import {
   getSelectedGeminiModel,
   GEMINI_THINKING_CONFIG,
@@ -137,11 +136,7 @@ export async function POST(req: NextRequest) {
     const file = form.get("file");
     const hasFile = file instanceof Blob;
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-    const model = await getSelectedGeminiModel(supabase);
+    const model = await getSelectedGeminiModel();
 
     let parts: Record<string, unknown>[];
     let searchText = "";

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { getSelectedGeminiModel, GEMINI_THINKING_CONFIG } from '@/lib/gemini-models'
 
 const SYSTEM_INSTRUCTION = `【重要な指示】
@@ -30,11 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 管理画面で選択中のGeminiモデルを取得（未設定時はデフォルト）
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-  const model = await getSelectedGeminiModel(supabase)
+  const model = await getSelectedGeminiModel()
 
   const today = new Date().toISOString().slice(0, 10)
 

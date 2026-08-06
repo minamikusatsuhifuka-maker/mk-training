@@ -14,6 +14,7 @@ import {
   normalizeProfileRoles,
   PROFILE_ROLE_CONFIG_KEY,
 } from "@/lib/profile-roles";
+import { serverGetContentRow } from "@/lib/content-store-server";
 import { normalizeNeedsSurvey } from "@/lib/needs-survey";
 import type { NeedsSurvey } from "@/lib/needs-survey";
 import { normalizeValueKeywords } from "@/lib/value-keywords";
@@ -75,13 +76,10 @@ export async function PUT(req: NextRequest) {
 
   // 役職は profile_role_config に存在する id のみ許可（指示書51）。
   // hidden の役職も許可する（使用中メンバーが他項目を保存しても役職が消えないように）。
-  const { data: roleCfg } = await db
-    .from("content_store")
-    .select("data")
-    .eq("id", PROFILE_ROLE_CONFIG_KEY)
-    .maybeSingle();
+  // 145: content_store は RLS 有効のため service-role 経由で読む
+  const roleCfgRow = await serverGetContentRow(PROFILE_ROLE_CONFIG_KEY);
   const roleDefs = normalizeProfileRoles(
-    (roleCfg?.data as { roles?: unknown } | null)?.roles
+    (roleCfgRow?.data as { roles?: unknown } | null)?.roles
   );
   const requestedRole = typeof body.role === "string" ? body.role.trim() : "";
   const role =

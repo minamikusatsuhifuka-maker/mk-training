@@ -1,4 +1,11 @@
-import { supabase } from './supabase'
+// 145: anon キーでの content_store 直接アクセスを廃止し、
+// content-store-core（ブラウザ=認証必須API／サーバー=service-role）経由に統一。
+// localStorage フォールバックは従来どおり（オフライン・失敗時の保険）。
+import {
+  deleteContentRow,
+  getContentRow,
+  putContentRow,
+} from './content-store-core'
 
 export const CONTENT_KEYS = {
   cosmetic: 'cosmetic_items',
@@ -22,13 +29,9 @@ export const CONTENT_KEYS = {
 // データを取得（Supabase優先、失敗時はlocalStorageにフォールバック）
 export async function getContent<T>(key: string, defaultData: T[]): Promise<T[]> {
   try {
-    const { data, error } = await supabase
-      .from('content_store')
-      .select('data')
-      .eq('id', key)
-      .single()
+    const row = await getContentRow(key)
 
-    if (error || !data) {
+    if (!row) {
       if (typeof window !== 'undefined') {
         const local = localStorage.getItem('mk_' + key)
         if (local) return JSON.parse(local)
@@ -36,7 +39,7 @@ export async function getContent<T>(key: string, defaultData: T[]): Promise<T[]>
       return defaultData
     }
 
-    const result = data.data as T[]
+    const result = row.data as T[]
     if (!result || (Array.isArray(result) && result.length === 0)) return defaultData
     return result
   } catch {
@@ -57,20 +60,7 @@ export async function saveContent<T>(key: string, data: T[]): Promise<boolean> {
   }
 
   try {
-    const { error } = await supabase
-      .from('content_store')
-      .upsert({
-        id: key,
-        content_type: key.split('_')[0],
-        data: data as unknown as Record<string, unknown>,
-        updated_at: new Date().toISOString(),
-      })
-
-    if (error) {
-      console.error('Supabase save error:', error)
-      return false
-    }
-    return true
+    return await putContentRow(key, key.split('_')[0], data)
   } catch (err) {
     console.error('Save error:', err)
     return false
@@ -80,20 +70,16 @@ export async function saveContent<T>(key: string, data: T[]): Promise<boolean> {
 // オブジェクト（配列でない設定）を取得。Supabase優先、失敗時はlocalStorage、最後にfallback。
 export async function getContentObject<T>(key: string, fallback: T | null = null): Promise<T | null> {
   try {
-    const { data, error } = await supabase
-      .from('content_store')
-      .select('data')
-      .eq('id', key)
-      .single()
+    const row = await getContentRow(key)
 
-    if (error || !data || data.data == null) {
+    if (!row || row.data == null) {
       if (typeof window !== 'undefined') {
         const local = localStorage.getItem('mk_' + key)
         if (local) return JSON.parse(local) as T
       }
       return fallback
     }
-    return data.data as T
+    return row.data as T
   } catch {
     if (typeof window !== 'undefined') {
       const local = localStorage.getItem('mk_' + key)
@@ -112,20 +98,7 @@ export async function saveContentObject<T>(key: string, data: T): Promise<boolea
   }
 
   try {
-    const { error } = await supabase
-      .from('content_store')
-      .upsert({
-        id: key,
-        content_type: key.split('_')[0],
-        data: data as unknown as Record<string, unknown>,
-        updated_at: new Date().toISOString(),
-      })
-
-    if (error) {
-      console.error('Supabase save error:', error)
-      return false
-    }
-    return true
+    return await putContentRow(key, key.split('_')[0], data)
   } catch (err) {
     console.error('Save error:', err)
     return false
@@ -141,12 +114,7 @@ export async function deleteContent(key: string): Promise<boolean> {
   }
 
   try {
-    const { error } = await supabase.from('content_store').delete().eq('id', key)
-    if (error) {
-      console.error('Supabase delete error:', error)
-      return false
-    }
-    return true
+    return await deleteContentRow(key)
   } catch (err) {
     console.error('Delete error:', err)
     return false

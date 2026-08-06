@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+// 145: anon 直アクセスを廃止し認証必須APIへ
+import { getContentRow } from "@/lib/content-store-core";
 import { getContent, saveContent, CONTENT_KEYS } from "@/lib/content-store";
 import { quizQuestions as initialQuiz, type QuizQuestion, type QuizCategory } from "@/data/quiz";
 import { KNOWLEDGE_DOCS_KEY, type KnowledgeDoc } from "@/lib/clinic-philosophy";
@@ -58,12 +59,8 @@ export default function QuizGeneratorPage() {
     (async () => {
       setDocsLoading(true);
       try {
-        const { data } = await supabase
-          .from("content_store")
-          .select("data")
-          .eq("id", KNOWLEDGE_DOCS_KEY)
-          .single();
-        const raw = (data?.data as { docs?: KnowledgeDoc[] } | undefined) || {};
+        const row = await getContentRow(KNOWLEDGE_DOCS_KEY);
+        const raw = (row?.data as { docs?: KnowledgeDoc[] } | undefined) || {};
         const list = (raw.docs || []).filter((d) => d.isActive);
         setDocs(list);
         if (list.length > 0) setSelectedDocId(list[0].id);

@@ -9,7 +9,8 @@ import {
   type KnowledgeDoc,
   type KnowledgeDocCategory,
 } from "@/lib/clinic-philosophy";
-import { supabase } from "@/lib/supabase";
+// 145: anon 直アクセスを廃止し認証必須APIへ
+import { getContentRow, putContentRow } from "@/lib/content-store-core";
 
 // このページで利用するカテゴリ（管理UI上の主要カテゴリ）
 const PRIMARY_CATEGORIES: KnowledgeDocCategory[] = [
@@ -144,12 +145,8 @@ export default function AdminKnowledgePage() {
   const loadDocs = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await supabase
-        .from("content_store")
-        .select("data")
-        .eq("id", KNOWLEDGE_DOCS_KEY)
-        .single();
-      const raw = (data?.data as { docs?: KnowledgeDoc[] } | undefined) || {};
+      const row = await getContentRow(KNOWLEDGE_DOCS_KEY);
+      const raw = (row?.data as { docs?: KnowledgeDoc[] } | undefined) || {};
       const loaded = raw.docs || [];
 
       // 初回のみ南草津皮フ科の理念・哲学ドキュメントを初期データとしてSupabaseに保存
@@ -167,18 +164,12 @@ export default function AdminKnowledgePage() {
           updatedAt: new Date().toISOString(),
         };
         try {
-          const { error: upsertErr } = await supabase
-            .from("content_store")
-            .upsert({
-              id: KNOWLEDGE_DOCS_KEY,
-              content_type: "knowledge_docs",
-              data: { docs: [initialDoc] } as unknown as Record<
-                string,
-                unknown
-              >,
-              updated_at: new Date().toISOString(),
-            });
-          if (!upsertErr) {
+          const ok = await putContentRow(
+            KNOWLEDGE_DOCS_KEY,
+            "knowledge_docs",
+            { docs: [initialDoc] }
+          );
+          if (ok) {
             setDocs([initialDoc]);
             return;
           }
@@ -207,13 +198,10 @@ export default function AdminKnowledgePage() {
 
   // Supabaseに保存
   const saveDocs = async (newDocs: KnowledgeDoc[]) => {
-    const { error: err } = await supabase.from("content_store").upsert({
-      id: KNOWLEDGE_DOCS_KEY,
-      content_type: "knowledge_docs",
-      data: { docs: newDocs } as unknown as Record<string, unknown>,
-      updated_at: new Date().toISOString(),
+    const ok = await putContentRow(KNOWLEDGE_DOCS_KEY, "knowledge_docs", {
+      docs: newDocs,
     });
-    if (err) throw err;
+    if (!ok) throw new Error("知識ベースの保存に失敗しました");
     setDocs(newDocs);
   };
 

@@ -1,16 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
 import { AI_BACKGROUND_KEY } from "@/lib/ai-background";
 import { CLINIC_PHILOSOPHY } from "@/lib/clinic-philosophy";
 import { loadPortalItems } from "@/lib/portal-store";
 import { PORTAL_KEYS, type PolicyItem } from "@/types/portal";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// 145: anon 直アクセスを廃止し認証必須APIへ
+import { getContentRow, putContentRow } from "@/lib/content-store-core";
 
 // 既存の理念・経営方針から取り込み用のMarkdownを組み立てる
 async function buildPrefill(): Promise<string> {
@@ -44,12 +40,8 @@ export default function AiBackgroundAdminPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const { data } = await supabase
-          .from("content_store")
-          .select("data")
-          .eq("id", AI_BACKGROUND_KEY)
-          .single();
-        const raw = data?.data as { text?: string } | string | null;
+        const row = await getContentRow(AI_BACKGROUND_KEY);
+        const raw = row?.data as { text?: string } | string | null;
         const saved = typeof raw === "string" ? raw : raw?.text ?? "";
         if (saved && saved.trim()) {
           setText(saved);
@@ -69,13 +61,10 @@ export default function AiBackgroundAdminPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const { error } = await supabase.from("content_store").upsert({
-        id: AI_BACKGROUND_KEY,
-        content_type: "ai_background",
-        data: { text },
-        updated_at: new Date().toISOString(),
+      const ok = await putContentRow(AI_BACKGROUND_KEY, "ai_background", {
+        text,
       });
-      if (error) throw error;
+      if (!ok) throw new Error("save failed");
       setSavedAt(new Date().toLocaleString("ja-JP"));
       alert("✅ AI背景情報を保存しました");
     } catch {

@@ -6,7 +6,7 @@
 // 写真は Supabase Storage バケット staff-photos（public read）。
 
 import { loadPortalItems, loadPortalObject } from "./portal-store";
-import { supabase } from "./supabase";
+import { getContentRowsByPrefix } from "./content-store-core";
 import type { NeedsSurvey } from "./needs-survey";
 
 export const STAFF_PROFILES_INDEX_KEY = "staff_profiles_index";
@@ -116,13 +116,10 @@ export async function loadAllStaffProfiles(): Promise<
   Record<string, StaffProfile>
 > {
   try {
-    const { data, error } = await supabase
-      .from("content_store")
-      .select("id, data")
-      .like("id", "staff_profile:%");
-    if (error || !data) return {};
+    // 145: anon 直読みを廃止（プレフィックス取得は /api/content-store?prefix= が許可済み）
+    const rows = await getContentRowsByPrefix("staff_profile:");
     const map: Record<string, StaffProfile> = {};
-    for (const row of data) {
+    for (const row of rows) {
       const p = row.data as StaffProfile | null;
       if (!p || typeof p.userId !== "string") continue;
       map[p.userId] = { ...emptyProfile(p.userId), ...p };

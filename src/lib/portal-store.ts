@@ -1,8 +1,9 @@
-// 南草津皮フ科 ポータル用のSupabaseストレージヘルパ
+// 南草津皮フ科 ポータル用のストレージヘルパ
 // content_store の data カラムには { items: [...] } 形式で保存する
 // （単一オブジェクト型は { ...data } の直書き）
+// 145: anon キーでの直接アクセスを廃止し content-store-core（認証必須API／サーバーは service-role）経由に統一。
 
-import { supabase } from "./supabase";
+import { getContentRow, putContentRow } from "./content-store-core";
 import type {
   ArchivedNewsItem,
   CharacterSettings,
@@ -26,15 +27,10 @@ export async function loadPortalItems<T>(
   defaultItems: T[] = []
 ): Promise<T[]> {
   try {
-    const { data, error } = await supabase
-      .from("content_store")
-      .select("data")
-      .eq("id", key)
-      .single();
+    const row = await getContentRow(key);
+    if (!row) return defaultItems;
 
-    if (error || !data) return defaultItems;
-
-    const payload = data.data as { items?: T[] } | null;
+    const payload = row.data as { items?: T[] } | null;
     if (!payload || !Array.isArray(payload.items)) return defaultItems;
     return payload.items;
   } catch {
@@ -48,17 +44,7 @@ export async function savePortalItems<T>(
   items: T[]
 ): Promise<boolean> {
   try {
-    const { error } = await supabase.from("content_store").upsert({
-      id: key,
-      content_type: "portal",
-      data: { items } as unknown as Record<string, unknown>,
-      updated_at: new Date().toISOString(),
-    });
-    if (error) {
-      console.error("Portal save error:", error);
-      return false;
-    }
-    return true;
+    return await putContentRow(key, "portal", { items });
   } catch (err) {
     console.error("Portal save error:", err);
     return false;
@@ -71,14 +57,9 @@ export async function loadPortalObject<T>(
   defaultObj: T
 ): Promise<T> {
   try {
-    const { data, error } = await supabase
-      .from("content_store")
-      .select("data")
-      .eq("id", key)
-      .single();
-
-    if (error || !data) return defaultObj;
-    const payload = data.data as T | null;
+    const row = await getContentRow(key);
+    if (!row) return defaultObj;
+    const payload = row.data as T | null;
     if (!payload) return defaultObj;
     return payload;
   } catch {
@@ -92,17 +73,7 @@ export async function savePortalObject<T>(
   obj: T
 ): Promise<boolean> {
   try {
-    const { error } = await supabase.from("content_store").upsert({
-      id: key,
-      content_type: "portal",
-      data: obj as unknown as Record<string, unknown>,
-      updated_at: new Date().toISOString(),
-    });
-    if (error) {
-      console.error("Portal save error:", error);
-      return false;
-    }
-    return true;
+    return await putContentRow(key, "portal", obj);
   } catch (err) {
     console.error("Portal save error:", err);
     return false;
