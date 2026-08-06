@@ -5217,7 +5217,7 @@ export default function AdminPortalPage() {
                   </button>
                 </div>
                 {showSloganPresets && (
-                  <div className="mb-2 p-3 bg-gray-50 border border-gray-200 rounded-xl max-h-72 overflow-y-auto space-y-3">
+                  <div className="mb-2 p-3 bg-gray-50 border border-gray-200 rounded-xl max-h-96 overflow-y-auto space-y-3">
                     <p className="text-xs text-gray-600">
                       タップすると本文に入ります。そのまま自由に編集してから保存できます。
                     </p>
