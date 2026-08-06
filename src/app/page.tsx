@@ -34,6 +34,7 @@ import { WeeklyQuestionSection } from "@/components/WeeklyQuestionSection";
 import { MonthlySloganSection } from "@/components/MonthlySloganSection";
 import { MonthOpeningShow } from "@/components/MonthOpeningShow";
 import { MonthlyDigestSection } from "@/components/MonthlyDigestSection";
+import { AnniversarySection } from "@/components/AnniversarySection";
 import { seasonalThemeFor } from "@/lib/seasonal";
 import { CharacterSVG } from "@/components/CharacterNotification";
 import {
@@ -635,6 +636,8 @@ export default function PortalHome() {
     monthly_digest: featureFlags.monthly_digest ? (
       <MonthlyDigestSection />
     ) : null,
+    // 146-E: 記念日当日だけ・本人にのみ（該当なしなら null）
+    anniversary: featureFlags.anniversary ? <AnniversarySection /> : null,
     news: (
       <section
         ref={newsSectionRef}

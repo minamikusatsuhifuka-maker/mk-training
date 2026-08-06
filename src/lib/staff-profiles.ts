@@ -56,6 +56,12 @@ export type StaffProfile = {
   // 表示は「詳細ダイアログのみ・showEmail=true の人のみ」。一覧カード/indexには載せない。
   showEmail?: boolean;
   email?: string;
+  // 146-E: 記念日。どちらも任意（本人が設定したときだけ本人のホームで祝う）。
+  // 他者には一切出さない（/members・staff_profiles_index には載せない）。
+  // joinedOn = 入職日 YYYY-MM-DD（勤続年数の算出に年が要る）
+  // birthday = 誕生日 MM-DD（年齢が分かる情報は保存しない）
+  joinedOn?: string;
+  birthday?: string;
   updatedAt: string;
 };
 
@@ -85,6 +91,8 @@ export function emptyProfile(userId: string, name = ""): StaffProfile {
     favoriteDocIds: [],
     showEmail: false,
     email: "",
+    joinedOn: "",
+    birthday: "",
     updatedAt: "",
   };
 }

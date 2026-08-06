@@ -15,6 +15,7 @@ import {
   PROFILE_ROLE_CONFIG_KEY,
 } from "@/lib/profile-roles";
 import { serverGetContentRow } from "@/lib/content-store-server";
+import { normalizeBirthday, normalizeJoinedOn } from "@/lib/anniversary";
 import { normalizeNeedsSurvey } from "@/lib/needs-survey";
 import type { NeedsSurvey } from "@/lib/needs-survey";
 import { normalizeValueKeywords } from "@/lib/value-keywords";
@@ -179,6 +180,13 @@ export async function PUT(req: NextRequest) {
           .slice(0, 500)
       : current.favoriteDocIds;
 
+  // 146-E: 記念日（送られた場合のみ更新＝68の教訓）。クライアント値は必ず正規化を通す。
+  // 誕生日は MM-DD に落として保存し、年齢が分かる情報を持たない。
+  const joinedOn =
+    "joinedOn" in body ? normalizeJoinedOn(body.joinedOn) : current.joinedOn;
+  const birthday =
+    "birthday" in body ? normalizeBirthday(body.birthday) : current.birthday;
+
   const next = {
     ...current,
     userId: user.id,
@@ -197,6 +205,8 @@ export async function PUT(req: NextRequest) {
     // メール表示の希望（既定OFF）。email はセッションから確定（クライアント値は使わない＝なりすまし防止）
     showEmail: body.showEmail === true,
     email: user.email ?? "",
+    joinedOn,
+    birthday,
   };
 
   try {

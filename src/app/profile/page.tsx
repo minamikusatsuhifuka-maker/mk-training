@@ -229,6 +229,9 @@ export default function ProfilePage() {
           aiParsed: surveyAiParsed,
         },
         showEmail: profile.showEmail === true,
+        // 146-E: 記念日（任意・本人のホームにだけ出る）
+        joinedOn: profile.joinedOn ?? "",
+        birthday: profile.birthday ?? "",
       }),
     });
     setSaving(false);
@@ -729,6 +732,56 @@ export default function ProfilePage() {
               </span>
             </span>
           </label>
+        </div>
+      </div>
+
+      {/* 146-E: 記念日（任意・本人のホームにだけ表示。他の人には見えません） */}
+      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+        <h2 className="text-sm font-semibold">
+          🎂 記念日
+          <span className="ml-2 text-xs font-normal text-muted-foreground">
+            任意
+          </span>
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          設定すると当日、<strong>あなたのホームにだけ</strong>お祝いが出ます。
+          メンバー紹介など他の人の画面には表示されません。空欄にすれば解除できます。
+        </p>
+
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">
+            入職日
+          </label>
+          <input
+            type="date"
+            value={profile.joinedOn ?? ""}
+            onChange={(e) => set("joinedOn", e.target.value)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">
+            毎年この日に「入職◯周年」のお祝いが出ます。
+          </p>
+        </div>
+
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">
+            誕生日
+          </label>
+          <input
+            type="date"
+            value={
+              profile.birthday
+                ? `2000-${profile.birthday}`
+                : ""
+            }
+            onChange={(e) =>
+              set("birthday", e.target.value ? e.target.value.slice(5) : "")
+            }
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">
+            月日だけを保存します（年齢が分かる情報は保存しません）。年の欄は無視されます。
+          </p>
         </div>
       </div>
 

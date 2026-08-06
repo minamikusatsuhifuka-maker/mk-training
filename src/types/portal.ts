@@ -285,7 +285,8 @@ export type HomeSectionKey =
   | "thanks"
   | "policy"
   | "library_news"
-  | "monthly_digest";
+  | "monthly_digest"
+  | "anniversary";
 
 export type HomeSectionConfig = {
   key: HomeSectionKey;
@@ -310,6 +311,8 @@ export const HOME_SECTION_LABELS: Record<HomeSectionKey, string> = {
   library_news: "📚 資料庫の新着・更新",
   // 146-C: 前月の分かち愛ダイジェスト（機能フラグ monthly_digest がONのときだけ表示）
   monthly_digest: "🤝 分かち愛ダイジェスト",
+  // 146-E: 記念日のお祝い（当日・本人にのみ表示）
+  anniversary: "🎂 記念日のお祝い",
 };
 
 // 現状のハードコード順（未設定/不正時のフォールバック用の既定値）
@@ -329,6 +332,8 @@ export const DEFAULT_HOME_LAYOUT: HomeSectionConfig[] = [
   { key: "policy", order: 9 },
   { key: "library_news", order: 10 },
   { key: "monthly_digest", order: 11 },
+  // 146-E: 当日だけ出る一時的なカードなので既定はページ上部寄り（並び替えは管理画面で）
+  { key: "anniversary", order: 12 },
 ];
 
 // 保存済み設定を検証・補完する。空/不正なら既定順に丸ごとフォールバック（ホームが壊れない）。

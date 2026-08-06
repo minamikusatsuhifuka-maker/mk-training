@@ -12,6 +12,7 @@ import {
   isAllowedContentPrefix,
   isValidContentKey,
 } from "@/lib/content-store-policy";
+import { redactForeignProfileRows } from "@/lib/content-store-redact";
 import {
   serverDeleteContentRow,
   serverGetContentRow,
@@ -34,7 +35,8 @@ export async function GET(req: Request) {
   if (prefix !== null) {
     if (!isAllowedContentPrefix(prefix)) return forbidden();
     const rows = await serverGetContentRowsByPrefix(prefix);
-    return NextResponse.json({ rows });
+    // 146-E: 記念日は本人にしか渡さない（画面で隠すだけでなく配信段階で落とす）
+    return NextResponse.json({ rows: redactForeignProfileRows(rows, user.id) });
   }
 
   const key = url.searchParams.get("key");
