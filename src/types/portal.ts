@@ -266,6 +266,8 @@ export const PORTAL_KEYS = {
   policy: "portal_policy",
   todayWord: "portal_today_word",
   homeLayout: "portal_home_layout",
+  // 141: 今月の意識目標・月間スローガン（月=YYYY-MMごとに履歴保存）
+  monthlySlogan: "portal_monthly_slogan",
 } as const;
 
 export type PortalKey = (typeof PORTAL_KEYS)[keyof typeof PORTAL_KEYS];
@@ -273,6 +275,7 @@ export type PortalKey = (typeof PORTAL_KEYS)[keyof typeof PORTAL_KEYS];
 // ─── ホーム画面のセクション並び順設定（管理画面「ポータル管理→レイアウト」で編集） ───
 export type HomeSectionKey =
   | "today_word"
+  | "monthly_slogan"
   | "news"
   | "quick_access"
   | "gantt_summary"
@@ -291,6 +294,7 @@ export type HomeSectionConfig = {
 
 export const HOME_SECTION_LABELS: Record<HomeSectionKey, string> = {
   today_word: "💬 今日の一言",
+  monthly_slogan: "🎯 今月の意識目標",
   news: "📢 新着情報",
   quick_access: "⚡ クイックアクセス",
   gantt_summary: "🎯 クリニック目標（進行中）",
@@ -308,15 +312,19 @@ export const HOME_SECTION_LABELS: Record<HomeSectionKey, string> = {
 // 現状のハードコード順（未設定/不正時のフォールバック用の既定値）
 export const DEFAULT_HOME_LAYOUT: HomeSectionConfig[] = [
   { key: "today_word", order: 0 },
-  { key: "news", order: 1 },
-  { key: "quick_access", order: 2 },
-  { key: "gantt_summary", order: 3 },
-  { key: "clinic_metrics", order: 4 },
-  { key: "weekly_question", order: 5 },
-  { key: "kizuki", order: 6 },
-  { key: "thanks", order: 7 },
-  { key: "policy", order: 8 },
-  { key: "library_news", order: 9 },
+  // 141: 月間スローガン（ページ上部寄り＝今日の一言の直後を既定に。
+  //   保存済みレイアウトがある環境では resolveSectionLayout により末尾へ自動追加
+  //   → 管理画面「レイアウト」タブで並び替え可能）
+  { key: "monthly_slogan", order: 1 },
+  { key: "news", order: 2 },
+  { key: "quick_access", order: 3 },
+  { key: "gantt_summary", order: 4 },
+  { key: "clinic_metrics", order: 5 },
+  { key: "weekly_question", order: 6 },
+  { key: "kizuki", order: 7 },
+  { key: "thanks", order: 8 },
+  { key: "policy", order: 9 },
+  { key: "library_news", order: 10 },
 ];
 
 // 保存済み設定を検証・補完する。空/不正なら既定順に丸ごとフォールバック（ホームが壊れない）。

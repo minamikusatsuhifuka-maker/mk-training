@@ -100,6 +100,13 @@ import {
   type KizukiPost,
 } from "@/lib/kizuki";
 import {
+  loadMonthlySlogans,
+  saveMonthlySlogans,
+  currentYm,
+  formatYmJa,
+  type MonthlySlogan,
+} from "@/lib/monthly-slogan";
+import {
   HIYARI_PLACES,
   HIYARI_FACTORS,
   HIYARI_LEVELS,
@@ -667,6 +674,16 @@ export default function AdminPortalPage() {
   });
   const [editingPolicyId, setEditingPolicyId] = useState<string | null>(null);
 
+  // 141: 今月の意識目標（月間スローガン・経営方針タブ内に同居）
+  // 月=YYYY-MM ごとに1件。同じ月を保存すると上書き（編集ボタンはフォームへの転記）。
+  const [slogans, setSlogans] = useState<MonthlySlogan[]>([]);
+  const [sloganForm, setSloganForm] = useState<{
+    ym: string;
+    slogan: string;
+    note: string;
+  }>(() => ({ ym: currentYm(), slogan: "", note: "" }));
+  const [savingSlogan, setSavingSlogan] = useState(false);
+
   // 共有ログ・貢献タブ（指示書36）
   const [newsLog, setNewsLog] = useState<NewsLogEntry[]>([]);
   const [newsReactions, setNewsReactions] = useState<NewsReactionsMap>({});
@@ -1168,7 +1185,7 @@ export default function AdminPortalPage() {
     const fetchAll = async () => {
       // 管理画面を開くたびに期限切れの新着をアーカイブへ移動（冪等）
       await archiveExpiredNews().catch(() => {});
-      const [n, na, h, t, p, w, c, layout, tLayout, nlog, rx, tlog] =
+      const [n, na, h, t, p, w, c, layout, tLayout, nlog, rx, tlog, sl] =
         await Promise.all([
         loadPortalItems<NewsItem>(PORTAL_KEYS.news, []),
         loadPortalItems<ArchivedNewsItem>(PORTAL_KEYS.newsArchive, []),
@@ -1192,6 +1209,7 @@ export default function AdminPortalPage() {
         loadNewsLog(),
         loadNewsReactions(),
         loadTaskLog(),
+        loadMonthlySlogans(),
       ]);
       setNews(n);
       setNewsArchive(na);
@@ -1205,6 +1223,7 @@ export default function AdminPortalPage() {
       setNewsLog(nlog);
       setNewsReactions(rx);
       setTaskLog(tlog);
+      setSlogans(sl);
       setLoading(false);
     };
     fetchAll().catch(() => setLoading(false));
@@ -2493,6 +2512,51 @@ export default function AdminPortalPage() {
     if (ok) {
       setPolicies(next);
       flash("✅ アクティブな年度を更新しました");
+    }
+  };
+
+  // ─────────────────────────────────────
+  // 今月の意識目標（月間スローガン・指示書141）
+  // ─────────────────────────────────────
+  const handleSaveSlogan = async () => {
+    const slogan = sloganForm.slogan.trim();
+    if (!/^\d{4}-\d{2}$/.test(sloganForm.ym) || !slogan) return;
+    setSavingSlogan(true);
+    const item: MonthlySlogan = {
+      ym: sloganForm.ym,
+      slogan,
+      updatedAt: new Date().toISOString(),
+    };
+    const note = sloganForm.note.trim();
+    if (note) item.note = note;
+    // 同じ月は上書き（月ごとに1件）・新しい月が先頭
+    const next = [item, ...slogans.filter((s) => s.ym !== item.ym)].sort(
+      (a, b) => b.ym.localeCompare(a.ym)
+    );
+    const ok = await saveMonthlySlogans(next);
+    setSavingSlogan(false);
+    if (ok) {
+      setSlogans(next);
+      setSloganForm({ ym: currentYm(), slogan: "", note: "" });
+      flash("💾 保存しました");
+    } else {
+      alert("保存に失敗しました（管理者権限をご確認ください）");
+    }
+  };
+
+  const handleEditSlogan = (s: MonthlySlogan) => {
+    setSloganForm({ ym: s.ym, slogan: s.slogan, note: s.note ?? "" });
+  };
+
+  const handleDeleteSlogan = async (ym: string) => {
+    if (!confirm(`${formatYmJa(ym)}の意識目標を削除しますか？`)) return;
+    setSavingSlogan(true);
+    const next = slogans.filter((s) => s.ym !== ym);
+    const ok = await saveMonthlySlogans(next);
+    setSavingSlogan(false);
+    if (ok) {
+      setSlogans(next);
+      flash("🗑️ 削除しました");
     }
   };
 
@@ -5095,11 +5159,137 @@ export default function AdminPortalPage() {
 
       {tab === "policy" && (
         <div className="space-y-5">
+          {/* 141: 今月の意識目標（月間スローガン）。月ごとに1件・同じ月の保存は上書き */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+            <div>
+              <h2 className="text-base font-semibold text-gray-800">
+                🎯 今月の意識目標（月間スローガン）
+              </h2>
+              <p className="text-xs text-gray-600 mt-1">
+                ホーム上部に当月分だけ表示されます（未設定の月はカード非表示）。翌月分の事前設定も可能で、月替わりで自動的に切り替わります。
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-gray-800 mb-1 block">
+                  対象月
+                </label>
+                <input
+                  type="month"
+                  value={sloganForm.ym}
+                  onChange={(e) =>
+                    setSloganForm({ ...sloganForm, ym: e.target.value })
+                  }
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs text-gray-800 mb-1 block">
+                  スローガン本文（1〜2行想定）{" "}
+                  <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={sloganForm.slogan}
+                  onChange={(e) =>
+                    setSloganForm({ ...sloganForm, slogan: e.target.value })
+                  }
+                  rows={2}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-y"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs text-gray-800 mb-1 block">
+                  補足ひとこと（任意）
+                </label>
+                <input
+                  value={sloganForm.note}
+                  onChange={(e) =>
+                    setSloganForm({ ...sloganForm, note: e.target.value })
+                  }
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleSaveSlogan}
+              disabled={
+                savingSlogan ||
+                !sloganForm.slogan.trim() ||
+                !/^\d{4}-\d{2}$/.test(sloganForm.ym)
+              }
+              className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700 disabled:opacity-50"
+            >
+              {savingSlogan ? "保存中..." : "💾 この月の目標を保存"}
+            </button>
+
+            {/* 月別の履歴（新しい月が先頭・当月をハイライト。スタッフ側は当月のみ表示） */}
+            <div className="space-y-2 pt-1">
+              <h3 className="text-sm font-semibold text-gray-800">
+                月別の履歴（{slogans.length}件）
+              </h3>
+              {slogans.map((s) => (
+                <div
+                  key={s.ym}
+                  className={`border rounded-xl p-3 ${
+                    s.ym === currentYm()
+                      ? "border-amber-300 ring-2 ring-amber-100 bg-amber-50/50"
+                      : "border-gray-200 bg-white"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-amber-700">
+                          {formatYmJa(s.ym)}
+                        </p>
+                        {s.ym === currentYm() && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+                            当月・ホーム表示中
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">
+                        {s.slogan}
+                      </p>
+                      {s.note && (
+                        <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">
+                          {s.note}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleEditSlogan(s)}
+                        className="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                      >
+                        編集
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSlogan(s.ym)}
+                        className="text-xs px-2 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50"
+                      >
+                        削除
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {slogans.length === 0 && (
+                <p className="text-sm text-gray-600 text-center py-4">
+                  まだ設定がありません（設定するまでホームには表示されません）
+                </p>
+              )}
+            </div>
+          </div>
+
           {/* 編集フォーム */}
           <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold text-gray-800">
-                {editingPolicyId ? "編集" : "新規追加"}
+                {editingPolicyId ? "経営方針の編集" : "経営方針の新規追加"}
               </h2>
               {editingPolicyId && (
                 <button

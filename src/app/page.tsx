@@ -31,6 +31,7 @@ import {
   loadCharacterOrderedChoices,
 } from "@/lib/character-order";
 import { WeeklyQuestionSection } from "@/components/WeeklyQuestionSection";
+import { MonthlySloganSection } from "@/components/MonthlySloganSection";
 import { GanttSummarySection } from "@/components/GanttSummarySection";
 import { ClinicMetricsSection } from "@/components/ClinicMetricsSection";
 import { LibraryNewsSection } from "@/components/LibraryNewsSection";
@@ -581,6 +582,8 @@ export default function PortalHome() {
         </div>
       </section>
     ),
+    // 141: 当月未設定なら null（カードごと非表示）
+    monthly_slogan: <MonthlySloganSection />,
     news: (
       <section
         ref={newsSectionRef}
