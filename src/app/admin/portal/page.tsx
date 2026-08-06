@@ -79,6 +79,7 @@ import {
   saveCharacterOrder,
 } from "@/lib/character-order";
 import { SectionLayoutEditor } from "@/components/admin/SectionLayoutEditor";
+import { DragSortList } from "@/components/admin/DragSortList";
 import {
   useBulkSelection,
   bulkConfirmMessage,
@@ -578,6 +579,20 @@ export default function AdminPortalPage() {
     setCharPreview(p);
     setCharPreviewKey((k) => k + 1);
   };
+  // 148: ドラッグでの並び替え（from を to の位置へ挿入）
+  const reorderCharacter = (from: number, to: number) => {
+    setCharacterChoices((prev) => {
+      if (from === to || from < 0 || to < 0 || from >= prev.length || to >= prev.length) {
+        return prev;
+      }
+      const next = prev.slice();
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
+    setCharOrderDirty(true);
+  };
+
   const moveCharacter = (index: number, delta: number) => {
     setCharacterChoices((prev) => {
       const to = index + delta;
@@ -5790,14 +5805,32 @@ export default function AdminPortalPage() {
               キャラクターの並び順
             </label>
             <p className="text-xs text-gray-500 mb-2">
-              ▲▼で入れ替え → 保存。ホームと管理のキャラ選択に反映されます（「おまかせ」は常に先頭）。キャラを押すと上のプレビューで動きます。
+              ⠿ をつかんでドラッグ、または ▲▼ で入れ替え → 保存。ホームと管理のキャラ選択に反映されます（「おまかせ」は常に先頭）。キャラを押すと上のプレビューで動きます。
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-              {characterChoices.map((c, i) => (
+            {/* 148: レイアウトタブと同じ共通部品でドラッグ対応（タッチ端末でも動く）。
+                2列グリッドなので mode="grid"（挿入線ではなく移動先のセルを光らせる） */}
+            <DragSortList
+              items={characterChoices}
+              keyOf={(c) => c.type}
+              onReorder={reorderCharacter}
+              mode="grid"
+              className="grid grid-cols-1 sm:grid-cols-2 gap-1.5"
+              renderRow={({ item: c, index: i, dragging, over, handleProps }) => (
                 <div
-                  key={c.type}
-                  className="flex items-center gap-2 border border-gray-100 rounded-lg px-2 py-1 bg-white"
+                  className={`flex items-center gap-2 border rounded-lg px-2 py-1 bg-white transition-colors ${
+                    dragging
+                      ? "border-teal-400 bg-teal-50"
+                      : over
+                        ? "border-teal-400 ring-2 ring-teal-200"
+                        : "border-gray-100"
+                  }`}
                 >
+                  <span
+                    {...handleProps}
+                    className="px-0.5 py-1.5 -my-1.5 text-gray-400 hover:text-gray-600 select-none leading-none"
+                  >
+                    ⠿
+                  </span>
                   <button
                     type="button"
                     onClick={() => previewCharacter({ svgType: c.type })}
@@ -5827,8 +5860,8 @@ export default function AdminPortalPage() {
                     ▼
                   </button>
                 </div>
-              ))}
-            </div>
+              )}
+            />
             <button
               type="button"
               onClick={saveCharacterOrderNow}

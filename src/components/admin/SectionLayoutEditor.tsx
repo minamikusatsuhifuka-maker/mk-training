@@ -1,11 +1,16 @@
 "use client";
 
 // セクション並び順エディタ（管理画面「レイアウト」タブ共通）
-// ドラッグ&ドロップ＋上下ボタンで並び替え、チェックで表示/非表示を切り替える。
+// ドラッグ&ドロップ（148でタッチ対応）＋上下ボタンで並び替え、チェックで表示/非表示を切り替える。
 // ホーム画面（portal_home_layout）と みんなのタスク（tasks_page_layout）の両方で使う。
+//
+// 148: 従来は HTML5 の draggable だったためタッチ端末で並び替えできなかった。
+//      Pointer Events ベースの共通部品 DragSortList に載せ替え、iPad・スマホでも動くようにした。
+//      ▲▼（↑↓）ボタンは併用のまま残す（1段だけ動かしたいときはボタンが確実）。
+//      並びの確定は従来どおり「💾 保存」を押すまで行われない。
 
-import { useState } from "react";
 import type { SectionConfig } from "@/lib/section-layout";
+import { DragSortList } from "@/components/admin/DragSortList";
 
 type Props<K extends string> = {
   layout: SectionConfig<K>[];
@@ -30,13 +35,18 @@ export function SectionLayoutEditor<K extends string>({
   description,
   previewTitle,
 }: Props<K>) {
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-
   const move = (index: number, direction: -1 | 1) => {
     const target = index + direction;
     if (target < 0 || target >= layout.length) return;
     const next = [...layout];
     [next[index], next[target]] = [next[target], next[index]];
+    onChange(next);
+  };
+
+  const reorder = (from: number, to: number) => {
+    const next = [...layout];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
     onChange(next);
   };
 
@@ -46,37 +56,28 @@ export function SectionLayoutEditor<K extends string>({
     );
   };
 
-  const handleDrop = (index: number) => {
-    if (draggedIndex === null || draggedIndex === index) {
-      setDraggedIndex(null);
-      return;
-    }
-    const next = [...layout];
-    const [moved] = next.splice(draggedIndex, 1);
-    next.splice(index, 0, moved);
-    onChange(next);
-    setDraggedIndex(null);
-  };
-
   return (
     <div className="space-y-4 max-w-xl">
       <p className="text-sm text-gray-600">{description}</p>
+      <p className="text-xs text-gray-600">
+        ⠿ をつかんで上下にドラッグすると並び替えられます（スマホ・iPadでも指でつかめます）。
+        1段だけ動かすときは ↑↓ が確実です。<strong>並びは「💾 保存」を押すまで確定しません。</strong>
+      </p>
 
-      <div className="space-y-2">
-        {layout.map((section, index) => (
+      <DragSortList
+        items={layout}
+        keyOf={(s) => s.key}
+        onReorder={reorder}
+        renderRow={({ item: section, index, dragging, handleProps }) => (
           <div
-            key={section.key}
-            draggable
-            onDragStart={() => setDraggedIndex(index)}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={() => handleDrop(index)}
-            className={`flex items-center gap-3 p-3 border rounded-xl bg-white cursor-move transition-colors ${
-              draggedIndex === index
-                ? "border-teal-400 bg-teal-50"
-                : "border-gray-200"
+            className={`flex items-center gap-3 p-3 border rounded-xl bg-white transition-colors ${
+              dragging ? "border-teal-400 bg-teal-50 shadow-sm" : "border-gray-200"
             } ${section.hidden ? "opacity-50" : ""}`}
           >
-            <span className="text-gray-600 select-none" title="ドラッグして並び替え">
+            <span
+              {...handleProps}
+              className="px-1 py-2 -my-2 text-gray-500 hover:text-gray-700 select-none text-lg leading-none"
+            >
               ⠿
             </span>
             <span className="flex-1 text-sm font-medium text-gray-800">
@@ -111,8 +112,8 @@ export function SectionLayoutEditor<K extends string>({
               </button>
             </div>
           </div>
-        ))}
-      </div>
+        )}
+      />
 
       {/* プレビュー（簡易：現在の表示順のみのリスト） */}
       <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
