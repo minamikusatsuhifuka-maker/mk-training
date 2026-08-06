@@ -106,6 +106,7 @@ import {
   formatYmJa,
   type MonthlySlogan,
 } from "@/lib/monthly-slogan";
+import { SLOGAN_PRESETS } from "@/lib/slogan-presets";
 import {
   HIYARI_PLACES,
   HIYARI_FACTORS,
@@ -683,6 +684,8 @@ export default function AdminPortalPage() {
     note: string;
   }>(() => ({ ym: currentYm(), slogan: "", note: "" }));
   const [savingSlogan, setSavingSlogan] = useState(false);
+  // 142: プリセット候補30選の開閉
+  const [showSloganPresets, setShowSloganPresets] = useState(false);
 
   // 共有ログ・貢献タブ（指示書36）
   const [newsLog, setNewsLog] = useState<NewsLogEntry[]>([]);
@@ -2546,6 +2549,21 @@ export default function AdminPortalPage() {
 
   const handleEditSlogan = (s: MonthlySlogan) => {
     setSloganForm({ ym: s.ym, slogan: s.slogan, note: s.note ?? "" });
+  };
+
+  // 142: 候補を本文フィールドへ転記（プリセットは起点・保存されるのは編集後の文言）。
+  // 既に入力がある場合は上書き確認（誤タップで消さない）。
+  const handlePickSloganPreset = (text: string) => {
+    const cur = sloganForm.slogan.trim();
+    if (
+      cur &&
+      cur !== text &&
+      !confirm("入力中のスローガン本文を選んだ候補で上書きしますか？")
+    ) {
+      return;
+    }
+    setSloganForm({ ...sloganForm, slogan: text });
+    setShowSloganPresets(false);
   };
 
   const handleDeleteSlogan = async (ym: string) => {
@@ -5184,10 +5202,44 @@ export default function AdminPortalPage() {
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="text-xs text-gray-800 mb-1 block">
-                  スローガン本文（1〜2行想定）{" "}
-                  <span className="text-red-500">*</span>
-                </label>
+                <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
+                  <label className="text-xs text-gray-800 block">
+                    スローガン本文（1〜2行想定）{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  {/* 142: プリセット候補30選（選ぶ→自由に編集→保存） */}
+                  <button
+                    type="button"
+                    onClick={() => setShowSloganPresets((v) => !v)}
+                    className="text-xs px-2 py-1 border border-teal-200 text-teal-700 rounded-lg hover:bg-teal-50"
+                  >
+                    📋 候補から選ぶ {showSloganPresets ? "▲" : "▼"}
+                  </button>
+                </div>
+                {showSloganPresets && (
+                  <div className="mb-2 p-3 bg-gray-50 border border-gray-200 rounded-xl max-h-72 overflow-y-auto space-y-3">
+                    <p className="text-xs text-gray-600">
+                      タップすると本文に入ります。そのまま自由に編集してから保存できます。
+                    </p>
+                    {SLOGAN_PRESETS.map((group) => (
+                      <div key={group.theme} className="space-y-1.5">
+                        <p className="text-xs font-semibold text-gray-700">
+                          {group.theme}
+                        </p>
+                        {group.items.map((text) => (
+                          <button
+                            key={text}
+                            type="button"
+                            onClick={() => handlePickSloganPreset(text)}
+                            className="w-full text-left text-sm text-gray-800 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-teal-50 hover:border-teal-200 active:bg-teal-100"
+                          >
+                            {text}
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <textarea
                   value={sloganForm.slogan}
                   onChange={(e) =>
