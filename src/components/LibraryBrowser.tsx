@@ -48,6 +48,7 @@ import {
 import { Label } from "@/components/ui/label";
 import LibraryPreviewModal from "@/components/LibraryPreviewModal";
 import { isAdminUser } from "@/lib/admin-role";
+import { LibraryCleanupPanel } from "@/components/LibraryCleanupPanel";
 import {
   LIBRARY_CATEGORIES,
   LIBRARY_MAX_BYTES,
@@ -1601,6 +1602,9 @@ export default function LibraryBrowser() {
             </Button>
           </div>
         </div>
+
+        {/* 147: 資料庫のお掃除（管理者のみ・既定は折りたたみ） */}
+        {isAdmin && <LibraryCleanupPanel onChanged={refresh} />}
 
         {/* ─── 資料一覧 ─── */}
         <TabsContent value="docs" className="space-y-4 mt-4">

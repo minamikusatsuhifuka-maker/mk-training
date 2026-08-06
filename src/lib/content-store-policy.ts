@@ -33,6 +33,8 @@ const ADMIN_ONLY_KEYS = new Set<string>([
   "portal_question_schedule",
   // 146: 月替わりマスコット当番の手動上書き
   "portal_mascot_duty",
+  // 147: 資料庫お掃除の「重複ではない」記録
+  "library_cleanup_dismissed",
   // 経営情報（lib 境界で管理者チェック済みだったもの）
   "portal_monthly_slogan",
   "portal_metrics",
