@@ -34,6 +34,15 @@ import {
   JitsuChecklist,
   JitsuCheckSummary,
 } from "@/components/JitsuChecklist";
+import { RwdepcForm, RwdepcGuide } from "@/components/RwdepcForm";
+import {
+  EMPTY_RWDEPC,
+  RWDEPC_STEPS,
+  hasRwdepcBody,
+  type RwdepcData,
+} from "@/lib/rwdepc";
+import type { OneOnOneMode } from "@/lib/one-on-one";
+import type { JitsuGroupKey } from "@/lib/jitsu-checklist";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
   loadProfilesIndex,
@@ -60,6 +69,12 @@ function OneOnOnePageBody() {
   const [sectionsDraft, setSectionsDraft] = useState<SectionDraft>(EMPTY_SECTIONS);
   // 152: 7つの実チェック（この回の記録として保存）
   const [jitsuDraft, setJitsuDraft] = useState<string[]>([]);
+  // 153: 記録形式（クイックメモ / RWDEPC対話）と RWDEPC の5欄
+  const [modeDraft, setModeDraft] = useState<OneOnOneMode>("quick");
+  const [rwdepcDraft, setRwdepcDraft] = useState<RwdepcData>(EMPTY_RWDEPC);
+  const [jitsuOpenGroup, setJitsuOpenGroup] = useState<JitsuGroupKey | null>(
+    null
+  );
   const [submitting, setSubmitting] = useState(false);
 
   // 編集（記録者本人のみ）
@@ -68,6 +83,10 @@ function OneOnOnePageBody() {
   const [editPartnerId, setEditPartnerId] = useState("");
   const [editSections, setEditSections] = useState<SectionDraft>(EMPTY_SECTIONS);
   const [editJitsu, setEditJitsu] = useState<string[]>([]);
+  const [editMode, setEditMode] = useState<OneOnOneMode>("quick");
+  const [editRwdepc, setEditRwdepc] = useState<RwdepcData>(EMPTY_RWDEPC);
+  const [editJitsuOpenGroup, setEditJitsuOpenGroup] =
+    useState<JitsuGroupKey | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
 
@@ -120,6 +139,26 @@ function OneOnOnePageBody() {
 
   const sorted = useMemo(() => sortOneOnOne(records), [records]);
 
+  // 153: 同じ相手の過去のRWDEPC回を新しい順で返す（③前回の約束・④Wの引き継ぎに使う）
+  const pastRwdepcFor = useCallback(
+    (partnerId: string, heldOn: string, excludeKey?: string) => {
+      if (!partnerId) return [];
+      return records
+        .map((r) => ({ r, d: normalizeOneOnOneData(r.data) }))
+        .filter(
+          ({ r, d }) =>
+            r.recordKey !== excludeKey &&
+            d.mode === "rwdepc" &&
+            d.participantIds.includes(partnerId) &&
+            d.heldOn &&
+            (!heldOn || d.heldOn < heldOn)
+        )
+        .sort((a, b) => b.d.heldOn.localeCompare(a.d.heldOn))
+        .map(({ d }) => d);
+    },
+    [records]
+  );
+
   // 152: 「前回の1on1」のチェックを引く（同じ相手の、指定日より前で最も新しい回）。
   // 見つからなければ null＝比較しない（初回は ✨new を出さない）。
   const previousJitsuFor = useCallback(
@@ -156,12 +195,14 @@ function OneOnOnePageBody() {
     try {
       const now = new Date().toISOString();
       const data: OneOnOneData = {
+        mode: modeDraft,
         heldOn,
         participantIds: [partnerIdDraft],
         partnerName: nameOf(partnerIdDraft, "名前未設定"),
         authorName: myName,
         sections: { ...sectionsDraft },
         jitsuChecks: jitsuDraft,
+        rwdepc: rwdepcDraft,
         createdAt: now,
         updatedAt: now,
       };
@@ -171,6 +212,8 @@ function OneOnOnePageBody() {
       setPartnerIdDraft("");
       setSectionsDraft(EMPTY_SECTIONS);
       setJitsuDraft([]);
+      setRwdepcDraft(EMPTY_RWDEPC);
+      setJitsuOpenGroup(null);
     } catch (e) {
       setError(
         e instanceof PrivateStoreError
@@ -189,6 +232,9 @@ function OneOnOnePageBody() {
     setEditPartnerId(d.participantIds[0] ?? "");
     setEditSections({ ...d.sections });
     setEditJitsu(d.jitsuChecks);
+    setEditMode(d.mode);
+    setEditRwdepc(d.rwdepc);
+    setEditJitsuOpenGroup(null);
   };
 
   const saveEdit = async (record: PrivateRecord) => {
@@ -206,6 +252,8 @@ function OneOnOnePageBody() {
         authorName: myName,
         sections: { ...editSections },
         jitsuChecks: editJitsu,
+        mode: editMode,
+        rwdepc: editRwdepc,
         updatedAt: new Date().toISOString(),
       };
       const saved = await upsertRecord("one_on_one", record.recordKey, next);
@@ -332,21 +380,69 @@ function OneOnOnePageBody() {
           </label>
         </div>
         <p className="text-xs text-gray-500">{PARTNER_NOTE}</p>
-        {ONE_ON_ONE_SECTIONS.map((sec) => (
-          <div key={sec.key} className="space-y-1">
-            <label className="text-sm font-medium text-gray-800 block">
-              {sec.label}
-            </label>
-            <textarea
-              value={sectionsDraft[sec.key]}
-              onChange={(e) =>
-                setSectionsDraft((prev) => ({ ...prev, [sec.key]: e.target.value }))
-              }
-              rows={3}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-y"
-            />
-          </div>
-        ))}
+
+        {/* 153: 記録の形式を選ぶ（既存の自由形式＝クイックメモとして温存） */}
+        <div className="flex items-center gap-2">
+          {(
+            [
+              ["quick", "📝 クイックメモ"],
+              ["rwdepc", "🔄 RWDEPC対話"],
+            ] as const
+          ).map(([m, label]) => (
+            <button
+              type="button"
+              key={m}
+              onClick={() => setModeDraft(m)}
+              className={`flex-1 px-3 py-2 rounded-xl text-sm font-medium border min-h-[44px] ${
+                modeDraft === m
+                  ? "bg-violet-600 text-white border-violet-600"
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {modeDraft === "quick" ? (
+          ONE_ON_ONE_SECTIONS.map((sec) => (
+            <div key={sec.key} className="space-y-1">
+              <label className="text-sm font-medium text-gray-800 block">
+                {sec.label}
+              </label>
+              <textarea
+                value={sectionsDraft[sec.key]}
+                onChange={(e) =>
+                  setSectionsDraft((prev) => ({
+                    ...prev,
+                    [sec.key]: e.target.value,
+                  }))
+                }
+                rows={3}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-y"
+              />
+            </div>
+          ))
+        ) : (
+          (() => {
+            const past = pastRwdepcFor(partnerIdDraft, heldOnDraft);
+            const prev = past[0] ?? null;
+            const withW = past.filter((d) => d.rwdepc.w.trim());
+            return (
+              <RwdepcForm
+                value={rwdepcDraft}
+                onChange={setRwdepcDraft}
+                disabled={submitting}
+                previousPromise={prev?.rwdepc.c.trim() || null}
+                previousPromiseDate={prev?.heldOn ?? null}
+                onOpenJikko={() => setJitsuOpenGroup("jikko")}
+                previousW={withW[0]?.rwdepc.w.trim() || null}
+                previousWDate={withW[0]?.heldOn ?? null}
+                wHistory={withW.map((d) => ({ heldOn: d.heldOn, w: d.rwdepc.w }))}
+              />
+            );
+          })()
+        )}
         {/* 152: 7つの実チェック（この回の記録として保存される） */}
         <div className="space-y-1">
           <label className="text-sm font-medium text-gray-800 block">
@@ -357,6 +453,8 @@ function OneOnOnePageBody() {
             onChange={setJitsuDraft}
             previousChecked={previousJitsuFor(partnerIdDraft, heldOnDraft)}
             disabled={submitting}
+            openGroup={jitsuOpenGroup}
+            onOpenGroupChange={setJitsuOpenGroup}
           />
         </div>
 
@@ -380,6 +478,9 @@ function OneOnOnePageBody() {
       )}
 
       {/* 一覧（実施日降順・自分が記録した回＋相手として参加した回） */}
+      {/* 153-⑤ 問いかけ集（読むだけモード） */}
+      <RwdepcGuide />
+
       {sorted.length === 0 ? (
         <p className="text-sm text-gray-500 py-10 text-center">
           {ONE_ON_ONE_EMPTY}
@@ -396,7 +497,9 @@ function OneOnOnePageBody() {
             const isExpanded = expanded.has(record.recordKey);
             const editing = editingKey === record.recordKey;
             const hasBody =
-              d.sections.theme || d.sections.kizuki || d.sections.nextStep;
+              d.mode === "rwdepc"
+                ? hasRwdepcBody(d.rwdepc)
+                : !!(d.sections.theme || d.sections.kizuki || d.sections.nextStep);
             return (
               <div
                 key={record.recordKey}
@@ -407,6 +510,11 @@ function OneOnOnePageBody() {
                     <span className="text-[10px] font-medium bg-violet-100 text-violet-800 rounded-full px-2 py-0.5">
                       📅 {d.heldOn.replaceAll("-", "/")}
                     </span>
+                    {d.mode === "rwdepc" && (
+                      <span className="text-[10px] font-medium bg-teal-100 text-teal-800 rounded-full px-2 py-0.5">
+                        🔄 RWDEPC
+                      </span>
+                    )}
                     <span className="text-sm text-gray-800">
                       記録: <span className="font-medium">{authorName}さん</span>
                       {" → "}相手: <span className="font-medium">{partnerName}さん</span>
@@ -461,24 +569,52 @@ function OneOnOnePageBody() {
                         ))}
                       </select>
                     </div>
-                    {ONE_ON_ONE_SECTIONS.map((sec) => (
-                      <div key={sec.key} className="space-y-1">
-                        <label className="text-sm font-medium text-gray-800 block">
-                          {sec.label}
-                        </label>
-                        <textarea
-                          value={editSections[sec.key]}
-                          onChange={(e) =>
-                            setEditSections((prev) => ({
-                              ...prev,
-                              [sec.key]: e.target.value,
-                            }))
-                          }
-                          rows={3}
-                          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-y"
-                        />
-                      </div>
-                    ))}
+                    {editMode === "quick" ? (
+                      ONE_ON_ONE_SECTIONS.map((sec) => (
+                        <div key={sec.key} className="space-y-1">
+                          <label className="text-sm font-medium text-gray-800 block">
+                            {sec.label}
+                          </label>
+                          <textarea
+                            value={editSections[sec.key]}
+                            onChange={(e) =>
+                              setEditSections((prev) => ({
+                                ...prev,
+                                [sec.key]: e.target.value,
+                              }))
+                            }
+                            rows={3}
+                            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-y"
+                          />
+                        </div>
+                      ))
+                    ) : (
+                      (() => {
+                        const past = pastRwdepcFor(
+                          editPartnerId,
+                          editHeldOn,
+                          record.recordKey
+                        );
+                        const prev = past[0] ?? null;
+                        const withW = past.filter((x) => x.rwdepc.w.trim());
+                        return (
+                          <RwdepcForm
+                            value={editRwdepc}
+                            onChange={setEditRwdepc}
+                            disabled={savingEdit}
+                            previousPromise={prev?.rwdepc.c.trim() || null}
+                            previousPromiseDate={prev?.heldOn ?? null}
+                            onOpenJikko={() => setEditJitsuOpenGroup("jikko")}
+                            previousW={withW[0]?.rwdepc.w.trim() || null}
+                            previousWDate={withW[0]?.heldOn ?? null}
+                            wHistory={withW.map((x) => ({
+                              heldOn: x.heldOn,
+                              w: x.rwdepc.w,
+                            }))}
+                          />
+                        );
+                      })()
+                    )}
                     <div className="space-y-1">
                       <label className="text-sm font-medium text-gray-800 block">
                         🌾 7つの実チェック
@@ -492,6 +628,8 @@ function OneOnOnePageBody() {
                           record.recordKey
                         )}
                         disabled={savingEdit}
+                        openGroup={editJitsuOpenGroup}
+                        onOpenGroupChange={setEditJitsuOpenGroup}
                       />
                     </div>
                     <div className="flex items-center gap-2 justify-end">
@@ -519,19 +657,38 @@ function OneOnOnePageBody() {
                     <JitsuCheckSummary checks={d.jitsuChecks} />
                     {hasBody && (
                     <div className="space-y-2">
-                      {(isExpanded
-                        ? ONE_ON_ONE_SECTIONS
-                        : ONE_ON_ONE_SECTIONS.slice(0, 1)
-                      ).map((sec) =>
-                        d.sections[sec.key] ? (
-                          <div key={sec.key}>
-                            <p className="text-xs text-gray-500">{sec.label}</p>
-                            <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
-                              {d.sections[sec.key]}
-                            </p>
-                          </div>
-                        ) : null
-                      )}
+                      {d.mode === "rwdepc"
+                        ? (isExpanded
+                            ? RWDEPC_STEPS
+                            : RWDEPC_STEPS.slice(0, 1)
+                          ).map((step) =>
+                            d.rwdepc[step.key] ? (
+                              <div key={step.key}>
+                                <p className="text-xs text-gray-500">
+                                  <span className="text-violet-700 font-medium">
+                                    {step.mark}
+                                  </span>
+                                  ｜{step.label}
+                                </p>
+                                <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                                  {d.rwdepc[step.key]}
+                                </p>
+                              </div>
+                            ) : null
+                          )
+                        : (isExpanded
+                            ? ONE_ON_ONE_SECTIONS
+                            : ONE_ON_ONE_SECTIONS.slice(0, 1)
+                          ).map((sec) =>
+                            d.sections[sec.key] ? (
+                              <div key={sec.key}>
+                                <p className="text-xs text-gray-500">{sec.label}</p>
+                                <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                                  {d.sections[sec.key]}
+                                </p>
+                              </div>
+                            ) : null
+                          )}
                       <button
                         type="button"
                         onClick={() => toggleExpanded(record.recordKey)}

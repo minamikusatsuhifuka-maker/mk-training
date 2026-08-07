@@ -22,13 +22,23 @@ export function JitsuChecklist({
   /** 前回の1on1でのチェック（今回新しく付いた実に ✨new を出すため。無ければ比較しない） */
   previousChecked,
   disabled = false,
+  openGroup: controlledOpenGroup,
+  onOpenGroupChange,
 }: {
   checked: string[];
   onChange: (next: string[]) => void;
   previousChecked?: string[] | null;
   disabled?: boolean;
+  /** 153: 外から特定グループを開きたいとき（「前回の約束」→実行グループ導線）に使う */
+  openGroup?: JitsuGroupKey | null;
+  onOpenGroupChange?: (key: JitsuGroupKey | null) => void;
 }) {
-  const [openGroup, setOpenGroup] = useState<JitsuGroupKey | null>(null);
+  const [innerOpenGroup, setInnerOpenGroup] = useState<JitsuGroupKey | null>(
+    null
+  );
+  const openGroup =
+    controlledOpenGroup !== undefined ? controlledOpenGroup : innerOpenGroup;
+  const setOpenGroup = onOpenGroupChange ?? setInnerOpenGroup;
   const [q, setQ] = useState("");
   const [readOnlyMode, setReadOnlyMode] = useState(false);
 

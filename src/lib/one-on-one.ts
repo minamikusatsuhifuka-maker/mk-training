@@ -8,8 +8,14 @@
 
 import { jstTodayYmd } from "./library";
 import { normalizeJitsuChecks } from "./jitsu-checklist";
+import { EMPTY_RWDEPC, normalizeRwdepc, type RwdepcData } from "./rwdepc";
+
+/** 153: 記録の形式。既存データは mode を持たないので "quick"（自由形式）に倒す */
+export type OneOnOneMode = "quick" | "rwdepc";
 
 export type OneOnOneData = {
+  /** 153: クイックメモ（従来の自由形式）か RWDEPC対話か */
+  mode: OneOnOneMode;
   heldOn: string; // 実施日 "YYYY-MM-DD"（必須）
   participantIds: string[]; // ペア相手の userId（当面1名。配列は将来の3者面談等への含み）
   partnerName: string; // 相手の表示名（記録時点を保存）
@@ -30,6 +36,8 @@ export type OneOnOneData = {
    * 一覧・編集・表示のすべてがここを通るため、不正なidが画面に出ることはない。
    */
   jitsuChecks: string[];
+  /** 153: RWDEPC対話モードの5欄（W→D→E→P→C）。quickモードでは空のまま */
+  rwdepc: RwdepcData;
   createdAt: string;
   updatedAt: string;
 };
@@ -45,12 +53,14 @@ export function normalizeHeldOnYmd(v: unknown): string {
 
 export function emptyOneOnOneData(): OneOnOneData {
   return {
+    mode: "quick",
     heldOn: "",
     participantIds: [],
     partnerName: "",
     authorName: "",
     sections: { theme: "", kizuki: "", nextStep: "" },
     jitsuChecks: [],
+    rwdepc: { ...EMPTY_RWDEPC },
     createdAt: "",
     updatedAt: "",
   };
@@ -66,6 +76,8 @@ export function normalizeOneOnOneData(raw: unknown): OneOnOneData {
   >;
   const createdAt = str(g.createdAt);
   return {
+    // 既存データ（modeなし）は自由形式として扱う＝後方互換
+    mode: g.mode === "rwdepc" ? "rwdepc" : "quick",
     heldOn: normalizeHeldOnYmd(g.heldOn),
     participantIds: Array.isArray(g.participantIds)
       ? g.participantIds.filter((v): v is string => typeof v === "string" && !!v)
@@ -78,6 +90,7 @@ export function normalizeOneOnOneData(raw: unknown): OneOnOneData {
       nextStep: str(s.nextStep),
     },
     jitsuChecks: normalizeJitsuChecks(g.jitsuChecks),
+    rwdepc: normalizeRwdepc(g.rwdepc),
     createdAt,
     updatedAt: str(g.updatedAt) || createdAt,
   };
