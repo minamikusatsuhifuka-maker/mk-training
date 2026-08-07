@@ -81,23 +81,45 @@ export function JitsuChecklist({
       {/* 今回チェックした実の一覧（✨new は前回との比較） */}
       {checked.length > 0 && !readOnlyMode && (
         <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl">
-          <div className="flex flex-wrap gap-1.5">
-            {checked.map((id) => {
-              const it = JITSU_ITEM_BY_ID.get(id);
-              if (!it) return null;
-              const isNew = hasPrev && !prevSet.has(id);
+          {/* 7分類は色数を増やすと判別しづらくなるため、色は1トーンに抑えて
+              「どの実か」は小見出しラベルで示す（指示 2026-08-07） */}
+          <div className="space-y-2">
+            {JITSU_GROUPS.map((g) => {
+              const ids = checked.filter(
+                (id) => JITSU_ITEM_BY_ID.get(id)?.group === g.key
+              );
+              if (ids.length === 0) return null;
               return (
-                <button
-                  type="button"
-                  key={id}
-                  onClick={() => toggle(id)}
-                  disabled={disabled}
-                  title="クリックで外す"
-                  className="text-xs px-2 py-1 bg-white border border-teal-300 text-teal-800 rounded-full hover:bg-teal-100 disabled:opacity-50"
+                <div
+                  key={g.key}
+                  className="flex flex-wrap items-baseline gap-x-2 gap-y-1.5"
                 >
-                  {isNew && <span className="mr-1 text-amber-600">✨new</span>}
-                  {it.label} ×
-                </button>
+                  <span className="text-xs font-semibold text-gray-800 shrink-0">
+                    {g.short}
+                  </span>
+                  {ids.map((id) => {
+                    const it = JITSU_ITEM_BY_ID.get(id);
+                    if (!it) return null;
+                    const isNew = hasPrev && !prevSet.has(id);
+                    return (
+                      <button
+                        type="button"
+                        key={id}
+                        onClick={() => toggle(id)}
+                        disabled={disabled}
+                        title="クリックで外す"
+                        className={`text-xs px-2 py-1 border rounded-full disabled:opacity-50 ${
+                          isNew
+                            ? "bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100"
+                            : "bg-white border-teal-300 text-teal-800 hover:bg-teal-100"
+                        }`}
+                      >
+                        {isNew && <span className="mr-1">✨new</span>}
+                        {it.label} ×
+                      </button>
+                    );
+                  })}
+                </div>
               );
             })}
           </div>
@@ -224,22 +246,38 @@ export function JitsuCheckSummary({ checks }: { checks: string[] }) {
       <div className="flex flex-wrap items-center gap-2 text-xs text-gray-700">
         <span className="font-medium">🌾 7つの実</span>
         {JITSU_GROUPS.filter((g) => counts[g.key] > 0).map((g) => (
-          <span key={g.key}>
+          <span key={g.key} className="text-gray-600">
             {g.short} {counts[g.key]}
           </span>
         ))}
       </div>
-      <div className="flex flex-wrap gap-1.5 mt-1.5">
-        {checks.map((id) => {
-          const it = JITSU_ITEM_BY_ID.get(id);
-          if (!it) return null;
+      <div className="mt-1.5 space-y-1.5">
+        {JITSU_GROUPS.map((g) => {
+          const ids = checks.filter(
+            (id) => JITSU_ITEM_BY_ID.get(id)?.group === g.key
+          );
+          if (ids.length === 0) return null;
           return (
-            <span
-              key={id}
-              className="text-xs px-2 py-1 bg-teal-50 border border-teal-200 text-teal-800 rounded-full"
+            <div
+              key={g.key}
+              className="flex flex-wrap items-baseline gap-x-2 gap-y-1.5"
             >
-              {it.label}
-            </span>
+              <span className="text-xs font-semibold text-gray-700 shrink-0">
+                {g.short}
+              </span>
+              {ids.map((id) => {
+                const it = JITSU_ITEM_BY_ID.get(id);
+                if (!it) return null;
+                return (
+                  <span
+                    key={id}
+                    className="text-xs px-2 py-1 bg-teal-50 border border-teal-200 text-teal-800 rounded-full"
+                  >
+                    {it.label}
+                  </span>
+                );
+              })}
+            </div>
           );
         })}
       </div>

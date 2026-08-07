@@ -13,6 +13,25 @@ import {
   type StrengthCategoryKey,
 } from "@/lib/strength-checklist";
 
+// 分類ごとのチップ配色（パステル地＋濃色文字でコントラストを確保・139準拠）
+const CHIP_STYLE: Record<StrengthCategoryKey, string> = {
+  sai: "bg-emerald-50 border-emerald-300 text-emerald-900 hover:bg-emerald-100",
+  toku: "bg-sky-50 border-sky-300 text-sky-900 hover:bg-sky-100",
+  bi: "bg-pink-50 border-pink-300 text-pink-900 hover:bg-pink-100",
+};
+
+// 一覧・タブの選択状態にも同じ色味を使い、どの分類かを一貫させる
+const ITEM_ON_STYLE: Record<StrengthCategoryKey, string> = {
+  sai: "bg-emerald-50 border-emerald-300",
+  toku: "bg-sky-50 border-sky-300",
+  bi: "bg-pink-50 border-pink-300",
+};
+const ITEM_ON_TEXT: Record<StrengthCategoryKey, string> = {
+  sai: "text-emerald-900",
+  toku: "text-sky-900",
+  bi: "text-pink-900",
+};
+
 export function StrengthChecklist({
   checked,
   onChange,
@@ -56,21 +75,38 @@ export function StrengthChecklist({
           </span>
         </div>
         {checked.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {checked.map((id) => {
-              const it = STRENGTH_ITEM_BY_ID.get(id);
-              if (!it) return null;
+          <div className="mt-2 space-y-2">
+            {STRENGTH_CATEGORIES.map((c) => {
+              // チェックのない分類は見出しごと出さない
+              const ids = checked.filter(
+                (id) => STRENGTH_ITEM_BY_ID.get(id)?.category === c.key
+              );
+              if (ids.length === 0) return null;
               return (
-                <button
-                  type="button"
-                  key={id}
-                  onClick={() => toggle(id)}
-                  disabled={disabled}
-                  title="クリックで外す"
-                  className="text-xs px-2 py-1 bg-white border border-teal-300 text-teal-800 rounded-full hover:bg-teal-100 disabled:opacity-50"
+                <div
+                  key={c.key}
+                  className="flex flex-wrap items-baseline gap-x-2 gap-y-1.5"
                 >
-                  {it.label} ×
-                </button>
+                  <span className="text-xs font-semibold text-gray-800 shrink-0">
+                    {c.short}
+                  </span>
+                  {ids.map((id) => {
+                    const it = STRENGTH_ITEM_BY_ID.get(id);
+                    if (!it) return null;
+                    return (
+                      <button
+                        type="button"
+                        key={id}
+                        onClick={() => toggle(id)}
+                        disabled={disabled}
+                        title="クリックで外す"
+                        className={`text-xs px-2 py-1 border rounded-full disabled:opacity-50 ${CHIP_STYLE[c.key]}`}
+                      >
+                        {it.label} ×
+                      </button>
+                    );
+                  })}
+                </div>
               );
             })}
           </div>
@@ -133,7 +169,7 @@ export function StrengthChecklist({
               key={it.id}
               className={`flex items-start gap-2 p-3 rounded-xl border cursor-pointer min-h-[48px] transition-colors ${
                 on
-                  ? "bg-teal-50 border-teal-300"
+                  ? ITEM_ON_STYLE[tab]
                   : "bg-white border-gray-200 hover:bg-gray-50"
               } ${disabled ? "opacity-60 pointer-events-none" : ""}`}
             >
@@ -146,7 +182,7 @@ export function StrengthChecklist({
               />
               <span
                 className={`text-sm leading-snug ${
-                  on ? "text-teal-900 font-medium" : "text-gray-800"
+                  on ? `${ITEM_ON_TEXT[tab]} font-medium` : "text-gray-800"
                 }`}
               >
                 {it.label}
