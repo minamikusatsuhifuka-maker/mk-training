@@ -5,8 +5,7 @@
 // 書き込みはサーバーAPI（/api/profile）経由のみ（本人一致をサーバーで担保）。
 // 写真は Supabase Storage バケット staff-photos（public read）。
 
-import { loadPortalItems, loadPortalObject } from "./portal-store";
-import { getContentRowsByPrefix } from "./content-store-core";
+import { loadPortalObject } from "./portal-store";
 import type { NeedsSurvey } from "./needs-survey";
 
 export const STAFF_PROFILES_INDEX_KEY = "staff_profiles_index";
@@ -107,15 +106,51 @@ export function isFieldPrivate(
 
 // ─── クライアント読み取り（閲覧は誰でも可） ───
 
+// 2026-08-07: 無効化（banned）されたアカウントを除外するため、
+// content_store の直読みをやめて /api/members（サーバー側で除外）経由にした。
+// これにより利用側（メンバー紹介・1on1の相手選択・ありがとう・メンバーノート等）は
+// 無改修で除外が効く。取得に失敗した場合は空配列（従来と同じフォールバック）。
+async function fetchMembers(withProfiles: boolean): Promise<{
+  items: StaffProfileIndexEntry[];
+  profiles: Record<string, StaffProfile>;
+  disabledNames: string[];
+}> {
+  const empty = { items: [], profiles: {}, disabledNames: [] };
+  try {
+    const res = await fetch(
+      withProfiles ? "/api/members?profiles=1" : "/api/members",
+      { credentials: "same-origin" }
+    );
+    if (!res.ok) return empty;
+    const json = (await res.json()) as {
+      items?: StaffProfileIndexEntry[];
+      profiles?: Record<string, StaffProfile>;
+      disabledNames?: string[];
+    };
+    return {
+      items: Array.isArray(json.items) ? json.items : [],
+      profiles: json.profiles ?? {},
+      disabledNames: Array.isArray(json.disabledNames)
+        ? json.disabledNames
+        : [],
+    };
+  } catch {
+    return empty;
+  }
+}
+
 export async function loadProfilesIndex(): Promise<StaffProfileIndexEntry[]> {
-  const items = await loadPortalItems<StaffProfileIndexEntry>(
-    STAFF_PROFILES_INDEX_KEY,
-    []
-  );
+  const { items } = await fetchMembers(false);
   // ふりがな順（無ければ名前順）で安定表示
   return [...items].sort((a, b) =>
     (a.kana || a.name).localeCompare(b.kana || b.name, "ja")
   );
+}
+
+/** 無効化されたアカウントの名前（名前ベースの候補リストを絞るのに使う） */
+export async function loadDisabledMemberNames(): Promise<string[]> {
+  const { disabledNames } = await fetchMembers(false);
+  return disabledNames;
 }
 
 // 全スタッフのプロフィール本体を1クエリで取得（一覧カード表示用）。
@@ -124,15 +159,10 @@ export async function loadAllStaffProfiles(): Promise<
   Record<string, StaffProfile>
 > {
   try {
-    // 145: anon 直読みを廃止（プレフィックス取得は /api/content-store?prefix= が許可済み）
-    const rows = await getContentRowsByPrefix("staff_profile:");
-    const map: Record<string, StaffProfile> = {};
-    for (const row of rows) {
-      const p = row.data as StaffProfile | null;
-      if (!p || typeof p.userId !== "string") continue;
-      map[p.userId] = { ...emptyProfile(p.userId), ...p };
-    }
-    return map;
+    // 2026-08-07: 無効アカウントの除外もサーバー側で行うため /api/members に統合
+    //（145で anon 直読みは廃止済み）
+    const { profiles } = await fetchMembers(true);
+    return profiles;
   } catch {
     return {};
   }

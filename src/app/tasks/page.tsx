@@ -78,6 +78,7 @@ import {
   type StaffTask,
   type TaskStatus,
 } from "@/lib/staff-tasks";
+import { loadDisabledMemberNames } from "@/lib/staff-profiles";
 import { resolveTaskActor } from "@/lib/task-actor";
 import { AssigneeNames } from "@/components/tasks/AssigneeNames";
 
@@ -92,6 +93,8 @@ const STATUS_SELECT_CLASS: Record<TaskStatus, string> = {
 export default function TasksPage() {
   const [tasks, setTasks] = useState<StaffTask[]>([]);
   const [members, setMembers] = useState<string[]>([]);
+  // 2026-08-07: 無効化されたアカウントの名前（担当者候補から外す。過去タスクの表示名は残す）
+  const [disabledNames, setDisabledNames] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [now, setNow] = useState<Date | null>(null);
 
@@ -158,6 +161,11 @@ export default function TasksPage() {
     ])
       .then(async ([t, m, cats, layout]) => {
         setMembers(m);
+        loadDisabledMemberNames()
+          .then(setDisabledNames)
+          .catch(() => {
+            /* 取得できないときは除外しない（fail-open） */
+          });
         setCategories(cats);
         setSectionOrder(visibleTasksSectionKeys(layout));
 
@@ -239,8 +247,13 @@ export default function TasksPage() {
     const set = new Set<string>();
     members.forEach((m) => m && set.add(m));
     tasks.forEach((t) => assigneesOf(t).forEach((a) => set.add(a)));
-    return Array.from(set).sort((a, b) => a.localeCompare(b, "ja"));
-  }, [members, tasks]);
+    // 無効化されたアカウントの人は新規の割り当て候補から外す。
+    // すでに割り当て済みのタスクの表示名はそのまま（過去記録を壊さない）。
+    const off = new Set(disabledNames);
+    return Array.from(set)
+      .filter((a) => !off.has(a))
+      .sort((a, b) => a.localeCompare(b, "ja"));
+  }, [members, tasks, disabledNames]);
 
   // カテゴリフィルタの選択肢（表示中の定義 ∪ タスクで使用中のカテゴリ）
   const categoryOptions = useMemo(() => {
