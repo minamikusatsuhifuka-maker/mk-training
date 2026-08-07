@@ -3,7 +3,7 @@
 // 管理画面の共通シェル（ヘッダー＋サイドナビ）。
 // 認可（管理者のみ）は src/app/admin/layout.tsx（サーバー側）で行う。
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FontSwitcher } from "@/components/FontSwitcher";
@@ -40,6 +40,26 @@ const adminNav = [
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  // 149: メンバーノートは指名された人だけに見せる。
+  // 許可されていないと probe が 404 を返すので、リンク自体を出さない（存在秘匿）。
+  const [canSeeNotes, setCanSeeNotes] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/member-notes?probe=1", { credentials: "same-origin" })
+      .then((r) => {
+        if (!cancelled) setCanSeeNotes(r.ok);
+      })
+      .catch(() => {
+        /* 判定できないときは出さない（fail-close） */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const navItems = canSeeNotes
+    ? [...adminNav, { label: "📔 メンバーノート", href: "/member-notes" }]
+    : adminNav;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -76,7 +96,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <div className="py-1.5">
             <FontSwitcher dark />
           </div>
-          {adminNav.map((item) => {
+          {navItems.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link
@@ -100,7 +120,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         {/* Desktop Sidebar */}
         <aside className="hidden md:block w-[200px] shrink-0 bg-slate-800 min-h-[calc(100vh-52px)] px-3 py-4">
           <nav className="space-y-1">
-            {adminNav.map((item) => {
+            {navItems.map((item) => {
               const isActive = pathname === item.href;
               return (
                 <Link
