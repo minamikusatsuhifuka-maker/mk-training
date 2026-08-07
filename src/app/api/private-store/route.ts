@@ -21,8 +21,15 @@ import { RECORD_KEY_RE } from "@/lib/private-store-client";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// content_type ホワイトリスト（追加は各フェーズの指示書で。onboarding は指示書113）
-const CONTENT_TYPES = ["self_review", "one_on_one", "onboarding"] as const;
+// content_type ホワイトリスト（追加は各フェーズの指示書で。onboarding は指示書113・quote_favorites は quotes_port）
+const CONTENT_TYPES = [
+  "self_review",
+  "one_on_one",
+  "onboarding",
+  // quotes_port: 格言のお気に入り（本人のみ・1ユーザー1レコード）。
+  //   専用テーブルを足さずに済むよう private_store を使う（owner_id で本人に閉じる）。
+  "quote_favorites",
+] as const;
 type PrivateContentType = (typeof CONTENT_TYPES)[number];
 const DATA_MAX_BYTES = 200 * 1024; // 1レコード 200KB（JSON文字列長）
 

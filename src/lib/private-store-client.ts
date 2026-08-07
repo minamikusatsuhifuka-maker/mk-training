@@ -6,7 +6,12 @@
 //   403 → kind "forbidden"（権限なし表示）
 //   その他 → kind "error"（メッセージ表示・再試行導線）
 
-export type PrivateContentType = "self_review" | "one_on_one" | "onboarding";
+export type PrivateContentType =
+  | "self_review"
+  | "one_on_one"
+  | "onboarding"
+  // quotes_port: 格言のお気に入り（本人のみ・1ユーザー1レコード）
+  | "quote_favorites";
 
 // record_key の形式（APIルートと共有・指示書111でlib共有化）
 export const RECORD_KEY_RE = /^[\w.-]{1,64}$/;
