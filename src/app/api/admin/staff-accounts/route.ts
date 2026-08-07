@@ -16,6 +16,8 @@ import {
 } from "@/lib/supabase-admin";
 import { getSessionUser } from "@/lib/staff-profiles-server";
 import { isAdminUser, countAdmins } from "@/lib/admin-role";
+import { STAFF_PROFILES_INDEX_KEY } from "@/lib/staff-profiles";
+import { serverGetContentRow } from "@/lib/content-store-server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -29,9 +31,35 @@ type AccountSummary = {
   invitedAt: string | null;
   banned: boolean;
   isAdmin: boolean;
+  /**
+   * 招待時の表示名が未設定のときに一覧で代わりに出す、本人がプロフィールに登録した名前。
+   * 表示のためだけの補助で、アカウント側のデータ（user_metadata）は変更しない。
+   */
+  profileName: string;
 };
 
-function toSummary(u: User): AccountSummary {
+/** userId → プロフィール名。取得できなければ空のMap（従来表示に倒れる） */
+async function loadProfileNames(): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  try {
+    const row = await serverGetContentRow(STAFF_PROFILES_INDEX_KEY);
+    const items = (row?.data as { items?: unknown } | null)?.items;
+    if (!Array.isArray(items)) return out;
+    for (const it of items) {
+      if (!it || typeof it !== "object") continue;
+      const e = it as { userId?: unknown; name?: unknown };
+      if (typeof e.userId === "string" && typeof e.name === "string") {
+        const name = e.name.trim();
+        if (e.userId && name) out.set(e.userId, name);
+      }
+    }
+  } catch {
+    /* 取得失敗時は従来どおり「（表示名なし）」になるだけ */
+  }
+  return out;
+}
+
+function toSummary(u: User, profileNames?: Map<string, string>): AccountSummary {
   const meta = u.user_metadata as Record<string, unknown> | null;
   const banned_until = (u as User & { banned_until?: string | null })
     .banned_until;
@@ -45,6 +73,7 @@ function toSummary(u: User): AccountSummary {
     invitedAt: u.invited_at ?? null,
     banned: !!banned_until && new Date(banned_until).getTime() > Date.now(),
     isAdmin: isAdminUser(u),
+    profileName: profileNames?.get(u.id) ?? "",
   };
 }
 
@@ -94,8 +123,9 @@ export async function GET() {
       // 初期セットアップ救済として一覧の閲覧（＝仮パスワード発行の入口）を許可する。
       // 管理者が1人でもできたら（またはログイン履歴がつけば）以後はログイン必須に戻る。
       if (adminCount === 0 && users.every((u) => !u.last_sign_in_at)) {
+        const profileNames = await loadProfileNames();
         return NextResponse.json({
-          users: users.map(toSummary),
+          users: users.map((u) => toSummary(u, profileNames)),
           bootstrap: false,
           preLogin: true,
         });
@@ -114,8 +144,9 @@ export async function GET() {
       );
     }
 
+    const profileNames = await loadProfileNames();
     return NextResponse.json({
-      users: users.map(toSummary),
+      users: users.map((u) => toSummary(u, profileNames)),
       bootstrap: false,
       me: user.id,
       adminCount,

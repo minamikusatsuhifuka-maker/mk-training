@@ -20,6 +20,8 @@ type AccountSummary = {
   invitedAt: string | null;
   banned: boolean;
   isAdmin: boolean;
+  /** 招待時の表示名が未設定のときの代替表示用（本人のプロフィール名・APIが付与） */
+  profileName?: string;
 };
 
 function fmt(iso: string | null): string {
@@ -547,9 +549,18 @@ export default function StaffAccountsAdminPage() {
                     }`}
                   >
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      {/* 招待時の表示名が未設定なら、本人が登録したプロフィール名で代替表示 */}
                       <span className="text-sm font-medium text-slate-800">
-                        {u.displayName || "（表示名なし）"}
+                        {u.displayName || u.profileName || "（表示名なし）"}
                       </span>
+                      {!u.displayName && u.profileName && (
+                        <span
+                          className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-600"
+                          title="招待時の表示名は未設定です。本人のマイプロフィールの名前を表示しています"
+                        >
+                          プロフィール名
+                        </span>
+                      )}
                       <span className="text-xs text-slate-500">{u.email}</span>
                       {u.id === me && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-100 text-teal-700">
