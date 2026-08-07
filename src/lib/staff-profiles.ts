@@ -119,7 +119,8 @@ async function fetchMembers(withProfiles: boolean): Promise<{
   try {
     const res = await fetch(
       withProfiles ? "/api/members?profiles=1" : "/api/members",
-      { credentials: "same-origin" }
+      // no-store: 無効化・有効化の反映が古いキャッシュで遅れないようにする
+      { credentials: "same-origin", cache: "no-store" }
     );
     if (!res.ok) return empty;
     const json = (await res.json()) as {

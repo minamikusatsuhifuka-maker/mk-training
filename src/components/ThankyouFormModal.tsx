@@ -8,7 +8,10 @@
 
 import { useState, useEffect } from "react";
 import { loadPortalItems, savePortalItems } from "@/lib/portal-store";
-import { loadProfilesIndex } from "@/lib/staff-profiles";
+import {
+  loadDisabledMemberNames,
+  loadProfilesIndex,
+} from "@/lib/staff-profiles";
 import { loadStaffMembers } from "@/lib/staff-tasks";
 import { getCurrentActorName } from "@/lib/news-log";
 import {
@@ -38,16 +41,20 @@ export function ThankyouFormModal({
   useEffect(() => {
     if (!open) return;
     (async () => {
-      const [profiles, members] = await Promise.all([
+      const [profiles, members, disabled] = await Promise.all([
         loadProfilesIndex().catch(() => []),
         loadStaffMembers().catch(() => []),
+        // staff_members は名前だけの名簿でアカウントと紐づかないため、
+        // プロフィール側の除外だけでは無効化された人が残る。名前でも弾く。
+        loadDisabledMemberNames().catch(() => [] as string[]),
       ]);
+      const off = new Set(disabled.map((n) => normalizeThankyouName(n)));
       const seen = new Set<string>();
       const names: string[] = [];
       for (const raw of [...profiles.map((p) => p.name), ...members]) {
         const name = (raw ?? "").trim();
         const key = normalizeThankyouName(name);
-        if (!key || seen.has(key)) continue;
+        if (!key || seen.has(key) || off.has(key)) continue;
         seen.add(key);
         names.push(name);
       }

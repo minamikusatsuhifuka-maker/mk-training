@@ -27,6 +27,8 @@ import {
 } from "@/lib/content-store-server";
 
 export const runtime = "nodejs";
+// 無効化・有効化の切替が即反映されるよう、常に都度実行する
+export const dynamic = "force-dynamic";
 
 function isBanned(u: User): boolean {
   const until = (u as User & { banned_until?: string | null }).banned_until;
