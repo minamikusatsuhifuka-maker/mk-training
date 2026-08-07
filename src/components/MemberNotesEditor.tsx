@@ -11,6 +11,7 @@ import {
   isEmptyNote,
   type MemberNote,
 } from "@/lib/member-notes";
+import { MemberNotesImportPanel } from "@/components/MemberNotesImportPanel";
 import { loadProfilesIndex } from "@/lib/staff-profiles";
 import type { StaffProfileIndexEntry } from "@/lib/staff-profiles";
 
@@ -251,6 +252,16 @@ export function MemberNotesEditor({ isAdmin }: { isAdmin: boolean }) {
           )}
         </div>
       )}
+
+      {/* 150: 資料からのAI取り込み（提案のみ・保存は承認後） */}
+      <MemberNotesImportPanel
+        members={members}
+        noteOf={noteOf}
+        onApplied={async () => {
+          await load();
+          if (selected) setDraft(noteOf(selected));
+        }}
+      />
 
       {/* メンバー一覧 */}
       <div className="rounded-xl border border-gray-200 bg-white p-3">
