@@ -7,6 +7,8 @@
 // 本人の同意で動くお祝いと、管理側が書く記録を混ぜないため、
 // 参照も同期も一切しない（データの出どころを1つに保つ）。
 
+import { normalizeStrengthChecks } from "./strength-checklist";
+
 /** テーブル内で設定を持つ行のID（132の __config__ と同じ流儀） */
 export const MEMBER_NOTES_CONFIG_ID = "__config__";
 
@@ -19,6 +21,12 @@ export type MemberNote = {
   joinedOn: string;
   /** 強みの記録（自由記述・才/徳/美は入力補助の見出しであって評価項目ではない） */
   strengths: string;
+  /**
+   * 151: 才・徳・美チェックリストで選ばれた項目のid配列。
+   * **文言ではなくidで保存する**（文言を直しても過去のチェックが外れないようにするため）。
+   * 自由記述 strengths とは別枠で、どちらも残る。
+   */
+  strengthChecks: string[];
   /** そのほかのメモ（自由記述） */
   memo: string;
   updatedBy: string;
@@ -59,6 +67,7 @@ export function normalizeMemberNote(
     birthday: normalizeNoteDate(o.birthday),
     joinedOn: normalizeNoteDate(o.joinedOn),
     strengths: text(o.strengths, STRENGTHS_MAX),
+    strengthChecks: normalizeStrengthChecks(o.strengthChecks),
     memo: text(o.memo, MEMO_MAX),
     updatedBy: text(o.updatedBy, 200),
     updatedAt: text(o.updatedAt, 40),
@@ -67,7 +76,13 @@ export function normalizeMemberNote(
 
 /** 中身が全部空なら「未記入」= 保存する意味がない */
 export function isEmptyNote(n: MemberNote): boolean {
-  return !n.birthday && !n.joinedOn && !n.strengths.trim() && !n.memo.trim();
+  return (
+    !n.birthday &&
+    !n.joinedOn &&
+    !n.strengths.trim() &&
+    !n.memo.trim() &&
+    n.strengthChecks.length === 0
+  );
 }
 
 export function emptyNote(staffUserId: string): MemberNote {
@@ -76,6 +91,7 @@ export function emptyNote(staffUserId: string): MemberNote {
     birthday: "",
     joinedOn: "",
     strengths: "",
+    strengthChecks: [],
     memo: "",
     updatedBy: "",
     updatedAt: "",

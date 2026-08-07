@@ -12,6 +12,7 @@ import {
   type MemberNote,
 } from "@/lib/member-notes";
 import { MemberNotesImportPanel } from "@/components/MemberNotesImportPanel";
+import { StrengthChecklist } from "@/components/StrengthChecklist";
 import { loadProfilesIndex } from "@/lib/staff-profiles";
 import type { StaffProfileIndexEntry } from "@/lib/staff-profiles";
 
@@ -289,7 +290,11 @@ export function MemberNotesEditor({ isAdmin }: { isAdmin: boolean }) {
                   )}
                 </span>
                 <span className="text-xs text-gray-500 shrink-0">
-                  {has ? "記入あり" : "未記入"}
+                  {has
+                    ? noteOf(m.userId).strengthChecks.length > 0
+                      ? `強み${noteOf(m.userId).strengthChecks.length}`
+                      : "記入あり"
+                    : "未記入"}
                 </span>
               </button>
             );
@@ -328,18 +333,32 @@ export function MemberNotesEditor({ isAdmin }: { isAdmin: boolean }) {
             </div>
           </div>
 
+          {/* 151: 才・徳・美チェックリスト（チェックした項目が強みとして保存される） */}
           <div>
             <label className="text-xs text-gray-600 mb-1 block">
-              強みの記録
+              強み（チェックリスト）
+            </label>
+            <StrengthChecklist
+              checked={draft.strengthChecks}
+              onChange={(next) =>
+                setDraft((d) => (d ? { ...d, strengthChecks: next } : d))
+              }
+              disabled={saving}
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">
+              強みの記録（自由記述）
             </label>
             <p className="text-[11px] text-gray-500 mb-1">
-              書き方の目安（自由記述でかまいません）:{" "}
+              チェックリストで表せないことの補足に。書き方の目安:{" "}
               {STRENGTH_HINTS.map((h) => `${h.key}=${h.hint}`).join(" ／ ")}
             </p>
             <textarea
               value={draft.strengths}
               onChange={(e) => setField("strengths", e.target.value)}
-              rows={8}
+              rows={6}
               placeholder={STRENGTH_HINTS.map((h) => `【${h.key}】`).join("\n\n")}
               className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm leading-relaxed"
             />
