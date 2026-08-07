@@ -7,6 +7,7 @@
 //   （リアクションは content_store=公開領域のため、機微文脈の存在をメタデータとして漏らさない）。
 
 import { jstTodayYmd } from "./library";
+import { normalizeJitsuChecks } from "./jitsu-checklist";
 
 export type OneOnOneData = {
   heldOn: string; // 実施日 "YYYY-MM-DD"（必須）
@@ -18,6 +19,12 @@ export type OneOnOneData = {
     kizuki: string; // 気づき・学び
     nextStep: string; // 次の一歩
   };
+  /**
+   * 152: 「7つの実チェック」で選ばれた項目のid配列（**この回ごと**に保存）。
+   * 文言ではなくidで持つ（文言を直しても過去の回のチェックが変わらないため）。
+   * 回を重ねると成長の履歴になるので、過去回のデータは書き換えない。
+   */
+  jitsuChecks: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -38,6 +45,7 @@ export function emptyOneOnOneData(): OneOnOneData {
     partnerName: "",
     authorName: "",
     sections: { theme: "", kizuki: "", nextStep: "" },
+    jitsuChecks: [],
     createdAt: "",
     updatedAt: "",
   };
@@ -64,6 +72,7 @@ export function normalizeOneOnOneData(raw: unknown): OneOnOneData {
       kizuki: str(s.kizuki),
       nextStep: str(s.nextStep),
     },
+    jitsuChecks: normalizeJitsuChecks(g.jitsuChecks),
     createdAt,
     updatedAt: str(g.updatedAt) || createdAt,
   };

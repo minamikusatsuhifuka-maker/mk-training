@@ -30,6 +30,10 @@ import {
   type OneOnOneData,
 } from "@/lib/one-on-one";
 import { jstTodayYmd } from "@/lib/library";
+import {
+  JitsuChecklist,
+  JitsuCheckSummary,
+} from "@/components/JitsuChecklist";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
   loadProfilesIndex,
@@ -54,6 +58,8 @@ function OneOnOnePageBody() {
   const [heldOnDraft, setHeldOnDraft] = useState("");
   const [partnerIdDraft, setPartnerIdDraft] = useState("");
   const [sectionsDraft, setSectionsDraft] = useState<SectionDraft>(EMPTY_SECTIONS);
+  // 152: 7つの実チェック（この回の記録として保存）
+  const [jitsuDraft, setJitsuDraft] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   // 編集（記録者本人のみ）
@@ -61,6 +67,7 @@ function OneOnOnePageBody() {
   const [editHeldOn, setEditHeldOn] = useState("");
   const [editPartnerId, setEditPartnerId] = useState("");
   const [editSections, setEditSections] = useState<SectionDraft>(EMPTY_SECTIONS);
+  const [editJitsu, setEditJitsu] = useState<string[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
 
@@ -113,6 +120,26 @@ function OneOnOnePageBody() {
 
   const sorted = useMemo(() => sortOneOnOne(records), [records]);
 
+  // 152: 「前回の1on1」のチェックを引く（同じ相手の、指定日より前で最も新しい回）。
+  // 見つからなければ null＝比較しない（初回は ✨new を出さない）。
+  const previousJitsuFor = useCallback(
+    (partnerId: string, heldOn: string, excludeKey?: string): string[] | null => {
+      if (!partnerId) return null;
+      const past = records
+        .map((r) => ({ r, d: normalizeOneOnOneData(r.data) }))
+        .filter(
+          ({ r, d }) =>
+            r.recordKey !== excludeKey &&
+            d.participantIds.includes(partnerId) &&
+            d.heldOn &&
+            (!heldOn || d.heldOn < heldOn)
+        )
+        .sort((a, b) => b.d.heldOn.localeCompare(a.d.heldOn));
+      return past.length > 0 ? past[0].d.jitsuChecks : null;
+    },
+    [records]
+  );
+
   const submit = async () => {
     const heldOn = normalizeHeldOnYmd(heldOnDraft);
     if (!heldOn) {
@@ -134,6 +161,7 @@ function OneOnOnePageBody() {
         partnerName: nameOf(partnerIdDraft, "名前未設定"),
         authorName: myName,
         sections: { ...sectionsDraft },
+        jitsuChecks: jitsuDraft,
         createdAt: now,
         updatedAt: now,
       };
@@ -142,6 +170,7 @@ function OneOnOnePageBody() {
       setHeldOnDraft("");
       setPartnerIdDraft("");
       setSectionsDraft(EMPTY_SECTIONS);
+      setJitsuDraft([]);
     } catch (e) {
       setError(
         e instanceof PrivateStoreError
@@ -159,6 +188,7 @@ function OneOnOnePageBody() {
     setEditHeldOn(d.heldOn);
     setEditPartnerId(d.participantIds[0] ?? "");
     setEditSections({ ...d.sections });
+    setEditJitsu(d.jitsuChecks);
   };
 
   const saveEdit = async (record: PrivateRecord) => {
@@ -175,6 +205,7 @@ function OneOnOnePageBody() {
         partnerName: nameOf(editPartnerId, d.partnerName || "名前未設定"),
         authorName: myName,
         sections: { ...editSections },
+        jitsuChecks: editJitsu,
         updatedAt: new Date().toISOString(),
       };
       const saved = await upsertRecord("one_on_one", record.recordKey, next);
@@ -316,6 +347,19 @@ function OneOnOnePageBody() {
             />
           </div>
         ))}
+        {/* 152: 7つの実チェック（この回の記録として保存される） */}
+        <div className="space-y-1">
+          <label className="text-sm font-medium text-gray-800 block">
+            🌾 7つの実チェック
+          </label>
+          <JitsuChecklist
+            checked={jitsuDraft}
+            onChange={setJitsuDraft}
+            previousChecked={previousJitsuFor(partnerIdDraft, heldOnDraft)}
+            disabled={submitting}
+          />
+        </div>
+
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <span className="text-xs text-gray-500">
             {myName} として記録します（記録の編集・削除はあなただけができます）
@@ -435,6 +479,21 @@ function OneOnOnePageBody() {
                         />
                       </div>
                     ))}
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium text-gray-800 block">
+                        🌾 7つの実チェック
+                      </label>
+                      <JitsuChecklist
+                        checked={editJitsu}
+                        onChange={setEditJitsu}
+                        previousChecked={previousJitsuFor(
+                          editPartnerId,
+                          editHeldOn,
+                          record.recordKey
+                        )}
+                        disabled={savingEdit}
+                      />
+                    </div>
                     <div className="flex items-center gap-2 justify-end">
                       <button
                         type="button"
@@ -455,7 +514,10 @@ function OneOnOnePageBody() {
                     </div>
                   </div>
                 ) : (
-                  hasBody && (
+                  <>
+                    {/* 152: この回でチェックされた実（読み取り専用の要約） */}
+                    <JitsuCheckSummary checks={d.jitsuChecks} />
+                    {hasBody && (
                     <div className="space-y-2">
                       {(isExpanded
                         ? ONE_ON_ONE_SECTIONS
@@ -478,7 +540,8 @@ function OneOnOnePageBody() {
                         {isExpanded ? "たたむ" : "すべて表示"}
                       </button>
                     </div>
-                  )
+                    )}
+                  </>
                 )}
               </div>
             );
