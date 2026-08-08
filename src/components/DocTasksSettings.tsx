@@ -236,6 +236,13 @@ export function DocTasksSettings({
                     🟢 送信できる状態です（差出人: {mail.from}）
                     {mail.lastSentOn && <>／ 最後の定期送信: {mail.lastSentOn}</>}
                   </p>
+                  {!mail.cronReady && (
+                    <p className="text-[11px] text-amber-800">
+                      🟡 毎朝の自動送信はまだ動きません（Vercelに{" "}
+                      <code>CRON_SECRET</code> が未設定）。設定するまでは、この画面の
+                      「テスト送信」でのみ送れます。
+                    </p>
+                  )}
                   {mail.entries.length > 0 && (
                     <ul className="text-[11px] text-gray-600 space-y-0.5">
                       {mail.entries.map((e, i) => (

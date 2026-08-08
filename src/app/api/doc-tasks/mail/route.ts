@@ -41,6 +41,8 @@ export async function GET() {
     const state = await loadMailState(auth.admin);
     return NextResponse.json({
       configured: isMailConfigured(),
+      // 日次実行の鍵（CRON_SECRET）が入っているか。未設定だとcronが401で空振りする
+      cronReady: !!process.env.CRON_SECRET,
       from: isMailConfigured() ? mailFrom() : "",
       portalUrl: portalUrl(),
       minResendDays: MIN_RESEND_DAYS,

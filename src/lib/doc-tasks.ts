@@ -598,6 +598,8 @@ export type DocTasksMailLogEntry = {
 export type DocTasksMailStatus = {
   /** Vercelに RESEND_API_KEY が入っているか（キー自体は取得しない） */
   configured: boolean;
+  /** Vercelに CRON_SECRET が入っているか（無いと日次実行が401で空振りする） */
+  cronReady: boolean;
   from: string;
   portalUrl: string;
   minResendDays: number;
