@@ -35,8 +35,10 @@ export async function proxy(request: NextRequest) {
   let isAdmin = false;
   try {
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      // 環境変数の前後に改行・空白が混ざっていても判定に失敗しないようにする
+      //（判定に失敗すると管理者まで締め出されるため）
+      (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim(),
+      (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim(),
       {
         cookies: {
           getAll() {
@@ -52,8 +54,13 @@ export async function proxy(request: NextRequest) {
     );
     const { data } = await supabase.auth.getUser();
     isAdmin = isAdminUser(data.user);
-  } catch {
+  } catch (e) {
     isAdmin = false; // 判定できない＝通さない
+    // 管理者まで締め出される事態に気づけるようログに残す（Vercelのログで確認できる）
+    console.error(
+      "[proxy] 管理者判定に失敗しました:",
+      e instanceof Error ? e.message : e
+    );
   }
 
   if (isAdmin) return response;
