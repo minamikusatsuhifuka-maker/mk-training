@@ -90,12 +90,21 @@ export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
     [members]
   );
 
-  // 主治医の候補＝管理画面の設定＋これまでに入力された名前
-  const doctorOptions = useMemo(() => {
-    const set = new Set<string>(config?.doctors ?? []);
-    for (const t of tasks) if (t.doctor) set.add(t.doctor);
-    return Array.from(set).sort((a, b) => a.localeCompare(b, "ja"));
-  }, [config, tasks]);
+  // 主治医の選択肢は**管理画面の設定だけ**から作る（表記ゆれを防ぐため自由入力にしない）。
+  // 設定が空のときだけ自由入力に落ちる（設定前でも登録できなくならないように）。
+  const doctorOptions = useMemo(() => config?.doctors ?? [], [config]);
+
+  // 絞り込みだけは、設定から外された医師名が入った過去の記録も探せるように、
+  // データ側にしか無い名前を末尾に足す（既存レコードが埋もれないようにするため）。
+  const doctorFilterOptions = useMemo(() => {
+    const known = new Set(doctorOptions);
+    const extra = new Set<string>();
+    for (const t of tasks) if (t.doctor && !known.has(t.doctor)) extra.add(t.doctor);
+    return [
+      ...doctorOptions,
+      ...Array.from(extra).sort((a, b) => a.localeCompare(b, "ja")),
+    ];
+  }, [doctorOptions, tasks]);
 
   const summary = useMemo(
     () => (config ? summarizeStale(tasks, config, today) : null),
@@ -289,18 +298,12 @@ export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
           </div>
           <div>
             <label className="text-[11px] text-gray-600 mb-1 block">主治医</label>
-            <input
+            <DoctorPicker
               value={newDoctor}
-              onChange={(e) => setNewDoctor(e.target.value)}
-              list="doc-tasks-doctors"
-              placeholder="例: 院長"
-              className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm min-h-[40px]"
+              options={doctorOptions}
+              disabled={busy}
+              onChange={setNewDoctor}
             />
-            <datalist id="doc-tasks-doctors">
-              {doctorOptions.map((d) => (
-                <option key={d} value={d} />
-              ))}
-            </datalist>
           </div>
           <div>
             <label className="text-[11px] text-gray-600 mb-1 block">
@@ -348,7 +351,7 @@ export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
             className="rounded-md border border-gray-200 px-2 py-2 text-sm min-h-[40px]"
           >
             <option value="">主治医: すべて</option>
-            {doctorOptions.map((d) => (
+            {doctorFilterOptions.map((d) => (
               <option key={d} value={d}>
                 {d}
               </option>
@@ -408,6 +411,7 @@ export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
               config={config}
               today={today}
               members={members}
+              doctorOptions={doctorOptions}
               nameOf={nameOf}
               busy={busy}
               expanded={expanded === task.id}
@@ -433,6 +437,80 @@ export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * 主治医の入力（院長指示 2026-08-08）。
+ * - 設定に登録された医師から**選ぶ**形にする（自由入力は表記ゆれのもとなのでしない）
+ * - 2〜3名までは横並びのボタン（診療の合間に1タップで選べる）、4名以上はプルダウン
+ * - **設定が空のときだけ**自由入力にフォールバック（設定前でも登録できなくならないように）
+ * - 選択肢に無い名前が既に入っている記録では、その値を選択肢に残す（勝手に消さない）
+ */
+function DoctorPicker({
+  value,
+  options,
+  disabled,
+  onChange,
+  compact,
+}: {
+  value: string;
+  options: string[];
+  disabled?: boolean;
+  onChange: (v: string) => void;
+  compact?: boolean;
+}) {
+  if (options.length === 0) {
+    return (
+      <input
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="例: 院長（設定に登録すると選択式になります）"
+        className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm min-h-[40px]"
+      />
+    );
+  }
+
+  // 過去の記録に、いま設定に無い名前が入っている場合はその値も選べるように残す
+  const list = options.includes(value) || !value ? options : [...options, value];
+
+  if (!compact && list.length <= 3) {
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        {list.map((d) => (
+          <button
+            key={d}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(value === d ? "" : d)}
+            className={`px-3 py-2 rounded-lg text-sm min-h-[40px] border transition-colors disabled:opacity-50 ${
+              value === d
+                ? "bg-teal-600 text-white border-teal-600"
+                : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+            }`}
+          >
+            {d}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <select
+      value={value}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded-md border border-gray-200 px-2 py-2 text-sm min-h-[40px]"
+    >
+      <option value="">選択してください</option>
+      {list.map((d) => (
+        <option key={d} value={d}>
+          {d}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -465,6 +543,7 @@ function TaskCard({
   config,
   today,
   members,
+  doctorOptions,
   nameOf,
   busy,
   expanded,
@@ -476,6 +555,7 @@ function TaskCard({
   config: DocTasksConfig;
   today: string;
   members: StaffProfileIndexEntry[];
+  doctorOptions: string[];
   nameOf: (userId: string) => string;
   busy: boolean;
   expanded: boolean;
@@ -632,12 +712,12 @@ function TaskCard({
               <label className="text-[11px] text-gray-600 mb-1 block">
                 主治医
               </label>
-              <input
+              <DoctorPicker
                 value={task.doctor}
+                options={doctorOptions}
                 disabled={busy}
-                onChange={(e) => onPatch({ doctor: e.target.value })}
-                list="doc-tasks-doctors"
-                className="w-full rounded-md border border-gray-200 px-2 py-2 text-sm min-h-[40px]"
+                compact
+                onChange={(v) => onPatch({ doctor: v })}
               />
             </div>
           </div>
