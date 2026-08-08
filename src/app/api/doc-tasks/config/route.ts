@@ -16,10 +16,19 @@ import {
   normalizeDocTasksConfig,
   type DocTasksConfig,
 } from "@/lib/doc-tasks";
+import { saveMenuAllowedUserIds } from "@/lib/menu-access-server";
+import { MENU_DOC_TASKS } from "@/lib/menu-access";
 
 export const runtime = "nodejs";
 
 const hidden = () => NextResponse.json({ error: "Not Found" }, { status: 404 });
+
+// 157: 設定画面（管理画面）が読む。記録は返さない＝設定だけを扱う口
+export async function GET() {
+  const auth = await authorizeDocTasks();
+  if (!auth.ok || !auth.isAdmin) return hidden();
+  return NextResponse.json({ config: auth.config });
+}
 
 export async function PUT(req: Request) {
   const auth = await authorizeDocTasks();
@@ -52,6 +61,15 @@ export async function PUT(req: Request) {
   };
 
   try {
+    // 157: 指名リストの正本は menu_access（メニューキー付き）に書く。
+    // 旧 clinic_doc_tasks 側にも同じ値を残すのは、ロールバックしても設定が消えないようにするため。
+    if ("viewerUserIds" in body) {
+      await saveMenuAllowedUserIds(
+        MENU_DOC_TASKS,
+        config.viewerUserIds,
+        auth.userEmail || auth.userId
+      );
+    }
     await saveDocTasksConfig(auth.admin, config, auth.userEmail || auth.userId);
     return NextResponse.json({ ok: true, config });
   } catch (e) {

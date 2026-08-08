@@ -64,6 +64,16 @@ const ADMIN_ONLY_CONTENT_KEYS = new Set<string>([
   "staff_members",
 ]);
 
+// サーバー専用キー（指示書157）。/api/content-store 経由では**読むことも書くこともできない**。
+// menu_access は「誰がどのメニューを開けるか」＝機能の存在に直結する情報で、
+// ログイン済みなら誰でも読める既定の扱い（読み取りは全キー一律）に置くと秘匿が崩れるため。
+// 読み書きは lib/menu-access-server.ts（service-role）と、それを使う管理者専用APIだけ。
+const SERVER_ONLY_KEYS = new Set<string>(["menu_access"]);
+
+export function isServerOnlyContentKey(key: string): boolean {
+  return SERVER_ONLY_KEYS.has(key);
+}
+
 /** 書き込みに管理者権限が必要なキーか */
 export function isAdminOnlyContentKey(key: string): boolean {
   if (ADMIN_ONLY_KEYS.has(key)) return true;

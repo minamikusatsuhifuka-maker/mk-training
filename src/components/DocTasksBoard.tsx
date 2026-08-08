@@ -9,19 +9,21 @@
 //   - メモだけは入力のたびに送らず、フォーカスを外したときに保存
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   DOC_TYPES,
   createDocTask,
   deleteDocTask,
   docTypeDef,
   elapsedDays,
+  elapsedTone,
   fetchDocTasks,
+  formatShortDate,
   hasFinalPending,
   isDocTaskCompleted,
   isStale,
   isStepDone,
   patchDocTask,
-  pendingSteps,
   sortDocTasks,
   summarizeStale,
   buildAlertLines,
@@ -31,12 +33,14 @@ import {
   type DocTasksListResponse,
   type DocTypeId,
 } from "@/lib/doc-tasks";
-import { DocTasksSettings } from "@/components/DocTasksSettings";
 import { loadProfilesIndex } from "@/lib/staff-profiles";
 import type { StaffProfileIndexEntry } from "@/lib/staff-profiles";
 
 /** 状態での絞り込み（154の要件3）。「状態」＝工程の進み具合をまとめた見方 */
 type StatusFilter = "open" | "stale" | "final" | "done" | "all";
+
+/** 並び順の記憶（157-C7・端末ごと） */
+const SORT_LS_KEY = "doc_tasks_sort";
 
 export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
   const [data, setData] = useState<DocTasksListResponse | null>(null);
@@ -57,8 +61,29 @@ export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
   const [filterAssignee, setFilterAssignee] = useState("");
   // 状態での絞り込み（154の要件3）。既定は「未完了だけ」＝日常はこれで足りる
   const [filterStatus, setFilterStatus] = useState<StatusFilter>("open");
-  const [sort, setSort] = useState<DocTaskSort>("stale");
+  // 157: 既定は記入日の新しい順。選んだ順序は端末に覚えさせる（人ごとの好みなので保存はローカル）
+  const [sort, setSort] = useState<DocTaskSort>("entered_desc");
   const [expanded, setExpanded] = useState<string>("");
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SORT_LS_KEY);
+      if (saved === "entered_desc" || saved === "entered_asc" || saved === "stale") {
+        setSort(saved);
+      }
+    } catch {
+      /* localStorageが使えなくても既定で動く */
+    }
+  }, []);
+
+  const changeSort = (next: DocTaskSort) => {
+    setSort(next);
+    try {
+      localStorage.setItem(SORT_LS_KEY, next);
+    } catch {
+      /* 保存できなくても表示は切り替わる */
+    }
+  };
 
   const load = useCallback(async () => {
     setError("");
@@ -83,12 +108,6 @@ export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
   const tasks = useMemo(() => data?.tasks ?? [], [data]);
   const config: DocTasksConfig | null = data?.config ?? null;
   const today = data?.today ?? "";
-
-  const nameOf = useCallback(
-    (userId: string) =>
-      members.find((m) => m.userId === userId)?.name || userId.slice(0, 8),
-    [members]
-  );
 
   // 主治医の選択肢は**管理画面の設定だけ**から作る（表記ゆれを防ぐため自由入力にしない）。
   // 設定が空のときだけ自由入力に落ちる（設定前でも登録できなくならないように）。
@@ -370,26 +389,46 @@ export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
             ))}
           </select>
           <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as DocTaskSort)}
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value as StatusFilter)}
             className="rounded-md border border-gray-200 px-2 py-2 text-sm min-h-[40px]"
           >
-            <option value="stale">並び: 滞留の長い順</option>
-            <option value="entered">並び: 記入日の新しい順</option>
-            <option value="chart">並び: ID順</option>
+            <option value="open">状態: 未完了だけ</option>
+            <option value="stale">状態: 滞留しているものだけ</option>
+            <option value="final">状態: 最終工程が残っているものだけ</option>
+            <option value="done">状態: 完了だけ</option>
+            <option value="all">状態: すべて</option>
           </select>
         </div>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value as StatusFilter)}
-          className="w-full sm:w-auto rounded-md border border-gray-200 px-2 py-2 text-sm min-h-[40px]"
-        >
-          <option value="open">状態: 未完了だけ</option>
-          <option value="stale">状態: 滞留しているものだけ</option>
-          <option value="final">状態: 最終工程が残っているものだけ</option>
-          <option value="done">状態: 完了だけ</option>
-          <option value="all">状態: すべて</option>
-        </select>
+
+        {/* 並び替え（157-C7）。記入日の新旧トグル＋滞留順 */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[11px] text-gray-600">並び替え</span>
+          <button
+            type="button"
+            onClick={() =>
+              changeSort(sort === "entered_desc" ? "entered_asc" : "entered_desc")
+            }
+            className={`px-3 py-1.5 rounded-full text-xs border min-h-[36px] transition-colors ${
+              sort !== "stale"
+                ? "bg-teal-600 text-white border-teal-600"
+                : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+            }`}
+          >
+            記入日 {sort === "entered_asc" ? "古い順 ↑" : "新しい順 ↓"}
+          </button>
+          <button
+            type="button"
+            onClick={() => changeSort("stale")}
+            className={`px-3 py-1.5 rounded-full text-xs border min-h-[36px] transition-colors ${
+              sort === "stale"
+                ? "bg-teal-600 text-white border-teal-600"
+                : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+            }`}
+          >
+            滞留の長い順
+          </button>
+        </div>
       </div>
 
       {/* 一覧 */}
@@ -412,7 +451,6 @@ export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
               today={today}
               members={members}
               doctorOptions={doctorOptions}
-              nameOf={nameOf}
               busy={busy}
               expanded={expanded === task.id}
               onToggleExpand={() =>
@@ -424,17 +462,18 @@ export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
           ))}
       </div>
 
-      {/* 管理者向け設定 */}
-      {isAdmin && config && (
-        <DocTasksSettings
-          config={config}
-          members={members}
-          onSaved={(next) => {
-            setData((d) => (d ? { ...d, config: next } : d));
-            setMsg("💾 設定を保存しました");
-          }}
-          onError={setError}
-        />
+      {/* 157: 設定は管理画面へ移設。ここには導線だけ置く（管理者にのみ表示） */}
+      {isAdmin && (
+        <p className="text-[11px] text-gray-500">
+          設定（開ける人・滞留日数・主治医・アラートの送信先）は{" "}
+          <Link
+            href="/admin/doc-tasks"
+            className="text-teal-700 underline underline-offset-2"
+          >
+            管理画面 → 書類進捗ボードの設定
+          </Link>{" "}
+          にあります。
+        </p>
       )}
     </div>
   );
@@ -544,7 +583,6 @@ function TaskCard({
   today,
   members,
   doctorOptions,
-  nameOf,
   busy,
   expanded,
   onToggleExpand,
@@ -556,18 +594,19 @@ function TaskCard({
   today: string;
   members: StaffProfileIndexEntry[];
   doctorOptions: string[];
-  nameOf: (userId: string) => string;
   busy: boolean;
   expanded: boolean;
   onToggleExpand: () => void;
   onPatch: (patch: Parameters<typeof patchDocTask>[1]) => void;
   onDelete: () => void;
 }) {
+  // 157: 1件2行（情報行＋工程チップ行）。⚠️注意文・「残り:」・独立した日付入力欄・
+  // 行頭の工程名は廃止し、状態はチップの見た目だけで表す。
   const def = docTypeDef(task.docType);
   const done = isDocTaskCompleted(task);
   const days = elapsedDays(task, today);
   const stale = isStale(task, config, today);
-  const finalPending = !done && hasFinalPending(task);
+  const tone = elapsedTone(task, config, today);
   // メモは入力のたびに送らず、フォーカスを外したときに保存する（下書きを持つ）。
   // サーバー側の値が変わったら下書きを合わせ直す（effectではなくレンダー中の調整）。
   const [memo, setMemo] = useState(task.memo);
@@ -577,120 +616,127 @@ function TaskCard({
     setMemo(task.memo);
   }
 
-  // 未完了の最終工程が残っている件は一覧で特に目立たせる（154-2）
   const frame = done
     ? "border-gray-200 bg-gray-50"
-    : finalPending && stale
-      ? "border-red-300 bg-red-50/60"
-      : stale
-        ? "border-amber-300 bg-amber-50/60"
+    : tone === "red"
+      ? "border-red-300 bg-red-50/50"
+      : tone === "amber"
+        ? "border-amber-300 bg-amber-50/50"
         : "border-gray-200 bg-white";
+
+  // 経過バッジ（C-5の決定的ルール）
+  const badge =
+    tone === "done"
+      ? "bg-emerald-100 text-emerald-800"
+      : tone === "red"
+        ? "bg-red-100 text-red-800 font-medium"
+        : tone === "amber"
+          ? "bg-amber-100 text-amber-900"
+          : "bg-gray-100 text-gray-700";
 
   const setStep = (stepId: string, value: string) =>
     onPatch({ steps: { ...task.steps, [stepId]: value } });
 
   return (
-    <div className={`rounded-xl border p-3 space-y-2 ${frame}`}>
-      <div className="flex items-start justify-between gap-2 flex-wrap">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-gray-900">
-            <span className="mr-1.5">{def.emoji}</span>
-            {def.label}
-            <span className="ml-2 font-mono text-[13px] text-gray-800">
-              ID {task.chartNo}
-            </span>
-          </p>
-          <p className="text-[11px] text-gray-600 mt-0.5">
-            記入日 {task.enteredOn}
-            {task.doctor && <> ／ 主治医 {task.doctor}</>}
-            {task.assigneeUserId && <> ／ 担当 {nameOf(task.assigneeUserId)}</>}
-          </p>
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          {done ? (
-            <span className="text-[11px] px-2 py-1 rounded-full bg-teal-100 text-teal-800">
-              ✅ 完了
-            </span>
-          ) : (
-            <span
-              className={`text-[11px] px-2 py-1 rounded-full ${
-                stale ? "bg-red-100 text-red-800 font-medium" : "bg-gray-100 text-gray-700"
-              }`}
-            >
-              {days}日経過
-            </span>
-          )}
-        </div>
+    <div className={`rounded-xl border px-3 py-2.5 space-y-2 ${frame}`}>
+      {/* 1行目: カルテ番号・記入日・経過バッジ・展開トグル */}
+      <div className="flex items-center gap-2">
+        <span className="shrink-0" aria-hidden>
+          {def.emoji}
+        </span>
+        <span className="font-mono text-[13px] font-semibold text-gray-900 truncate">
+          {task.chartNo}
+        </span>
+        <span className="text-[11px] text-gray-600 shrink-0">
+          {formatShortDate(task.enteredOn, today)}
+        </span>
+        <span
+          className={`text-[11px] px-2 py-0.5 rounded-full shrink-0 ${badge}`}
+        >
+          {done ? "完了" : `${days}日経過`}
+        </span>
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          aria-label="メモ・担当・履歴"
+          className="ml-auto shrink-0 text-gray-500 hover:text-gray-800 min-w-[40px] min-h-[40px] flex items-center justify-center"
+        >
+          {expanded ? "▲" : "▼"}
+        </button>
       </div>
 
-      {finalPending && (
-        <p className="text-[11px] text-red-700 font-medium">
-          ⚠️ {def.finalNote}
-        </p>
-      )}
-
-      {/* 工程（タップした瞬間に保存） */}
+      {/* 2行目: 工程チップ（タップした瞬間に保存・狭い画面での折り返しは許容） */}
       <div className="flex flex-wrap gap-1.5">
         {def.steps.map((step) => {
           const ok = isStepDone(task, step);
+          // 済み＝緑の塗り／未＝枠線／滞留を超えた未完了＝赤枠
+          const chip = ok
+            ? "bg-emerald-600 text-white border-emerald-600"
+            : stale
+              ? "bg-white text-red-700 border-red-400 font-medium hover:bg-red-50"
+              : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50";
+          const base = `px-3 py-2 rounded-lg text-xs min-h-[40px] border transition-colors inline-flex items-center gap-1 disabled:opacity-50 ${chip}`;
+
           if (step.kind === "check") {
             return (
               <button
                 key={step.id}
                 type="button"
                 disabled={busy}
+                title={step.label}
                 onClick={() => setStep(step.id, ok ? "" : "1")}
-                className={`px-3 py-2 rounded-lg text-xs min-h-[40px] border transition-colors disabled:opacity-50 ${
-                  ok
-                    ? "bg-teal-600 text-white border-teal-600"
-                    : step.final
-                      ? "bg-white text-red-700 border-red-300 font-medium hover:bg-red-50"
-                      : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                }`}
+                className={base}
               >
-                {ok ? "✓ " : "□ "}
-                {step.label}
+                {ok && <span aria-hidden>✓</span>}
+                {step.short}
               </button>
             );
           }
+          // 日付工程: チップ自体をタップすると日付選択が開く（入力欄は重ねて透明にする）
           return (
             <label
               key={step.id}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] border ${
-                ok ? "bg-white border-teal-200" : "bg-white border-gray-200"
-              }`}
+              title={step.label}
+              className={`${base} relative cursor-pointer`}
             >
-              <span className="text-gray-700">{step.label}</span>
+              {ok && <span aria-hidden>✓</span>}
+              <span>{step.short}</span>
+              {ok && (
+                <span className="tabular-nums">
+                  {formatShortDate(task.steps[step.id] ?? "", today)}
+                </span>
+              )}
               <input
                 type="date"
                 value={task.steps[step.id] ?? ""}
                 disabled={busy}
                 onChange={(e) => setStep(step.id, e.target.value)}
-                className="rounded border border-gray-200 px-1.5 py-1 text-[11px] min-h-[32px]"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />
             </label>
           );
         })}
       </div>
 
-      {!done && (
-        <p className="text-[11px] text-gray-600">
-          残り: {pendingSteps(task).map((s) => s.label).join(" / ")}
-        </p>
-      )}
-
-      <div className="flex items-center gap-2 flex-wrap">
-        <button
-          type="button"
-          onClick={onToggleExpand}
-          className="text-[11px] text-teal-700 underline underline-offset-2 min-h-[32px]"
-        >
-          {expanded ? "▲ 閉じる" : "▼ メモ・担当・履歴"}
-        </button>
-      </div>
-
       {expanded && (
         <div className="space-y-2 border-t border-gray-200 pt-2">
+          {/* 短縮名の正式名称はここで確認できるようにする（一覧では短縮のみ） */}
+          <p className="text-[11px] text-gray-600 leading-relaxed">
+            {def.label}:{" "}
+            {def.steps
+              .map(
+                (s) =>
+                  `${s.label}${
+                    isStepDone(task, s)
+                      ? s.kind === "date"
+                        ? `（${task.steps[s.id]}）`
+                        : "（済）"
+                      : "（未）"
+                  }`
+              )
+              .join(" ／ ")}
+          </p>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
               <label className="text-[11px] text-gray-600 mb-1 block">担当</label>

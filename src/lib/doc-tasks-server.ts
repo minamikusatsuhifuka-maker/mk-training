@@ -14,6 +14,8 @@ import {
 } from "./supabase-admin";
 import { getSessionUser } from "./staff-profiles-server";
 import { isAdminUser } from "./admin-role";
+import { loadMenuAllowedUserIds } from "./menu-access-server";
+import { MENU_DOC_TASKS } from "./menu-access";
 import {
   DOC_TASKS_CONFIG_ID,
   defaultDocTasksConfig,
@@ -121,8 +123,14 @@ export async function authorizeDocTasks(): Promise<DocTasksAuth> {
   }
 
   const isAdmin = isAdminUser(user);
-  const { config, tableMissing } = await loadDocTasksConfig(admin);
-  const allowed = isAdmin || config.viewerUserIds.includes(user.id);
+  const { config: stored, tableMissing } = await loadDocTasksConfig(admin);
+  // 157: 指名リストの正本は menu_access（メニューキー付き）。
+  // まだ移行していない環境では、旧 config.viewerUserIds をそのまま使う（設定を引き継ぐ）。
+  const fromMenu = await loadMenuAllowedUserIds(MENU_DOC_TASKS);
+  const viewerUserIds = fromMenu ?? stored.viewerUserIds;
+  const config: DocTasksConfig = { ...stored, viewerUserIds };
+
+  const allowed = isAdmin || viewerUserIds.includes(user.id);
   if (!allowed) return { ok: false };
 
   return {

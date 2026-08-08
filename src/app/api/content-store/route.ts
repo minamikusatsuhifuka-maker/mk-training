@@ -10,6 +10,7 @@ import { isAdminUser } from "@/lib/admin-role";
 import {
   isAdminOnlyContentKey,
   isAllowedContentPrefix,
+  isServerOnlyContentKey,
   isValidContentKey,
 } from "@/lib/content-store-policy";
 import { redactForeignProfileRows } from "@/lib/content-store-redact";
@@ -25,6 +26,8 @@ const unauth = () =>
   NextResponse.json({ error: "ログインが必要です" }, { status: 401 });
 const forbidden = () =>
   NextResponse.json({ error: "権限がありません" }, { status: 403 });
+// 157: サーバー専用キーは「無いもの」として扱う（403だとキーの存在が分かるため）
+const hidden = () => NextResponse.json({ error: "Not Found" }, { status: 404 });
 
 export async function GET(req: Request) {
   const { user } = await getSessionUser();
@@ -43,6 +46,8 @@ export async function GET(req: Request) {
   if (!isValidContentKey(key)) {
     return NextResponse.json({ error: "キーが不正です" }, { status: 400 });
   }
+  // 157: サーバー専用キー（menu_access）はこのAPIからは読み書きさせない
+  if (isServerOnlyContentKey(key)) return hidden();
   const row = await serverGetContentRow(key);
   return NextResponse.json({ row });
 }
@@ -62,6 +67,8 @@ export async function PUT(req: Request) {
   if (!isValidContentKey(key)) {
     return NextResponse.json({ error: "キーが不正です" }, { status: 400 });
   }
+  // 157: サーバー専用キー（menu_access）はこのAPIからは読み書きさせない
+  if (isServerOnlyContentKey(key)) return hidden();
   if (data === undefined) {
     return NextResponse.json({ error: "dataが必要です" }, { status: 400 });
   }
@@ -92,6 +99,8 @@ export async function DELETE(req: Request) {
   if (!isValidContentKey(key)) {
     return NextResponse.json({ error: "キーが不正です" }, { status: 400 });
   }
+  // 157: サーバー専用キー（menu_access）はこのAPIからは読み書きさせない
+  if (isServerOnlyContentKey(key)) return hidden();
   // 削除は「設定を既定に戻す」用途。書き込みと同じ権限で判定する。
   if (isAdminOnlyContentKey(key) && !isAdminUser(user)) return forbidden();
 

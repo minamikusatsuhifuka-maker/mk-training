@@ -68,7 +68,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       ? [{ label: "📔 メンバーノート", href: "/member-notes" }]
       : []),
     ...(canSeeDocTasks
-      ? [{ label: "📋 書類進捗ボード", href: "/doc-tasks" }]
+      ? [
+          { label: "📋 書類進捗ボード", href: "/doc-tasks" },
+          // 157: 設定は管理画面側に移設（開ける人・滞留日数・主治医・アラートの送信先）
+          { label: "⚙️ 書類進捗ボードの設定", href: "/admin/doc-tasks" },
+        ]
       : []),
   ];
 

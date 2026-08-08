@@ -24,15 +24,19 @@ import type { StaffProfileIndexEntry } from "@/lib/staff-profiles";
 export function DocTasksSettings({
   config,
   members,
+  alwaysOpen,
   onSaved,
   onError,
 }: {
   config: DocTasksConfig;
   members: StaffProfileIndexEntry[];
+  /** 157: 管理画面では常に開いた状態で置く（折りたたみは使わない） */
+  alwaysOpen?: boolean;
   onSaved: (next: DocTasksConfig) => void;
   onError: (message: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
+  const open = alwaysOpen || !collapsed;
   const [saving, setSaving] = useState(false);
   const [viewers, setViewers] = useState<string[]>(config.viewerUserIds);
   const [notifiees, setNotifiees] = useState<string[]>(config.notifyUserIds);
@@ -95,9 +99,16 @@ export function DocTasksSettings({
           .split("\n")
           .map((s) => s.trim())
           .filter(Boolean);
+      // 名簿に出ていないID（無効化されたアカウント等）は画面で操作できないので、
+      // 保存時にそのまま残す（157-B: 保存済みのIDを壊さない）
+      const known = new Set(members.map((m) => m.userId));
+      const keepHidden = (list: string[], saved: string[]) => [
+        ...list,
+        ...saved.filter((id) => !known.has(id)),
+      ];
       const next = await saveDocTasksConfig({
-        viewerUserIds: viewers,
-        notifyUserIds: notifiees,
+        viewerUserIds: keepHidden(viewers, config.viewerUserIds),
+        notifyUserIds: keepHidden(notifiees, config.notifyUserIds),
         notifyEmails: lines(emails),
         thresholdDays: thresholds,
         doctors: lines(doctors),
@@ -118,21 +129,23 @@ export function DocTasksSettings({
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-3">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between text-left"
-      >
-        <span className="text-sm font-medium text-gray-900">
-          ⚙️ ボードの設定
-          <span className="ml-2 text-xs font-normal text-gray-600">
-            {config.viewerUserIds.length
-              ? `${config.viewerUserIds.length}人を指名中`
-              : "未設定（管理者のみ）"}
+      {!alwaysOpen && (
+        <button
+          type="button"
+          onClick={() => setCollapsed((v) => !v)}
+          className="w-full flex items-center justify-between text-left"
+        >
+          <span className="text-sm font-medium text-gray-900">
+            ⚙️ ボードの設定
+            <span className="ml-2 text-xs font-normal text-gray-600">
+              {config.viewerUserIds.length
+                ? `${config.viewerUserIds.length}人を指名中`
+                : "未設定（管理者のみ）"}
+            </span>
           </span>
-        </span>
-        <span className="text-xs text-gray-500">{open ? "▲" : "▼"}</span>
-      </button>
+          <span className="text-xs text-gray-500">{open ? "▲" : "▼"}</span>
+        </button>
+      )}
 
       {open && (
         <div className="mt-3 space-y-4">

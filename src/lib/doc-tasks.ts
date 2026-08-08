@@ -25,8 +25,14 @@ export type DocStepKind = "check" | "date";
 export type DocStep = {
   /** 保存キー。振り直し禁止 */
   id: string;
-  /** 表示名（現行シートの文言のまま） */
+  /** 表示名（現行シートの文言のまま）。展開時・メモ・履歴ではこちらを使う */
   label: string;
+  /**
+   * 一覧のチップに出す短縮名（157）。
+   * 一覧は1件2行に収めるため短縮するが、**正式名称は label 側に必ず残す**
+   * （記録・履歴・展開表示は正式名称のまま）。
+   */
+  short: string;
   kind: DocStepKind;
   /**
    * 最終工程（お渡し済み・郵送済み・ORCA送信済み）。
@@ -56,11 +62,11 @@ export const DOC_TYPES: DocTypeDef[] = [
     emoji: "📝",
     finalNote: "お渡しが済んでいません",
     steps: [
-      { id: "ref_doctor_done", label: "先生作成済み", kind: "check" },
-      { id: "ref_content_date", label: "紹介状内容記載日", kind: "date" },
-      { id: "ref_reserved", label: "紹介先予約済み", kind: "check" },
-      { id: "ref_patient_contacted", label: "患者様連絡済み", kind: "check" },
-      { id: "ref_handed", label: "お渡し済み", kind: "check", final: true },
+      { id: "ref_doctor_done", label: "先生作成済み", short: "作成", kind: "check" },
+      { id: "ref_content_date", label: "紹介状内容記載日", short: "記載", kind: "date" },
+      { id: "ref_reserved", label: "紹介先予約済み", short: "予約", kind: "check" },
+      { id: "ref_patient_contacted", label: "患者様連絡済み", short: "連絡", kind: "check" },
+      { id: "ref_handed", label: "お渡し済み", short: "お渡し", kind: "check", final: true },
     ],
   },
   {
@@ -70,14 +76,16 @@ export const DOC_TYPES: DocTypeDef[] = [
     emoji: "✉️",
     finalNote: "郵送が済んでいません（最も落ちやすい工程です）",
     steps: [
-      { id: "rep_doctor_done", label: "先生作成済み", kind: "check" },
+      { id: "rep_doctor_done", label: "先生作成済み", short: "作成", kind: "check" },
       {
         id: "rep_saved_date",
         label: "紹介状電カルの書類欄に保存した日",
+        // 「書類作成＆保存済み」と紛れないよう、保存先である電カルを短縮名にする
+        short: "電カル",
         kind: "date",
       },
-      { id: "rep_doc_saved", label: "書類作成＆保存済み", kind: "check" },
-      { id: "rep_mailed", label: "郵送済み", kind: "check", final: true },
+      { id: "rep_doc_saved", label: "書類作成＆保存済み", short: "書類", kind: "check" },
+      { id: "rep_mailed", label: "郵送済み", short: "郵送", kind: "check", final: true },
     ],
   },
   {
@@ -87,9 +95,15 @@ export const DOC_TYPES: DocTypeDef[] = [
     emoji: "🧾",
     finalNote: "ORCA送信が済んでいません（未完だと請求に影響します）",
     steps: [
-      { id: "det_doctor_done", label: "先生記入済み", kind: "check" },
-      { id: "det_written_date", label: "詳記記載日", kind: "date" },
-      { id: "det_orca_sent", label: "ORCA送信済み", kind: "check", final: true },
+      { id: "det_doctor_done", label: "先生記入済み", short: "記入", kind: "check" },
+      { id: "det_written_date", label: "詳記記載日", short: "記載", kind: "date" },
+      {
+        id: "det_orca_sent",
+        label: "ORCA送信済み",
+        short: "ORCA",
+        kind: "check",
+        final: true,
+      },
     ],
   },
 ];
@@ -261,6 +275,18 @@ export function elapsedDays(task: DocTask, today: string): number {
   return Math.max(0, daysBetweenYmd(task.enteredOn, today));
 }
 
+/**
+ * 一覧用の日付表示（157）。**同じ年なら年を省いて `8/08`**、年をまたぐときだけ `2025/12/28`。
+ * 一覧の横幅を食わないための省略なので、展開表示や履歴では省略しない。
+ */
+export function formatShortDate(value: string, today: string): string {
+  const v = ymd(value);
+  if (!v) return "";
+  const [y, m, d] = v.split("-");
+  if (today.slice(0, 4) !== y) return `${y}/${m}/${d}`;
+  return `${Number(m)}/${d}`;
+}
+
 // ─── 設定（config行） ───
 
 export const DEFAULT_THRESHOLD_DAYS = 2;
@@ -363,6 +389,25 @@ export function isStale(
 ): boolean {
   if (isDocTaskCompleted(task)) return false;
   return elapsedDays(task, today) >= cfg.thresholdDays[task.docType];
+}
+
+/**
+ * 経過バッジの色（157・決定的ルール）。N＝その種別の「滞留とみなす日数」。
+ *   完了 → done（緑）／経過≧N → red（赤）／経過＝N−1 → amber（滞留の予兆）／それ未満 → gray
+ */
+export type ElapsedTone = "done" | "red" | "amber" | "gray";
+
+export function elapsedTone(
+  task: DocTask,
+  cfg: DocTasksConfig,
+  today: string
+): ElapsedTone {
+  if (isDocTaskCompleted(task)) return "done";
+  const n = cfg.thresholdDays[task.docType];
+  const days = elapsedDays(task, today);
+  if (days >= n) return "red";
+  if (days === n - 1) return "amber";
+  return "gray";
 }
 
 // ─── アラートのまとめ ───
@@ -477,7 +522,8 @@ export function staleDigest(
 
 // ─── 並び替え・絞り込み ───
 
-export type DocTaskSort = "stale" | "entered" | "chart";
+/** 157: 記入日の新しい順／古い順のトグル＋滞留の長い順（既定は記入日の新しい順） */
+export type DocTaskSort = "entered_desc" | "entered_asc" | "stale";
 
 export function sortDocTasks(
   tasks: DocTask[],
@@ -485,12 +531,14 @@ export function sortDocTasks(
   today: string
 ): DocTask[] {
   const list = tasks.slice();
-  if (sort === "chart") {
+  if (sort === "entered_asc") {
     return list.sort(
-      (a, b) => a.chartNo.localeCompare(b.chartNo, "ja") || a.enteredOn.localeCompare(b.enteredOn)
+      (a, b) =>
+        a.enteredOn.localeCompare(b.enteredOn) ||
+        a.createdAt.localeCompare(b.createdAt)
     );
   }
-  if (sort === "entered") {
+  if (sort === "entered_desc") {
     return list.sort(
       (a, b) => b.enteredOn.localeCompare(a.enteredOn) || b.createdAt.localeCompare(a.createdAt)
     );
@@ -540,6 +588,15 @@ async function callDocTasksApi<T>(
 
 export async function fetchDocTasks(): Promise<DocTasksListResponse> {
   return callDocTasksApi<DocTasksListResponse>({ method: "GET" });
+}
+
+/** 設定だけを取得（157・管理画面用。記録は取りに行かない） */
+export async function fetchDocTasksConfig(): Promise<DocTasksConfig> {
+  const j = await callDocTasksApi<{ config: DocTasksConfig }>({
+    method: "GET",
+    path: "/config",
+  });
+  return j.config;
 }
 
 export type NewDocTaskInput = {
