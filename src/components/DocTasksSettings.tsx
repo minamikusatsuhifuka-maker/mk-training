@@ -1,22 +1,22 @@
 "use client";
 
-// 書類進捗ボードの設定（指示書154 / 154-2・**管理者のみ**表示）
+// 書類進捗ボードの設定（指示書154 / 154-2 / 155・**管理者のみ**表示）
 //   - このボードを開ける人（未設定＝管理者のみ＝安全側）
 //   - アラートを受け取る人（未指名＝開ける人ぜんいん）
+//   - 通知先メールアドレス（155・複数可）＋送信状態の表示とテスト送信
 //   - 滞留とみなす日数（種別ごと・既定2日）
 //   - 主治医の選択肢
-//
-// メール通知は現時点で未接続（既存の招待メールは Supabase Auth の招待専用で、
-// 任意の本文・任意の宛先には送れないため）。接続には新しい送信サービスの追加が必要で、
-// 指示書134の停止条件（新規APIキー・課金・環境変数）に当たるので院長判断待ち。
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   DOC_TYPES,
   THRESHOLD_MAX,
   THRESHOLD_MIN,
+  fetchDocTasksMailStatus,
   saveDocTasksConfig,
+  sendDocTasksTestMail,
   type DocTasksConfig,
+  type DocTasksMailStatus,
   type DocTypeId,
 } from "@/lib/doc-tasks";
 import type { StaffProfileIndexEntry } from "@/lib/staff-profiles";
@@ -40,6 +40,39 @@ export function DocTasksSettings({
     config.thresholdDays
   );
   const [doctors, setDoctors] = useState(config.doctors.join("\n"));
+  const [emails, setEmails] = useState(config.notifyEmails.join("\n"));
+  const [mail, setMail] = useState<DocTasksMailStatus | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [mailMsg, setMailMsg] = useState("");
+
+  // メールの状態（APIキーが入っているか・直近の送信結果）は開いたときに取りに行く
+  const loadMail = useCallback(async () => {
+    try {
+      setMail(await fetchDocTasksMailStatus());
+    } catch {
+      /* 取得できなくても設定画面は使える */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open && !mail) loadMail();
+  }, [open, mail, loadMail]);
+
+  const sendTest = async () => {
+    setTesting(true);
+    setMailMsg("");
+    try {
+      const r = await sendDocTasksTestMail();
+      setMailMsg(
+        `✉️ ${r.toCount}件の宛先に送信しました（滞留${r.staleCount}件の内容）。受信箱をご確認ください。`
+      );
+      await loadMail();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "テスト送信に失敗しました");
+    } finally {
+      setTesting(false);
+    }
+  };
 
   const toggle = (
     list: string[],
@@ -51,19 +84,24 @@ export function DocTasksSettings({
   const save = async () => {
     setSaving(true);
     try {
+      const lines = (v: string) =>
+        v
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean);
       const next = await saveDocTasksConfig({
         viewerUserIds: viewers,
         notifyUserIds: notifiees,
+        notifyEmails: lines(emails),
         thresholdDays: thresholds,
-        doctors: doctors
-          .split("\n")
-          .map((s) => s.trim())
-          .filter(Boolean),
+        doctors: lines(doctors),
       });
       setViewers(next.viewerUserIds);
       setNotifiees(next.notifyUserIds);
       setThresholds(next.thresholdDays);
       setDoctors(next.doctors.join("\n"));
+      // 形式が不正なアドレスはサーバー側で落とされるので、保存後の値で入力欄を上書きする
+      setEmails(next.notifyEmails.join("\n"));
       onSaved(next);
     } catch (e) {
       onError(e instanceof Error ? e.message : "保存に失敗しました");
@@ -170,12 +208,75 @@ export function DocTasksSettings({
             />
           </section>
 
-          <p className="text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-2 leading-relaxed">
-            ✉️ <strong>メール通知は未接続です。</strong>
-            既存の招待メールは Supabase の「招待専用」の仕組みで、任意の本文・任意の宛先には送れません。
-            メールを飛ばすには新しい送信サービス（＝新しいAPIキー・環境変数）の追加が必要なため、
-            指示書134の停止条件に当たると判断していったん止めています。ご判断ください。
-          </p>
+          <section>
+            <p className="text-xs font-medium text-gray-800">
+              ✉️ 通知先メールアドレス（1行に1件・複数可）
+            </p>
+            <p className="text-[11px] text-gray-600 mt-0.5 leading-relaxed">
+              毎朝8時に、その時点で滞留している件を<strong>1通にまとめて</strong>送ります。
+              <strong>本文にカルテ番号・患者様のお名前は入りません</strong>
+              （「紹介状お返事 2件が3日以上未完了」までの粒度＋ポータルへのリンク）。
+              内容が変わらないまま毎日届かないよう、同じ状態が続くうちは
+              {mail?.minResendDays ?? 3}日あけて再送します。
+            </p>
+            <textarea
+              value={emails}
+              onChange={(e) => setEmails(e.target.value)}
+              rows={3}
+              placeholder={"staff@example.com\nclinic@example.com"}
+              className="mt-1.5 w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+            />
+
+            <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-2 space-y-1">
+              {mail === null ? (
+                <p className="text-[11px] text-gray-600">送信設定を確認中…</p>
+              ) : mail.configured ? (
+                <>
+                  <p className="text-[11px] text-gray-700">
+                    🟢 送信できる状態です（差出人: {mail.from}）
+                    {mail.lastSentOn && <>／ 最後の定期送信: {mail.lastSentOn}</>}
+                  </p>
+                  {mail.entries.length > 0 && (
+                    <ul className="text-[11px] text-gray-600 space-y-0.5">
+                      {mail.entries.map((e, i) => (
+                        <li key={`${e.at}-${i}`}>
+                          {e.ok ? "✅" : "⚠️"} {e.at.slice(0, 16).replace("T", " ")}
+                          　{e.kind === "test" ? "テスト" : "定期"}／滞留{e.staleCount}件／宛先
+                          {e.toCount}件
+                          {!e.ok && (
+                            <span className="text-red-700">　失敗: {e.error}</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              ) : (
+                <p className="text-[11px] text-amber-800">
+                  🟡 まだメールは送られません（Vercelに <code>RESEND_API_KEY</code>{" "}
+                  が未設定）。
+                  <code className="mx-1">
+                    ~/Downloads/155_Resendセットアップ手順_院長用.md
+                  </code>
+                  の手順で設定してください。設定するまではアプリ内のバッジだけで動きます。
+                </p>
+              )}
+              <div className="flex items-center gap-2 flex-wrap pt-1">
+                <button
+                  type="button"
+                  onClick={sendTest}
+                  disabled={testing || !mail?.configured}
+                  className="px-3 py-2 border border-teal-300 text-teal-800 rounded-full text-xs hover:bg-teal-50 disabled:opacity-40 min-h-[36px]"
+                >
+                  {testing ? "送信中…" : "✉️ テスト送信"}
+                </button>
+                <span className="text-[10px] text-gray-500">
+                  ※ 保存してから押してください（保存前の宛先には届きません）
+                </span>
+              </div>
+              {mailMsg && <p className="text-[11px] text-teal-800">{mailMsg}</p>}
+            </div>
+          </section>
 
           <button
             type="button"

@@ -1,5 +1,12 @@
 {
   "buildCommand": "pnpm run build",
   "installCommand": "pnpm install",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "crons": [
+    {
+      "comment": "書類進捗ボードの滞留アラート（指示書155）。23:00 UTC = 翌朝08:00 JST の1日1回",
+      "path": "/api/cron/doc-tasks-alert",
+      "schedule": "0 23 * * *"
+    }
+  ]
 }

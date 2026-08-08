@@ -272,6 +272,11 @@ export type DocTasksConfig = {
   viewerUserIds: string[];
   /** アプリ内でアラートのバッジを出す人（未設定＝閲覧できる人ぜんいん） */
   notifyUserIds: string[];
+  /**
+   * まとめ通知メールの宛先（155・複数可・空なら送信しない）。
+   * **本文にカルテ番号は載せない**ので、宛先はスタッフ個人でも共有アドレスでもよい。
+   */
+  notifyEmails: string[];
   /** 滞留とみなす日数（種別ごと・既定2日） */
   thresholdDays: Record<DocTypeId, number>;
   /** 主治医の選択肢（空なら自由入力のみ） */
@@ -282,6 +287,7 @@ export function defaultDocTasksConfig(): DocTasksConfig {
   return {
     viewerUserIds: [],
     notifyUserIds: [],
+    notifyEmails: [],
     thresholdDays: {
       referral: DEFAULT_THRESHOLD_DAYS,
       reply: DEFAULT_THRESHOLD_DAYS,
@@ -289,6 +295,21 @@ export function defaultDocTasksConfig(): DocTasksConfig {
     },
     doctors: [],
   };
+}
+
+/** ざっくりした形式チェック（送信前にResend側でも弾かれる。ここは事故防止の一次フィルタ） */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function normalizeNotifyEmails(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return Array.from(
+    new Set(
+      raw
+        .filter((v): v is string => typeof v === "string")
+        .map((v) => v.trim().slice(0, 200))
+        .filter((v) => EMAIL_RE.test(v))
+    )
+  ).slice(0, 10);
 }
 
 function ids(raw: unknown, max: number): string[] {
@@ -321,6 +342,7 @@ export function normalizeDocTasksConfig(raw: unknown): DocTasksConfig {
   return {
     viewerUserIds: ids(g.viewerUserIds, 100),
     notifyUserIds: ids(g.notifyUserIds, 100),
+    notifyEmails: normalizeNotifyEmails(g.notifyEmails),
     thresholdDays: base.thresholdDays,
     doctors: Array.from(
       new Set(
@@ -402,6 +424,55 @@ export function buildAlertLines(summary: StaleSummary): string[] {
         : "";
     return `${def.label} ${r.count}件が${r.maxDays}日以上未完了${tail}`;
   });
+}
+
+/**
+ * まとめ通知メールの件名・本文（155）。
+ * **カルテ番号・患者情報は載せない**（載せられるのは種別・件数・日数だけ＝buildAlertLines）。
+ * 詳細は院内でポータルを開いて確認する形にするため、本文にはリンクだけを置く。
+ */
+export type AlertMailContent = { subject: string; text: string };
+
+export function buildAlertMail(
+  summary: StaleSummary,
+  portalUrl: string,
+  today: string
+): AlertMailContent {
+  const lines = buildAlertLines(summary);
+  const subject =
+    summary.finalPendingTotal > 0
+      ? `【書類進捗】未完了 ${summary.total}件（うち最終工程 ${summary.finalPendingTotal}件）${today}`
+      : `【書類進捗】未完了 ${summary.total}件 ${today}`;
+  const text = [
+    "書類の進捗で、日数が経っているものがあります。",
+    "",
+    ...lines.map((l) => `・${l}`),
+    "",
+    "詳しくは院内のポータルでご確認ください:",
+    portalUrl,
+    "",
+    "※このメールには患者様のお名前・カルテ番号は記載していません。",
+    "（南草津皮フ科 スタッフ研修ポータル／自動送信）",
+  ].join("\n");
+  return { subject, text };
+}
+
+/** 「同じ内容か」を判定するための指紋。滞留している件と、その工程の状態だけで作る */
+export function staleDigest(
+  tasks: DocTask[],
+  cfg: DocTasksConfig,
+  today: string
+): string {
+  return tasks
+    .filter((t) => isStale(t, cfg, today))
+    .map((t) => {
+      const steps = docTypeDef(t.docType)
+        .steps.map((s) => (isStepDone(t, s) ? "1" : "0"))
+        .join("");
+      return `${t.id}:${steps}`;
+    })
+    .sort()
+    .join("|");
 }
 
 // ─── 並び替え・絞り込み ───
@@ -510,6 +581,41 @@ export async function deleteDocTask(id: string): Promise<void> {
   await callDocTasksApi({
     method: "DELETE",
     query: `?id=${encodeURIComponent(id)}`,
+  });
+}
+
+// ─── メール通知（155・管理者のみ） ───
+
+export type DocTasksMailLogEntry = {
+  at: string;
+  toCount: number;
+  ok: boolean;
+  staleCount: number;
+  error: string;
+  kind: "cron" | "test";
+};
+
+export type DocTasksMailStatus = {
+  /** Vercelに RESEND_API_KEY が入っているか（キー自体は取得しない） */
+  configured: boolean;
+  from: string;
+  portalUrl: string;
+  minResendDays: number;
+  lastSentOn: string;
+  entries: DocTasksMailLogEntry[];
+};
+
+export async function fetchDocTasksMailStatus(): Promise<DocTasksMailStatus> {
+  return callDocTasksApi<DocTasksMailStatus>({ method: "GET", path: "/mail" });
+}
+
+export async function sendDocTasksTestMail(): Promise<{
+  staleCount: number;
+  toCount: number;
+}> {
+  return callDocTasksApi<{ staleCount: number; toCount: number }>({
+    method: "POST",
+    path: "/mail",
   });
 }
 

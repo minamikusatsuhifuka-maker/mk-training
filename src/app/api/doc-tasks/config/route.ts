@@ -1,5 +1,6 @@
 // 書類進捗ボードの設定API（指示書154 / 154-2）— **管理者のみ**
-//   PUT → 閲覧できる人・アラートを受け取る人・滞留とみなす日数（種別ごと）・主治医の選択肢
+//   PUT → 閲覧できる人・アラートを受け取る人・**通知先メールアドレス（155）**・
+//         滞留とみなす日数（種別ごと）・主治医の選択肢
 // 非許可・未ログイン・非管理者にはすべて 404（存在秘匿）。
 //
 // ロックアウト防止: 閲覧者リストの保存時は「操作している管理者自身」を必ず含める（149と同じ）。
@@ -37,6 +38,7 @@ export async function PUT(req: Request) {
     ...auth.config,
     ...("viewerUserIds" in body ? { viewerUserIds: body.viewerUserIds } : {}),
     ...("notifyUserIds" in body ? { notifyUserIds: body.notifyUserIds } : {}),
+    ...("notifyEmails" in body ? { notifyEmails: body.notifyEmails } : {}),
     ...("thresholdDays" in body ? { thresholdDays: body.thresholdDays } : {}),
     ...("doctors" in body ? { doctors: body.doctors } : {}),
   });
