@@ -70,8 +70,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     ...(canSeeDocTasks
       ? [
           { label: "📋 書類進捗ボード", href: "/doc-tasks" },
-          // 157: 設定は管理画面側に移設（開ける人・滞留日数・主治医・アラートの送信先）
-          { label: "⚙️ 書類進捗ボードの設定", href: "/admin/doc-tasks" },
+          // 157: 設定はここから開く（実体は /doc-tasks/settings。
+          //   /admin 配下だと未ログイン・非管理者に200が返り、ルートの存在が漏れるため）
+          { label: "⚙️ 書類進捗ボードの設定", href: "/doc-tasks/settings" },
         ]
       : []),
   ];

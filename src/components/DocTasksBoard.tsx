@@ -467,11 +467,12 @@ export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
         <p className="text-[11px] text-gray-500">
           設定（開ける人・滞留日数・主治医・アラートの送信先）は{" "}
           <Link
-            href="/admin/doc-tasks"
+            href="/doc-tasks/settings"
             className="text-teal-700 underline underline-offset-2"
           >
-            管理画面 → 書類進捗ボードの設定
-          </Link>{" "}
+            書類進捗ボードの設定
+          </Link>
+          （管理画面のメニューからも開けます）{" "}
           にあります。
         </p>
       )}
