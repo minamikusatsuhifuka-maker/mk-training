@@ -68,7 +68,8 @@ export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
   useEffect(() => {
     try {
       const saved = localStorage.getItem(SORT_LS_KEY);
-      if (saved === "entered_desc" || saved === "entered_asc" || saved === "stale") {
+      // 158で "stale" は廃止。古い保存値は既定（新しい順）に倒す
+      if (saved === "entered_desc" || saved === "entered_asc") {
         setSort(saved);
       }
     } catch {
@@ -145,7 +146,7 @@ export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
       if (filterStatus === "final" && (done || !hasFinalPending(t))) return false;
       return true;
     });
-    return sortDocTasks(filtered, sort, today);
+    return sortDocTasks(filtered, sort);
   }, [tasks, config, filterType, filterDoctor, filterAssignee, filterStatus, sort, today]);
 
   const replaceTask = (task: DocTask) =>
@@ -401,7 +402,7 @@ export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
           </select>
         </div>
 
-        {/* 並び替え（157-C7）。記入日の新旧トグル＋滞留順 */}
+        {/* 並び替え（157-C7）。記入日の新旧トグルの2択（158で「滞留の長い順」は削除） */}
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-[11px] text-gray-600">並び替え</span>
           <button
@@ -409,24 +410,9 @@ export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
             onClick={() =>
               changeSort(sort === "entered_desc" ? "entered_asc" : "entered_desc")
             }
-            className={`px-3 py-1.5 rounded-full text-xs border min-h-[36px] transition-colors ${
-              sort !== "stale"
-                ? "bg-teal-600 text-white border-teal-600"
-                : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-            }`}
+            className="px-3 py-1.5 rounded-full text-xs border min-h-[36px] bg-teal-600 text-white border-teal-600"
           >
             記入日 {sort === "entered_asc" ? "古い順 ↑" : "新しい順 ↓"}
-          </button>
-          <button
-            type="button"
-            onClick={() => changeSort("stale")}
-            className={`px-3 py-1.5 rounded-full text-xs border min-h-[36px] transition-colors ${
-              sort === "stale"
-                ? "bg-teal-600 text-white border-teal-600"
-                : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-            }`}
-          >
-            滞留の長い順
           </button>
         </div>
       </div>

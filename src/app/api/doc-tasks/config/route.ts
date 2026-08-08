@@ -61,16 +61,14 @@ export async function PUT(req: Request) {
   };
 
   try {
-    // 157: 指名リストの正本は menu_access（メニューキー付き）に書く。
-    // 旧 clinic_doc_tasks 側にも同じ値を残すのは、ロールバックしても設定が消えないようにするため。
+    const by = auth.userEmail || auth.userId;
+    // 158: 指名リストの保存先は menu_access だけ。
+    // 旧 clinic_doc_tasks 側の viewerUserIds には**二度と書かない**（常に空で保存する）。
+    // 真実の在り処を1つにするため。他の設定（主治医・滞留日数・送信先・通知メンバー）は従来どおり。
     if ("viewerUserIds" in body) {
-      await saveMenuAllowedUserIds(
-        MENU_DOC_TASKS,
-        config.viewerUserIds,
-        auth.userEmail || auth.userId
-      );
+      await saveMenuAllowedUserIds(MENU_DOC_TASKS, config.viewerUserIds, by);
     }
-    await saveDocTasksConfig(auth.admin, config, auth.userEmail || auth.userId);
+    await saveDocTasksConfig(auth.admin, { ...config, viewerUserIds: [] }, by);
     return NextResponse.json({ ok: true, config });
   } catch (e) {
     if (e instanceof DocTasksTableMissingError) {

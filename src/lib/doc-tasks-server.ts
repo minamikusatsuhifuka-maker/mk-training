@@ -14,7 +14,10 @@ import {
 } from "./supabase-admin";
 import { getSessionUser } from "./staff-profiles-server";
 import { isAdminUser } from "./admin-role";
-import { loadMenuAllowedUserIds } from "./menu-access-server";
+import {
+  loadMenuAllowedUserIds,
+  saveMenuAllowedUserIds,
+} from "./menu-access-server";
 import { MENU_DOC_TASKS } from "./menu-access";
 import {
   DOC_TASKS_CONFIG_ID,
@@ -97,6 +100,36 @@ export async function saveDocTasksConfig(
   }
 }
 
+/**
+ * 158: 権限データの一本化（1回だけ走る移行）。
+ *   ① 旧フィールドの値を menu_access へ写す（既に空でも「移行済み」の印として書く）
+ *   ② 旧側の viewerUserIds **だけ**を空にする（主治医・滞留日数・送信先・通知メンバーは触らない）
+ * 失敗しても例外は投げない（次のアクセスで再試行される。読み取りは旧値のまま動く）。
+ */
+async function migrateViewerUserIds(
+  admin: DocTasksAdminClient,
+  stored: DocTasksConfig,
+  viewerUserIds: string[]
+): Promise<void> {
+  try {
+    const ok = await saveMenuAllowedUserIds(
+      MENU_DOC_TASKS,
+      viewerUserIds,
+      "migration-158"
+    );
+    if (!ok) return; // 新キーに書けていないなら旧側は消さない
+    if (stored.viewerUserIds.length > 0) {
+      await saveDocTasksConfig(
+        admin,
+        { ...stored, viewerUserIds: [] },
+        "migration-158"
+      );
+    }
+  } catch {
+    /* 次のアクセスで再試行する */
+  }
+}
+
 export type DocTasksAuth =
   | { ok: false }
   | {
@@ -124,10 +157,15 @@ export async function authorizeDocTasks(): Promise<DocTasksAuth> {
 
   const isAdmin = isAdminUser(user);
   const { config: stored, tableMissing } = await loadDocTasksConfig(admin);
-  // 157: 指名リストの正本は menu_access（メニューキー付き）。
-  // まだ移行していない環境では、旧 config.viewerUserIds をそのまま使う（設定を引き継ぐ）。
-  const fromMenu = await loadMenuAllowedUserIds(MENU_DOC_TASKS);
-  const viewerUserIds = fromMenu ?? stored.viewerUserIds;
+
+  // 158: 指名リストの正本は menu_access **だけ**。
+  // 157以前に保存された環境のために、初回だけ旧フィールドから移して旧側を空にする
+  // （真実の在り処を1つにするため。移行後は旧側を読みも書きもしない）。
+  let viewerUserIds = await loadMenuAllowedUserIds(MENU_DOC_TASKS);
+  if (viewerUserIds === null) {
+    viewerUserIds = stored.viewerUserIds;
+    await migrateViewerUserIds(admin, stored, viewerUserIds);
+  }
   const config: DocTasksConfig = { ...stored, viewerUserIds };
 
   const allowed = isAdmin || viewerUserIds.includes(user.id);

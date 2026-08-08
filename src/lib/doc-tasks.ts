@@ -95,8 +95,10 @@ export const DOC_TYPES: DocTypeDef[] = [
     emoji: "🧾",
     finalNote: "ORCA送信が済んでいません（未完だと請求に影響します）",
     steps: [
-      { id: "det_doctor_done", label: "先生記入済み", short: "記入", kind: "check" },
-      { id: "det_written_date", label: "詳記記載日", short: "記載", kind: "date" },
+      // 158: 「記入」と「記載」は一字違いで並ぶと見分けがつかない。
+      //   先生が書いた工程は3種別とも「作成」に統一し、日付側は成果物名の「詳記」にした。
+      { id: "det_doctor_done", label: "先生記入済み", short: "作成", kind: "check" },
+      { id: "det_written_date", label: "詳記記載日", short: "詳記", kind: "date" },
       {
         id: "det_orca_sent",
         label: "ORCA送信済み",
@@ -522,14 +524,17 @@ export function staleDigest(
 
 // ─── 並び替え・絞り込み ───
 
-/** 157: 記入日の新しい順／古い順のトグル＋滞留の長い順（既定は記入日の新しい順） */
-export type DocTaskSort = "entered_desc" | "entered_asc" | "stale";
+/**
+ * 並び替えは記入日の新しい順／古い順の2択（既定は新しい順）。
+ *
+ * 158: 「滞留の長い順」は削除した。滞留日数＝今日−記入日なので、同じ種別の中では
+ * **記入日の古い順とまったく同じ並び**になり、選択肢が1つ増えるだけだったため
+ * （157でID順を外したのと同じ物差し）。滞留だけを見たいときは
+ * 「状態: 滞留しているものだけ」で絞り込む。
+ */
+export type DocTaskSort = "entered_desc" | "entered_asc";
 
-export function sortDocTasks(
-  tasks: DocTask[],
-  sort: DocTaskSort,
-  today: string
-): DocTask[] {
+export function sortDocTasks(tasks: DocTask[], sort: DocTaskSort): DocTask[] {
   const list = tasks.slice();
   if (sort === "entered_asc") {
     return list.sort(
@@ -538,24 +543,11 @@ export function sortDocTasks(
         a.createdAt.localeCompare(b.createdAt)
     );
   }
-  if (sort === "entered_desc") {
-    return list.sort(
-      (a, b) => b.enteredOn.localeCompare(a.enteredOn) || b.createdAt.localeCompare(a.createdAt)
-    );
-  }
-  // 既定: 滞留日数の長い順（未完了が先・同日数なら最終工程未完を先に）
-  return list.sort((a, b) => {
-    const ac = isDocTaskCompleted(a);
-    const bc = isDocTaskCompleted(b);
-    if (ac !== bc) return ac ? 1 : -1;
-    const ad = elapsedDays(a, today);
-    const bd = elapsedDays(b, today);
-    if (ad !== bd) return bd - ad;
-    const af = hasFinalPending(a) ? 0 : 1;
-    const bf = hasFinalPending(b) ? 0 : 1;
-    if (af !== bf) return af - bf;
-    return a.chartNo.localeCompare(b.chartNo, "ja");
-  });
+  return list.sort(
+    (a, b) =>
+      b.enteredOn.localeCompare(a.enteredOn) ||
+      b.createdAt.localeCompare(a.createdAt)
+  );
 }
 
 // ─── クライアント → /api/doc-tasks 呼び出しヘルパ ───
