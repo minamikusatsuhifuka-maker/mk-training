@@ -8,6 +8,7 @@ import { useResolvedNav } from "@/lib/use-nav";
 import { UserMenu } from "@/components/UserMenu";
 import { AdminOnly } from "@/components/AdminOnly";
 import { FontSwitcher } from "@/components/FontSwitcher";
+import { DocTasksNavLink } from "@/components/DocTasksNavLink";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -65,6 +66,9 @@ export function Sidebar() {
               </ul>
             </div>
           ))}
+
+          {/* 書類進捗ボード（154）。指名された人にだけ出る（未許可には描画されない） */}
+          <DocTasksNavLink variant="sidebar" />
         </nav>
       </ScrollArea>
 

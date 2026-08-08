@@ -43,23 +43,34 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   // 149: メンバーノートは指名された人だけに見せる。
   // 許可されていないと probe が 404 を返すので、リンク自体を出さない（存在秘匿）。
   const [canSeeNotes, setCanSeeNotes] = useState(false);
+  // 154: 書類進捗ボードも同じ流儀（指名された人だけ・probeが404ならリンクを出さない）
+  const [canSeeDocTasks, setCanSeeDocTasks] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/member-notes?probe=1", { credentials: "same-origin" })
-      .then((r) => {
-        if (!cancelled) setCanSeeNotes(r.ok);
-      })
-      .catch(() => {
-        /* 判定できないときは出さない（fail-close） */
-      });
+    const probe = (path: string, set: (ok: boolean) => void) =>
+      fetch(path, { credentials: "same-origin" })
+        .then((r) => {
+          if (!cancelled) set(r.ok);
+        })
+        .catch(() => {
+          /* 判定できないときは出さない（fail-close） */
+        });
+    probe("/api/member-notes?probe=1", setCanSeeNotes);
+    probe("/api/doc-tasks?probe=1", setCanSeeDocTasks);
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const navItems = canSeeNotes
-    ? [...adminNav, { label: "📔 メンバーノート", href: "/member-notes" }]
-    : adminNav;
+  const navItems = [
+    ...adminNav,
+    ...(canSeeNotes
+      ? [{ label: "📔 メンバーノート", href: "/member-notes" }]
+      : []),
+    ...(canSeeDocTasks
+      ? [{ label: "📋 書類進捗ボード", href: "/doc-tasks" }]
+      : []),
+  ];
 
   return (
     <div className="min-h-screen bg-slate-50">
