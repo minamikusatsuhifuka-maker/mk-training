@@ -20,6 +20,10 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+// 判定はアプリ本体と同じ関数を使う（純関数）。
+// ここで独自に user_metadata だけを見ると、app_metadata.role で管理者になっている
+// アカウントを締め出してしまう。
+import { isAdminUser } from "@/lib/admin-role";
 
 /** rewrite 先。実在しないパスなら何でもよいが、固定にして応答を1種類に揃える */
 const HIDDEN_PATH = "/__not_found__";
@@ -47,7 +51,7 @@ export async function proxy(request: NextRequest) {
       }
     );
     const { data } = await supabase.auth.getUser();
-    isAdmin = data.user?.user_metadata?.role === "admin";
+    isAdmin = isAdminUser(data.user);
   } catch {
     isAdmin = false; // 判定できない＝通さない
   }
