@@ -40,12 +40,17 @@ const DEFAULT_FROM = "南草津皮フ科ポータル <onboarding@resend.dev>";
 
 export type MailLogEntry = {
   at: string;
-  /** 宛先の件数だけ残す（アドレス本体は設定にあるので二重に持たない） */
+  /** 宛先の件数 */
   toCount: number;
+  /** 届いた宛先の数（156: 宛先ごとに送るので部分成功があり得る） */
+  sentCount: number;
+  /** 失敗した宛先の数 */
+  failedCount: number;
+  /** 1件でも届いたか */
   ok: boolean;
   /** 送った時点の滞留件数 */
   staleCount: number;
-  /** 失敗理由（成功時は空） */
+  /** 失敗理由（宛先ごと・成功時は空） */
   error: string;
   /** cron（日次）か test（管理画面からの手動）か */
   kind: "cron" | "test";
@@ -74,6 +79,13 @@ function normalizeMailState(raw: unknown): MailState {
         .map((e) => ({
           at: typeof e.at === "string" ? e.at : "",
           toCount: typeof e.toCount === "number" ? e.toCount : 0,
+          sentCount:
+            typeof e.sentCount === "number"
+              ? e.sentCount
+              : e.ok === true && typeof e.toCount === "number"
+                ? e.toCount // 156より前の記録（宛先一括送信）との互換
+                : 0,
+          failedCount: typeof e.failedCount === "number" ? e.failedCount : 0,
           ok: e.ok === true,
           staleCount: typeof e.staleCount === "number" ? e.staleCount : 0,
           error: typeof e.error === "string" ? e.error.slice(0, 300) : "",
@@ -136,9 +148,9 @@ export function portalUrl(): string {
 
 type SendResult = { ok: boolean; error: string };
 
-/** Resend の REST を直接叩く（SDK不要） */
-async function sendViaResend(
-  to: string[],
+/** Resend の REST を直接叩く（SDK不要）。**宛先1件ずつ** */
+async function sendOne(
+  to: string,
   subject: string,
   text: string
 ): Promise<SendResult> {
@@ -151,13 +163,13 @@ async function sendViaResend(
         Authorization: `Bearer ${key}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ from: mailFrom(), to, subject, text }),
+      body: JSON.stringify({ from: mailFrom(), to: [to], subject, text }),
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       return {
         ok: false,
-        error: `Resend ${res.status}: ${body.slice(0, 200)}`,
+        error: `Resend ${res.status}: ${body.slice(0, 160)}`,
       };
     }
     return { ok: true, error: "" };
@@ -169,13 +181,51 @@ async function sendViaResend(
   }
 }
 
+export type FanoutResult = {
+  sent: string[];
+  failures: { to: string; error: string }[];
+};
+
+/**
+ * 宛先ごとに1通ずつ送る（156）。
+ * **1件の失敗が他の宛先を巻き込まない**。共有ドメイン運用では「院長宛だけ通り、
+ * 他は403」という状況が普通に起きるため、まとめて to: [...] で送ってはいけない。
+ */
+async function sendEach(
+  recipients: string[],
+  subject: string,
+  text: string
+): Promise<FanoutResult> {
+  const sent: string[] = [];
+  const failures: { to: string; error: string }[] = [];
+  for (const to of recipients) {
+    const r = await sendOne(to, subject, text);
+    if (r.ok) sent.push(to);
+    else failures.push({ to, error: r.error });
+  }
+  return { sent, failures };
+}
+
+/** 失敗した宛先を1行にまとめる（管理画面に出す・宛先は設定済みのものだけ） */
+function summarizeFailures(failures: { to: string; error: string }[]): string {
+  return failures.map((f) => `${f.to}: ${f.error}`).join(" ／ ").slice(0, 300);
+}
+
 function pushEntry(state: MailState, entry: MailLogEntry): MailState {
   return { ...state, entries: [entry, ...state.entries].slice(0, LOG_MAX) };
 }
 
 export type DispatchOutcome =
-  | { status: "sent"; staleCount: number; toCount: number }
-  | { status: "failed"; error: string }
+  | {
+      status: "sent";
+      staleCount: number;
+      toCount: number;
+      sentCount: number;
+      failedCount: number;
+      /** 失敗した宛先があれば理由（部分成功でもcronは200を返す） */
+      error?: string;
+    }
+  | { status: "failed"; error: string; toCount: number; failedCount: number }
   | {
       status: "skipped";
       reason:
@@ -221,22 +271,30 @@ export async function dispatchDailyAlertMail(
   }
 
   const { subject, text } = buildAlertMail(summary, portalUrl(), today);
-  const result = await sendViaResend(config.notifyEmails, subject, text);
+  const { sent, failures } = await sendEach(config.notifyEmails, subject, text);
   const entry: MailLogEntry = {
     at: new Date().toISOString(),
     toCount: config.notifyEmails.length,
-    ok: result.ok,
+    sentCount: sent.length,
+    failedCount: failures.length,
+    ok: sent.length > 0,
     staleCount: summary.total,
-    error: result.error,
+    error: summarizeFailures(failures),
     kind: "cron",
   };
 
-  if (!result.ok) {
-    // 失敗は記録だけして lastSentOn は進めない（次の便で再挑戦する）
+  if (sent.length === 0) {
+    // 全滅のときだけ lastSentOn を進めない（次の便で再挑戦する）
     await saveMailState(admin, pushEntry(state, entry));
-    return { status: "failed", error: result.error };
+    return {
+      status: "failed",
+      error: entry.error || "送信に失敗しました",
+      toCount: config.notifyEmails.length,
+      failedCount: failures.length,
+    };
   }
 
+  // 1件でも届いたら「今日は送った」扱い（部分成功。失敗分は記録に残す）
   await saveMailState(admin, {
     ...pushEntry(state, entry),
     lastSentOn: today,
@@ -246,6 +304,9 @@ export async function dispatchDailyAlertMail(
     status: "sent",
     staleCount: summary.total,
     toCount: config.notifyEmails.length,
+    sentCount: sent.length,
+    failedCount: failures.length,
+    ...(failures.length > 0 ? { error: entry.error } : {}),
   };
 }
 
@@ -254,13 +315,22 @@ export async function dispatchDailyAlertMail(
  * 1日1回の制限・再送制御は**通さない**（確認のための手動操作なので）。
  * lastSentOn も更新しない（日次の判断に影響させない）。
  */
+export type TestSendResult = {
+  ok: boolean;
+  error: string;
+  staleCount: number;
+  sent: string[];
+  failures: { to: string; error: string }[];
+};
+
 export async function sendTestAlertMail(
   admin: DocTasksAdminClient,
   config: DocTasksConfig,
   tasks: DocTask[]
-): Promise<SendResult & { staleCount: number }> {
+): Promise<TestSendResult> {
   const today = todayYmdJst();
   const summary = summarizeStale(tasks, config, today);
+  const empty = { sent: [], failures: [] };
 
   if (!isMailConfigured()) {
     return {
@@ -268,13 +338,15 @@ export async function sendTestAlertMail(
       error:
         "RESEND_API_KEY がVercelに設定されていません（手順書: 155_Resendセットアップ手順_院長用.md）",
       staleCount: summary.total,
+      ...empty,
     };
   }
   if (config.notifyEmails.length === 0) {
     return {
       ok: false,
-      error: "通知先メールアドレスが未設定です",
+      error: "アラートの送信先が未設定です",
       staleCount: summary.total,
+      ...empty,
     };
   }
 
@@ -296,18 +368,26 @@ export async function sendTestAlertMail(
           ].join("\n"),
         };
 
-  const result = await sendViaResend(config.notifyEmails, subject, text);
+  const { sent, failures } = await sendEach(config.notifyEmails, subject, text);
   const state = await loadMailState(admin);
   await saveMailState(
     admin,
     pushEntry(state, {
       at: new Date().toISOString(),
       toCount: config.notifyEmails.length,
-      ok: result.ok,
+      sentCount: sent.length,
+      failedCount: failures.length,
+      ok: sent.length > 0,
       staleCount: summary.total,
-      error: result.error,
+      error: summarizeFailures(failures),
       kind: "test",
     })
   );
-  return { ...result, staleCount: summary.total };
+  return {
+    ok: sent.length > 0,
+    error: summarizeFailures(failures),
+    staleCount: summary.total,
+    sent,
+    failures,
+  };
 }

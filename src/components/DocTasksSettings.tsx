@@ -63,8 +63,14 @@ export function DocTasksSettings({
     setMailMsg("");
     try {
       const r = await sendDocTasksTestMail();
+      const failed =
+        r.failedCount > 0
+          ? `／⚠️ ${r.failedCount}件は送れませんでした（${r.failures
+              .map((f) => `${f.to}: ${f.error}`)
+              .join(" ／ ")}）`
+          : "";
       setMailMsg(
-        `✉️ ${r.toCount}件の宛先に送信しました（滞留${r.staleCount}件の内容）。受信箱をご確認ください。`
+        `✉️ ${r.sentCount}件の宛先に送信しました（滞留${r.staleCount}件の内容）。受信箱をご確認ください。${failed}`
       );
       await loadMail();
     } catch (e) {
@@ -210,7 +216,7 @@ export function DocTasksSettings({
 
           <section>
             <p className="text-xs font-medium text-gray-800">
-              ✉️ 通知先メールアドレス（1行に1件・複数可）
+              📧 アラートの送信先（1行に1件・複数可）
             </p>
             <p className="text-[11px] text-gray-600 mt-0.5 leading-relaxed">
               毎朝8時に、その時点で滞留している件を<strong>1通にまとめて</strong>送ります。
@@ -218,6 +224,11 @@ export function DocTasksSettings({
               （「紹介状お返事 2件が3日以上未完了」までの粒度＋ポータルへのリンク）。
               内容が変わらないまま毎日届かないよう、同じ状態が続くうちは
               {mail?.minResendDays ?? 3}日あけて再送します。
+              <br />
+              <strong>空のあいだはメールを送りません</strong>（エラーにもなりません）。
+              いまは共有ドメインで運用しているため、
+              <strong>Resendに登録した院長のアドレス以外には届きません</strong>
+              （他を入れてもその宛先だけが失敗し、院長宛の送信は妨げません）。
             </p>
             <textarea
               value={emails}
@@ -247,11 +258,12 @@ export function DocTasksSettings({
                     <ul className="text-[11px] text-gray-600 space-y-0.5">
                       {mail.entries.map((e, i) => (
                         <li key={`${e.at}-${i}`}>
-                          {e.ok ? "✅" : "⚠️"} {e.at.slice(0, 16).replace("T", " ")}
-                          　{e.kind === "test" ? "テスト" : "定期"}／滞留{e.staleCount}件／宛先
-                          {e.toCount}件
-                          {!e.ok && (
-                            <span className="text-red-700">　失敗: {e.error}</span>
+                          {e.ok ? (e.failedCount > 0 ? "⚠️" : "✅") : "⛔"}{" "}
+                          {e.at.slice(0, 16).replace("T", " ")}
+                          　{e.kind === "test" ? "テスト" : "定期"}／滞留{e.staleCount}件／送信
+                          {e.sentCount}件・失敗{e.failedCount}件（宛先{e.toCount}件）
+                          {e.error && (
+                            <span className="text-red-700">　{e.error}</span>
                           )}
                         </li>
                       ))}

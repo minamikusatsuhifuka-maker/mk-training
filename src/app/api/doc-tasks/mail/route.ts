@@ -61,13 +61,20 @@ export async function POST() {
   try {
     const { tasks } = await fetchAllDocTasks(auth.admin);
     const result = await sendTestAlertMail(auth.admin, auth.config, tasks);
+    // 1件も届かなかったときだけエラー。部分成功は結果を返して画面に出す（156）
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
+      return NextResponse.json(
+        { error: result.error || "送信に失敗しました" },
+        { status: 400 }
+      );
     }
     return NextResponse.json({
       ok: true,
       staleCount: result.staleCount,
       toCount: auth.config.notifyEmails.length,
+      sentCount: result.sent.length,
+      failedCount: result.failures.length,
+      failures: result.failures,
     });
   } catch (e) {
     return errorResponse(e);

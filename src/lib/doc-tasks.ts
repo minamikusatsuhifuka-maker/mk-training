@@ -589,6 +589,9 @@ export async function deleteDocTask(id: string): Promise<void> {
 export type DocTasksMailLogEntry = {
   at: string;
   toCount: number;
+  /** 届いた宛先数・失敗した宛先数（156・宛先ごとに送るため部分成功がある） */
+  sentCount: number;
+  failedCount: number;
   ok: boolean;
   staleCount: number;
   error: string;
@@ -611,11 +614,16 @@ export async function fetchDocTasksMailStatus(): Promise<DocTasksMailStatus> {
   return callDocTasksApi<DocTasksMailStatus>({ method: "GET", path: "/mail" });
 }
 
-export async function sendDocTasksTestMail(): Promise<{
+export type DocTasksTestMailResult = {
   staleCount: number;
   toCount: number;
-}> {
-  return callDocTasksApi<{ staleCount: number; toCount: number }>({
+  sentCount: number;
+  failedCount: number;
+  failures: { to: string; error: string }[];
+};
+
+export async function sendDocTasksTestMail(): Promise<DocTasksTestMailResult> {
+  return callDocTasksApi<DocTasksTestMailResult>({
     method: "POST",
     path: "/mail",
   });
