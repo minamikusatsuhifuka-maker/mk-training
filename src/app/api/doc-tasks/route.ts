@@ -22,6 +22,7 @@ import {
   ServiceRoleMissingError,
 } from "@/lib/doc-tasks-server";
 import {
+  buildAlertLines,
   isDocTypeId,
   normalizeSteps,
   summarizeStale,
@@ -86,11 +87,13 @@ export async function GET(req: Request) {
     const today = todayYmdJst();
 
     if (probe) {
-      // ナビのバッジ用。件数だけ（カルテ番号など明細は返さない）
+      // ナビのバッジ・ホームのアラートカード用。
+      // 返すのは件数と「種別◯件が◯日以上未完了」の行だけ（**カルテ番号など明細は返さない**）。
       const summary = summarizeStale(tasks, auth.config, today);
       return NextResponse.json({
         ok: true,
         staleCount: auth.canNotify ? summary.total : 0,
+        alertLines: buildAlertLines(summary),
       });
     }
 

@@ -35,6 +35,7 @@ import { MonthlySloganSection } from "@/components/MonthlySloganSection";
 import { MonthOpeningShow } from "@/components/MonthOpeningShow";
 import { MonthlyDigestSection } from "@/components/MonthlyDigestSection";
 import { AnniversarySection } from "@/components/AnniversarySection";
+import { DocTasksHomeAlert } from "@/components/DocTasksHomeAlert";
 import { seasonalThemeFor } from "@/lib/seasonal";
 import { CharacterSVG } from "@/components/CharacterNotification";
 import {
@@ -638,6 +639,9 @@ export default function PortalHome() {
     ) : null,
     // 146-E: 記念日当日だけ・本人にのみ（該当なしなら null）
     anniversary: featureFlags.anniversary ? <AnniversarySection /> : null,
+    // 154: 書類進捗の滞留アラート。指名された人・滞留ありのときだけ中身が出る
+    //（コンポーネント側で probe して判断するのでフラグ連動は不要）
+    doc_tasks_alert: <DocTasksHomeAlert />,
     news: (
       <section
         ref={newsSectionRef}

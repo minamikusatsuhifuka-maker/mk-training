@@ -35,6 +35,9 @@ import { DocTasksSettings } from "@/components/DocTasksSettings";
 import { loadProfilesIndex } from "@/lib/staff-profiles";
 import type { StaffProfileIndexEntry } from "@/lib/staff-profiles";
 
+/** 状態での絞り込み（154の要件3）。「状態」＝工程の進み具合をまとめた見方 */
+type StatusFilter = "open" | "stale" | "final" | "done" | "all";
+
 export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
   const [data, setData] = useState<DocTasksListResponse | null>(null);
   const [members, setMembers] = useState<StaffProfileIndexEntry[]>([]);
@@ -52,7 +55,8 @@ export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
   const [filterType, setFilterType] = useState<DocTypeId | "all">("all");
   const [filterDoctor, setFilterDoctor] = useState("");
   const [filterAssignee, setFilterAssignee] = useState("");
-  const [showDone, setShowDone] = useState(false);
+  // 状態での絞り込み（154の要件3）。既定は「未完了だけ」＝日常はこれで足りる
+  const [filterStatus, setFilterStatus] = useState<StatusFilter>("open");
   const [sort, setSort] = useState<DocTaskSort>("stale");
   const [expanded, setExpanded] = useState<string>("");
 
@@ -104,11 +108,17 @@ export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
       if (filterType !== "all" && t.docType !== filterType) return false;
       if (filterDoctor && t.doctor !== filterDoctor) return false;
       if (filterAssignee && t.assigneeUserId !== filterAssignee) return false;
-      if (!showDone && isDocTaskCompleted(t)) return false;
+      const done = isDocTaskCompleted(t);
+      if (filterStatus === "open" && done) return false;
+      if (filterStatus === "done" && !done) return false;
+      if (filterStatus === "stale" && (done || !isStale(t, config, today))) {
+        return false;
+      }
+      if (filterStatus === "final" && (done || !hasFinalPending(t))) return false;
       return true;
     });
     return sortDocTasks(filtered, sort, today);
-  }, [tasks, config, filterType, filterDoctor, filterAssignee, showDone, sort, today]);
+  }, [tasks, config, filterType, filterDoctor, filterAssignee, filterStatus, sort, today]);
 
   const replaceTask = (task: DocTask) =>
     setData((d) =>
@@ -366,14 +376,17 @@ export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
             <option value="chart">並び: ID順</option>
           </select>
         </div>
-        <label className="flex items-center gap-2 text-xs text-gray-700">
-          <input
-            type="checkbox"
-            checked={showDone}
-            onChange={(e) => setShowDone(e.target.checked)}
-          />
-          完了したものも表示する
-        </label>
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value as StatusFilter)}
+          className="w-full sm:w-auto rounded-md border border-gray-200 px-2 py-2 text-sm min-h-[40px]"
+        >
+          <option value="open">状態: 未完了だけ</option>
+          <option value="stale">状態: 滞留しているものだけ</option>
+          <option value="final">状態: 最終工程が残っているものだけ</option>
+          <option value="done">状態: 完了だけ</option>
+          <option value="all">状態: すべて</option>
+        </select>
       </div>
 
       {/* 一覧 */}
@@ -383,7 +396,8 @@ export function DocTasksBoard({ isAdmin }: { isAdmin: boolean }) {
         )}
         {data && visible.length === 0 && (
           <p className="text-xs text-gray-600">
-            該当する記録はありません。{!showDone && "（完了したものは表示していません）"}
+            該当する記録はありません。
+            {filterStatus === "open" && "（完了したものは表示していません）"}
           </p>
         )}
         {config &&

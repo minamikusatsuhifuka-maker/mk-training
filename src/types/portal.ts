@@ -286,7 +286,8 @@ export type HomeSectionKey =
   | "policy"
   | "library_news"
   | "monthly_digest"
-  | "anniversary";
+  | "anniversary"
+  | "doc_tasks_alert";
 
 export type HomeSectionConfig = {
   key: HomeSectionKey;
@@ -313,6 +314,8 @@ export const HOME_SECTION_LABELS: Record<HomeSectionKey, string> = {
   monthly_digest: "🤝 分かち愛ダイジェスト",
   // 146-E: 記念日のお祝い（当日・本人にのみ表示）
   anniversary: "🎂 記念日のお祝い",
+  // 154: 書類進捗の滞留アラート（指名されたアカウントにだけ・滞留0件なら出ない）
+  doc_tasks_alert: "🔔 書類進捗の滞留アラート",
 };
 
 // 現状のハードコード順（未設定/不正時のフォールバック用の既定値）
@@ -334,6 +337,9 @@ export const DEFAULT_HOME_LAYOUT: HomeSectionConfig[] = [
   { key: "monthly_digest", order: 11 },
   // 146-E: 当日だけ出る一時的なカードなので既定はページ上部寄り（並び替えは管理画面で）
   { key: "anniversary", order: 12 },
+  // 154: 滞留があるときだけ出る。診療の合間に気づけるよう既定は上部寄り
+  //（保存済みレイアウトがある環境では末尾に自動追加される → 管理画面で並び替え）
+  { key: "doc_tasks_alert", order: 13 },
 ];
 
 // 保存済み設定を検証・補完する。空/不正なら既定順に丸ごとフォールバック（ホームが壊れない）。
