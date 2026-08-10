@@ -1,119 +1,35 @@
 "use client";
 
-import { useState } from "react";
+// 画面の外枠の出し分け（指示書161で中身を AppShellInner へ分離）
+//
+// ログイン画面・管理画面では外枠を出さない。従来と同じ挙動だが、
+// 161では **出さないだけでなく読み込みもしない** ようにした。
+// 外枠は機能一覧（メニュー定義）を持つため、同じチャンクに同居していると
+// 未ログインの人に配られるJSの中に全機能の名前が入ってしまう。
+
 import { usePathname } from "next/navigation";
-import Link from "next/link";
-import { Sidebar } from "@/components/sidebar";
-import { useResolvedNav } from "@/lib/use-nav";
-import { UserMenu } from "@/components/UserMenu";
-import { AdminOnly } from "@/components/AdminOnly";
-import { FontSwitcher } from "@/components/FontSwitcher";
-import { DocTasksNavLink } from "@/components/DocTasksNavLink";
+import dynamic from "next/dynamic";
+
+// dynamic: /login・/reset-password ではこのチャンクを要求させない。
+// ssr は既定（true）のまま＝サーバー描画は従来どおりで、分かれるのはクライアントの
+// チャンクだけ。ssr:false にすると中身が初回描画で消えて体感が悪くなる。
+const AppShellInner = dynamic(() => import("@/components/AppShellInner"));
+
+// 未ログインでも開ける画面（proxy.ts の PUBLIC_PATHS と同じ）。
+// 161: /join がこの一覧から漏れていた＝**招待コードの登録画面に
+// スタッフ用サイドメニューが出ていた**（未ログインで機能一覧が見える状態）。
+const PUBLIC_PATHS = ["/login", "/reset-password", "/join"];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const mobileNavSections = useResolvedNav().filter((s) => s.items.length > 0);
   const isAdmin = pathname.startsWith("/admin");
-  const isLogin = pathname === "/login" || pathname === "/reset-password";
+  const isPublic = PUBLIC_PATHS.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`)
+  );
 
-  if (isAdmin || isLogin) {
+  if (isAdmin || isPublic) {
     return <>{children}</>;
   }
 
-  return (
-    <div className="flex min-h-full">
-      {/* Desktop sidebar */}
-      <div className="hidden md:block">
-        <Sidebar />
-      </div>
-
-      {/* Mobile header + drawer */}
-      {/* min-w-0: flex項目のmin-width:autoが子の内在幅で最小幅を張るのを防ぐ（指示書92）。
-          これが無いと歩みグラフ等の幅広コンテンツが狭画面でviewportを超えて膨張し、
-          body{overflow-x:hidden}に右端を切られてスクロールで末尾に到達できなくなる。 */}
-      <div className="flex-1 min-w-0 min-h-screen flex flex-col">
-        <header className="md:hidden bg-teal text-white px-4 py-3 flex items-center justify-between sticky top-0 z-40">
-          <button type="button" onClick={() => setMenuOpen(true)} className="text-xl min-w-[44px] min-h-[44px] flex items-center justify-center">
-            ☰
-          </button>
-          <Link href="/" className="font-bold text-sm">南草津皮フ科 スタッフ研修</Link>
-          <div className="w-[44px]" />
-        </header>
-
-        {/* Mobile overlay */}
-        {menuOpen && (
-          <div className="md:hidden fixed inset-0 z-50 flex">
-            <div className="w-[260px] bg-white h-full overflow-y-auto shadow-xl">
-              <div className="px-4 py-5 border-b">
-                <h1 className="text-lg font-bold text-teal">南草津皮フ科</h1>
-                <p className="text-xs text-muted-foreground">スタッフ研修</p>
-              </div>
-              <nav className="px-3 py-4 space-y-4">
-                {mobileNavSections.map((section) => (
-                  <div key={section.id}>
-                    <p className="px-2 mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{section.label}</p>
-                    <ul className="space-y-0.5">
-                      {section.items.map((item) => (
-                        <li key={item.href}>
-                          {item.external ? (
-                            // 外部リンクは別タブで開く（指示書59）
-                            <a
-                              href={item.href}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={() => setMenuOpen(false)}
-                              className="rounded-md px-2 py-2 text-sm min-h-[44px] flex items-center transition-colors text-foreground hover:bg-accent"
-                            >
-                              {item.label}
-                            </a>
-                          ) : (
-                            <Link
-                              href={item.href}
-                              onClick={() => setMenuOpen(false)}
-                              className={`block rounded-md px-2 py-2 text-sm min-h-[44px] flex items-center transition-colors ${
-                                pathname === item.href
-                                  ? "bg-teal-light text-teal font-medium"
-                                  : "text-foreground hover:bg-accent"
-                              }`}
-                            >
-                              {item.label}
-                            </Link>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-
-                {/* 書類進捗ボード（154）。指名された人にだけ出る */}
-                <DocTasksNavLink
-                  variant="drawer"
-                  onNavigate={() => setMenuOpen(false)}
-                />
-              </nav>
-              <div className="px-3 py-2.5 border-t">
-                <FontSwitcher />
-              </div>
-              <div className="px-3 py-2 border-t">
-                <UserMenu onNavigate={() => setMenuOpen(false)} />
-              </div>
-              <AdminOnly>
-                <div className="px-3 py-3 border-t">
-                  <Link href="/admin" onClick={() => setMenuOpen(false)} className="flex items-center gap-1.5 px-2 py-2 text-xs text-muted-foreground hover:text-foreground">
-                    <span>⚙</span><span>管理画面</span>
-                  </Link>
-                </div>
-              </AdminOnly>
-            </div>
-            <div className="flex-1 bg-black/30" onClick={() => setMenuOpen(false)} />
-          </div>
-        )}
-
-        <main className="flex-1 min-w-0 overflow-y-auto p-3 md:p-6">
-          {children}
-        </main>
-      </div>
-    </div>
-  );
+  return <AppShellInner>{children}</AppShellInner>;
 }

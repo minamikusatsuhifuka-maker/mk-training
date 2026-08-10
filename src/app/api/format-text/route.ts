@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireLogin } from "@/lib/require-login";
 
 export const maxDuration = 30;
 
@@ -14,6 +15,10 @@ const FIELD_GUIDE: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
+  // 161: ログイン必須（関門は proxy.ts。ここは関門が外れたときの二重の歯止め）
+  const gate = await requireLogin();
+  if (gate.response) return gate.response;
+
   try {
     const { text, fieldType } = (await req.json()) as {
       text: string;

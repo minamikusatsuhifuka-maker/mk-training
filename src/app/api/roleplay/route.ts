@@ -3,6 +3,7 @@ import { buildFullKnowledgeContext } from "@/lib/knowledge-server";
 import { AI_JUDGMENT_AXES } from "@/lib/clinic-philosophy";
 import { getAiBackgroundBlock } from "@/lib/ai-background";
 import { callAI } from "@/lib/ai-provider";
+import { requireLogin } from "@/lib/require-login";
 
 export const maxDuration = 60;
 
@@ -68,6 +69,10 @@ const scenarioPrompts: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
+  // 161: ログイン必須（関門は proxy.ts。ここは関門が外れたときの二重の歯止め）
+  const gate = await requireLogin();
+  if (gate.response) return gate.response;
+
   const { action, scenario, messages, staffResponses } = await req.json();
 
   // 理念 + 追加ドキュメントを取得（全アクションで共通）

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSelectedGeminiModel, GEMINI_THINKING_CONFIG } from '@/lib/gemini-models'
+import { requireLogin } from '@/lib/require-login'
 
 export const maxDuration = 60
 
@@ -27,6 +28,10 @@ const SYSTEM_INSTRUCTION = `【重要な指示】
    - 「添付文書（20XX年X月改訂）」「〇〇ガイドライン20XX年版」等を具体的に記載`
 
 export async function POST(req: NextRequest) {
+  // 161: ログイン必須（関門は proxy.ts。ここは関門が外れたときの二重の歯止め）
+  const gate = await requireLogin();
+  if (gate.response) return gate.response;
+
   try {
     const body = await req.json()
     const apiKey = process.env.GEMINI_API_KEY

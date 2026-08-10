@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
+import { requireLogin } from "@/lib/require-login";
 
 export const maxDuration = 30;
 
 // 薬剤候補名の検索API（Step1→Step2用）
 // キーワードを受け取り、PMDA添付文書・保険診療に基づく代表的な薬剤名を返す
 export async function POST(request: Request) {
+  // 161: ログイン必須（関門は proxy.ts。ここは関門が外れたときの二重の歯止め）
+  const gate = await requireLogin();
+  if (gate.response) return gate.response;
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey || apiKey === "dummy_key_please_replace") {
     return NextResponse.json(

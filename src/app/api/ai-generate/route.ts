@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAiBackgroundBlock } from "@/lib/ai-background";
+import { requireLogin } from "@/lib/require-login";
 
 type GenerateType = "drug" | "disease" | "quiz" | "contraindication";
 type Mode = "fast" | "quality";
@@ -130,6 +131,10 @@ async function callAnthropic(
 }
 
 export async function POST(request: Request) {
+  // 161: ログイン必須（関門は proxy.ts。ここは関門が外れたときの二重の歯止め）
+  const gate = await requireLogin();
+  if (gate.response) return gate.response;
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey || apiKey === "dummy_key_please_replace") {
     return NextResponse.json(

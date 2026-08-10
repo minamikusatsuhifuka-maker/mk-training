@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireLogin } from "@/lib/require-login";
 
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  // 161: ログイン必須（関門は proxy.ts。ここは関門が外れたときの二重の歯止め）
+  const gate = await requireLogin();
+  if (gate.response) return gate.response;
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "API key not set" }, { status: 500 });
 

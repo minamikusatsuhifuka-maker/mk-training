@@ -32,6 +32,13 @@ export const metadata: Metadata = {
   title: "南草津皮フ科 スタッフ研修アプリ",
   description:
     "皮膚科専門医と共に安全な医療を提供するためのスタッフ研修アプリです。皮膚疾患・薬剤・美容施術・業務フローを網羅した学習ツールです。",
+  // 161: 院内専用。検索エンジンに載せない（robots.ts と両方で断る）。
+  robots: {
+    index: false,
+    follow: false,
+    nocache: true,
+    googleBot: { index: false, follow: false },
+  },
 };
 
 export const viewport: Viewport = {

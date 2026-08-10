@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAiBackgroundBlock } from "@/lib/ai-background";
 import { callAI } from "@/lib/ai-provider";
+import { requireLogin } from "@/lib/require-login";
 
 export const maxDuration = 120;
 
@@ -205,6 +206,10 @@ impact フィールドは必ず以下の四方よし形式で記述してくだ�
 }
 
 export async function POST(req: NextRequest) {
+  // 161: ログイン必須（関門は proxy.ts。ここは関門が外れたときの二重の歯止め）
+  const gate = await requireLogin();
+  if (gate.response) return gate.response;
+
   try {
     const { type, role, customRole, theme, category, notes } =
       (await req.json()) as {

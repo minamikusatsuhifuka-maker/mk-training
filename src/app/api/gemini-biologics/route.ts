@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSelectedGeminiModel, GEMINI_THINKING_CONFIG } from '@/lib/gemini-models'
+import { requireLogin } from '@/lib/require-login'
 
 const SYSTEM_INSTRUCTION = `【重要な指示】
 あなたは日本の医療情報を厳密に評価する専門AIです。
@@ -21,6 +22,10 @@ const SYSTEM_INSTRUCTION = `【重要な指示】
    - 各回答に evidenceSource（参照した情報源）を記載する`
 
 export async function POST(req: NextRequest) {
+  // 161: ログイン必須（関門は proxy.ts。ここは関門が外れたときの二重の歯止め）
+  const gate = await requireLogin();
+  if (gate.response) return gate.response;
+
   const { action, drugName, currentData } = await req.json()
 
   const apiKey = process.env.GEMINI_API_KEY

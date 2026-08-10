@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAiBackgroundBlock } from "@/lib/ai-background";
 import { callAI } from "@/lib/ai-provider";
+import { requireLogin } from "@/lib/require-login";
 
 export const maxDuration = 60;
 
@@ -14,6 +15,10 @@ type ExpertItem = {
 
 // エキスパート要件のAI改善・項目追加API
 export async function POST(request: Request) {
+  // 161: ログイン必須（関門は proxy.ts。ここは関門が外れたときの二重の歯止め）
+  const gate = await requireLogin();
+  if (gate.response) return gate.response;
+
   const body = await request.json();
   const { action, role, section, item, existingItems } = body as {
     action?: string;

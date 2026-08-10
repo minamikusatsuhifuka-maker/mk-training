@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "check:api-auth": "node scripts/check-api-auth.mjs",
+    "build": "node scripts/check-api-auth.mjs && next build",
     "start": "next start",
     "lint": "eslint"
   },

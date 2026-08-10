@@ -4,10 +4,15 @@ import { getAiBackgroundBlock } from "@/lib/ai-background";
 import { callAI } from "@/lib/ai-provider";
 import { getFeatureFlags } from "@/lib/feature-flags";
 import { buildHrChatKnowledge } from "@/lib/hr-chat-knowledge";
+import { requireLogin } from "@/lib/require-login";
 
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  // 161: ログイン必須（関門は proxy.ts。ここは関門が外れたときの二重の歯止め）
+  const gate = await requireLogin();
+  if (gate.response) return gate.response;
+
   const { messages } = await req.json();
 
   const baseSystemPrompt = `あなたは南草津皮フ科クリニックのスタッフ研修用AIアシスタントです。

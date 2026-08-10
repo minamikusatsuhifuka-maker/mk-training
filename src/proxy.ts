@@ -1,18 +1,21 @@
-// 入口の制御（指示書160: 未ログインはログイン画面へ／指示書158: 管理画面の秘匿）
+// 入口の制御（指示書161: 唯一の関門／160: 未ログインはログイン画面へ／158: 管理画面の秘匿）
 //
-// 【160で直したこと】
-// これまで未ログインでも全ページが開けたため、「ログイン画面に入る導線」が
-// どこにも出ていなかった（サイドメニューだけが見えている状態）。
-// 未ログインのページアクセスは **すべて /login へ送る**。
+// 【161で直したこと】
+// 160まで、APIはこの関門の対象外で「各ルートが自前でログイン必須を判定する」方式だった。
+// 実測の結果、58本中18本にその判定が**入っていなかった**（AI系ルート）。
+// 未認証で /api/ai-chat が院内の理念・人事制度を注入したAIとして応答していた。
+//
+// 個々のルートに足していく方式は足し忘れが必ず起きる。よって
+// **ページもAPIもこの1箇所を通す。既定は拒否。通すものだけを下に列挙する。**
+// 各ルート側のチェックは残す（この関門が万一無効化されても素通りさせないため）。
 //
 // 【原則】「ログイン画面を出すこと」と「中身を見せること」は別。
-// ここで通すのはログインに至るために必要な最小限のパスだけで、
-// 中身（院内データ）の保護は各APIのログイン必須チェック（401）が引き続き担保する。
+// ここで通すのはログインに至るために必要な最小限のパスだけ。
 //
 // 【158の続き】/admin 配下は管理者以外に **実在しない固定パスへ rewrite**。
 // 実在ページも存在しないパスもまったく同じ404本文になり、存在が漏れない。
 //
-// 【判定できないとき】通さない（ログイン画面へ）。
+// 【判定できないとき】通さない（ページ=ログイン画面へ／API=401）。
 // 万一セッション判定に失敗しても、利用者はログインし直せば入れる。
 
 import { createServerClient } from "@supabase/ssr";
@@ -34,15 +37,46 @@ const HIDDEN_PATH = "/__not_found__";
  */
 const PUBLIC_PATHS = ["/login", "/reset-password", "/join"];
 
+/**
+ * 未ログインでも通す **API**（161）。ここに無いAPIはすべて401で止まる。
+ * 追加するときは「なぜCookieセッションで守れないのか」を必ず書くこと。
+ *
+ * - /api/join
+ *     招待コードでの登録。ログイン前にしか呼ばれない。
+ *     コード一致が必須＋同一IPのレート制限あり（route.ts 側）。
+ * - /api/cron/
+ *     Vercel Cron からの呼び出し。**Cookieを持たない**ためセッションで守れない。
+ *     CRON_SECRET 必須（未設定なら誰も実行できない fail-closed）。
+ * - /api/hr-chat-knowledge
+ *     ai-incho からのサーバー間呼び出し。同じくCookieを持たない。
+ *     HR_CHAT_KNOWLEDGE_TOKEN 必須（未設定=404・不一致=401 の fail-close）。
+ */
+const PUBLIC_API_PATHS = [
+  "/api/join",
+  "/api/cron/",
+  "/api/hr-chat-knowledge",
+];
+
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`)
   );
 }
 
+function isPublicApiPath(pathname: string): boolean {
+  return PUBLIC_API_PATHS.some(
+    (p) => pathname === p || pathname.startsWith(p.endsWith("/") ? p : `${p}/`)
+  );
+}
+
+// 未認証のAPI応答。**全APIで同一**にする（応答の違いからルートの存在を推測させない）。
+const apiUnauthorized = () =>
+  NextResponse.json({ error: "ログインが必要です" }, { status: 401 });
+
 export async function proxy(request: NextRequest) {
   const response = NextResponse.next();
   const { pathname, search } = request.nextUrl;
+  const isApi = pathname === "/api" || pathname.startsWith("/api/");
 
   let user = null;
   try {
@@ -75,6 +109,14 @@ export async function proxy(request: NextRequest) {
     );
   }
 
+  // API（161）: 明示した例外以外は、未ログインなら一律401でここで止める。
+  // ルートの中身（存在秘匿の404など）はログイン済みの人にだけ見せる。
+  if (isApi) {
+    if (isPublicApiPath(pathname)) return response;
+    if (!user) return apiUnauthorized();
+    return response;
+  }
+
   // 管理画面: 管理者以外は存在しないパスと同じ404にする（158）
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
     if (isAdminUser(user)) return response;
@@ -96,9 +138,9 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // ページだけを対象にする。API（各ルートが自前でログイン必須を判定している）と
-  // 静的ファイルは対象外＝二重に判定して遅くしない。
+  // 161: **APIもここを通す**（160までは api/ を除外していた＝18本が素通りだった）。
+  // 除外は静的アセットのみ。
   matcher: [
-    "/((?!api/|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json|webmanifest)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json|webmanifest)$).*)",
   ],
 };

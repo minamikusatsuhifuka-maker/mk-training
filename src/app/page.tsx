@@ -88,35 +88,23 @@ const NEWS_CATEGORY_CHOICES: { value: NewsCategory; label: string }[] = [
 
 // キャラ選択肢は lib/character-order.ts に集約（指示書137・並び順は管理画面で変更可能）
 
-// ─── 初期データ（Supabaseが空のときのフォールバック） ───
-const DEFAULT_NEWS: NewsItem[] = [
-  {
-    id: "1",
-    title: "スタッフポータルへようこそ",
-    category: "notice",
-    author: "管理者",
-    content:
-      "新しいスタッフポータルが完成しました。新着情報・気づきシェア・ありがとうカードなどをご活用ください。",
-    createdAt: new Date().toISOString(),
-    isActive: true,
-  },
-];
+// ─── 未取得時のフォールバック（指示書161で「空」に変更） ───
+//
+// 161の真因はここだった。以前はここに実在の院内文言（お知らせ本文・投稿者名・
+// 2026年の経営方針・今日の一言）が書かれていた。
+// これらは **クライアントのJSに同梱される**ため、
+//   未ログイン → /api/content-store が401 → 取得失敗 → この既定値を表示
+// という経路で、APIが正しく401を返していても院内情報が画面に出ていた。
+// （院長が見た「投稿日」が常にアクセス時刻だったのがその証拠）
+//
+// よって、未取得時は **何も出さない**。院内の文言は必ずDB（content_store）に置き、
+// 認証を通った人だけがAPI経由で受け取る。ここに実データを書き戻さないこと。
+const DEFAULT_NEWS: NewsItem[] = [];
 
 const DEFAULT_TODAY_WORD: TodayWord = {
-  text: "「当たり前のことを、特別熱心に、しかも徹底的に行う。」",
-  author: "アチーブメント 成功の八原則 第八原則",
-  updatedAt: new Date().toISOString(),
-};
-
-const DEFAULT_POLICY: PolicyItem = {
-  id: "2026",
-  year: 2026,
-  purpose: "肌すこやかに、心かろやかに — 大切な人生を次のステージへ",
-  mission: "患者様の人生好転・物心両面の幸福への貢献",
-  vision: "ティール組織・全員主役・自律型生命体",
-  value: "凡事徹底・先払い・インサイドアウト",
-  fullText: "",
-  isActive: true,
+  text: "",
+  author: "",
+  updatedAt: "",
 };
 
 // ─── カテゴリ別スタイル ───
@@ -287,9 +275,8 @@ export default function PortalHome() {
   }, []);
   const [hiyariItems, setHiyariItems] = useState<HiyariItem[]>([]);
   const [thankyouItems, setThankyouItems] = useState<ThankyouItem[]>([]);
-  const [activePolicy, setActivePolicy] = useState<PolicyItem | null>(
-    DEFAULT_POLICY
-  );
+  // 161: 未取得のうちは null（カードごと非表示）。既定値に院内文言を持たせない。
+  const [activePolicy, setActivePolicy] = useState<PolicyItem | null>(null);
   const [todayWord, setTodayWord] = useState<TodayWord>(DEFAULT_TODAY_WORD);
 
   // ホーム画面のセクション表示順（管理画面「ポータル管理→レイアウト」で編集）
@@ -447,7 +434,7 @@ export default function PortalHome() {
         loadPortalItems<ArchivedNewsItem>(PORTAL_KEYS.newsArchive, []),
         loadPortalItems<HiyariItem>(PORTAL_KEYS.hiyari, []),
         loadPortalItems<ThankyouItem>(PORTAL_KEYS.thankyou, []),
-        loadPortalItems<PolicyItem>(PORTAL_KEYS.policy, [DEFAULT_POLICY]),
+        loadPortalItems<PolicyItem>(PORTAL_KEYS.policy, []),
         loadTodayWord(DEFAULT_TODAY_WORD),
         loadCharacterSettings(),
         loadPortalItems<HomeSectionConfig>(
@@ -622,13 +609,18 @@ export default function PortalHome() {
           )}
         </div>
 
-        <div className="mt-4 p-4 bg-teal-50 rounded-xl border border-teal-100">
-          <p className="text-xs font-medium text-teal-600 mb-2">今日の一言</p>
-          <p className="text-sm text-teal-900 leading-relaxed max-w-prose">
-            {todayWord.text}
-          </p>
-          <p className="text-xs text-teal-600 mt-2">— {todayWord.author}</p>
-        </div>
+        {/* 161: 未取得（未ログイン・通信失敗）のときは枠ごと出さない */}
+        {todayWord.text && (
+          <div className="mt-4 p-4 bg-teal-50 rounded-xl border border-teal-100">
+            <p className="text-xs font-medium text-teal-600 mb-2">今日の一言</p>
+            <p className="text-sm text-teal-900 leading-relaxed max-w-prose">
+              {todayWord.text}
+            </p>
+            {todayWord.author && (
+              <p className="text-xs text-teal-600 mt-2">— {todayWord.author}</p>
+            )}
+          </div>
+        )}
       </section>
     ),
     // 141: 当月未設定なら null（カードごと非表示）

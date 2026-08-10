@@ -7,11 +7,16 @@ import { NextResponse } from "next/server";
 import { generateText, stripCodeFence } from "@/lib/deep-research/gemini-research";
 import { getPatientSheetPrompt } from "@/lib/deep-research/prompts";
 import { getAiBackgroundBlock } from "@/lib/ai-background";
+import { requireLogin } from "@/lib/require-login";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 export async function POST(request: Request) {
+  // 161: ログイン必須（関門は proxy.ts。ここは関門が外れたときの二重の歯止め）
+  const gate = await requireLogin();
+  if (gate.response) return gate.response;
+
   try {
     const { topic, content } = await request.json();
     if (!topic || !content) {

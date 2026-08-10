@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSelectedGeminiModel, GEMINI_THINKING_CONFIG } from "@/lib/gemini-models";
 import { normalizeParsedTask, type ParsedTask } from "@/lib/staff-tasks";
+import { requireLogin } from "@/lib/require-login";
 
 // edge は使わない（GEMINI_API_KEY を使う Node 実行）
 export const runtime = "nodejs";
@@ -86,6 +87,10 @@ function parseJsonArrayLoose(raw: string): unknown[] {
 }
 
 export async function POST(req: NextRequest) {
+  // 161: ログイン必須（関門は proxy.ts。ここは関門が外れたときの二重の歯止め）
+  const gate = await requireLogin();
+  if (gate.response) return gate.response;
+
   try {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey)
