@@ -1,22 +1,19 @@
-// 管理画面の秘匿（指示書158-D）
+// 入口の制御（指示書160: 未ログインはログイン画面へ／指示書158: 管理画面の秘匿）
 //
-// 要件は「404を返すこと」ではなく **「全パスで応答が同一であること」**。
-// ページ側で notFound() を返すだけでは、実在ページはレイアウトのスクリプトを含む
-// 大きな404、存在しないパスは小さな404となり **本文の大きさで実在が分かってしまう**
-// （157→158の実測: 79KB と 28KB）。
+// 【160で直したこと】
+// これまで未ログインでも全ページが開けたため、「ログイン画面に入る導線」が
+// どこにも出ていなかった（サイドメニューだけが見えている状態）。
+// 未ログインのページアクセスは **すべて /login へ送る**。
 //
-// そこで管理者以外の /admin/* へのアクセスは、ページに到達させる前に
-// **実在しない固定パスへ rewrite** する。こうすると実在ページも存在しないパスも
-// まったく同じ404本文になり、区別する手がかりが残らない。
+// 【原則】「ログイン画面を出すこと」と「中身を見せること」は別。
+// ここで通すのはログインに至るために必要な最小限のパスだけで、
+// 中身（院内データ）の保護は各APIのログイン必須チェック（401）が引き続き担保する。
 //
-// - 管理者のみ通過（user_metadata.role === "admin"）
-// - 未ログインと非管理者を分けない（分けると分けた側から存在が漏れる）
-// - 判定できないときは通さない（fail-close）
+// 【158の続き】/admin 配下は管理者以外に **実在しない固定パスへ rewrite**。
+// 実在ページも存在しないパスもまったく同じ404本文になり、存在が漏れない。
 //
-// 注意: 管理者が0人の状態からの復旧は、この経路では行えない
-// （/admin の初回セットアップ画面にも到達しなくなる）。復旧は Supabase 側で
-// user_metadata.role に "admin" を入れるか、/api/admin/staff-accounts の
-// ブートストラップAPI（middleware の対象外）を使う。
+// 【判定できないとき】通さない（ログイン画面へ）。
+// 万一セッション判定に失敗しても、利用者はログインし直せば入れる。
 
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
@@ -28,15 +25,30 @@ import { isAdminUser } from "@/lib/admin-role";
 /** rewrite 先。実在しないパスなら何でもよいが、固定にして応答を1種類に揃える */
 const HIDDEN_PATH = "/__not_found__";
 
-// Next.js 16 では middleware は proxy に改称された（middleware のままだと非推奨警告が出る）
+/**
+ * 未ログインでも通すパス（ログインに至るための最小限）。
+ * - /login          ログイン・パスワード再設定の申し込み
+ * - /reset-password 招待メール／再設定メールのリンク先
+ * - /join           招待コードでの登録（コードが無ければ登録できない）
+ * 上記以外は、ページであれば /login へ送る。
+ */
+const PUBLIC_PATHS = ["/login", "/reset-password", "/join"];
+
+function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PATHS.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`)
+  );
+}
+
 export async function proxy(request: NextRequest) {
   const response = NextResponse.next();
+  const { pathname, search } = request.nextUrl;
 
-  let isAdmin = false;
+  let user = null;
   try {
     const supabase = createServerClient(
       // 環境変数の前後に改行・空白が混ざっていても判定に失敗しないようにする
-      //（判定に失敗すると管理者まで締め出されるため）
+      //（判定に失敗すると全員がログイン画面に送られてしまうため）
       (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim(),
       (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim(),
       {
@@ -53,20 +65,40 @@ export async function proxy(request: NextRequest) {
       }
     );
     const { data } = await supabase.auth.getUser();
-    isAdmin = isAdminUser(data.user);
+    user = data.user;
   } catch (e) {
-    isAdmin = false; // 判定できない＝通さない
-    // 管理者まで締め出される事態に気づけるようログに残す（Vercelのログで確認できる）
+    user = null;
+    // 全員が入れない事態に気づけるようログに残す（Vercelのログで確認できる）
     console.error(
-      "[proxy] 管理者判定に失敗しました:",
+      "[proxy] セッション判定に失敗しました:",
       e instanceof Error ? e.message : e
     );
   }
 
-  if (isAdmin) return response;
-  return NextResponse.rewrite(new URL(HIDDEN_PATH, request.url));
+  // 管理画面: 管理者以外は存在しないパスと同じ404にする（158）
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+    if (isAdminUser(user)) return response;
+    return NextResponse.rewrite(new URL(HIDDEN_PATH, request.url));
+  }
+
+  // ログインに至るためのパスは素通し
+  if (isPublicPath(pathname)) return response;
+
+  // それ以外のページは、未ログインならログイン画面へ（元のURLは next で引き継ぐ）
+  if (!user) {
+    const url = new URL("/login", request.url);
+    const target = `${pathname}${search}`;
+    if (target && target !== "/") url.searchParams.set("next", target);
+    return NextResponse.redirect(url);
+  }
+
+  return response;
 }
 
 export const config = {
-  matcher: ["/admin", "/admin/:path*"],
+  // ページだけを対象にする。API（各ルートが自前でログイン必須を判定している）と
+  // 静的ファイルは対象外＝二重に判定して遅くしない。
+  matcher: [
+    "/((?!api/|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json|webmanifest)$).*)",
+  ],
 };

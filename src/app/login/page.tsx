@@ -1,20 +1,35 @@
 "use client";
 
 // スタッフログイン（メール＋パスワード、Supabase Auth・招待制）
-// 段階導入②: ポータル閲覧にログインは不要。プロフィール編集系のみ要ログイン。
+//
+// 160: ここは「新しい人が最初に開く画面」なので、**サーバー側のHTMLに
+// フォームがそのまま入っている**ことを最優先にする。
+// 以前は useSearchParams を使っていたため Next.js がクライアント描画に切り替わり
+// （BAILOUT_TO_CLIENT_SIDE_RENDERING）、JSが動くまで画面が空になっていた。
+// 遷移先（next）は送信時に window.location から読むだけで足りるので、
+// useSearchParams と Suspense をやめてサーバー描画できる形にしている。
 
-import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+/**
+ * ログイン後の遷移先。`?next=` が付いていればそこへ戻す。
+ * レンダー中ではなく送信時に読むので、サーバー描画を妨げない。
+ * 外部サイトへ飛ばされないよう「/」で始まるパスだけを受け付ける。
+ */
+function nextPath(): string {
+  if (typeof window === "undefined") return "/";
+  const raw = new URLSearchParams(window.location.search).get("next") ?? "";
+  return raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
+}
+
 function LoginForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const next = searchParams.get("next") || "/profile";
 
   const [mode, setMode] = useState<"login" | "reset">("login");
   const [email, setEmail] = useState("");
@@ -41,7 +56,7 @@ function LoginForm() {
       );
       return;
     }
-    router.push(next);
+    router.push(nextPath());
     router.refresh();
   };
 
@@ -155,11 +170,8 @@ function LoginForm() {
             招待コードで登録 →
           </Link>
           <br />
-          ポータルの閲覧はログインなしでも
-          <Link href="/" className="underline underline-offset-2 mx-0.5">
-            こちら
-          </Link>
-          から利用できます。
+          {/* 160: ログインなしでは閲覧できなくなったため、旧「ログインなしでも閲覧できます」の案内は削除 */}
+          ポータルのご利用にはログインが必要です。
         </p>
       </div>
     </div>
@@ -167,9 +179,5 @@ function LoginForm() {
 }
 
 export default function LoginPage() {
-  return (
-    <Suspense fallback={null}>
-      <LoginForm />
-    </Suspense>
-  );
+  return <LoginForm />;
 }
