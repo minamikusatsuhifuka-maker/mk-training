@@ -3,17 +3,24 @@
 // QR/URLからのスタッフ自己登録ページ（指示書55）
 // 院内で共有された招待コード＋名前＋メール＋パスワードで登録 →
 // 自動ログインして /profile へ。部外者は招待コードなしでは登録できない。
+//
+// 【162で直したこと】
+// この画面には「ポータルの閲覧はログインなしでも こちら」というホームへのリンクが
+// 残っていた（160でログインなしの閲覧を廃止したのに、案内だけが取り残されていた）。
+// <Link> は本番でリンク先を先読みするため、**未ログイン時のホームの判定
+// （ログイン画面へ戻す307）がクライアントに記録され**、登録・ログインに成功した
+// あともホームに入れない原因になっていた。案内は削除し、登録後の遷移は
+// 画面ごと読み込み直す（reloadTo）ことで、記録された判定を確実に捨てる。
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { reloadTo } from "@/lib/auth-navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export default function JoinPage() {
-  const router = useRouter();
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -67,11 +74,14 @@ export default function JoinPage() {
       });
       if (signInError) {
         // 作成は成功しているのでログインページへ誘導
-        router.push("/login?next=/profile");
+        reloadTo("/login?next=/profile");
         return;
       }
-      router.push("/profile");
-      router.refresh();
+      // 162: router.push ではなく画面ごと読み込み直す。
+      // ここを通ることで、ログイン前に先読みされた「ログイン画面へ戻す」判定が
+      // すべて捨てられ、以降どのメニューへ進んでもログインを求められない。
+      // welcome=1 は初回の案内（ホームへ進む導線）を出すための目印。
+      reloadTo("/profile?welcome=1");
     } finally {
       setBusy(false);
     }
@@ -185,11 +195,10 @@ export default function JoinPage() {
           </Link>
           へ。
           <br />
-          ポータルの閲覧はログインなしでも
-          <Link href="/" className="underline underline-offset-2 mx-0.5">
-            こちら
-          </Link>
-          から利用できます。
+          {/* 162: 旧「ポータルの閲覧はログインなしでも こちら」を削除。
+              160でログインなしの閲覧は廃止済みで案内自体が誤りだったうえ、
+              ホームへのリンクの先読みが登録後の締め出しを起こしていた。 */}
+          ポータルのご利用にはログインが必要です。
         </p>
       </div>
     </div>

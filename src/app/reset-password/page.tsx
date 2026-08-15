@@ -6,15 +6,14 @@
 // 自動検出してセッション化するので、セッション確立を待ってからパスワードを更新する。
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { reloadTo } from "@/lib/auth-navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export default function ResetPasswordPage() {
-  const router = useRouter();
   const [ready, setReady] = useState<"checking" | "ok" | "no-session">(
     "checking"
   );
@@ -78,8 +77,9 @@ export default function ResetPasswordPage() {
       setError(`設定に失敗しました: ${error.message}`);
       return;
     }
-    router.push("/profile");
-    router.refresh();
+    // 162: ここも認証状態が変わる遷移なので画面ごと読み込み直す
+    //（ログイン前に先読みされた判定を残さない。詳細は src/lib/auth-navigation.ts）
+    reloadTo("/profile?welcome=1");
   };
 
   return (

@@ -10,9 +10,9 @@
 // useSearchParams と Suspense をやめてサーバー描画できる形にしている。
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { reloadTo } from "@/lib/auth-navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,8 +29,6 @@ function nextPath(): string {
 }
 
 function LoginForm() {
-  const router = useRouter();
-
   const [mode, setMode] = useState<"login" | "reset">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -56,8 +54,9 @@ function LoginForm() {
       );
       return;
     }
-    router.push(nextPath());
-    router.refresh();
+    // 162: 画面ごと読み込み直す。ログイン前に先読みされた「ログイン画面へ戻す」判定が
+    // クライアントに残っていても、ここで確実に捨てられる。
+    reloadTo(nextPath());
   };
 
   const handleReset = async (e: React.FormEvent) => {

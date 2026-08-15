@@ -6,6 +6,7 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +76,17 @@ export default function ProfilePage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [dragOver, setDragOver] = useState(false);
+
+  // 162: 登録直後だけ出す「ようこそ」案内。
+  // 登録後にここへ来るのは以前からの設計だが、案内が無いため
+  // 「ホームに着いていない」ことが本人に伝わらなかった。
+  // useSearchParams は使わない（160: サーバー描画をやめてしまい初回が空白になる）。
+  const [welcome, setWelcome] = useState(false);
+  useEffect(() => {
+    setWelcome(
+      new URLSearchParams(window.location.search).get("welcome") === "1"
+    );
+  }, []);
 
   // パスワード変更（仮パスワードでログインした人が自分で変更できるように）
   const [newPassword, setNewPassword] = useState("");
@@ -547,6 +559,41 @@ export default function ProfilePage() {
         title="👤 マイプロフィール"
         description="メンバー紹介ページに表示される自分のプロフィールを編集します"
       />
+
+      {/* 162: 登録直後の案内。朝礼など限られた時間でも足止めされないよう、
+          入力は必須にせず、ホームへ進む導線をここで明示する。 */}
+      {welcome && (
+        <div className="rounded-lg border border-teal/30 bg-teal-light/40 p-4 space-y-3">
+          <div className="space-y-1">
+            <h2 className="text-sm font-semibold text-teal">
+              🎉 ようこそ{profile.name ? `、${profile.name}さん` : ""}
+            </h2>
+            <p className="text-xs text-foreground/80 leading-relaxed">
+              登録が完了し、<strong>ログインした状態</strong>
+              です。この先はログインを求められません。
+              <br />
+              ここはあなたのプロフィール画面です。
+              <strong>入力は必須ではありません</strong>
+              。あとからいつでも設定できます。
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-teal px-4 text-sm font-medium text-white min-h-[44px] hover:opacity-90 transition-opacity"
+            >
+              <span>🏠</span>
+              <span>ホームへ進む</span>
+            </Link>
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center rounded-md px-3 text-xs text-muted-foreground min-h-[44px] underline underline-offset-2 hover:text-foreground"
+            >
+              あとで設定する
+            </Link>
+          </div>
+        </div>
+      )}
 
       {(message || error) && (
         <p

@@ -73,6 +73,22 @@ function isPublicApiPath(pathname: string): boolean {
 const apiUnauthorized = () =>
   NextResponse.json({ error: "ログインが必要です" }, { status: 401 });
 
+/**
+ * getUser() が更新したセッションCookieを、これから返す応答に引き継ぐ（162）。
+ *
+ * getUser() は有効期限が近いトークンをその場で更新することがある。更新すると
+ * **前のリフレッシュトークンは使えなくなる**（Supabaseは更新のたびに入れ替える）。
+ * 更新後のCookieは NextResponse.next() の側に書かれるため、redirect や rewrite、
+ * 401 を返す経路では **書き戻しが捨てられ、利用者の手元には無効になった古い
+ * トークンだけが残る**＝次の操作から突然ログアウトする。
+ *
+ * どの応答を返す場合も、必ずここを通して更新分を引き継ぐ。
+ */
+function withSession<T extends NextResponse>(from: NextResponse, to: T): T {
+  for (const cookie of from.cookies.getAll()) to.cookies.set(cookie);
+  return to;
+}
+
 export async function proxy(request: NextRequest) {
   const response = NextResponse.next();
   const { pathname, search } = request.nextUrl;
@@ -113,14 +129,17 @@ export async function proxy(request: NextRequest) {
   // ルートの中身（存在秘匿の404など）はログイン済みの人にだけ見せる。
   if (isApi) {
     if (isPublicApiPath(pathname)) return response;
-    if (!user) return apiUnauthorized();
+    if (!user) return withSession(response, apiUnauthorized());
     return response;
   }
 
   // 管理画面: 管理者以外は存在しないパスと同じ404にする（158）
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
     if (isAdminUser(user)) return response;
-    return NextResponse.rewrite(new URL(HIDDEN_PATH, request.url));
+    return withSession(
+      response,
+      NextResponse.rewrite(new URL(HIDDEN_PATH, request.url))
+    );
   }
 
   // ログインに至るためのパスは素通し
@@ -131,7 +150,12 @@ export async function proxy(request: NextRequest) {
     const url = new URL("/login", request.url);
     const target = `${pathname}${search}`;
     if (target && target !== "/") url.searchParams.set("next", target);
-    return NextResponse.redirect(url);
+    const redirect = NextResponse.redirect(url);
+    // 162: 「ログインが必要」という判定を保存させない。
+    // この応答が先読み（プリフェッチ）で取得されて残ると、ログイン後も
+    // その判定が使われて締め出しが続く（詳細は src/lib/auth-navigation.ts）。
+    redirect.headers.set("Cache-Control", "no-store, must-revalidate");
+    return withSession(response, redirect);
   }
 
   return response;

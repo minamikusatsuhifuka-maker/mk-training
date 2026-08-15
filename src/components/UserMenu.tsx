@@ -5,9 +5,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { reloadTo } from "@/lib/auth-navigation";
 
 function displayNameOf(user: User): string {
   const meta = user.user_metadata as Record<string, unknown> | null;
@@ -16,7 +16,6 @@ function displayNameOf(user: User): string {
 }
 
 export function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
-  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -37,8 +36,11 @@ export function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
     const supabase = getSupabaseBrowserClient();
     await supabase.auth.signOut();
     onNavigate?.();
-    router.push("/");
-    router.refresh();
+    // 162: 画面ごと読み込み直してログイン画面へ。
+    // router.push だとログイン中に読み込んだ画面がクライアント側に残るため、
+    // ログアウト後に戻る操作で中身が見えうる（閉じる方向の是正）。
+    // 行き先が / ではなく /login なのは、/ は未ログインでは開けないため（160）。
+    reloadTo("/login");
   };
 
   if (!loaded) return null;
