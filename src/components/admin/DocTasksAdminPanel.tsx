@@ -7,11 +7,14 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchDocTasksConfig, type DocTasksConfig } from "@/lib/doc-tasks";
 import { DocTasksSettings } from "@/components/DocTasksSettings";
+import { DocTaskLogsPanel } from "@/components/admin/DocTaskLogsPanel";
 import { loadProfilesIndex } from "@/lib/staff-profiles";
 import type { StaffProfileIndexEntry } from "@/lib/staff-profiles";
 
 export function DocTasksAdminPanel() {
   const [config, setConfig] = useState<DocTasksConfig | null>(null);
+  // 159-A: 公開範囲。読めるまでは既定（指名した人だけ）として扱う
+  const [scope, setScope] = useState("listed");
   const [members, setMembers] = useState<StaffProfileIndexEntry[]>([]);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
@@ -22,7 +25,8 @@ export function DocTasksAdminPanel() {
         fetchDocTasksConfig(),
         loadProfilesIndex(),
       ]);
-      setConfig(cfg);
+      setConfig(cfg.config);
+      setScope(cfg.scope);
       setMembers(idx);
       setError("");
     } catch (e) {
@@ -66,17 +70,26 @@ export function DocTasksAdminPanel() {
       {config ? (
         <DocTasksSettings
           config={config}
+          scope={scope}
           members={members}
           alwaysOpen
-          onSaved={(next) => {
+          onSaved={(next, nextScope) => {
             setConfig(next);
-            setMsg("💾 設定を保存しました");
+            setScope(nextScope);
+            setMsg(
+              nextScope === "everyone"
+                ? "💾 設定を保存しました（このボードは「全員」が開ける状態です）"
+                : "💾 設定を保存しました"
+            );
           }}
           onError={setError}
         />
       ) : (
         !error && <p className="text-xs text-gray-500">読み込み中…</p>
       )}
+
+      {/* 159-B: 操作ログ（管理者のみ・時系列一覧） */}
+      <DocTaskLogsPanel />
     </div>
   );
 }

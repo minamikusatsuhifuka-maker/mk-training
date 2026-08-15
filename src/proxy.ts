@@ -29,6 +29,18 @@ import { isAdminUser } from "@/lib/admin-role";
 const HIDDEN_PATH = "/__not_found__";
 
 /**
+ * 159-D: /api/admin 配下の rewrite 先（**実在しないAPIパス**）。
+ *
+ * 158でページ側は区別不能になったが、APIが401/403を返していると、
+ * そこから「そのルートが実在すること」が漏れる。ページだけ閉じてAPIが開いていては
+ * 片手落ちなので、非管理者には**存在しないAPIパスと同じ応答**を返す。
+ *
+ * 要件の本体は「404を返すこと」ではなく **「全パスで応答が同一であること」**（159-D-2）。
+ * 実在するAPIも存在しないAPIも、ここへ rewrite された同じ結果になる。
+ */
+const HIDDEN_API_PATH = "/api/__not_found__";
+
+/**
  * 未ログインでも通すパス（ログインに至るための最小限）。
  * - /login          ログイン・パスワード再設定の申し込み
  * - /reset-password 招待メール／再設定メールのリンク先
@@ -61,6 +73,11 @@ function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`)
   );
+}
+
+/** 159-D: 管理者専用API（/api/admin 配下） */
+function isAdminApiPath(pathname: string): boolean {
+  return pathname === "/api/admin" || pathname.startsWith("/api/admin/");
 }
 
 function isPublicApiPath(pathname: string): boolean {
@@ -130,6 +147,15 @@ export async function proxy(request: NextRequest) {
   if (isApi) {
     if (isPublicApiPath(pathname)) return response;
     if (!user) return withSession(response, apiUnauthorized());
+    // 159-D: /api/admin 配下は、管理者以外には**実在しないAPIと同じ応答**にする。
+    // ページ側（/admin）と同じ手法。ここを通さないと、ログイン済みの非管理者に対して
+    // 実在ルートは401/403・非実在ルートは404となり、応答の違いから存在が分かる。
+    if (isAdminApiPath(pathname) && !isAdminUser(user)) {
+      return withSession(
+        response,
+        NextResponse.rewrite(new URL(HIDDEN_API_PATH, request.url))
+      );
+    }
     return response;
   }
 

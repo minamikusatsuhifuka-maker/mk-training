@@ -8,6 +8,7 @@
 import { NextResponse } from "next/server";
 import {
   authorizeDocTasks,
+  recordDocTaskLog,
   saveDocTasksConfig,
   DocTasksTableMissingError,
   ServiceRoleMissingError,
@@ -16,8 +17,16 @@ import {
   normalizeDocTasksConfig,
   type DocTasksConfig,
 } from "@/lib/doc-tasks";
-import { saveMenuAllowedUserIds } from "@/lib/menu-access-server";
-import { MENU_DOC_TASKS } from "@/lib/menu-access";
+import {
+  saveMenuAllowedUserIds,
+  saveMenuScope,
+} from "@/lib/menu-access-server";
+import {
+  MENU_DOC_TASKS,
+  MENU_SCOPE_EVERYONE,
+  MENU_SCOPE_LISTED,
+  scopeLabel,
+} from "@/lib/menu-access";
 
 export const runtime = "nodejs";
 
@@ -27,7 +36,8 @@ const hidden = () => NextResponse.json({ error: "Not Found" }, { status: 404 });
 export async function GET() {
   const auth = await authorizeDocTasks();
   if (!auth.ok || !auth.isAdmin) return hidden();
-  return NextResponse.json({ config: auth.config });
+  // 159-A: 公開範囲は menu_access 側にあるので併せて返す
+  return NextResponse.json({ config: auth.config, scope: auth.scope });
 }
 
 export async function PUT(req: Request) {
@@ -60,6 +70,15 @@ export async function PUT(req: Request) {
       : [...merged.viewerUserIds, auth.userId],
   };
 
+  // 159-A: 公開範囲。**"everyone" と明示されたときだけ**全員にする。
+  // 送られてこなければ今の値のまま（他の設定を保存しただけで範囲が変わらないように）。
+  const nextScope =
+    "scope" in body
+      ? body.scope === MENU_SCOPE_EVERYONE
+        ? MENU_SCOPE_EVERYONE
+        : MENU_SCOPE_LISTED
+      : auth.scope;
+
   try {
     const by = auth.userEmail || auth.userId;
     // 158: 指名リストの保存先は menu_access だけ。
@@ -68,8 +87,25 @@ export async function PUT(req: Request) {
     if ("viewerUserIds" in body) {
       await saveMenuAllowedUserIds(MENU_DOC_TASKS, config.viewerUserIds, by);
     }
+    if ("scope" in body && nextScope !== auth.scope) {
+      await saveMenuScope(MENU_DOC_TASKS, nextScope, by);
+      // 159-B: 公開範囲の変更そのものを操作ログに残す（誰がいつ開けたか）
+      await recordDocTaskLog(auth.admin, {
+        by,
+        action: "設定変更",
+        chartNo: "",
+        docType: "",
+        changes: [
+          {
+            field: "このボードを開ける人",
+            before: scopeLabel(auth.scope),
+            after: scopeLabel(nextScope),
+          },
+        ],
+      });
+    }
     await saveDocTasksConfig(auth.admin, { ...config, viewerUserIds: [] }, by);
-    return NextResponse.json({ ok: true, config });
+    return NextResponse.json({ ok: true, config, scope: nextScope });
   } catch (e) {
     if (e instanceof DocTasksTableMissingError) {
       return NextResponse.json(

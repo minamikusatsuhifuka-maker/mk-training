@@ -18,9 +18,31 @@ export const MENU_ACCESS_KEY = "menu_access";
 /** メニューキー（＝将来ここに行が増える） */
 export const MENU_DOC_TASKS = "doc-tasks";
 
+/**
+ * 公開範囲（指示書159-A）。
+ * - listed   … 指名した人だけ（＝157/158からの現行動作）。**既定**
+ * - everyone … ログイン済み・有効なアカウント全員
+ *
+ * 未設定・不明な値は必ず listed に倒す（開ける方向に倒さない）。
+ */
+export type MenuScope = "listed" | "everyone";
+
+export const MENU_SCOPE_LISTED: MenuScope = "listed";
+export const MENU_SCOPE_EVERYONE: MenuScope = "everyone";
+
+/** 画面と操作ログで使う表示名（表記を1か所に揃える） */
+export function scopeLabel(scope: MenuScope): string {
+  return scope === MENU_SCOPE_EVERYONE ? "全員" : "指名した人だけ";
+}
+
 export type MenuAccessEntry = {
   /** 指名されたアカウント。空＝管理者のみ */
   allowed_user_ids: string[];
+  /**
+   * 159-A: 公開範囲。**保存済みデータには無いので、無ければ listed とみなす**
+   * （既存環境が勝手に「全員」へ広がらないようにするため）。
+   */
+  scope: MenuScope;
 };
 
 export type MenuAccessConfig = {
@@ -61,7 +83,12 @@ export function normalizeMenuAccess(raw: unknown): MenuAccessConfig {
       string,
       unknown
     >;
-    menus[key] = { allowed_user_ids: normalizeIds(entry.allowed_user_ids) };
+    menus[key] = {
+      allowed_user_ids: normalizeIds(entry.allowed_user_ids),
+      // 159-A: "everyone" と**明示的に**書かれているときだけ全員。
+      // 未設定・想定外の値・壊れた値はすべて listed（＝指名した人だけ）に倒す。
+      scope: entry.scope === MENU_SCOPE_EVERYONE ? MENU_SCOPE_EVERYONE : MENU_SCOPE_LISTED,
+    };
   }
   return {
     menus,
@@ -82,6 +109,16 @@ export function menuAllowedUserIds(
   return entry ? entry.allowed_user_ids : null;
 }
 
+/**
+ * そのメニューの公開範囲（159-A）。**キーが無ければ listed**。
+ * 「未設定なら全員」には絶対にしない。
+ */
+export function menuScope(cfg: MenuAccessConfig, menuKey: string): MenuScope {
+  return cfg.menus[menuKey]?.scope === MENU_SCOPE_EVERYONE
+    ? MENU_SCOPE_EVERYONE
+    : MENU_SCOPE_LISTED;
+}
+
 export function withMenuAllowedUserIds(
   cfg: MenuAccessConfig,
   menuKey: string,
@@ -90,7 +127,29 @@ export function withMenuAllowedUserIds(
   return {
     menus: {
       ...cfg.menus,
-      [menuKey]: { allowed_user_ids: normalizeIds(userIds) },
+      [menuKey]: {
+        allowed_user_ids: normalizeIds(userIds),
+        // 指名リストだけを変えるときは、公開範囲は今の値を保つ
+        scope: menuScope(cfg, menuKey),
+      },
+    },
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/** 公開範囲だけを変える（指名リストは保つ）。159-A */
+export function withMenuScope(
+  cfg: MenuAccessConfig,
+  menuKey: string,
+  scope: MenuScope
+): MenuAccessConfig {
+  return {
+    menus: {
+      ...cfg.menus,
+      [menuKey]: {
+        allowed_user_ids: cfg.menus[menuKey]?.allowed_user_ids ?? [],
+        scope: scope === MENU_SCOPE_EVERYONE ? MENU_SCOPE_EVERYONE : MENU_SCOPE_LISTED,
+      },
     },
     updatedAt: new Date().toISOString(),
   };

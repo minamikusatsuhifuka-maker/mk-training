@@ -130,6 +130,77 @@ export type DocTaskHistoryEntry = {
   action: string; // 「郵送済み を ✓」など短文
 };
 
+// ─── 操作ログ（指示書159-B）───
+//
+// 【既存の history と何が違うか】
+// history はタスクのレコード内に埋まっていて、
+//   ・タスクを削除すると一緒に消える（削除の記録が残らない）
+//   ・HISTORY_MAX=50 で古いものから切り捨てられる
+//   ・ボードを開ける人には見える（159-Aで「全員」にすると全職員に見える）
+// 一方この操作ログは **1操作＝1レコード**の独立した記録で、
+//   ・削除されたタスクの記録も残る
+//   ・切り捨てられない
+//   ・**管理者だけが見られる**（スタッフ向け画面には一切出さない）
+// 就業規則（正職員 第74条／準職員 第73条「パソコン通信等の管理」）で
+// 医院が調査できるとされている範囲の記録である。
+//
+// 【作らないもの（159-B-5）】
+// 人別の集計・ランキング・比較・期間別グラフ・多い少ないが分かる並び替えは**作らない**。
+// 規程が認めるのは漏洩防止と環境保全のための調査であって、評価や指導の材料ではない。
+// 閲覧は**時系列の一覧のみ**（指示書152と同じ線）。
+
+/** 変更1件（変更前 → 変更後） */
+export type DocTaskLogChange = {
+  field: string;
+  before: string;
+  after: string;
+};
+
+export type DocTaskLog = {
+  id: string;
+  /** 日時 ISO */
+  at: string;
+  /** 操作した人（メール or userId・サーバーが確定させる） */
+  by: string;
+  /** 「登録」「更新」「削除」「設定変更」 */
+  action: string;
+  /** 対象（カルテ番号）。設定変更など対象が無い操作では空 */
+  chartNo: string;
+  /** 対象（工程種別＝書類の種類） */
+  docType: string;
+  /** 変更内容（変更前 → 変更後） */
+  changes: DocTaskLogChange[];
+};
+
+/** 一覧の1ページ件数（時系列のみ・集計はしない） */
+export const DOC_TASK_LOG_PAGE_SIZE = 100;
+
+function logText(v: unknown, max: number): string {
+  return typeof v === "string" ? v.slice(0, max) : "";
+}
+
+export function normalizeDocTaskLog(id: string, raw: unknown): DocTaskLog | null {
+  if (!raw || typeof raw !== "object") return null;
+  const g = raw as Record<string, unknown>;
+  const rawChanges = Array.isArray(g.changes) ? g.changes : [];
+  return {
+    id,
+    at: logText(g.at, 40),
+    by: logText(g.by, 200),
+    action: logText(g.action, 40),
+    chartNo: logText(g.chartNo, 60),
+    docType: logText(g.docType, 40),
+    changes: rawChanges.slice(0, 40).map((c) => {
+      const e = (c && typeof c === "object" ? c : {}) as Record<string, unknown>;
+      return {
+        field: logText(e.field, 60),
+        before: logText(e.before, 200),
+        after: logText(e.after, 200),
+      };
+    }),
+  };
+}
+
 export type DocTask = {
   id: string;
   docType: DocTypeId;
@@ -583,12 +654,30 @@ export async function fetchDocTasks(): Promise<DocTasksListResponse> {
 }
 
 /** 設定だけを取得（157・管理画面用。記録は取りに行かない） */
-export async function fetchDocTasksConfig(): Promise<DocTasksConfig> {
-  const j = await callDocTasksApi<{ config: DocTasksConfig }>({
+export async function fetchDocTasksConfig(): Promise<{
+  config: DocTasksConfig;
+  /** 159-A: 公開範囲（"listed" | "everyone"）。古い応答なら listed 扱い */
+  scope: string;
+}> {
+  const j = await callDocTasksApi<{ config: DocTasksConfig; scope?: string }>({
     method: "GET",
     path: "/config",
   });
-  return j.config;
+  return { config: j.config, scope: j.scope === "everyone" ? "everyone" : "listed" };
+}
+
+/**
+ * 操作ログの取得（159-B・管理者のみ）。
+ * 返るのは新しい順の時系列だけ。集計・並び替えの引数は用意しない。
+ */
+export async function fetchDocTaskLogs(before?: string): Promise<{
+  logs: DocTaskLog[];
+  tableMissing: boolean;
+}> {
+  const qs = before ? `?before=${encodeURIComponent(before)}` : "";
+  const res = await fetch(`/api/admin/doc-task-logs${qs}`);
+  if (!res.ok) throw new Error("操作ログを取得できませんでした");
+  return (await res.json()) as { logs: DocTaskLog[]; tableMissing: boolean };
 }
 
 export type NewDocTaskInput = {
@@ -679,12 +768,12 @@ export async function sendDocTasksTestMail(): Promise<DocTasksTestMailResult> {
 }
 
 export async function saveDocTasksConfig(
-  patch: Partial<DocTasksConfig>
-): Promise<DocTasksConfig> {
-  const j = await callDocTasksApi<{ config: DocTasksConfig }>({
+  patch: Partial<DocTasksConfig> & { scope?: string }
+): Promise<{ config: DocTasksConfig; scope: string }> {
+  const j = await callDocTasksApi<{ config: DocTasksConfig; scope?: string }>({
     method: "PUT",
     path: "/config",
     body: JSON.stringify(patch),
   });
-  return j.config;
+  return { config: j.config, scope: j.scope === "everyone" ? "everyone" : "listed" };
 }

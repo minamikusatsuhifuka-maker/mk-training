@@ -23,21 +23,26 @@ import type { StaffProfileIndexEntry } from "@/lib/staff-profiles";
 
 export function DocTasksSettings({
   config,
+  scope: savedScope,
   members,
   alwaysOpen,
   onSaved,
   onError,
 }: {
   config: DocTasksConfig;
+  /** 159-A: 現在の公開範囲（"listed" | "everyone"） */
+  scope: string;
   members: StaffProfileIndexEntry[];
   /** 157: 管理画面では常に開いた状態で置く（折りたたみは使わない） */
   alwaysOpen?: boolean;
-  onSaved: (next: DocTasksConfig) => void;
+  onSaved: (next: DocTasksConfig, scope: string) => void;
   onError: (message: string) => void;
 }) {
   const [collapsed, setCollapsed] = useState(true);
   const open = alwaysOpen || !collapsed;
   const [saving, setSaving] = useState(false);
+  // 159-A: 公開範囲のモード。既定は「指名した人だけ」
+  const [scope, setScope] = useState<string>(savedScope);
   const [viewers, setViewers] = useState<string[]>(config.viewerUserIds);
   const [notifiees, setNotifiees] = useState<string[]>(config.notifyUserIds);
   const [thresholds, setThresholds] = useState<Record<DocTypeId, number>>(
@@ -106,20 +111,23 @@ export function DocTasksSettings({
         ...list,
         ...saved.filter((id) => !known.has(id)),
       ];
-      const next = await saveDocTasksConfig({
+      const saved = await saveDocTasksConfig({
+        scope,
         viewerUserIds: keepHidden(viewers, config.viewerUserIds),
         notifyUserIds: keepHidden(notifiees, config.notifyUserIds),
         notifyEmails: lines(emails),
         thresholdDays: thresholds,
         doctors: lines(doctors),
       });
+      const next = saved.config;
       setViewers(next.viewerUserIds);
       setNotifiees(next.notifyUserIds);
       setThresholds(next.thresholdDays);
       setDoctors(next.doctors.join("\n"));
       // 形式が不正なアドレスはサーバー側で落とされるので、保存後の値で入力欄を上書きする
       setEmails(next.notifyEmails.join("\n"));
-      onSaved(next);
+      setScope(saved.scope);
+      onSaved(next, saved.scope);
     } catch (e) {
       onError(e instanceof Error ? e.message : "保存に失敗しました");
     } finally {
@@ -153,11 +161,58 @@ export function DocTasksSettings({
             <p className="text-xs font-medium text-gray-800">
               🔑 このボードを開ける人
             </p>
-            <p className="text-[11px] text-gray-600 mt-0.5 leading-relaxed">
-              カルテ番号を扱うため、指名した人だけが開けます。
-              <strong>未設定のうちは管理者のみ</strong>（安全側）。
+            {/* 159-A: モードの2択。既定は「指名した人だけ」 */}
+            <div className="mt-1.5 space-y-1.5">
+              <label className="flex items-start gap-2 p-2 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                <input
+                  type="radio"
+                  name="doc-tasks-scope"
+                  className="mt-0.5"
+                  checked={scope !== "everyone"}
+                  onChange={() => setScope("listed")}
+                />
+                <span className="text-[11px] leading-relaxed">
+                  <strong className="text-sm">指名した人だけ</strong>
+                  <br />
+                  下でチェックした人と管理者だけが開けます。
+                  <strong>未設定のうちは管理者のみ</strong>（安全側）。
+                </span>
+              </label>
+              <label className="flex items-start gap-2 p-2 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                <input
+                  type="radio"
+                  name="doc-tasks-scope"
+                  className="mt-0.5"
+                  checked={scope === "everyone"}
+                  onChange={() => setScope("everyone")}
+                />
+                <span className="text-[11px] leading-relaxed">
+                  <strong className="text-sm">全員</strong>
+                  <br />
+                  ログイン済みの有効なアカウント全員が閲覧・編集できます。
+                  <strong>ログインしていない人・無効化した人は開けません。</strong>
+                </span>
+              </label>
+            </div>
+            {scope === "everyone" && (
+              <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-1.5 leading-relaxed">
+                ⚠️ ボードには<strong>カルテ番号</strong>があります。
+                自己登録（招待コード）の受付を<strong>停止したあと</strong>で
+                「全員」に切り替えてください。受付が開いている間は、
+                登録した人がそのまま開ける状態になります。
+              </p>
+            )}
+            <p className="text-[11px] text-gray-600 mt-1.5 leading-relaxed">
+              カルテ番号を扱うため、既定では指名した人だけが開けます。
               管理者はこの設定を変更できる立場のため、指名の有無にかかわらず開けます。
               保存時はあなた自身が自動的に含まれます。
+              {scope === "everyone" && (
+                <>
+                  <br />
+                  いまは<strong>「全員」モード</strong>のため、下の指名は使われません
+                  （「指名した人だけ」に戻すとそのまま効きます）。
+                </>
+              )}
             </p>
             <MemberChecklist
               members={members}
@@ -172,11 +227,18 @@ export function DocTasksSettings({
             </p>
             <p className="text-[11px] text-gray-600 mt-0.5 leading-relaxed">
               メニューの「書類進捗」に滞留件数のバッジを出します。
-              未指名のときは<strong>ボードを開ける人ぜんいん</strong>に出ます。
+              {/* 159-C: 旧「未指名のときはボードを開ける人ぜんいん」を修正。
+                  「全員」モードではそれが全職員を意味してしまうため、
+                  未指名のフォールバックを管理者のみに変えた。 */}
+              未指名のときは<strong>管理者のみ</strong>に出ます。
             </p>
             <MemberChecklist
+              // 159-A: 「全員」モードでは誰でも開けるので、指名で絞らず全員から選べる
               members={members.filter(
-                (m) => viewers.length === 0 || viewers.includes(m.userId)
+                (m) =>
+                  scope === "everyone" ||
+                  viewers.length === 0 ||
+                  viewers.includes(m.userId)
               )}
               selected={notifiees}
               onToggle={(id, checked) =>

@@ -10,11 +10,15 @@ import {
 } from "./content-store-server";
 import {
   MENU_ACCESS_KEY,
+  MENU_SCOPE_LISTED,
   emptyMenuAccess,
   menuAllowedUserIds,
+  menuScope,
   normalizeMenuAccess,
   withMenuAllowedUserIds,
+  withMenuScope,
   type MenuAccessConfig,
+  type MenuScope,
 } from "./menu-access";
 
 export async function loadMenuAccess(): Promise<MenuAccessConfig> {
@@ -33,6 +37,18 @@ export async function loadMenuAllowedUserIds(
   return menuAllowedUserIds(await loadMenuAccess(), menuKey);
 }
 
+/**
+ * そのメニューの公開範囲（159-A）。
+ * 読み取りに失敗したときは loadMenuAccess() が空を返すので listed になる（fail-close）。
+ */
+export async function loadMenuScope(menuKey: string): Promise<MenuScope> {
+  try {
+    return menuScope(await loadMenuAccess(), menuKey);
+  } catch {
+    return MENU_SCOPE_LISTED; // 例外は閉じる方向に倒す
+  }
+}
+
 export async function saveMenuAllowedUserIds(
   menuKey: string,
   userIds: string[],
@@ -40,5 +56,16 @@ export async function saveMenuAllowedUserIds(
 ): Promise<boolean> {
   const current = await loadMenuAccess();
   const next = withMenuAllowedUserIds(current, menuKey, userIds);
+  return serverPutContentRow(MENU_ACCESS_KEY, "menu_access", next, updatedBy);
+}
+
+/** 公開範囲だけを保存する（指名リストは保つ）。159-A */
+export async function saveMenuScope(
+  menuKey: string,
+  scope: MenuScope,
+  updatedBy: string
+): Promise<boolean> {
+  const current = await loadMenuAccess();
+  const next = withMenuScope(current, menuKey, scope);
   return serverPutContentRow(MENU_ACCESS_KEY, "menu_access", next, updatedBy);
 }

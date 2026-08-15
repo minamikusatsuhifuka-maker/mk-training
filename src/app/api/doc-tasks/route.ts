@@ -15,6 +15,9 @@ import {
   saveDocTaskRow,
   deleteDocTaskRow,
   buildHistoryActions,
+  buildDocTaskChanges,
+  docTaskSnapshot,
+  recordDocTaskLog,
   appendHistory,
   withCompletedAt,
   enteredOnOrToday,
@@ -152,6 +155,14 @@ export async function POST(req: Request) {
 
   try {
     await saveDocTaskRow(auth.admin, task, by, true);
+    // 159-B: 新規登録も記録する
+    await recordDocTaskLog(auth.admin, {
+      by,
+      action: "登録",
+      chartNo: task.chartNo,
+      docType: task.docType,
+      changes: docTaskSnapshot(task),
+    });
     return NextResponse.json({ task });
   } catch (e) {
     return errorResponse(e);
@@ -207,6 +218,17 @@ export async function PATCH(req: Request) {
     const saved: DocTask = { ...next, history: appendHistory(next, actions, by) };
 
     await saveDocTaskRow(auth.admin, saved, by, false);
+    // 159-B: 変更前 → 変更後を記録する（変更が無ければ残さない）
+    const changes = buildDocTaskChanges(prev, saved);
+    if (changes.length > 0) {
+      await recordDocTaskLog(auth.admin, {
+        by,
+        action: "更新",
+        chartNo: saved.chartNo,
+        docType: saved.docType,
+        changes,
+      });
+    }
     return NextResponse.json({ task: saved });
   } catch (e) {
     return errorResponse(e);
@@ -222,7 +244,19 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: "id は必須です" }, { status: 400 });
   }
   try {
+    // 159-B: 削除も記録する。**タスクごと消えると履歴も消える**ので、
+    // 消す前に内容を読み、独立した操作ログとして残しておく。
+    const prev = await fetchDocTaskRow(auth.admin, id);
     await deleteDocTaskRow(auth.admin, id);
+    if (prev) {
+      await recordDocTaskLog(auth.admin, {
+        by: auth.userEmail || auth.userId,
+        action: "削除",
+        chartNo: prev.chartNo,
+        docType: prev.docType,
+        changes: docTaskSnapshot(prev),
+      });
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
     return errorResponse(e);
