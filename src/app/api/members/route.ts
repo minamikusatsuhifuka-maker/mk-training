@@ -24,6 +24,7 @@ import {
   type StaffProfile,
   type StaffProfileIndexEntry,
 } from "@/lib/staff-profiles";
+import { redactProfilesForViewer } from "@/lib/survey-visibility";
 import {
   serverGetContentRow,
   serverGetContentRowsByPrefix,
@@ -133,8 +134,12 @@ export async function GET(req: Request) {
         if (disabled?.ids.has(p.userId)) continue;
         profiles[p.userId] = { ...emptyProfile(p.userId), ...p };
       }
+      // 164: **署名URLを発行する前に**、本人以外に見せない情報を削ぐ。
+      // 非公開のサーベイは needsSurvey ごと落とすので、
+      // その画像の署名URLもここから先で発行されない（164-3-4）。
+      const visible = redactProfilesForViewer(Object.values(profiles), user.id);
       // 163: 写真URLを署名付きにして返す（人数分まとめて1回で発行）
-      const signedList = await withSignedProfiles(Object.values(profiles));
+      const signedList = await withSignedProfiles(visible);
       body.profiles = Object.fromEntries(signedList.map((p) => [p.userId, p]));
     }
 
