@@ -13,7 +13,10 @@
 
 import { NextResponse } from "next/server";
 import type { User } from "@supabase/supabase-js";
-import { getSessionUser } from "@/lib/staff-profiles-server";
+import {
+  getSessionUser,
+  withSignedProfiles,
+} from "@/lib/staff-profiles-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import {
   STAFF_PROFILES_INDEX_KEY,
@@ -130,7 +133,9 @@ export async function GET(req: Request) {
         if (disabled?.ids.has(p.userId)) continue;
         profiles[p.userId] = { ...emptyProfile(p.userId), ...p };
       }
-      body.profiles = profiles;
+      // 163: 写真URLを署名付きにして返す（人数分まとめて1回で発行）
+      const signedList = await withSignedProfiles(Object.values(profiles));
+      body.profiles = Object.fromEntries(signedList.map((p) => [p.userId, p]));
     }
 
     return NextResponse.json(body);

@@ -5,6 +5,7 @@
 // - 変更履歴（監査ログ）を全操作で必ず記録する（誰が・いつ・何を）。
 
 import { createSupabaseAdminClient } from "./supabase-admin";
+import { signPublicUrls } from "./storage-signed";
 import {
   LIBRARY_KEY,
   LIBRARY_LOG_KEY,
@@ -12,6 +13,7 @@ import {
   normalizeStore,
   normalizeLog,
   genLibraryId,
+  type LibraryDoc,
   type LibraryStore,
   type LibraryLog,
   type LibraryLogEntry,
@@ -80,4 +82,69 @@ export async function appendLog(
   } catch {
     // ログ失敗は握りつぶす（本体操作は成立させる）
   }
+}
+
+// ─── 署名付きURLへの差し替え（指示書163）───
+//
+// 資料のURLを、**返すときだけ**署名付きURLに差し替える。
+// 保存されている値（公開URL）は書き換えない＝既存データに触れずに非公開化へ移行でき、
+// 元に戻したくなればこの層を外すだけで済む（歯止め2・歯止め6）。
+//
+// 差し替える対象は3か所ある。**どれか1つでも漏れると、その画面だけ開けなくなる**:
+//   ① doc.fileUrl            … 本体
+//   ② doc.versions[].fileUrl … 過去の版（指示書95）
+//   ③ doc.pendingUpdate      … 承認待ちの差し替えファイル（指示書96）
+
+/** 資料1件に含まれる公開URLをすべて集める */
+function docUrls(doc: LibraryDoc): string[] {
+  const urls: string[] = [];
+  if (doc.fileUrl) urls.push(doc.fileUrl);
+  for (const v of doc.versions ?? []) if (v.fileUrl) urls.push(v.fileUrl);
+  if (doc.pendingUpdate?.fileUrl) urls.push(doc.pendingUpdate.fileUrl);
+  return urls;
+}
+
+/** 1件だけ署名する（登録・差し替え直後にその資料を返す場面用） */
+export async function withSignedDoc(
+  admin: Admin,
+  doc: LibraryDoc
+): Promise<LibraryDoc> {
+  return (await withSignedDocUrls(admin, [doc]))[0] ?? doc;
+}
+
+/**
+ * 一覧に含まれるすべてのURLを**1回のAPI呼び出しでまとめて署名**して差し替える。
+ * 署名できなかったものは空文字にする（公開URLのまま返さない＝fail-close）。
+ * 外部リンク（kind:"link"）は公開URLではないので、そのまま残る。
+ */
+export async function withSignedDocUrls(
+  admin: Admin,
+  docs: LibraryDoc[]
+): Promise<LibraryDoc[]> {
+  const all = docs.flatMap(docUrls);
+  if (all.length === 0) return docs;
+  const signed = await signPublicUrls(admin, all);
+
+  // 公開URLだったものだけを差し替える。それ以外（外部リンク等）は元の値を保つ
+  const swap = (url: string): string =>
+    url && url.includes("/storage/v1/object/public/")
+      ? signed.get(url) ?? ""
+      : url;
+
+  return docs.map((doc) => ({
+    ...doc,
+    fileUrl: swap(doc.fileUrl),
+    versions: (doc.versions ?? []).map((v) => ({
+      ...v,
+      fileUrl: swap(v.fileUrl),
+    })),
+    ...(doc.pendingUpdate
+      ? {
+          pendingUpdate: {
+            ...doc.pendingUpdate,
+            fileUrl: swap(doc.pendingUpdate.fileUrl),
+          },
+        }
+      : {}),
+  }));
 }

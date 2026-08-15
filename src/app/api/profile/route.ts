@@ -9,6 +9,7 @@ import {
   displayNameOf,
   loadProfileServer,
   saveProfileServer,
+  withSignedProfile,
 } from "@/lib/staff-profiles-server";
 import {
   normalizeProfileRoles,
@@ -33,7 +34,9 @@ export async function GET() {
     const dn = displayNameOf(user);
     profile.name = dn.includes("@") ? dn.split("@")[0] : dn;
   }
-  return NextResponse.json({ profile, email: user.email ?? "" });
+  // 163: 写真URLを署名付きにして返す（staff-photos 非公開化への追随）
+  const signed = await withSignedProfile(profile);
+  return NextResponse.json({ profile: signed, email: user.email ?? "" });
 }
 
 const MAX_LEN: Record<string, number> = {

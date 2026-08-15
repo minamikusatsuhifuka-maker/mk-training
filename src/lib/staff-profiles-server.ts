@@ -6,6 +6,7 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "./supabase-server";
 import { createSupabaseAdminClient } from "./supabase-admin";
+import { signPublicUrls } from "./storage-signed";
 import {
   STAFF_PROFILES_INDEX_KEY,
   staffProfileKey,
@@ -108,4 +109,86 @@ export async function saveProfileServer(
   });
   if (idxError)
     throw new Error(`プロフィール一覧の更新に失敗しました: ${idxError.message}`);
+}
+
+// ─── 署名付きURLへの差し替え（指示書163）───
+//
+// 資料庫と**同じ staff-photos バケット**にプロフィール写真・サーベイ画像が同居している。
+// 163でバケットを非公開にすると、資料庫だけでなくこちらも公開URLでは開けなくなる。
+// 既存ファイルの移動は指示書163の範囲外なので、**返すときに署名URLへ差し替える**形で追随する。
+//
+// 差し替える対象は3か所:
+//   ① avatarUrl              … アバター
+//   ② photos[].url           … 共有写真（1人最大20枚）
+//   ③ needsSurvey.imageUrl   … 5つの基本的欲求サーベイの画像
+//
+// 一覧（/api/members）では人数分まとめて署名するため、1回のAPI呼び出しで済ませる。
+
+/** プロフィール1件に含まれる公開URLを集める */
+function profileUrls(p: StaffProfile): string[] {
+  const urls: string[] = [];
+  if (p.avatarUrl) urls.push(p.avatarUrl);
+  for (const ph of p.photos ?? []) if (ph.url) urls.push(ph.url);
+  if (p.needsSurvey?.imageUrl) urls.push(p.needsSurvey.imageUrl);
+  return urls;
+}
+
+/** 複数のプロフィールのURLを一括で署名URLに差し替える */
+export async function withSignedProfiles(
+  profiles: StaffProfile[]
+): Promise<StaffProfile[]> {
+  const all = profiles.flatMap(profileUrls);
+  if (all.length === 0) return profiles;
+  let signed: Map<string, string>;
+  try {
+    signed = await signPublicUrls(createSupabaseAdminClient(), all);
+  } catch {
+    signed = new Map(); // service-role が無い環境では差し替えない
+  }
+  const swap = (url: string): string =>
+    url && url.includes("/storage/v1/object/public/")
+      ? signed.get(url) ?? ""
+      : url;
+
+  return profiles.map((p) => ({
+    ...p,
+    avatarUrl: swap(p.avatarUrl),
+    photos: (p.photos ?? []).map((ph) => ({ ...ph, url: swap(ph.url) })),
+    ...(p.needsSurvey
+      ? {
+          needsSurvey: {
+            ...p.needsSurvey,
+            ...(p.needsSurvey.imageUrl
+              ? { imageUrl: swap(p.needsSurvey.imageUrl) }
+              : {}),
+          },
+        }
+      : {}),
+  }));
+}
+
+/** 1件だけ署名する */
+export async function withSignedProfile(
+  profile: StaffProfile
+): Promise<StaffProfile> {
+  return (await withSignedProfiles([profile]))[0] ?? profile;
+}
+
+/** 一覧の軽量データ（avatarUrl のみ）を署名URLに差し替える */
+export async function withSignedIndexEntries(
+  items: StaffProfileIndexEntry[]
+): Promise<StaffProfileIndexEntry[]> {
+  const all = items.map((i) => i.avatarUrl ?? "").filter(Boolean);
+  if (all.length === 0) return items;
+  let signed: Map<string, string>;
+  try {
+    signed = await signPublicUrls(createSupabaseAdminClient(), all);
+  } catch {
+    signed = new Map();
+  }
+  return items.map((i) =>
+    i.avatarUrl && i.avatarUrl.includes("/storage/v1/object/public/")
+      ? { ...i, avatarUrl: signed.get(i.avatarUrl) ?? "" }
+      : i
+  );
 }

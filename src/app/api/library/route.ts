@@ -14,7 +14,14 @@ import {
   loadProfileServer,
 } from "@/lib/staff-profiles-server";
 import { STAFF_PHOTOS_BUCKET } from "@/lib/staff-profiles";
-import { loadStore, saveStore, appendLog, loadLog } from "@/lib/library-server";
+import {
+  loadStore,
+  saveStore,
+  appendLog,
+  loadLog,
+  withSignedDoc,
+  withSignedDocUrls,
+} from "@/lib/library-server";
 import {
   LIBRARY_PATH_PREFIX,
   normalizeCategory,
@@ -76,8 +83,12 @@ export async function GET() {
     const docs = [...store.docs].sort((a, b) =>
       (b.updatedAt || "").localeCompare(a.updatedAt || "")
     );
+    // 163: ファイルURLを署名付きに差し替えて返す（バケット非公開化への対応）。
+    // 保存されている公開URLは書き換えず、**返すときだけ**署名URLにする。
+    // 外部リンク（kind:"link"）は公開URLではないのでそのまま通る。
+    const signedDocs = await withSignedDocUrls(admin, docs);
     // 変更履歴は既に新しい順（append時に先頭挿入）
-    return NextResponse.json({ docs, log: log.entries });
+    return NextResponse.json({ docs: signedDocs, log: log.entries });
   } catch (e) {
     return errorResponse(e);
   }
@@ -220,7 +231,8 @@ export async function POST(req: NextRequest) {
       docTitle: doc.title,
     });
 
-    return NextResponse.json({ ok: true, doc });
+    // 163: 登録直後もそのまま開けるよう署名URLにして返す
+    return NextResponse.json({ ok: true, doc: await withSignedDoc(admin, doc) });
   } catch (e) {
     return errorResponse(e);
   }

@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
+import { signOne } from "@/lib/storage-signed";
 import {
   createSupabaseAdminClient,
   ServiceRoleMissingError,
@@ -155,7 +156,9 @@ export async function POST(req: NextRequest) {
     if (!profile.name) profile.name = user.email ?? "";
     await saveProfileServer(db, profile);
 
-    return NextResponse.json({ ok: true, url });
+    // 163: アップロード直後に画面へ返すURLも署名付きにする
+    // （保存する値は公開URLのまま＝既存データと同じ形を保つ）
+    return NextResponse.json({ ok: true, url: await signOne(admin, url) });
   } catch (e) {
     return errorResponse(e);
   }

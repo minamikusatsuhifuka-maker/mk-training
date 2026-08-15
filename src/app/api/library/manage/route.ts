@@ -18,7 +18,13 @@ import {
   loadProfileServer,
 } from "@/lib/staff-profiles-server";
 import { STAFF_PHOTOS_BUCKET } from "@/lib/staff-profiles";
-import { loadStore, saveStore, loadLog, appendLog } from "@/lib/library-server";
+import {
+  loadStore,
+  saveStore,
+  loadLog,
+  appendLog,
+  withSignedDoc,
+} from "@/lib/library-server";
 import {
   LIBRARY_PATH_PREFIX,
   VERSIONS_MAX,
@@ -120,7 +126,7 @@ export async function PATCH(req: NextRequest) {
         docId: restored.id,
         docTitle: restored.title,
       });
-      return NextResponse.json({ ok: true, doc: restored });
+      return NextResponse.json({ ok: true, doc: await withSignedDoc(admin, restored) });
     }
 
     if (action === "rollback") {
@@ -178,7 +184,7 @@ export async function PATCH(req: NextRequest) {
         docTitle: updated.title,
         note: `版を復元: ${target.fileName || target.versionId}`,
       });
-      return NextResponse.json({ ok: true, doc: updated });
+      return NextResponse.json({ ok: true, doc: await withSignedDoc(admin, updated) });
     }
 
     if (action === "approveUpdate") {
@@ -237,7 +243,7 @@ export async function PATCH(req: NextRequest) {
         docTitle: updated.title,
         note: `v${fromV}→v${fromV + 1}（承認: ${userName || "不明"}）`,
       });
-      return NextResponse.json({ ok: true, doc: updated });
+      return NextResponse.json({ ok: true, doc: await withSignedDoc(admin, updated) });
     }
 
     if (action === "withdrawUpdate") {
@@ -261,7 +267,7 @@ export async function PATCH(req: NextRequest) {
         docId: updated.id,
         docTitle: updated.title,
       });
-      return NextResponse.json({ ok: true, doc: updated });
+      return NextResponse.json({ ok: true, doc: await withSignedDoc(admin, updated) });
     }
 
     if (action === "mergeTag") {
@@ -355,7 +361,7 @@ export async function PATCH(req: NextRequest) {
       docTitle: updated.title,
       ...(note ? { note } : {}),
     });
-    return NextResponse.json({ ok: true, doc: updated });
+    return NextResponse.json({ ok: true, doc: await withSignedDoc(admin, updated) });
   } catch (e) {
     return errorResponse(e);
   }
@@ -514,7 +520,7 @@ export async function POST(req: NextRequest) {
     const updated: LibraryDoc = { ...store.docs[idx], pendingUpdate: pending };
     store.docs[idx] = updated;
     await saveStore(admin, store);
-    return NextResponse.json({ ok: true, doc: updated });
+    return NextResponse.json({ ok: true, doc: await withSignedDoc(admin, updated) });
   } catch (e) {
     return errorResponse(e);
   }
