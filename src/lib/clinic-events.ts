@@ -121,6 +121,9 @@ export type EventsListResponse = {
   events: ClinicEvent[];
   canEdit: boolean;
   isAdmin: boolean;
+  // 写真の保管庫（バケット event-photos）が未作成か（165）。
+  // 編集できる人にだけサーバーが立てる。閲覧専用の人には常に false。
+  photoBucketMissing?: boolean;
 };
 
 async function callEventsApi<T>(init: RequestInit & { query?: string }): Promise<T> {

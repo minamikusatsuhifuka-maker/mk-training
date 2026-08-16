@@ -2,6 +2,9 @@
 // - 認可: 管理者 or config行 editorUserIds（fail-close: 未設定・取得失敗=管理者のみ）。
 // - 写真バケット: event-photos（**非公開**・閲覧は署名URLのみ=指示書132-B担保案1）。
 //   staff-photos（公開バケット）には置かない（未ログイン到達を防ぐ）。
+// - 指示書165: バケットの実体は**交付SQLでの事前作成が正**。コード側の自動作成は保険。
+//   未作成のまま使われたときは握りつぶさず、何を作れば直るかを日本語で画面まで届ける。
+//   署名URLの発行とTTLは lib/storage-signed.ts に一本化（作法を2つに分けない）。
 
 import {
   createSupabaseAdminClient,
@@ -9,6 +12,11 @@ import {
 } from "./supabase-admin";
 import { getSessionUser } from "./staff-profiles-server";
 import { isAdminUser } from "./admin-role";
+import {
+  SIGNED_URL_TTL,
+  isBucketNotFound,
+  signBucketPaths,
+} from "./storage-signed";
 import {
   EVENT_CONFIG_ID,
   normalizeClinicEvent,
@@ -21,7 +29,30 @@ export const EVENTS_TABLE = "clinic_events";
 export const EVENT_PHOTOS_BUCKET = "event-photos";
 export const EVENT_PHOTO_MAX_BYTES = 8 * 1024 * 1024; // 8MB/枚（サーバー側強制）
 export const EVENT_PHOTO_MAX_COUNT = 20; // 1回のアップロード上限
-export const EVENT_PHOTO_SIGN_TTL = 3600; // 署名URL有効期間（秒）
+// 署名URL有効期間（秒）。165 §3-3「作法を2つに分けない」により
+// lib/storage-signed.ts の SIGNED_URL_TTL を唯一の値として再輸出するだけにする。
+export const EVENT_PHOTO_SIGN_TTL = SIGNED_URL_TTL;
+
+/**
+ * 写真の保管庫（Storageバケット event-photos）が未作成であることを表すエラー。
+ *
+ * 【165でこれを足した理由】
+ * 132-Bはコードとしては完成していたが、バケットという**前提のリソースが無かった**。
+ * それでも画面には「アップロードに失敗しました」としか出ず、
+ * 何を作れば直るのかが誰にも分からない状態だった。
+ * 「実装済み」と「動く」は別である以上、足りていないものは名指しで言う。
+ */
+export class EventPhotoBucketMissingError extends Error {
+  constructor(detail?: string) {
+    super(
+      "写真の保管庫（Storageバケット event-photos）がまだ作られていません。" +
+        "Supabase の SQL Editor で、指示書165で交付したSQL" +
+        "（165_event-photos_バケット作成.sql）を実行してください。" +
+        (detail ? `（詳細: ${detail}）` : "")
+    );
+    this.name = "EventPhotoBucketMissingError";
+  }
+}
 
 export type EventsAdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
@@ -93,42 +124,72 @@ export async function saveEventRow(
   }
 }
 
-// 非公開バケットの用意（初回のみ作成・冪等。院長のダッシュボード操作・SQL不要）
-export async function ensureEventPhotosBucket(
+/** バケットが今あるかどうかだけを見る（作らない・編集者向けの事前警告用） */
+export async function eventPhotosBucketExists(
   admin: EventsAdminClient
-): Promise<void> {
-  const { data } = await admin.storage.getBucket(EVENT_PHOTOS_BUCKET);
-  if (data) return;
-  const { error } = await admin.storage.createBucket(EVENT_PHOTOS_BUCKET, {
-    public: false,
-    fileSizeLimit: EVENT_PHOTO_MAX_BYTES,
-  });
-  // 並行作成の競合（既に存在）は成功扱い
-  if (error && !/already exists/i.test(error.message)) {
-    throw new Error(error.message);
+): Promise<boolean> {
+  try {
+    const { data } = await admin.storage.getBucket(EVENT_PHOTOS_BUCKET);
+    return Boolean(data);
+  } catch {
+    return false;
   }
 }
 
-// 一覧の photos に署名URL（期限つき）を付与して返す（担保案1・恒久URLはDBに保存しない）
+/**
+ * 非公開バケットの用意（初回のみ作成・冪等）。
+ *
+ * 165の位置づけ: **保険**。正規の作成手段は交付SQL（事前作成）。
+ * ここで作れなかった場合は、握りつぶさず EventPhotoBucketMissingError にして
+ * 「何を作れば直るのか」を画面まで届ける。
+ */
+export async function ensureEventPhotosBucket(
+  admin: EventsAdminClient
+): Promise<void> {
+  if (await eventPhotosBucketExists(admin)) return;
+  const { error } = await admin.storage.createBucket(EVENT_PHOTOS_BUCKET, {
+    public: false, // 歯止め3: 新規バケットは必ず非公開
+    fileSizeLimit: EVENT_PHOTO_MAX_BYTES,
+  });
+  if (!error) return;
+  // 並行作成の競合（既に存在）は成功扱い
+  if (/already exists/i.test(error.message)) return;
+  throw new EventPhotoBucketMissingError(error.message);
+}
+
+/**
+ * 一覧の photos に署名URL（期限つき）を付与して返す（担保案1・恒久URLはDBに保存しない）。
+ * 署名の実処理は lib/storage-signed.ts に一本化（165 §3-3）。
+ *
+ * bucketMissing: バケット未作成が原因で署名できなかったか。
+ * 165以前はここが静かに空文字になり、写真が黙って消えて見えていた。
+ */
 export async function attachSignedUrls(
   admin: EventsAdminClient,
   events: ClinicEvent[]
-): Promise<ClinicEvent[]> {
+): Promise<{ events: ClinicEvent[]; bucketMissing: boolean }> {
   const paths = events.flatMap((e) => e.photos.map((p) => p.path));
-  if (paths.length === 0) return events;
-  const { data } = await admin.storage
-    .from(EVENT_PHOTOS_BUCKET)
-    .createSignedUrls(paths, EVENT_PHOTO_SIGN_TTL);
-  const urlMap = new Map(
-    (data ?? [])
-      .filter((d) => d.signedUrl)
-      .map((d) => [d.path, d.signedUrl as string])
+  if (paths.length === 0) return { events, bucketMissing: false };
+  const { urls, bucketMissing } = await signBucketPaths(
+    admin,
+    EVENT_PHOTOS_BUCKET,
+    paths
   );
-  return events.map((e) => ({
-    ...e,
-    photos: e.photos.map((p) => ({
-      ...p,
-      signedUrl: urlMap.get(p.path) ?? "",
+  return {
+    events: events.map((e) => ({
+      ...e,
+      photos: e.photos.map((p) => ({
+        ...p,
+        signedUrl: urls.get(p.path) ?? "",
+      })),
     })),
-  }));
+    bucketMissing,
+  };
+}
+
+/** Storage の生エラーを、原因の分かるエラーに変える（未作成なら名指しする） */
+export function translateStorageError(message: string): Error {
+  return isBucketNotFound(message)
+    ? new EventPhotoBucketMissingError(message)
+    : new Error(message);
 }

@@ -14,11 +14,14 @@ import { ServiceRoleMissingError } from "@/lib/supabase-admin";
 import {
   EVENTS_TABLE,
   EVENT_PHOTOS_BUCKET,
+  EventPhotoBucketMissingError,
   authorizeEvents,
   loadEditorUserIds,
   fetchEventRow,
   saveEventRow,
   attachSignedUrls,
+  eventPhotosBucketExists,
+  translateStorageError,
 } from "@/lib/events-server";
 import {
   EVENT_CONFIG_ID,
@@ -33,6 +36,10 @@ export const maxDuration = 60;
 
 function errorResponse(e: unknown): NextResponse {
   if (e instanceof ServiceRoleMissingError) {
+    return NextResponse.json({ error: e.message }, { status: 503 });
+  }
+  // 前提リソース（バケット）未作成は「設定不足」＝503 で、何を作ればよいか名指しする（165）
+  if (e instanceof EventPhotoBucketMissingError) {
     return NextResponse.json({ error: e.message }, { status: 503 });
   }
   const msg = e instanceof Error ? e.message : "処理に失敗しました";
@@ -91,10 +98,20 @@ export async function GET(req: NextRequest) {
     // 写真の署名URLを付与（132-B・担保案1）
     const signed = await attachSignedUrls(auth.admin, sortEventsByHeldOn(events));
 
+    // 写真の保管庫が無いことを、編集できる人にだけ先に知らせる（165）。
+    // 一覧を落とさない（写真以外は使える）が、黙ってもいない。
+    // 閲覧専用のスタッフには出さない＝直せない人に出しても意味がないため、
+    // Storage への問い合わせもその場合はしない（全員分の往復を増やさない）。
+    let photoBucketMissing = signed.bucketMissing;
+    if (auth.canEdit && !photoBucketMissing) {
+      photoBucketMissing = !(await eventPhotosBucketExists(auth.admin));
+    }
+
     return NextResponse.json({
-      events: signed,
+      events: signed.events,
       canEdit: auth.canEdit,
       isAdmin: auth.isAdmin,
+      photoBucketMissing,
     });
   } catch (e) {
     return errorResponse(e);
@@ -225,6 +242,10 @@ export async function DELETE(req: NextRequest) {
         .from(EVENT_PHOTOS_BUCKET)
         .remove(paths);
       if (rmError) {
+        // バケット未作成なら「再試行」ではなく作成が答え＝原因を名指しする（165）。
+        // それ以外は従来どおり再試行を促す（DBは変えていない＝孤児ゼロ）。
+        const translated = translateStorageError(rmError.message);
+        if (translated instanceof EventPhotoBucketMissingError) throw translated;
         return NextResponse.json(
           { error: `写真の削除に失敗しました（再試行してください）: ${rmError.message}` },
           { status: 500 }

@@ -46,6 +46,8 @@ function EventsPageBody() {
   const [canEdit, setCanEdit] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // 写真の保管庫が未作成（165）。編集できる人にだけ出す＝直せる人にだけ伝える。
+  const [photoBucketMissing, setPhotoBucketMissing] = useState(false);
 
   // 資料チップ表示用（タイトル解決・LibraryDocPicker と同じ anon 直読み）
   const [libraryDocs, setLibraryDocs] = useState<LibraryDoc[]>([]);
@@ -113,6 +115,7 @@ function EventsPageBody() {
       const res = await fetchEvents();
       setEvents(res.events);
       setCanEdit(res.canEdit);
+      setPhotoBucketMissing(res.photoBucketMissing === true);
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
@@ -201,6 +204,16 @@ function EventsPageBody() {
 
       {error && (
         <p className="text-sm text-red-600 bg-red-50 rounded-xl p-3">{error}</p>
+      )}
+
+      {/* 写真の保管庫が未作成（165）。アップロードする前に、直せる人にだけ理由を出す。 */}
+      {photoBucketMissing && (
+        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3 leading-relaxed">
+          ⚠️ 写真の保管庫（Storageバケット <code>event-photos</code>）がまだ作られていません。
+          このままだと写真の追加に失敗します。Supabase の SQL Editor で、
+          指示書165で交付したSQL（165_event-photos_バケット作成.sql）を実行してください。
+          イベントの記録・編集・資料の紐づけは、この状態でも使えます。
+        </p>
       )}
 
       {/* 投稿・編集フォーム（指定メンバー＋管理者のみ。権限の実体はサーバー側） */}
@@ -400,7 +413,10 @@ function EventsPageBody() {
                                     onClick={() => handlePhotoRemove(ev, p.path)}
                                     disabled={uploadingId === ev.id}
                                     aria-label="この写真を外す"
-                                    className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[10px] leading-none opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-30"
+                                    /* スマートフォンには hover が無く opacity-0 のままだと押せない。
+                                       常時うっすら出して、PCではホバーではっきりさせる（165 §4-1）。
+                                       タップ領域も指で押せる大きさ（28px）にする。 */
+                                    className="absolute top-1 right-1 w-7 h-7 rounded-full bg-black/60 text-white text-[11px] leading-none opacity-70 group-hover:opacity-100 focus:opacity-100 disabled:opacity-30"
                                   >
                                     ✕
                                   </button>

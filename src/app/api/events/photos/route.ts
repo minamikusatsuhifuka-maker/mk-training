@@ -1,6 +1,7 @@
 // イベント写真API（指示書132-B・担保案1=非公開バケット＋署名URL）
 // - POST: 写真アップロード（multipart・管理者or編集メンバーのみ・1回20枚/各8MBサーバー強制）。
-//   バケット event-photos（public: false）は初回に自動作成。
+//   バケット event-photos（public: false）は交付SQLで事前作成するのが正（165）。
+//   コード側の自動作成は保険で、作れなかった場合は原因を名指しして503で返す。
 // - DELETE: 写真の付け外し＝**Storage実体を即削除**→DBから参照を除去（132承認済みの原則。
 //   実体削除が失敗した場合はDBを変えず明示エラー＝孤児ゼロ）。
 // - 認可・行アクセスは lib/events-server.ts（/api/events と共用・重複実装禁止）。
@@ -11,11 +12,13 @@ import {
   EVENT_PHOTOS_BUCKET,
   EVENT_PHOTO_MAX_BYTES,
   EVENT_PHOTO_MAX_COUNT,
+  EventPhotoBucketMissingError,
   authorizeEvents,
   fetchEventRow,
   saveEventRow,
   ensureEventPhotosBucket,
   attachSignedUrls,
+  translateStorageError,
 } from "@/lib/events-server";
 
 export const runtime = "nodejs";
@@ -23,6 +26,10 @@ export const maxDuration = 60;
 
 function errorResponse(e: unknown): NextResponse {
   if (e instanceof ServiceRoleMissingError) {
+    return NextResponse.json({ error: e.message }, { status: 503 });
+  }
+  // 前提リソース（バケット）未作成は「設定不足」＝503 で、何を作ればよいか名指しする（165）
+  if (e instanceof EventPhotoBucketMissingError) {
     return NextResponse.json({ error: e.message }, { status: 503 });
   }
   const msg = e instanceof Error ? e.message : "処理に失敗しました";
@@ -88,7 +95,8 @@ export async function POST(req: NextRequest) {
       const { error } = await auth.admin.storage
         .from(EVENT_PHOTOS_BUCKET)
         .upload(path, bytes, { contentType: f.type, upsert: false });
-      if (error) throw new Error(error.message);
+      // バケットが無い場合は「アップロードに失敗しました」で終わらせない（165）
+      if (error) throw translateStorageError(error.message);
       added.push({ path, uploadedAt: now });
     }
 
@@ -99,7 +107,7 @@ export async function POST(req: NextRequest) {
     };
     await saveEventRow(auth.admin, next, false);
 
-    const [signed] = await attachSignedUrls(auth.admin, [next]);
+    const signed = (await attachSignedUrls(auth.admin, [next])).events[0];
     return NextResponse.json({ event: signed });
   } catch (e) {
     return errorResponse(e);
@@ -137,6 +145,9 @@ export async function DELETE(req: NextRequest) {
       .from(EVENT_PHOTOS_BUCKET)
       .remove([path]);
     if (rmError) {
+      // バケット未作成なら再試行では直らない＝作るべきものを名指しする（165）
+      const translated = translateStorageError(rmError.message);
+      if (translated instanceof EventPhotoBucketMissingError) throw translated;
       return NextResponse.json(
         { error: `写真の削除に失敗しました（再試行してください）: ${rmError.message}` },
         { status: 500 }
@@ -150,7 +161,7 @@ export async function DELETE(req: NextRequest) {
     };
     await saveEventRow(auth.admin, next, false);
 
-    const [signed] = await attachSignedUrls(auth.admin, [next]);
+    const signed = (await attachSignedUrls(auth.admin, [next])).events[0];
     return NextResponse.json({ event: signed });
   } catch (e) {
     return errorResponse(e);
