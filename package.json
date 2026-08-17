@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "check:api-auth": "node scripts/check-api-auth.mjs",
+    "check-alias": "node scripts/check-alias.mjs",
     "build": "node scripts/check-api-auth.mjs && next build",
     "start": "next start",
     "lint": "eslint"
