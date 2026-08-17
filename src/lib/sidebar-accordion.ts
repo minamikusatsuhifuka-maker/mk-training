@@ -1,15 +1,18 @@
 "use client";
 
-// サイドメニューのアコーディオン表示設定（指示書166 B）
+// サイドメニューのアコーディオン表示設定（指示書166 → 167でカテゴリ別に拡張）
 //
 // 【設定（管理者・全員共通）】
-// - content_store の portal_sidebar_mode に { mode, updatedAt } を保存（character_order 流儀）。
-// - mode = "open"（すべて開く・既定）| "closed"（カテゴリ見出しのみ表示）。
-// - 未保存・取得失敗・不正値は "open" ＝現状どおり全項目表示（歯止め5：既定は現状維持）。
+// - content_store の portal_sidebar_mode に { collapsed: { カテゴリid: boolean }, updatedAt } を保存。
+//   **保存される実体はカテゴリ別の値のみ**（167 A-3。全体一括の mode は保存しない）。
+// - collapsed に無いカテゴリ・未保存・取得失敗・不正値は「開いた状態」＝現状どおり（歯止め5）。
+// - 166の旧形式 { mode: "open"|"closed" } が保存されている場合は読み出し時に
+//   **全カテゴリへ展開して引き継ぐ**（allClosed フラグ。管理画面で次に保存した時点で
+//   カテゴリ別の値に置き換わり一本化される）。
 //
-// 【スタッフ側の開閉挙動】
+// 【スタッフ側の開閉挙動】（166で決めた動作を維持）
 // - 見出しタップで開閉できる（設定に関わらず）。
-// - 現在ページが属するカテゴリは "closed" 設定でも開く（自分の居場所が分かるように）。
+// - 現在ページが属するカテゴリは、閉じる設定でも開く（自分の居場所が分かるように）。
 //   ページ移動で新しいカテゴリに入ったときは、そのカテゴリの「閉じた」記憶を破棄して開く。
 // - ユーザーが開閉した状態は sessionStorage でそのセッション中だけ保持する。
 //   管理者が設定を変更（updatedAt が変わる）したら記憶を破棄し、設定を優先する。
@@ -20,40 +23,64 @@ import type { ResolvedCategory } from "@/lib/nav";
 
 export const SIDEBAR_MODE_KEY = "portal_sidebar_mode";
 
-export type SidebarMode = "open" | "closed";
-
-export type SidebarModeStore = {
-  mode: SidebarMode;
+export type SidebarSettings = {
+  // カテゴリid → 既定で閉じるか。無いidは「開く」。
+  collapsed: Record<string, boolean>;
+  // 166の旧形式 { mode: "closed" } を読み込んだときだけ true（＝全カテゴリ閉）。
+  // 読み出し専用の互換フラグで、**保存はしない**。
+  allClosed?: boolean;
   updatedAt: string;
 };
 
-export const DEFAULT_SIDEBAR_MODE_STORE: SidebarModeStore = {
-  mode: "open",
+export const DEFAULT_SIDEBAR_SETTINGS: SidebarSettings = {
+  collapsed: {},
   updatedAt: "",
 };
 
-// 保存値の検証（不正値は既定 "open" に倒す）
-export function normalizeSidebarModeStore(saved: unknown): SidebarModeStore {
+// 保存値の検証。新旧どちらの形式も受け、不正は既定（全カテゴリ開）に倒す。
+export function normalizeSidebarSettings(saved: unknown): SidebarSettings {
   if (saved && typeof saved === "object") {
-    const s = saved as Partial<SidebarModeStore>;
-    if (s.mode === "open" || s.mode === "closed") {
-      return {
-        mode: s.mode,
-        updatedAt: typeof s.updatedAt === "string" ? s.updatedAt : "",
-      };
+    const s = saved as {
+      collapsed?: unknown;
+      mode?: unknown;
+      updatedAt?: unknown;
+    };
+    const updatedAt = typeof s.updatedAt === "string" ? s.updatedAt : "";
+    if (s.collapsed && typeof s.collapsed === "object") {
+      const collapsed: Record<string, boolean> = {};
+      for (const [id, v] of Object.entries(
+        s.collapsed as Record<string, unknown>
+      )) {
+        if (typeof v === "boolean") collapsed[id] = v;
+      }
+      return { collapsed, updatedAt };
     }
+    // 166の旧形式からの引き継ぎ
+    if (s.mode === "closed") return { collapsed: {}, allClosed: true, updatedAt };
+    if (s.mode === "open") return { collapsed: {}, updatedAt };
   }
-  return DEFAULT_SIDEBAR_MODE_STORE;
+  return DEFAULT_SIDEBAR_SETTINGS;
 }
 
-export async function loadSidebarModeStore(): Promise<SidebarModeStore> {
+// このカテゴリは既定で閉じるか
+export function isCategoryCollapsed(
+  settings: SidebarSettings,
+  categoryId: string
+): boolean {
+  return settings.collapsed[categoryId] ?? settings.allClosed ?? false;
+}
+
+export async function loadSidebarSettings(): Promise<SidebarSettings> {
   const saved = await loadPortalObject<unknown>(SIDEBAR_MODE_KEY, null);
-  return normalizeSidebarModeStore(saved);
+  return normalizeSidebarSettings(saved);
 }
 
-export async function saveSidebarMode(mode: SidebarMode): Promise<boolean> {
-  return savePortalObject<SidebarModeStore>(SIDEBAR_MODE_KEY, {
-    mode,
+// 保存はカテゴリ別の値のみ（167 A-3・旧 mode 形式では二度と保存しない）
+export async function saveSidebarSettings(
+  collapsed: Record<string, boolean>
+): Promise<boolean> {
+  return savePortalObject(SIDEBAR_MODE_KEY, {
+    collapsed,
     updatedAt: new Date().toISOString(),
   });
 }
@@ -63,12 +90,12 @@ export async function saveSidebarMode(mode: SidebarMode): Promise<boolean> {
 const SESSION_KEY = "sidebar_accordion_v1";
 
 type SessionState = {
-  sig: string; // 管理者設定の署名（mode|updatedAt）。不一致なら記憶を破棄する
+  sig: string; // 管理者設定の署名（updatedAt）。不一致なら記憶を破棄する
   open: Record<string, boolean>; // カテゴリid → 開閉のユーザー操作（未操作のidは含めない）
 };
 
-function sigOf(store: SidebarModeStore): string {
-  return `${store.mode}|${store.updatedAt}`;
+function sigOf(settings: SidebarSettings): string {
+  return `v2|${settings.updatedAt}`;
 }
 
 function readSession(): SessionState | null {
@@ -101,8 +128,8 @@ export function useSidebarAccordion(
   sections: ResolvedCategory[],
   pathname: string
 ): { isOpen: (id: string) => boolean; toggle: (id: string) => void } {
-  const [modeStore, setModeStore] = useState<SidebarModeStore>(
-    DEFAULT_SIDEBAR_MODE_STORE
+  const [settings, setSettings] = useState<SidebarSettings>(
+    DEFAULT_SIDEBAR_SETTINGS
   );
   // ユーザー操作の開閉記憶。初期値は空（SSR/ハイドレーション時は既定表示と一致させ、
   // sessionStorage の復元は下の非同期ロード完了後に行う）
@@ -122,14 +149,14 @@ export function useSidebarAccordion(
   // 変わっていなければ復元する。現在ページのカテゴリの「閉じた」記憶は破棄して開く。
   useEffect(() => {
     let active = true;
-    loadSidebarModeStore()
-      .then((store) => {
+    loadSidebarSettings()
+      .then((loaded) => {
         if (!active) return;
-        setModeStore(store);
+        setSettings(loaded);
         const session = readSession();
-        if (session && session.sig !== sigOf(store)) {
+        if (session && session.sig !== sigOf(loaded)) {
           setOverrides({});
-          writeSession({ sig: sigOf(store), open: {} });
+          writeSession({ sig: sigOf(loaded), open: {} });
           return;
         }
         if (session) {
@@ -171,21 +198,21 @@ export function useSidebarAccordion(
     (id: string): boolean => {
       const override = overrides[id];
       if (typeof override === "boolean") return override;
-      if (modeStore.mode === "open") return true;
+      if (!isCategoryCollapsed(settings, id)) return true;
       return id === activeCategoryId;
     },
-    [overrides, modeStore.mode, activeCategoryId]
+    [overrides, settings, activeCategoryId]
   );
 
   const toggle = useCallback(
     (id: string) => {
       setOverrides((prev) => {
         const next = { ...prev, [id]: !isOpen(id) };
-        writeSession({ sig: sigOf(modeStore), open: next });
+        writeSession({ sig: sigOf(settings), open: next });
         return next;
       });
     },
-    [isOpen, modeStore]
+    [isOpen, settings]
   );
 
   return { isOpen, toggle };

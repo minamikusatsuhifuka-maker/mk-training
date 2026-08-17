@@ -13,6 +13,7 @@ import {
   UNCATEGORIZED_ID,
   UNCATEGORIZED_LABEL,
   buildDefaultConfig,
+  categoryLabelOf,
   normalizeConfig,
   type NavConfig,
 } from "@/lib/nav";
@@ -20,9 +21,10 @@ import { AdminBanner } from "@/components/AdminBanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  loadSidebarModeStore,
-  saveSidebarMode,
-  type SidebarMode,
+  isCategoryCollapsed,
+  loadSidebarSettings,
+  saveSidebarSettings,
+  type SidebarSettings,
 } from "@/lib/sidebar-accordion";
 
 type EditCategory = { id: string; label: string; hidden: boolean };
@@ -58,7 +60,8 @@ function configToEdit(cfg: NavConfig | null): EditState {
 function editToConfig(state: EditState): NavConfig {
   const categories = state.categories.map((c, i) => ({
     id: c.id,
-    label: c.label,
+    // 167 B-4: 空欄は既定名で保存する（blur を経ずに保存された場合の防衛）
+    label: categoryLabelOf(c.id, c.label),
     order: i,
     hidden: c.hidden,
   }));
@@ -102,26 +105,44 @@ export default function AdminNavPage() {
   const loaded = useRef(false);
   const dragRef = useRef<DragPayload | null>(null);
 
-  // 166: サイドメニューの既定表示（すべて開く／すべて閉じる）
-  const [sidebarMode, setSidebarMode] = useState<SidebarMode>("open");
-  const [savingSidebarMode, setSavingSidebarMode] = useState(false);
+  // 166→167: サイドメニューの既定開閉（カテゴリごと）。
+  // 旧形式（全体一括 mode）は loadSidebarSettings が読み出し時に全カテゴリへ展開して引き継ぎ、
+  // ここで保存した時点でカテゴリ別の値に一本化される。
+  const [sidebarSettings, setSidebarSettings] = useState<SidebarSettings>({
+    collapsed: {},
+    updatedAt: "",
+  });
+  const [savingSidebar, setSavingSidebar] = useState(false);
   useEffect(() => {
-    loadSidebarModeStore()
-      .then((store) => setSidebarMode(store.mode))
-      .catch(() => {});
+    loadSidebarSettings().then(setSidebarSettings).catch(() => {});
   }, []);
-  const changeSidebarMode = async (mode: SidebarMode) => {
-    const prev = sidebarMode;
-    setSidebarMode(mode);
-    setSavingSidebarMode(true);
-    const ok = await saveSidebarMode(mode);
-    setSavingSidebarMode(false);
+  const collapsedOf = (id: string) => isCategoryCollapsed(sidebarSettings, id);
+  // 現在のカテゴリ一覧で実体化（旧形式の「全閉」もここでカテゴリ別の値になる）
+  const materializeCollapsed = (): Record<string, boolean> =>
+    Object.fromEntries(state.categories.map((c) => [c.id, collapsedOf(c.id)]));
+  const persistCollapsed = async (collapsed: Record<string, boolean>) => {
+    const prev = sidebarSettings;
+    setSidebarSettings({ collapsed, updatedAt: prev.updatedAt });
+    setSavingSidebar(true);
+    const ok = await saveSidebarSettings(collapsed);
+    setSavingSidebar(false);
     if (ok) {
       flash("保存しました（スタッフ側はリロードで反映されます）");
     } else {
-      setSidebarMode(prev);
+      setSidebarSettings(prev);
       flash("保存に失敗しました");
     }
+  };
+  const toggleCategoryCollapsed = (id: string) => {
+    const next = materializeCollapsed();
+    next[id] = !next[id];
+    persistCollapsed(next);
+  };
+  const setAllCollapsed = (collapsed: boolean) => {
+    const next = Object.fromEntries(
+      state.categories.map((c) => [c.id, collapsed])
+    );
+    persistCollapsed(next);
   };
 
   useEffect(() => {
@@ -351,36 +372,24 @@ export default function AdminNavPage() {
         並び替えはドラッグ&ドロップ（項目の行・カテゴリの ⠿）でも、↑↓ボタンでもできます。変更は自動保存されます。
       </p>
 
-      {/* 166: サイドメニューの既定表示（アコーディオン） */}
+      {/* 166→167: サイドメニューの既定開閉（カテゴリごと） */}
       <div className="rounded-lg border bg-white p-4 space-y-2">
-        <h2 className="text-sm font-bold text-slate-800">📂 サイドメニューの既定表示</h2>
+        <h2 className="text-sm font-bold text-slate-800">📂 サイドメニューの既定の開閉（カテゴリごと）</h2>
         <p className="text-xs text-slate-600">
-          スタッフ側サイドメニューのカテゴリを、開いた状態で表示するか、見出しだけ表示するかを選びます（全スタッフ共通・カテゴリ見出しのタップでいつでも開閉できます）。
+          スタッフ側サイドメニューで、各カテゴリを開いた状態で表示するか、見出しだけ表示するかをカテゴリごとに選べます（全スタッフ共通・既定はすべて「開いた状態」）。
+          設定は下の各カテゴリの「▾ 既定:開／▸ 既定:閉」ボタンで切り替えます。
+          カテゴリ見出しのタップでいつでも開閉でき、閉じる設定でも現在開いているページのカテゴリは開いた状態になります。
         </p>
-        <div className="flex flex-wrap gap-4">
-          <label className="flex items-center gap-1.5 text-sm text-slate-700 cursor-pointer">
-            <input
-              type="radio"
-              name="sidebar-mode"
-              checked={sidebarMode === "open"}
-              onChange={() => changeSidebarMode("open")}
-              disabled={savingSidebarMode}
-            />
-            すべて開く（既定）
-          </label>
-          <label className="flex items-center gap-1.5 text-sm text-slate-700 cursor-pointer">
-            <input
-              type="radio"
-              name="sidebar-mode"
-              checked={sidebarMode === "closed"}
-              onChange={() => changeSidebarMode("closed")}
-              disabled={savingSidebarMode}
-            />
-            すべて閉じる（カテゴリ見出しのみ表示。現在ページのカテゴリは開いたまま）
-          </label>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={() => setAllCollapsed(false)} disabled={savingSidebar}>
+            ▾ すべて開くにする
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setAllCollapsed(true)} disabled={savingSidebar}>
+            ▸ すべて閉じるにする
+          </Button>
         </div>
         <p className="text-xs text-amber-700">
-          ⚠️ 「すべて閉じる」にすると、初めて使う人にはメニューの中身が見えなくなります。スタッフが機能を把握して慣れてきてから切り替えることをおすすめします。
+          ⚠️ 閉じる設定にしたカテゴリは、初めて使う人にはメニューの中身が見えなくなります。スタッフが機能を把握して慣れてきてから閉じる設定に切り替えることをおすすめします。
         </p>
       </div>
 
@@ -419,7 +428,16 @@ export default function AdminNavPage() {
               <Input
                 value={cat.label}
                 onChange={(e) => renameCategory(cIdx, e.target.value)}
-                onBlur={() => persist(state)}
+                onBlur={() => {
+                  // 167 B-4: 空欄のまま確定したら既定名に戻す（見出しが消えるのを防ぐ）
+                  if (!cat.label.trim()) {
+                    const next = clone(state);
+                    next.categories[cIdx].label = categoryLabelOf(cat.id, "");
+                    update(next);
+                    return;
+                  }
+                  persist(state);
+                }}
                 className="max-w-[220px] font-bold"
               />
               <span className="text-xs text-muted-foreground">
@@ -435,6 +453,16 @@ export default function AdminNavPage() {
               <div className="ml-auto flex gap-1">
                 <Button variant="outline" size="sm" onClick={() => moveCategory(cIdx, -1)} disabled={cIdx === 0}>↑</Button>
                 <Button variant="outline" size="sm" onClick={() => moveCategory(cIdx, 1)} disabled={cIdx === state.categories.length - 1}>↓</Button>
+                {/* 167: スタッフ側サイドメニューでの既定の開閉（保存はカテゴリ別の値のみ） */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => toggleCategoryCollapsed(cat.id)}
+                  disabled={savingSidebar}
+                  title="スタッフ側サイドメニューで、このカテゴリを既定で開いておくか・閉じておくか"
+                >
+                  {collapsedOf(cat.id) ? "▸ 既定:閉" : "▾ 既定:開"}
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => toggleCategoryHidden(cIdx)}>
                   {cat.hidden ? "表示する" : "非表示"}
                 </Button>

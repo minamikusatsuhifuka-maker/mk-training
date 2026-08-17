@@ -146,6 +146,21 @@ export function buildDefaultConfig(): NavConfig {
 
 export const MASTER_ITEM_BY_KEY = new Map(MASTER_ITEMS.map((it) => [it.key, it]));
 
+const MASTER_CATEGORY_BY_ID = new Map(MASTER_CATEGORIES.map((c) => [c.id, c]));
+
+// カテゴリ表示名の解決（指示書167）。
+// 表示名は cfg の label（管理画面で編集可）、識別子は id（不変）。
+// 空・空白のみで保存された場合はマスターの既定名にフォールバックする
+// （見出しが消えて構造が分からなくなるのを防ぐ）。マスターに無いカスタムカテゴリは「未分類」。
+export function categoryLabelOf(
+  id: string,
+  label: string | null | undefined
+): string {
+  const trimmed = (label ?? "").trim();
+  if (trimmed) return trimmed;
+  return MASTER_CATEGORY_BY_ID.get(id)?.label ?? UNCATEGORIZED_LABEL;
+}
+
 // 管理画面の編集用に config を正規化する。
 // - マスターの全項目を必ず含める（欠けていれば既定カテゴリ末尾に補完）
 // - マスターに無い古いキーは捨てる
@@ -156,7 +171,7 @@ export function normalizeConfig(cfg: NavConfig | null | undefined): NavConfig {
 
   let categories = base.categories
     .filter((c) => c && typeof c.id === "string")
-    .map((c, i) => ({ id: c.id, label: c.label ?? c.id, order: c.order ?? i, hidden: !!c.hidden }));
+    .map((c, i) => ({ id: c.id, label: categoryLabelOf(c.id, c.label), order: c.order ?? i, hidden: !!c.hidden }));
   if (categories.length === 0) {
     categories = MASTER_CATEGORIES.map((c, i) => ({ id: c.id, label: c.label, order: i, hidden: false }));
   }
@@ -317,7 +332,8 @@ export function resolveNav(
 
     const result: ResolvedCategory[] = visibleCats.map((c) => ({
       id: c.id,
-      label: c.label,
+      // 空欄で保存されたカテゴリ名は既定名にフォールバック（指示書167）
+      label: categoryLabelOf(c.id, c.label),
       items: (buckets.get(c.id) ?? [])
         .sort((a, b) => a.order - b.order)
         .map((x) => x.item),
