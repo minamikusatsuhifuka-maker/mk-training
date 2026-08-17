@@ -19,6 +19,7 @@ import { UserMenu } from "@/components/UserMenu";
 import { AdminOnly } from "@/components/AdminOnly";
 import { FontSwitcher } from "@/components/FontSwitcher";
 import { DocTasksNavLink } from "@/components/DocTasksNavLink";
+import { useSidebarAccordion } from "@/lib/sidebar-accordion";
 
 export default function AppShellInner({
   children,
@@ -28,6 +29,8 @@ export default function AppShellInner({
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const mobileNavSections = useResolvedNav().filter((s) => s.items.length > 0);
+  // 166: カテゴリの開閉（デスクトップのサイドバーと同じ設定・記憶を共有）
+  const { isOpen, toggle } = useSidebarAccordion(mobileNavSections, pathname);
 
   return (
     <div className="flex min-h-full">
@@ -60,7 +63,16 @@ export default function AppShellInner({
               <nav className="px-3 py-4 space-y-4">
                 {mobileNavSections.map((section) => (
                   <div key={section.id}>
-                    <p className="px-2 mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{section.label}</p>
+                    <button
+                      type="button"
+                      onClick={() => toggle(section.id)}
+                      aria-expanded={isOpen(section.id)}
+                      className="w-full flex items-center justify-between px-2 mb-1 min-h-[44px] text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+                    >
+                      <span>{section.label}</span>
+                      <span aria-hidden="true">{isOpen(section.id) ? "▾" : "▸"}</span>
+                    </button>
+                    {isOpen(section.id) && (
                     <ul className="space-y-0.5">
                       {section.items.map((item) => (
                         <li key={item.href}>
@@ -91,6 +103,7 @@ export default function AppShellInner({
                         </li>
                       ))}
                     </ul>
+                    )}
                   </div>
                 ))}
 

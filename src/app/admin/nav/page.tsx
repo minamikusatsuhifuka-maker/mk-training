@@ -19,6 +19,11 @@ import {
 import { AdminBanner } from "@/components/AdminBanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  loadSidebarModeStore,
+  saveSidebarMode,
+  type SidebarMode,
+} from "@/lib/sidebar-accordion";
 
 type EditCategory = { id: string; label: string; hidden: boolean };
 type EditItemMeta = { hidden: boolean; labelOverride: string };
@@ -96,6 +101,28 @@ export default function AdminNavPage() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const loaded = useRef(false);
   const dragRef = useRef<DragPayload | null>(null);
+
+  // 166: サイドメニューの既定表示（すべて開く／すべて閉じる）
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>("open");
+  const [savingSidebarMode, setSavingSidebarMode] = useState(false);
+  useEffect(() => {
+    loadSidebarModeStore()
+      .then((store) => setSidebarMode(store.mode))
+      .catch(() => {});
+  }, []);
+  const changeSidebarMode = async (mode: SidebarMode) => {
+    const prev = sidebarMode;
+    setSidebarMode(mode);
+    setSavingSidebarMode(true);
+    const ok = await saveSidebarMode(mode);
+    setSavingSidebarMode(false);
+    if (ok) {
+      flash("保存しました（スタッフ側はリロードで反映されます）");
+    } else {
+      setSidebarMode(prev);
+      flash("保存に失敗しました");
+    }
+  };
 
   useEffect(() => {
     getContentObject<NavConfig>(NAV_CONFIG_KEY)
@@ -323,6 +350,39 @@ export default function AdminNavPage() {
       <p className="text-xs text-muted-foreground">
         並び替えはドラッグ&ドロップ（項目の行・カテゴリの ⠿）でも、↑↓ボタンでもできます。変更は自動保存されます。
       </p>
+
+      {/* 166: サイドメニューの既定表示（アコーディオン） */}
+      <div className="rounded-lg border bg-white p-4 space-y-2">
+        <h2 className="text-sm font-bold text-slate-800">📂 サイドメニューの既定表示</h2>
+        <p className="text-xs text-slate-600">
+          スタッフ側サイドメニューのカテゴリを、開いた状態で表示するか、見出しだけ表示するかを選びます（全スタッフ共通・カテゴリ見出しのタップでいつでも開閉できます）。
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <label className="flex items-center gap-1.5 text-sm text-slate-700 cursor-pointer">
+            <input
+              type="radio"
+              name="sidebar-mode"
+              checked={sidebarMode === "open"}
+              onChange={() => changeSidebarMode("open")}
+              disabled={savingSidebarMode}
+            />
+            すべて開く（既定）
+          </label>
+          <label className="flex items-center gap-1.5 text-sm text-slate-700 cursor-pointer">
+            <input
+              type="radio"
+              name="sidebar-mode"
+              checked={sidebarMode === "closed"}
+              onChange={() => changeSidebarMode("closed")}
+              disabled={savingSidebarMode}
+            />
+            すべて閉じる（カテゴリ見出しのみ表示。現在ページのカテゴリは開いたまま）
+          </label>
+        </div>
+        <p className="text-xs text-amber-700">
+          ⚠️ 「すべて閉じる」にすると、初めて使う人にはメニューの中身が見えなくなります。スタッフが機能を把握して慣れてきてから切り替えることをおすすめします。
+        </p>
+      </div>
 
       <div className="space-y-4">
         {state.categories.map((cat, cIdx) => (

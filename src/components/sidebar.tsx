@@ -9,10 +9,13 @@ import { UserMenu } from "@/components/UserMenu";
 import { AdminOnly } from "@/components/AdminOnly";
 import { FontSwitcher } from "@/components/FontSwitcher";
 import { DocTasksNavLink } from "@/components/DocTasksNavLink";
+import { useSidebarAccordion } from "@/lib/sidebar-accordion";
 
 export function Sidebar() {
   const pathname = usePathname();
   const navSections = useResolvedNav().filter((s) => s.items.length > 0);
+  // 166: カテゴリの開閉。既定の開閉は管理画面「サイドバー構成」の設定（未設定は全開＝従来どおり）
+  const { isOpen, toggle } = useSidebarAccordion(navSections, pathname);
 
   return (
     <aside className="w-[220px] shrink-0 border-r border-border bg-[var(--sidebar)] flex flex-col h-screen sticky top-0">
@@ -27,9 +30,16 @@ export function Sidebar() {
         <nav className="space-y-5">
           {navSections.map((section) => (
             <div key={section.id}>
-              <p className="px-2 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {section.label}
-              </p>
+              <button
+                type="button"
+                onClick={() => toggle(section.id)}
+                aria-expanded={isOpen(section.id)}
+                className="w-full flex items-center justify-between px-2 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <span>{section.label}</span>
+                <span aria-hidden="true">{isOpen(section.id) ? "▾" : "▸"}</span>
+              </button>
+              {isOpen(section.id) && (
               <ul className="space-y-0.5">
                 {section.items.map((item) => {
                   // 外部リンクは別タブで開く（現在ページのハイライトは不要）。指示書59
@@ -64,6 +74,7 @@ export function Sidebar() {
                   );
                 })}
               </ul>
+              )}
             </div>
           ))}
 

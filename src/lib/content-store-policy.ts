@@ -19,6 +19,9 @@ const ADMIN_ONLY_KEYS = new Set<string>([
   "portal_feature_flags",
   "portal_nav_config",
   "portal_home_layout",
+  // 166: クイックアクセスの表示項目・並び順／サイドメニューの既定開閉
+  "portal_quick_access",
+  "portal_sidebar_mode",
   // AI 設定
   "gemini_model_setting",
   "ai_background_context",

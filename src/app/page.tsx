@@ -25,7 +25,12 @@ import {
   NewsGrid,
 } from "@/components/NewsColumns";
 import { NEWS_AUTHOR_LS_KEY } from "@/lib/news-reactions";
-import { AI_INCHO_URL } from "@/lib/external-links";
+import {
+  QUICK_ACCESS_KEY,
+  applyQuickAccessLayout,
+  type QuickAccessConfig,
+  type QuickLinkDef,
+} from "@/lib/quick-access";
 import {
   CHARACTER_CHOICES,
   loadCharacterOrderedChoices,
@@ -183,85 +188,8 @@ function defaultNoticeLocal(days: number): string {
 }
 
 // ─── クイックアクセス ───
-type QuickLink = {
-  icon: string;
-  name: string;
-  sub: string;
-  href: string;
-  external?: boolean;
-  highlight?: boolean;
-};
-
-const quickLinks: QuickLink[] = [
-  {
-    icon: "🏛️",
-    name: "組織知識ベース",
-    sub: "マニュアル・スキルマップ",
-    href: "/knowledge",
-  },
-  {
-    icon: "📚",
-    name: "医療知識",
-    sub: "疾患・薬剤・生物学的製剤",
-    href: "/diseases",
-  },
-  {
-    icon: "🤖",
-    name: "AI相談",
-    sub: "チャット・症例・ロールプレイ",
-    href: "/ai-chat",
-  },
-  {
-    icon: "✅",
-    name: "業務チェック",
-    sub: "ロール別チェックリスト",
-    href: "/operations",
-  },
-  {
-    icon: "⭐",
-    name: "エキスパート",
-    sub: "成長ロードマップ",
-    href: "/expert",
-  },
-  {
-    icon: "💛",
-    name: "気づきシェア",
-    sub: "ヒヤリハット・良いこと",
-    href: "#hiyari",
-  },
-  {
-    icon: "🌱",
-    name: "理念・想い",
-    sub: "理念・8原則",
-    href: "/philosophy",
-  },
-  {
-    icon: "📊",
-    name: "等級制度",
-    sub: "G1〜G5・評価項目",
-    href: "/grade-system",
-  },
-  {
-    icon: "🚀",
-    name: "成長ロードマップ",
-    sub: "AIでスキル・知識を一括生成",
-    href: "/growth-builder",
-  },
-  {
-    icon: "📖",
-    name: "学習",
-    sub: "クイズ・症例学習",
-    href: "/quiz",
-  },
-  {
-    icon: "👨‍⚕️",
-    name: "AI院長",
-    sub: "判断基準・理念を確認",
-    href: AI_INCHO_URL,
-    external: true,
-    highlight: true,
-  },
-];
+// 166: 項目定義と表示設定（portal_quick_access）は lib/quick-access.ts が正本。
+// 未保存のあいだは従来の11項目・従来順のまま。
 
 export default function PortalHome() {
   // データ
@@ -282,6 +210,12 @@ export default function PortalHome() {
   // ホーム画面のセクション表示順（管理画面「ポータル管理→レイアウト」で編集）
   const [sectionOrder, setSectionOrder] = useState<HomeSectionKey[]>(
     DEFAULT_HOME_LAYOUT.map((s) => s.key)
+  );
+
+  // クイックアクセスの表示項目・並び順（166・管理画面「ポータル管理→レイアウト」で編集）
+  // 初期値＝既定の11項目。読み込み失敗時もこのまま（現状どおりの表示）。
+  const [quickLinks, setQuickLinks] = useState<QuickLinkDef[]>(() =>
+    applyQuickAccessLayout(null)
   );
 
   // 機能スイッチ（46R。thanksShowcase=ありがとうの常時表示）
@@ -429,6 +363,7 @@ export default function PortalHome() {
         word,
         charSettings,
         layout,
+        quickAccessLayout,
       ] = await Promise.all([
         loadPortalItems<NewsItem>(PORTAL_KEYS.news, DEFAULT_NEWS),
         loadPortalItems<ArchivedNewsItem>(PORTAL_KEYS.newsArchive, []),
@@ -441,9 +376,11 @@ export default function PortalHome() {
           PORTAL_KEYS.homeLayout,
           DEFAULT_HOME_LAYOUT
         ),
+        loadPortalItems<QuickAccessConfig>(QUICK_ACCESS_KEY, []),
       ]);
 
       setSectionOrder(visibleHomeSectionKeys(layout));
+      setQuickLinks(applyQuickAccessLayout(quickAccessLayout));
 
       // 期限切れ（noticeUntil超過 or createdAt+newsNoticeDays超過）は表示しない。
       const days =
@@ -736,7 +673,7 @@ export default function PortalHome() {
           {(featureFlags.hiyari
             ? // 106: ヒヤリハット報告の分離後は「良いこと共有」のリンクとして表示（OFF時は無変化）
               quickLinks.map((link) =>
-                link.href === "#hiyari"
+                link.key === "hiyari"
                   ? {
                       ...link,
                       icon: "✨",
@@ -761,7 +698,7 @@ export default function PortalHome() {
             );
             return link.external ? (
               <a
-                key={`${link.name}-${link.href}`}
+                key={link.key}
                 href={link.href}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -769,7 +706,7 @@ export default function PortalHome() {
                 {inner}
               </a>
             ) : (
-              <Link key={`${link.name}-${link.href}`} href={link.href}>
+              <Link key={link.key} href={link.href}>
                 {inner}
               </Link>
             );

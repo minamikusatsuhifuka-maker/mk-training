@@ -79,6 +79,13 @@ import {
   saveCharacterOrder,
 } from "@/lib/character-order";
 import { SectionLayoutEditor } from "@/components/admin/SectionLayoutEditor";
+import {
+  QUICK_ACCESS_KEY,
+  QUICK_ACCESS_LABELS,
+  DEFAULT_QUICK_ACCESS_LAYOUT,
+  resolveQuickAccessLayout,
+  type QuickAccessConfig,
+} from "@/lib/quick-access";
 import { DragSortList } from "@/components/admin/DragSortList";
 import {
   useBulkSelection,
@@ -792,6 +799,12 @@ export default function AdminPortalPage() {
     useState<TasksSectionConfig[]>(DEFAULT_TASKS_LAYOUT);
   const [savingTasksLayout, setSavingTasksLayout] = useState(false);
 
+  // クイックアクセスの表示項目・並び順（166・同タブで編集）
+  const [quickAccessLayout, setQuickAccessLayout] = useState<
+    QuickAccessConfig[]
+  >(DEFAULT_QUICK_ACCESS_LAYOUT);
+  const [savingQuickAccess, setSavingQuickAccess] = useState(false);
+
   // 機能スイッチ（portal_features。指示書47・46Rで「⚙ 機能」タブに3トグル集約）
   const [features, setFeatures] = useState<PortalFeatures>(
     DEFAULT_PORTAL_FEATURES
@@ -1254,7 +1267,7 @@ export default function AdminPortalPage() {
     const fetchAll = async () => {
       // 管理画面を開くたびに期限切れの新着をアーカイブへ移動（冪等）
       await archiveExpiredNews().catch(() => {});
-      const [n, na, h, t, p, w, c, layout, tLayout, nlog, rx, tlog, sl] =
+      const [n, na, h, t, p, w, c, layout, tLayout, qaLayout, nlog, rx, tlog, sl] =
         await Promise.all([
         loadPortalItems<NewsItem>(PORTAL_KEYS.news, []),
         loadPortalItems<ArchivedNewsItem>(PORTAL_KEYS.newsArchive, []),
@@ -1275,6 +1288,7 @@ export default function AdminPortalPage() {
           TASKS_PAGE_LAYOUT_KEY,
           DEFAULT_TASKS_LAYOUT
         ),
+        loadPortalItems<QuickAccessConfig>(QUICK_ACCESS_KEY, []),
         loadNewsLog(),
         loadNewsReactions(),
         loadTaskLog(),
@@ -1289,6 +1303,7 @@ export default function AdminPortalPage() {
       setCharSettings(c);
       setHomeLayout(resolveHomeLayout(layout));
       setTasksLayout(resolveTasksLayout(tLayout));
+      setQuickAccessLayout(resolveQuickAccessLayout(qaLayout));
       setNewsLog(nlog);
       setNewsReactions(rx);
       setTaskLog(tlog);
@@ -1431,6 +1446,35 @@ export default function AdminPortalPage() {
 
   const handleResetTasksLayoutToDefault = () => {
     setTasksLayout(DEFAULT_TASKS_LAYOUT);
+  };
+
+  // ─────────────────────────────────────
+  // クイックアクセス（表示項目・並び順）（166）
+  // ─────────────────────────────────────
+  const handleSaveQuickAccess = async () => {
+    setSavingQuickAccess(true);
+    const normalized = quickAccessLayout.map((s, i) => ({ ...s, order: i }));
+    const ok = await savePortalItems(QUICK_ACCESS_KEY, normalized);
+    setSavingQuickAccess(false);
+    if (ok) {
+      setQuickAccessLayout(normalized);
+      flash("💾 クイックアクセスの並びを保存しました");
+    } else {
+      alert("保存に失敗しました");
+    }
+  };
+
+  const handleReloadSavedQuickAccess = async () => {
+    const layout = await loadPortalItems<QuickAccessConfig>(
+      QUICK_ACCESS_KEY,
+      []
+    );
+    setQuickAccessLayout(resolveQuickAccessLayout(layout));
+    flash("🔄 保存済みの並びを読み込みました");
+  };
+
+  const handleResetQuickAccessToDefault = () => {
+    setQuickAccessLayout(DEFAULT_QUICK_ACCESS_LAYOUT);
   };
 
   // 追加フォームの通知期限を「現在 + newsNoticeDays日」でプリフィル（未入力時のみ）
@@ -6078,6 +6122,23 @@ export default function AdminPortalPage() {
               onReset={handleResetLayoutToDefault}
               description="スタッフ側ホーム画面のセクション表示順を編集します（サイドバー構成とは別の設定です）。ドラッグ&ドロップ、または「上へ／下へ」ボタンで並び替え、チェックを外すと該当セクションをホームから非表示にできます。"
               previewTitle="プレビュー（ホームでの表示順）"
+            />
+          </section>
+
+          <section className="space-y-3 border-t border-gray-200 pt-6">
+            <h2 className="text-sm font-semibold text-gray-800">
+              ⚡ クイックアクセスの表示項目・並び順
+            </h2>
+            <SectionLayoutEditor
+              layout={quickAccessLayout}
+              labels={QUICK_ACCESS_LABELS}
+              onChange={setQuickAccessLayout}
+              onSave={handleSaveQuickAccess}
+              saving={savingQuickAccess}
+              onReload={handleReloadSavedQuickAccess}
+              onReset={handleResetQuickAccessToDefault}
+              description="ホーム画面「クイックアクセス」に表示する項目と並び順を編集します（全スタッフ共通）。チェックを外した項目はホームに表示されません。未保存のあいだは従来の11項目・従来順のまま表示されます。"
+              previewTitle="プレビュー（クイックアクセスでの表示順）"
             />
           </section>
 
