@@ -189,9 +189,13 @@ export async function POST(req: NextRequest) {
           { status: 403 }
         );
       }
+      // 管理者判定（isAdminUser）は app_metadata.role のみを見る（2026-08-16 修正）。
+      // 以前ここは user_metadata に書いていたため、判定変更後はブートストラップしても
+      // 管理者になれない（復旧経路が機能しない）状態だった。
+      // app_metadata は service-role の Admin API からのみ書ける＝この経路はサーバー専用なので書ける。
       const { error } = await admin.auth.admin.updateUserById(sessionUser.id, {
-        user_metadata: {
-          ...((sessionUser.user_metadata ?? {}) as Record<string, unknown>),
+        app_metadata: {
+          ...((sessionUser.app_metadata ?? {}) as Record<string, unknown>),
           role: "admin",
         },
       });
@@ -294,9 +298,12 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+      // 判定（isAdminUser）が見るのは app_metadata.role のみ（2026-08-16 修正）。
+      // 以前ここは user_metadata に書いていたため、昇格しても管理者にならず、
+      // 解除しても app_metadata 側の admin が残る（＝解除できない）状態だった。
       const { error } = await admin.auth.admin.updateUserById(target.id, {
-        user_metadata: {
-          ...((target.user_metadata ?? {}) as Record<string, unknown>),
+        app_metadata: {
+          ...((target.app_metadata ?? {}) as Record<string, unknown>),
           role: action === "promote" ? "admin" : null,
         },
       });
