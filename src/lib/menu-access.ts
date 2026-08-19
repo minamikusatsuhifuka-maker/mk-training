@@ -17,6 +17,15 @@ export const MENU_ACCESS_KEY = "menu_access";
 
 /** メニューキー（＝将来ここに行が増える） */
 export const MENU_DOC_TASKS = "doc-tasks";
+/**
+ * スタッフ連絡先（指示書169）。
+ * **scope（159-A の「全員」モード）は使わない。**
+ * 住所・電話番号と、本人以外（家族・保証人）の個人情報を含むため、
+ * 「全員が開ける」状態を作れる口そのものを持たせない
+ *（判定側の authorizeStaffContacts が scope を読まないので、
+ *   仮に値が書き込まれても指名制のまま動く）。
+ */
+export const MENU_STAFF_CONTACTS = "staff-contacts";
 
 /**
  * 公開範囲（指示書159-A）。

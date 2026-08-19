@@ -9,6 +9,7 @@ import { UserMenu } from "@/components/UserMenu";
 import { AdminOnly } from "@/components/AdminOnly";
 import { FontSwitcher } from "@/components/FontSwitcher";
 import { DocTasksNavLink } from "@/components/DocTasksNavLink";
+import { StaffContactsNavLink } from "@/components/StaffContactsNavLink";
 import { useSidebarAccordion } from "@/lib/sidebar-accordion";
 
 export function Sidebar() {
@@ -80,6 +81,9 @@ export function Sidebar() {
 
           {/* 書類進捗ボード（154）。指名された人にだけ出る（未許可には描画されない） */}
           <DocTasksNavLink variant="sidebar" />
+
+          {/* スタッフ連絡先（169）。指名された人にだけ出る（未許可には描画されない） */}
+          <StaffContactsNavLink variant="sidebar" />
         </nav>
       </ScrollArea>
 

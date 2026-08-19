@@ -19,6 +19,7 @@ import { UserMenu } from "@/components/UserMenu";
 import { AdminOnly } from "@/components/AdminOnly";
 import { FontSwitcher } from "@/components/FontSwitcher";
 import { DocTasksNavLink } from "@/components/DocTasksNavLink";
+import { StaffContactsNavLink } from "@/components/StaffContactsNavLink";
 import { useSidebarAccordion } from "@/lib/sidebar-accordion";
 
 export default function AppShellInner({
@@ -109,6 +110,12 @@ export default function AppShellInner({
 
                 {/* 書類進捗ボード（154）。指名された人にだけ出る */}
                 <DocTasksNavLink
+                  variant="drawer"
+                  onNavigate={() => setMenuOpen(false)}
+                />
+
+                {/* スタッフ連絡先（169）。指名された人にだけ出る */}
+                <StaffContactsNavLink
                   variant="drawer"
                   onNavigate={() => setMenuOpen(false)}
                 />

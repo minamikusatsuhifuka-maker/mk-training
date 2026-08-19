@@ -45,6 +45,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const [canSeeNotes, setCanSeeNotes] = useState(false);
   // 154: 書類進捗ボードも同じ流儀（指名された人だけ・probeが404ならリンクを出さない）
   const [canSeeDocTasks, setCanSeeDocTasks] = useState(false);
+  // 169: スタッフ連絡先も同じ流儀（指名された人だけ・probeが404ならリンクを出さない）
+  const [canSeeContacts, setCanSeeContacts] = useState(false);
   useEffect(() => {
     let cancelled = false;
     const probe = (path: string, set: (ok: boolean) => void) =>
@@ -57,6 +59,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         });
     probe("/api/member-notes?probe=1", setCanSeeNotes);
     probe("/api/doc-tasks?probe=1", setCanSeeDocTasks);
+    probe("/api/staff-contacts?probe=1", setCanSeeContacts);
     return () => {
       cancelled = true;
     };
@@ -73,6 +76,14 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           // 157: 設定はここから開く（実体は /doc-tasks/settings。
           //   /admin 配下だと未ログイン・非管理者に200が返り、ルートの存在が漏れるため）
           { label: "⚙️ 書類進捗ボードの設定", href: "/doc-tasks/settings" },
+        ]
+      : []),
+    ...(canSeeContacts
+      ? [
+          { label: "📇 スタッフ連絡先", href: "/staff-contacts" },
+          // 169: 設定はここから開く（実体は /staff-contacts/settings。
+          //   /admin 配下だとルートの存在が漏れるため・157と同じ理由）
+          { label: "⚙️ スタッフ連絡先の設定", href: "/staff-contacts/settings" },
         ]
       : []),
   ];

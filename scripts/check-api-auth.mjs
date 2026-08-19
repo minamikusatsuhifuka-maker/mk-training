@@ -24,6 +24,7 @@ const GUARDS = [
   "getSessionUser", // セッションを自分で見て判定している
   "authorizeDocTasks", // 154: 書類進捗ボード（指名制・非許可は404）
   "authorizeMemberNotes", // 149: メンバーノート（指名制・非許可は404）
+  "authorizeStaffContacts", // 169: スタッフ連絡先（指名制・閲覧のみ／編集は管理者・非許可は404）
   "authorizeEvents", // 128: イベント（閲覧=ログイン済み・投稿=編集者）
   "CRON_SECRET", // 155: Vercel Cron 用の共有鍵
   "HR_CHAT_KNOWLEDGE_TOKEN", // ai-incho からのサーバー間呼び出し
