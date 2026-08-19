@@ -45,8 +45,11 @@ export function StaffContactsBoard({ isAdmin }: { isAdmin: boolean }) {
     try {
       const [json, idx] = await Promise.all([
         fetchStaffContacts(),
-        // 指名や紐付けの候補に使う名簿（無効化アカウントはサーバー側で除外済み）
-        loadProfilesIndex().catch(() => [] as StaffProfileIndexEntry[]),
+        // 名簿は「アカウントの紐付け」を選ぶ登録フォームでしか使わないので、
+        // 編集できない人（＝管理者以外）のためには取りに行かない
+        isAdmin
+          ? loadProfilesIndex().catch(() => [] as StaffProfileIndexEntry[])
+          : Promise.resolve([] as StaffProfileIndexEntry[]),
       ]);
       setContacts(json.contacts);
       setRetired(new Set(json.retiredUserIds));
@@ -57,7 +60,7 @@ export function StaffContactsBoard({ isAdmin }: { isAdmin: boolean }) {
     } finally {
       setLoaded(true);
     }
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     void load();

@@ -87,9 +87,13 @@ export async function GET(req: Request) {
       fetchAllStaffContacts(auth.admin),
       loadRetiredUserIds(auth.admin),
     ]);
+    // 無効化アカウントの一覧をそのまま渡さない。
+    // 画面が必要とするのは「この連絡先が退職者かどうか」だけなので、
+    // 連絡先に紐付いているIDだけに絞る（無関係なアカウントの状態を配らない）。
+    const linked = new Set(contacts.map((c) => c.userId).filter(Boolean));
     return NextResponse.json({
       contacts,
-      retiredUserIds,
+      retiredUserIds: retiredUserIds.filter((id) => linked.has(id)),
       isAdmin: auth.isAdmin,
       tableMissing,
     });
