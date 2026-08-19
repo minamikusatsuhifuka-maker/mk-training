@@ -60,6 +60,11 @@ function genId(): string {
  * 送られてきた内容を1件の連絡先に整える。
  * 値の検証・切り詰めは normalizeStaffContact に一任する（クライアントの値を信じない）。
  * 2-3の「保存しないもの」は型に無いので、余分なキーはここで落ちる。
+ *
+ * 更新のときは **送られてきた項目だけを差し替える**（base の上に body を重ねる）。
+ * 全置換にすると、項目が1つ欠けたリクエストで住所や電話番号が黙って消える。
+ * 「誤って書き換えられると本人に連絡が取れなくなる」（169-1-3）のが
+ * 編集を管理者に限る理由なので、消える方向の事故は仕組みで塞いでおく。
  */
 function buildContact(
   id: string,
@@ -68,6 +73,7 @@ function buildContact(
 ): StaffContact | null {
   const now = new Date().toISOString();
   return normalizeStaffContact(id, {
+    ...(base ?? {}),
     ...body,
     createdAt: base?.createdAt || now,
     updatedAt: now,
