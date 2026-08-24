@@ -76,17 +76,21 @@ export default function AppShellInner({
                     {isOpen(section.id) && (
                     <ul className="space-y-0.5">
                       {section.items.map((item) => (
-                        <li key={item.href}>
+                        <li key={item.key}>
                           {item.external ? (
                             // 外部リンクは別タブで開く（指示書59）
+                            // 171: ↗ で外部サイトだと分かるようにする（タップ領域は44px維持）
                             <a
                               href={item.href}
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={() => setMenuOpen(false)}
-                              className="rounded-md px-2 py-2 text-sm min-h-[44px] flex items-center transition-colors text-foreground hover:bg-accent"
+                              title={`${item.label}（外部サイト・新しいタブで開きます）`}
+                              className="rounded-md px-2 py-2 text-sm min-h-[44px] flex items-center gap-1 transition-colors text-foreground hover:bg-accent"
                             >
-                              {item.label}
+                              <span className="min-w-0 truncate">{item.label}</span>
+                              <span aria-hidden="true" className="shrink-0 text-[11px] text-muted-foreground">↗</span>
+                              <span className="sr-only">（外部サイト・新しいタブで開きます）</span>
                             </a>
                           ) : (
                             <Link

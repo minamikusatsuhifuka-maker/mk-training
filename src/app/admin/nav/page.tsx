@@ -14,8 +14,14 @@ import {
   UNCATEGORIZED_LABEL,
   buildDefaultConfig,
   categoryLabelOf,
+  isLinkKey,
+  isSafeExternalUrl,
+  linkIdOf,
+  linkKeyOf,
+  linkLabelOf,
   normalizeConfig,
   type NavConfig,
+  type NavLink,
 } from "@/lib/nav";
 import { AdminBanner } from "@/components/AdminBanner";
 import { Button } from "@/components/ui/button";
@@ -29,11 +35,15 @@ import {
 
 type EditCategory = { id: string; label: string; hidden: boolean };
 type EditItemMeta = { hidden: boolean; labelOverride: string };
+// 外部リンク（171）の編集内容。key（`link:<id>`）で itemsByCat の並びに載る＝
+// 並び順・カテゴリ移動・非表示は既存のメニュー項目とまったく同じ操作で動く。
+type EditLink = { label: string; url: string; icon: string };
 
 type EditState = {
   categories: EditCategory[];
   itemsByCat: Record<string, string[]>;
   itemMeta: Record<string, EditItemMeta>;
+  linkMeta: Record<string, EditLink>;
 };
 
 function configToEdit(cfg: NavConfig | null): EditState {
@@ -46,15 +56,29 @@ function configToEdit(cfg: NavConfig | null): EditState {
   const itemsByCat: Record<string, string[]> = {};
   for (const c of categories) itemsByCat[c.id] = [];
   const itemMeta: Record<string, EditItemMeta> = {};
+  const linkMeta: Record<string, EditLink> = {};
+  // items と links を order で混ぜてから並べる（nav.ts の normalizeConfig と同じ番号空間）
+  type Row = { key: string; catId: string; order: number };
+  const rows: Row[] = [];
   for (const it of norm.items) {
-    if (!itemsByCat[it.categoryId]) itemsByCat[it.categoryId] = [];
-    itemsByCat[it.categoryId].push(it.key);
+    rows.push({ key: it.key, catId: it.categoryId, order: it.order });
     itemMeta[it.key] = {
       hidden: !!it.hidden,
       labelOverride: it.labelOverride ?? "",
     };
   }
-  return { categories, itemsByCat, itemMeta };
+  for (const l of norm.links ?? []) {
+    const key = linkKeyOf(l.id);
+    rows.push({ key, catId: l.categoryId, order: l.order });
+    itemMeta[key] = { hidden: !!l.hidden, labelOverride: "" };
+    linkMeta[key] = { label: l.label, url: l.url, icon: l.icon ?? "" };
+  }
+  rows.sort((a, b) => a.order - b.order);
+  for (const r of rows) {
+    if (!itemsByCat[r.catId]) itemsByCat[r.catId] = [];
+    itemsByCat[r.catId].push(r.key);
+  }
+  return { categories, itemsByCat, itemMeta, linkMeta };
 }
 
 function editToConfig(state: EditState): NavConfig {
@@ -66,9 +90,24 @@ function editToConfig(state: EditState): NavConfig {
     hidden: c.hidden,
   }));
   const items: NavConfig["items"] = [];
+  const links: NavLink[] = [];
   for (const c of state.categories) {
     (state.itemsByCat[c.id] ?? []).forEach((key, order) => {
       const meta = state.itemMeta[key] ?? { hidden: false, labelOverride: "" };
+      if (isLinkKey(key)) {
+        const l = state.linkMeta[key];
+        if (!l) return; // 実体を失った孤児キーは保存しない
+        links.push({
+          id: linkIdOf(key),
+          label: l.label.trim(),
+          url: l.url.trim(),
+          ...(l.icon.trim() ? { icon: l.icon.trim() } : {}),
+          categoryId: c.id,
+          order,
+          hidden: meta.hidden,
+        });
+        return;
+      }
       items.push({
         key,
         categoryId: c.id,
@@ -78,7 +117,7 @@ function editToConfig(state: EditState): NavConfig {
       });
     });
   }
-  return { categories, items };
+  return { categories, items, links };
 }
 
 function masterLabel(key: string): string {
@@ -86,6 +125,15 @@ function masterLabel(key: string): string {
 }
 function masterHref(key: string): string {
   return MASTER_ITEM_BY_KEY.get(key)?.href ?? key;
+}
+
+// 行の表示ラベル（外部リンクは登録内容から組み立てる）
+function rowLabel(state: EditState, key: string): string {
+  if (isLinkKey(key)) {
+    const l = state.linkMeta[key];
+    return l ? linkLabelOf(l) || "（表示名なし）" : key;
+  }
+  return masterLabel(key);
 }
 
 // ドラッグ中の対象（項目 or カテゴリ）
@@ -181,7 +229,70 @@ export default function AdminNavPage() {
     categories: s.categories.map((c) => ({ ...c })),
     itemsByCat: Object.fromEntries(Object.entries(s.itemsByCat).map(([k, v]) => [k, [...v]])),
     itemMeta: Object.fromEntries(Object.entries(s.itemMeta).map(([k, v]) => [k, { ...v }])),
+    linkMeta: Object.fromEntries(Object.entries(s.linkMeta).map(([k, v]) => [k, { ...v }])),
   });
+
+  // --- 外部リンク（171） ---
+  const addLink = (catId: string) => {
+    const next = clone(state);
+    // IDは既存の最大番号＋1（時刻・乱数を使わない＝再描画で結果が揺れない）
+    const used = Object.keys(next.linkMeta).map((k) => Number(linkIdOf(k).replace(/^l/, "")));
+    const nextNo = used.reduce((m, n) => (Number.isFinite(n) && n > m ? n : m), 0) + 1;
+    const key = linkKeyOf(`l${nextNo}`);
+    next.linkMeta[key] = { label: "新しいリンク", url: "", icon: "🔗" };
+    next.itemMeta[key] = { hidden: false, labelOverride: "" };
+    next.itemsByCat[catId] = [...(next.itemsByCat[catId] ?? []), key];
+    update(next);
+    flash("外部リンクを追加しました（表示名とURLを入力してください）");
+  };
+  const setLinkField = (key: string, field: keyof EditLink, val: string) => {
+    const next = clone(state);
+    next.linkMeta[key] = {
+      ...(next.linkMeta[key] ?? { label: "", url: "", icon: "" }),
+      [field]: val,
+    };
+    setState(next); // persist on blur
+  };
+  const deleteLink = (catId: string, key: string) => {
+    const name = rowLabel(state, key);
+    if (!confirm(`外部リンク「${name}」を削除しますか？`)) return;
+    const next = clone(state);
+    next.itemsByCat[catId] = (next.itemsByCat[catId] ?? []).filter((k) => k !== key);
+    delete next.linkMeta[key];
+    delete next.itemMeta[key];
+    update(next);
+  };
+  // 既定構成へ戻す系の操作で外部リンクを失わせないための復元（歯止め2）
+  const keepLinks = (base: EditState, from: EditState): EditState => {
+    const next: EditState = {
+      ...base,
+      itemMeta: { ...base.itemMeta },
+      itemsByCat: Object.fromEntries(
+        Object.entries(base.itemsByCat).map(([k, v]) => [k, [...v]])
+      ),
+      linkMeta: { ...from.linkMeta },
+    };
+    const catIds = new Set(next.categories.map((c) => c.id));
+    for (const [catId, keys] of Object.entries(from.itemsByCat)) {
+      for (const key of keys) {
+        if (!isLinkKey(key) || !next.linkMeta[key]) continue;
+        const to = catIds.has(catId) ? catId : UNCATEGORIZED_ID;
+        if (!next.itemsByCat[to]) {
+          next.itemsByCat[to] = [];
+          if (!catIds.has(to)) {
+            next.categories = [
+              ...next.categories,
+              { id: UNCATEGORIZED_ID, label: UNCATEGORIZED_LABEL, hidden: false },
+            ];
+            catIds.add(to);
+          }
+        }
+        next.itemsByCat[to].push(key);
+        next.itemMeta[key] = from.itemMeta[key] ?? { hidden: false, labelOverride: "" };
+      }
+    }
+    return next;
+  };
 
   // --- category ops ---
   const moveCategory = (idx: number, dir: -1 | 1) => {
@@ -293,12 +404,13 @@ export default function AdminNavPage() {
 
   // --- global ops ---
   const importCurrent = () => {
-    const next = configToEdit(buildDefaultConfig());
+    // 171: 既定の取り込みでも、管理画面から登録した外部リンクは残す
+    const next = keepLinks(configToEdit(buildDefaultConfig()), state);
     update(next);
-    flash("現在の構成（既定）を取り込みました");
+    flash("現在の構成（既定）を取り込みました（外部リンクは維持）");
   };
   const resetToDefault = async () => {
-    if (!confirm("設定を削除して既定の構成に戻しますか？（カスタマイズは失われます）")) return;
+    if (!confirm("設定を削除して既定の構成に戻しますか？（カスタマイズと、登録した外部リンクは失われます）")) return;
     setSaving(true);
     await deleteContent(NAV_CONFIG_KEY);
     setState(configToEdit(null));
@@ -317,16 +429,19 @@ export default function AdminNavPage() {
       return;
     }
     const base = configToEdit(buildDefaultConfig());
-    const next: EditState = {
+    const merged: EditState = {
       categories: base.categories.map((c) => {
         const cur = state.categories.find((x) => x.id === c.id);
         return cur ? { ...c, label: cur.label, hidden: cur.hidden } : c;
       }),
       itemsByCat: base.itemsByCat,
       itemMeta: { ...base.itemMeta, ...state.itemMeta },
+      linkMeta: state.linkMeta,
     };
+    // 171: 既定の配置に戻しても外部リンクは元のカテゴリに残す
+    const next = keepLinks(merged, state);
     update(next);
-    flash("既定の配置を反映しました（表示/名前の設定は維持）");
+    flash("既定の配置を反映しました（表示/名前の設定・外部リンクは維持）");
   };
 
   return (
@@ -371,6 +486,22 @@ export default function AdminNavPage() {
       <p className="text-xs text-muted-foreground">
         並び替えはドラッグ&ドロップ（項目の行・カテゴリの ⠿）でも、↑↓ボタンでもできます。変更は自動保存されます。
       </p>
+
+      {/* 171: 外部リンク */}
+      <div className="rounded-lg border bg-white p-4 space-y-1.5">
+        <h2 className="text-sm font-bold text-slate-800">🔗 外部サイトへのリンク</h2>
+        <p className="text-xs text-slate-600">
+          各カテゴリの下にある「＋ 外部リンクを追加」から、外部サイトへのリンクをメニューに並べられます。表示名・URL・アイコンを入力し、並び順とカテゴリは通常のメニュー項目と同じように変更できます。
+        </p>
+        <p className="text-xs text-slate-600">
+          スタッフ側では<strong>新しいタブで開き、項目名の横に ↗ が付きます</strong>（アプリ内のページと区別できるようにするため）。URLは
+          <code className="mx-1 rounded bg-slate-100 px-1">https://</code>
+          で始まるもののみ登録できます。
+        </p>
+        <p className="text-xs text-amber-700">
+          ⚠️ 院内の個人情報を扱うものは、外部リンクではなくアプリ内の機能として作ってください（リンク先の安全性はこのアプリでは守れません）。
+        </p>
+      </div>
 
       {/* 166→167: サイドメニューの既定開閉（カテゴリごと） */}
       <div className="rounded-lg border bg-white p-4 space-y-2">
@@ -446,7 +577,7 @@ export default function AdminNavPage() {
               {collapsed[cat.id] && (
                 <span className="text-[11px] text-muted-foreground truncate max-w-[380px]">
                   {(state.itemsByCat[cat.id] ?? [])
-                    .map((key) => state.itemMeta[key]?.labelOverride?.trim() || masterLabel(key))
+                    .map((key) => state.itemMeta[key]?.labelOverride?.trim() || rowLabel(state, key))
                     .join(" / ")}
                 </span>
               )}
@@ -475,6 +606,97 @@ export default function AdminNavPage() {
               {(state.itemsByCat[cat.id] ?? []).map((key, iIdx) => {
                 const meta = state.itemMeta[key] ?? { hidden: false, labelOverride: "" };
                 const list = state.itemsByCat[cat.id] ?? [];
+                const link = isLinkKey(key) ? state.linkMeta[key] : undefined;
+                if (link) {
+                  const urlOk = isSafeExternalUrl(link.url);
+                  return (
+                    <li
+                      key={key}
+                      draggable
+                      onDragStart={() => {
+                        dragRef.current = { type: "item", key, fromCat: cat.id };
+                      }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        dropItemAt(cat.id, iIdx);
+                      }}
+                      className={`rounded-md border p-2 space-y-2 cursor-grab ${meta.hidden ? "bg-slate-50 opacity-70" : "bg-sky-50/40"}`}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-700">
+                          外部リンク ↗
+                        </span>
+                        <span className="text-sm font-medium text-slate-700">
+                          {linkLabelOf(link) || "（表示名なし）"}
+                        </span>
+                        {!urlOk && (
+                          <span className="text-[11px] text-red-600">
+                            ⚠ https:// で始まるURLを入力してください（この状態ではメニューに表示されません）
+                          </span>
+                        )}
+                        <div className="ml-auto flex gap-1">
+                          <Button variant="outline" size="sm" onClick={() => moveItem(cat.id, iIdx, -1)} disabled={iIdx === 0}>↑</Button>
+                          <Button variant="outline" size="sm" onClick={() => moveItem(cat.id, iIdx, 1)} disabled={iIdx === list.length - 1}>↓</Button>
+                          <Button variant="outline" size="sm" onClick={() => toggleItemHidden(key)}>
+                            {meta.hidden ? "表示する" : "非表示"}
+                          </Button>
+                          <Button variant="destructive" size="sm" onClick={() => deleteLink(cat.id, key)}>削除</Button>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="text-[11px] text-muted-foreground">アイコン:</label>
+                        <Input
+                          value={link.icon}
+                          onChange={(e) => setLinkField(key, "icon", e.target.value)}
+                          onBlur={() => persist(state)}
+                          placeholder="🔗"
+                          className="w-[64px] h-8 text-xs"
+                        />
+                        <label className="text-[11px] text-muted-foreground">表示名:</label>
+                        <Input
+                          value={link.label}
+                          onChange={(e) => setLinkField(key, "label", e.target.value)}
+                          onBlur={() => persist(state)}
+                          placeholder="チームボード"
+                          className="max-w-[180px] h-8 text-xs"
+                        />
+                        <label className="text-[11px] text-muted-foreground">URL:</label>
+                        <Input
+                          value={link.url}
+                          onChange={(e) => setLinkField(key, "url", e.target.value)}
+                          onBlur={() => {
+                            if (link.url.trim() && !isSafeExternalUrl(link.url)) {
+                              flash("https:// で始まるURLのみ登録できます");
+                            }
+                            persist(state);
+                          }}
+                          placeholder="https://example.com/board"
+                          className={`max-w-[320px] h-8 text-xs ${link.url.trim() && !urlOk ? "border-red-400" : ""}`}
+                        />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="text-[11px] text-muted-foreground">カテゴリ移動:</label>
+                        <select
+                          value={cat.id}
+                          onChange={(e) => changeItemCategory(key, cat.id, e.target.value)}
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        >
+                          {state.categories.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.label}
+                              {c.hidden ? "（非表示）" : ""}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="text-[11px] text-muted-foreground">
+                          新しいタブで開きます（スタッフ側では ↗ が付きます）
+                        </span>
+                      </div>
+                    </li>
+                  );
+                }
                 return (
                   <li
                     key={key}
@@ -533,6 +755,14 @@ export default function AdminNavPage() {
                 </li>
               )}
             </ul>
+            )}
+            {!collapsed[cat.id] && (
+              <div className="pt-1">
+                {/* 171: 外部サイトへのリンクをこのカテゴリに追加する */}
+                <Button variant="outline" size="sm" onClick={() => addLink(cat.id)}>
+                  ＋ 外部リンクを追加
+                </Button>
+              </div>
             )}
           </div>
         ))}

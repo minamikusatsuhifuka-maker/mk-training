@@ -123,7 +123,63 @@ export type NavItemConfig = {
   hidden?: boolean;
   labelOverride?: string;
 };
-export type NavConfig = { categories: NavCategory[]; items: NavItemConfig[] };
+
+// 管理画面から追加する外部リンク（指示書171）。
+//
+// 【なぜ links を別配列にするか】
+// items[] は「マスターに存在するページの配置情報」であり、
+// normalizeConfig がマスターに無いキーを捨てる前提で動いている（この性質は残したい）。
+// 外部リンクは**設定そのものが実体**（マスターに対応物が無い）なので、別の配列で持つ。
+// 保存先は同じ portal_nav_config（167の仕組みをそのまま拡張・新しい方式を持ち込まない）。
+// links が無い既存データはそのまま「外部リンク0件」として読める＝後方互換。
+export type NavLink = {
+  id: string; // 一意ID（生成は addLink 側。key は `link:<id>`）
+  label: string; // 表示名
+  url: string; // https:// のみ（isSafeExternalUrl で検証）
+  icon?: string; // 絵文字（任意）
+  categoryId: string;
+  order: number; // 同一カテゴリ内での位置。items と同じ番号空間を共有する
+  hidden?: boolean;
+};
+
+export type NavConfig = {
+  categories: NavCategory[];
+  items: NavItemConfig[];
+  links?: NavLink[];
+};
+
+// 外部リンク項目の key は `link:<id>`。マスターのキー（ルート or 一意ID）とは衝突しない。
+export const LINK_KEY_PREFIX = "link:";
+export const linkKeyOf = (id: string): string => `${LINK_KEY_PREFIX}${id}`;
+export const isLinkKey = (key: string): boolean =>
+  key.startsWith(LINK_KEY_PREFIX);
+export const linkIdOf = (key: string): string =>
+  key.slice(LINK_KEY_PREFIX.length);
+
+/**
+ * 外部リンクとして受け入れてよいURLか（指示書171 §3-1）。
+ *
+ * **https:// で始まるものだけ**を通す。`javascript:` `data:` `http:` などは弾く。
+ * 保存時（管理画面）と描画時（resolveNav）の両方で通す＝
+ * 不正な値がDBに入っていても**リンクとして表示されない**（フェイルクローズド）。
+ */
+export function isSafeExternalUrl(url: string | null | undefined): boolean {
+  const t = (url ?? "").trim();
+  if (!/^https:\/\//i.test(t)) return false;
+  try {
+    const u = new URL(t);
+    return u.protocol === "https:" && !!u.hostname;
+  } catch {
+    return false;
+  }
+}
+
+/** 外部リンクの表示ラベル（アイコン＋表示名）。マスター項目のラベル（絵文字込み）と同じ見た目に揃える */
+export function linkLabelOf(l: Pick<NavLink, "label" | "icon">): string {
+  const icon = (l.icon ?? "").trim();
+  const label = (l.label ?? "").trim();
+  return icon ? `${icon} ${label}`.trim() : label;
+}
 
 // --- 描画用に解決した形 ---
 export type ResolvedItem = {
@@ -141,6 +197,8 @@ export function buildDefaultConfig(): NavConfig {
   return {
     categories: MASTER_CATEGORIES.map((c, i) => ({ id: c.id, label: c.label, order: i })),
     items: MASTER_ITEMS.map((it, i) => ({ key: it.key, categoryId: it.categoryId, order: i })),
+    // 外部リンクの既定は0件（171 §2-3・歯止め5）。登録は院長が管理画面から行う
+    links: [],
   };
 }
 
@@ -200,6 +258,27 @@ export function normalizeConfig(cfg: NavConfig | null | undefined): NavConfig {
     };
   });
 
+  // 外部リンク（171）。形が壊れているものだけ落とし、URLが不正なものは残す
+  //（管理画面で直せるようにするため。**表示側は resolveNav が弾く**＝フェイルクローズド）
+  let links: NavLink[] = (base.links ?? []).filter(
+    (l): l is NavLink =>
+      !!l &&
+      typeof l === "object" &&
+      typeof l.id === "string" &&
+      !!l.id &&
+      typeof l.url === "string"
+  );
+  if (links.some((l) => !catIds.has(l.categoryId))) needUncat = true;
+  links = links.map((l) => ({
+    id: l.id,
+    label: typeof l.label === "string" ? l.label : "",
+    url: l.url,
+    ...(l.icon ? { icon: l.icon } : {}),
+    categoryId: catIds.has(l.categoryId) ? l.categoryId : UNCATEGORIZED_ID,
+    order: typeof l.order === "number" ? l.order : 9999,
+    hidden: !!l.hidden,
+  }));
+
   if (needUncat && !catIds.has(UNCATEGORIZED_ID)) {
     categories.push({ id: UNCATEGORIZED_ID, label: UNCATEGORIZED_LABEL, order: categories.length, hidden: false });
   }
@@ -209,18 +288,29 @@ export function normalizeConfig(cfg: NavConfig | null | undefined): NavConfig {
     .sort((a, b) => a.order - b.order)
     .map((c, i) => ({ ...c, order: i }));
 
-  const byCat = new Map<string, NavItemConfig[]>();
-  for (const it of items) {
-    if (!byCat.has(it.categoryId)) byCat.set(it.categoryId, []);
-    byCat.get(it.categoryId)!.push(it);
-  }
+  // items と links はカテゴリ内で**同じ番号空間**を共有する（混在させて並び替えられるように）
+  type Entry =
+    | { kind: "item"; order: number; item: NavItemConfig }
+    | { kind: "link"; order: number; link: NavLink };
+  const byCat = new Map<string, Entry[]>();
+  const push = (catId: string, e: Entry) => {
+    if (!byCat.has(catId)) byCat.set(catId, []);
+    byCat.get(catId)!.push(e);
+  };
+  for (const it of items) push(it.categoryId, { kind: "item", order: it.order, item: it });
+  for (const l of links) push(l.categoryId, { kind: "link", order: l.order, link: l });
+
   const normItems: NavItemConfig[] = [];
+  const normLinks: NavLink[] = [];
   for (const c of categories) {
     const list = (byCat.get(c.id) ?? []).slice().sort((a, b) => a.order - b.order);
-    list.forEach((it, i) => normItems.push({ ...it, order: i }));
+    list.forEach((e, i) => {
+      if (e.kind === "item") normItems.push({ ...e.item, order: i });
+      else normLinks.push({ ...e.link, order: i });
+    });
   }
 
-  return { categories, items: normItems };
+  return { categories, items: normItems, links: normLinks };
 }
 
 function defaultResolved(flags?: FeatureFlags): ResolvedCategory[] {
@@ -327,6 +417,30 @@ export function resolveNav(
           needsUncategorized = true;
           pushTo(UNCATEGORIZED_ID, resolved, order);
         }
+      }
+    }
+
+    // 管理画面から追加された外部リンク（171）。マスターに実体が無いので config だけが情報源。
+    // **URLが https:// でないものはここで捨てる**＝壊れた値が保存されていてもリンクは出ない。
+    for (const l of cfg.links ?? []) {
+      if (!l || typeof l.id !== "string" || l.hidden) continue;
+      if (!isSafeExternalUrl(l.url)) continue;
+      const label = linkLabelOf(l);
+      if (!label) continue; // 表示名が無いものは出さない（押せない項目を並べない）
+      const resolved: ResolvedItem = {
+        key: linkKeyOf(l.id),
+        href: l.url.trim(),
+        label,
+        external: true as const,
+      };
+      const order = typeof l.order === "number" ? l.order : 9999;
+      if (visibleCatIds.has(l.categoryId)) {
+        pushTo(l.categoryId, resolved, order);
+      } else if (catExists.has(l.categoryId)) {
+        continue; // カテゴリ自体が hidden → 項目も非表示扱い（マスター項目と同じ規則）
+      } else {
+        needsUncategorized = true;
+        pushTo(UNCATEGORIZED_ID, resolved, order);
       }
     }
 
