@@ -6,7 +6,7 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "./supabase-server";
 import { createSupabaseAdminClient } from "./supabase-admin";
-import { signPublicUrls } from "./storage-signed";
+import { logSignFailure, signPublicUrls } from "./storage-signed";
 import {
   STAFF_PROFILES_INDEX_KEY,
   staffProfileKey,
@@ -117,10 +117,15 @@ export async function saveProfileServer(
 // 163でバケットを非公開にすると、資料庫だけでなくこちらも公開URLでは開けなくなる。
 // 既存ファイルの移動は指示書163の範囲外なので、**返すときに署名URLへ差し替える**形で追随する。
 //
-// 差し替える対象は3か所:
-//   ① avatarUrl              … アバター
+// 差し替える対象は4か所:
+//   ① avatarUrl              … アバター（プロフィール本体）
 //   ② photos[].url           … 共有写真（1人最大20枚）
 //   ③ needsSurvey.imageUrl   … 5つの基本的欲求サーベイの画像
+//   ④ index の avatarUrl     … メンバー紹介の一覧カードが見ているのは**こちら**
+//
+// ④は163で関数（withSignedIndexEntries）だけ用意され、**呼び出しが繋がっていなかった**。
+// その結果、一覧カードのアバターだけが公開URLのまま返り、バケット非公開化で全滅した
+// （指示書170の真因）。以後、index を返す経路は必ずこの関数を通すこと。
 //
 // 一覧（/api/members）では人数分まとめて署名するため、1回のAPI呼び出しで済ませる。
 
@@ -142,24 +147,42 @@ export async function withSignedProfiles(
   let signed: Map<string, string>;
   try {
     signed = await signPublicUrls(createSupabaseAdminClient(), all);
-  } catch {
+  } catch (e) {
     signed = new Map(); // service-role が無い環境では差し替えない
+    logSignFailure("withSignedProfiles", {
+      profileCount: profiles.length,
+      urlCount: all.length,
+      reason: e instanceof Error ? e.message : String(e),
+    });
   }
-  const swap = (url: string): string =>
-    url && url.includes("/storage/v1/object/public/")
-      ? signed.get(url) ?? ""
-      : url;
+  // fail-close（空文字に倒す）は維持。ただし**倒した事実は必ず残す**（170 §4-3）
+  const swap = (url: string, userId: string, field: string): string => {
+    if (!url || !url.includes("/storage/v1/object/public/")) return url;
+    const s = signed.get(url);
+    if (s) return s;
+    logSignFailure("withSignedProfiles（差し替え不可）", { userId, field });
+    return "";
+  };
 
   return profiles.map((p) => ({
     ...p,
-    avatarUrl: swap(p.avatarUrl),
-    photos: (p.photos ?? []).map((ph) => ({ ...ph, url: swap(ph.url) })),
+    avatarUrl: swap(p.avatarUrl, p.userId, "avatarUrl"),
+    photos: (p.photos ?? []).map((ph) => ({
+      ...ph,
+      url: swap(ph.url, p.userId, "photos[].url"),
+    })),
     ...(p.needsSurvey
       ? {
           needsSurvey: {
             ...p.needsSurvey,
             ...(p.needsSurvey.imageUrl
-              ? { imageUrl: swap(p.needsSurvey.imageUrl) }
+              ? {
+                  imageUrl: swap(
+                    p.needsSurvey.imageUrl,
+                    p.userId,
+                    "needsSurvey.imageUrl"
+                  ),
+                }
               : {}),
           },
         }
@@ -174,7 +197,12 @@ export async function withSignedProfile(
   return (await withSignedProfiles([profile]))[0] ?? profile;
 }
 
-/** 一覧の軽量データ（avatarUrl のみ）を署名URLに差し替える */
+/**
+ * 一覧の軽量データ（avatarUrl のみ）を署名URLに差し替える。
+ *
+ * **メンバー紹介のカードが表示に使っているのはこの index の avatarUrl**（170）。
+ * index を画面へ返す経路は、必ずここを通すこと。
+ */
 export async function withSignedIndexEntries(
   items: StaffProfileIndexEntry[]
 ): Promise<StaffProfileIndexEntry[]> {
@@ -183,12 +211,25 @@ export async function withSignedIndexEntries(
   let signed: Map<string, string>;
   try {
     signed = await signPublicUrls(createSupabaseAdminClient(), all);
-  } catch {
+  } catch (e) {
     signed = new Map();
+    logSignFailure("withSignedIndexEntries", {
+      itemCount: items.length,
+      urlCount: all.length,
+      reason: e instanceof Error ? e.message : String(e),
+    });
   }
-  return items.map((i) =>
-    i.avatarUrl && i.avatarUrl.includes("/storage/v1/object/public/")
-      ? { ...i, avatarUrl: signed.get(i.avatarUrl) ?? "" }
-      : i
-  );
+  return items.map((i) => {
+    if (!i.avatarUrl || !i.avatarUrl.includes("/storage/v1/object/public/")) {
+      return i;
+    }
+    const s = signed.get(i.avatarUrl);
+    if (s) return { ...i, avatarUrl: s };
+    // fail-close は維持（公開URLには戻さない）。消えた事実だけログに残す
+    logSignFailure("withSignedIndexEntries（差し替え不可）", {
+      userId: i.userId,
+      field: "index.avatarUrl",
+    });
+    return { ...i, avatarUrl: "" };
+  });
 }

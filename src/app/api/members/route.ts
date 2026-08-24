@@ -15,6 +15,7 @@ import { NextResponse } from "next/server";
 import type { User } from "@supabase/supabase-js";
 import {
   getSessionUser,
+  withSignedIndexEntries,
   withSignedProfiles,
 } from "@/lib/staff-profiles-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
@@ -114,13 +115,18 @@ export async function GET(req: Request) {
         )
       : [];
 
+    // 163/170: 一覧カードのアバターは **index の avatarUrl** を見ている。
+    // ここを署名URLに差し替えないと、バケット非公開化により全員のアバターが消える
+    //（170の真因。関数はあったが呼ばれていなかった）。
+    const signedItems = await withSignedIndexEntries(items);
+
     const body: {
       items: StaffProfileIndexEntry[];
       disabledNames: string[];
       filtered: boolean;
       profiles?: Record<string, StaffProfile>;
     } = {
-      items,
+      items: signedItems,
       disabledNames,
       // false = 無効判定に失敗して除外していない（画面側が知りたい場合のため）
       filtered: disabled !== null,

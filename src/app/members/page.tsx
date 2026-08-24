@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   loadProfilesIndex,
-  loadStaffProfile,
+  loadStaffProfileForViewing,
   loadAllStaffProfiles,
   isFieldPrivate,
   type StaffProfile,
@@ -220,14 +220,15 @@ export default function MembersPage() {
 
   const openDetail = async (entry: StaffProfileIndexEntry) => {
     setShowAllHistory(false);
-    // 一括取得済みならそれを使い、無ければ従来どおり個別取得
+    // 一括取得済みならそれを使い、無ければ取り直す。
+    // 取り直しも /api/members 経由（署名URL＋サーベイの公開判定つき。163/164/170）
     const cached = profiles[entry.userId];
     if (cached) {
       setSelected(cached);
       return;
     }
     setDetailLoading(true);
-    const p = await loadStaffProfile(entry.userId).catch(() => null);
+    const p = await loadStaffProfileForViewing(entry.userId).catch(() => null);
     setDetailLoading(false);
     if (p) setSelected(p);
   };

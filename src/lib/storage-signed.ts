@@ -49,6 +49,23 @@ export function isBucketNotFound(message: string | null | undefined): boolean {
 }
 
 /**
+ * 署名に失敗した事実をログに残す（指示書170 §4-3）。
+ *
+ * 【なぜ必要か】163の fail-close（失敗したら空文字）は方針として正しいが、
+ * **失敗しても画面には何も出ない**ため、170ではアバターが黙って消えたまま
+ * 原因に辿り着けなかった。空文字に倒す設計は維持したうえで、
+ * 「いつ・どこで・何件・なぜ」だけはサーバーログに必ず残す。
+ *
+ * 出力先は Vercel のランタイムログ。画面には出さない（利用者には無関係な情報のため）。
+ */
+export function logSignFailure(
+  where: string,
+  detail: Record<string, unknown>
+): void {
+  console.error(`[storage-signed] 署名URLを発行できませんでした（${where}）`, detail);
+}
+
+/**
  * 指定バケットのパス群に署名URLをまとめて発行する（**署名の唯一の入口**）。
  *
  * - 1回のAPI呼び出しでまとめて発行する（件数分の往復をしない）
@@ -69,13 +86,35 @@ export async function signBucketPaths(
       .from(bucket)
       .createSignedUrls(uniq, SIGNED_URL_TTL);
     if (error || !data) {
-      return { urls, bucketMissing: isBucketNotFound(error?.message) };
+      const bucketMissing = isBucketNotFound(error?.message);
+      logSignFailure("createSignedUrls", {
+        bucket,
+        count: uniq.length,
+        bucketMissing,
+        reason: error?.message ?? "応答が空でした",
+      });
+      return { urls, bucketMissing };
     }
     for (const d of data) {
       if (d.signedUrl && !d.error) urls.set(d.path as string, d.signedUrl);
     }
-  } catch {
-    /* fail-close: 空のまま返す */
+    // 一部だけ失敗した場合も黙って消えないよう、失敗したパスを名指しで残す
+    const failed = uniq.filter((p) => !urls.has(p));
+    if (failed.length > 0) {
+      logSignFailure("createSignedUrls（一部）", {
+        bucket,
+        failedCount: failed.length,
+        totalCount: uniq.length,
+        paths: failed.slice(0, 10),
+      });
+    }
+  } catch (e) {
+    // fail-close: 空のまま返す（公開URLへは絶対に戻さない）
+    logSignFailure("createSignedUrls（例外）", {
+      bucket,
+      count: uniq.length,
+      reason: e instanceof Error ? e.message : String(e),
+    });
   }
   return { urls, bucketMissing: false };
 }

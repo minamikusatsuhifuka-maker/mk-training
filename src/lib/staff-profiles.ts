@@ -169,6 +169,21 @@ export async function loadAllStaffProfiles(): Promise<
   }
 }
 
+// 他人のプロフィールを見る経路（メンバー紹介の詳細）は**必ず /api/members を通す**。
+//
+// 【なぜ】content_store を直読みすると、
+//   ・写真URLが公開URLのまま返る（署名されない＝バケット非公開で表示できない・163/170）
+//   ・非公開のサーベイ結果まで含まれて返る（164の絞り込みを迂回する）
+// の2つを同時に踏む。表示できないだけでなく、見せない判断も抜ける。
+export async function loadStaffProfileForViewing(
+  userId: string
+): Promise<StaffProfile | null> {
+  const { profiles } = await fetchMembers(true);
+  return profiles[userId] ?? null;
+}
+
+// 本人の情報を本人の画面で使う場合のみ（記念日カード等）。
+// **他人のプロフィール取得には使わないこと**（上の loadStaffProfileForViewing を使う）。
 export async function loadStaffProfile(
   userId: string
 ): Promise<StaffProfile | null> {
