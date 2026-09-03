@@ -3,7 +3,7 @@
 // - 変更履歴は content_store 単一キー portal_library_log（{ entries, updatedAt }・最新200件）。
 // - 87で承認フローは撤廃。status は持たない（旧データにあっても無視）。登録＝即公開。
 // - ファイル本体は Supabase Storage（staff-photos バケットの library/ 配下）。この lib は純粋ロジックのみ。
-// - カテゴリはコード固定（value-keywords と同じ流儀。将来追加は別指示書）。
+// - カテゴリはコード固定（将来追加は別指示書。value-keywords は172で管理画面編集に対応済み）。
 // - 権限は「ログインユーザー全員が登録・編集・削除」。実際の書き込みはサーバー(Service Role)経由。
 //   ※ content_store は anon 読み取り可（gantt 等と同じ構造）。閲覧は全員可なので構造的な制約なし。
 

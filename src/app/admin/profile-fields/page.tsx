@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ValueKeywordsAdminPanel } from "@/components/admin/ValueKeywordsAdminPanel";
 import {
   DEFAULT_PROFILE_FIELDS,
   loadProfileFieldConfig,
@@ -701,6 +702,9 @@ export default function ProfileFieldsAdminPage() {
               </Button>
             </div>
           </div>
+
+          {/* 大切にしている価値観の語（指示書172） */}
+          <ValueKeywordsAdminPanel />
         </>
       )}
     </div>

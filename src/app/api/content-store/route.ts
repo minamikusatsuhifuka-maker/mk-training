@@ -11,6 +11,7 @@ import {
   isAdminOnlyContentKey,
   isAllowedContentPrefix,
   isServerOnlyContentKey,
+  isServerWriteOnlyContentKey,
   isValidContentKey,
 } from "@/lib/content-store-policy";
 import { redactForeignProfileRows } from "@/lib/content-store-redact";
@@ -69,6 +70,8 @@ export async function PUT(req: Request) {
   }
   // 157: サーバー専用キー（menu_access）はこのAPIからは読み書きさせない
   if (isServerOnlyContentKey(key)) return hidden();
+  // 172: 専用APIからしか書けないキー（操作ログを迂回させない）。読めるキーなので存在は隠さない
+  if (isServerWriteOnlyContentKey(key)) return forbidden();
   if (data === undefined) {
     return NextResponse.json({ error: "dataが必要です" }, { status: 400 });
   }
@@ -101,6 +104,7 @@ export async function DELETE(req: Request) {
   }
   // 157: サーバー専用キー（menu_access）はこのAPIからは読み書きさせない
   if (isServerOnlyContentKey(key)) return hidden();
+  if (isServerWriteOnlyContentKey(key)) return forbidden(); // 172
   // 削除は「設定を既定に戻す」用途。書き込みと同じ権限で判定する。
   if (isAdminOnlyContentKey(key) && !isAdminUser(user)) return forbidden();
 

@@ -42,6 +42,8 @@ const ADMIN_ONLY_KEYS = new Set<string>([
   "portal_monthly_slogan",
   "portal_metrics",
   "portal_gantt",
+  // 172: 価値観キーワードの一覧（読みは全員・書きは下の SERVER_WRITE_ONLY_KEYS でさらに制限）
+  "value_keywords_config",
 ]);
 
 // 前方一致で管理者のみ書き込み可（研修コンテンツ・院内資料の原本）
@@ -71,10 +73,23 @@ const ADMIN_ONLY_CONTENT_KEYS = new Set<string>([
 // menu_access は「誰がどのメニューを開けるか」＝機能の存在に直結する情報で、
 // ログイン済みなら誰でも読める既定の扱い（読み取りは全キー一律）に置くと秘匿が崩れるため。
 // 読み書きは lib/menu-access-server.ts（service-role）と、それを使う管理者専用APIだけ。
-const SERVER_ONLY_KEYS = new Set<string>(["menu_access"]);
+const SERVER_ONLY_KEYS = new Set<string>([
+  "menu_access",
+  // 172: 価値観キーワードの操作ログ（管理者だけが閲覧。/api/admin/value-keywords/logs 経由のみ）
+  "value_keywords_log",
+]);
 
 export function isServerOnlyContentKey(key: string): boolean {
   return SERVER_ONLY_KEYS.has(key);
+}
+
+// 読むのは全員可だが、書くのは専用の管理者APIだけ（指示書172）。
+// /api/content-store 経由の書き込みを管理者にも許すと、操作ログ（172-4）を残さずに変えられてしまう。
+// 書き込みは lib/value-keywords-server.ts（設定の保存とログの追記を必ず対で行う）だけ。
+const SERVER_WRITE_ONLY_KEYS = new Set<string>(["value_keywords_config"]);
+
+export function isServerWriteOnlyContentKey(key: string): boolean {
+  return SERVER_WRITE_ONLY_KEYS.has(key);
 }
 
 /** 書き込みに管理者権限が必要なキーか */

@@ -19,7 +19,11 @@ import { serverGetContentRow } from "@/lib/content-store-server";
 import { normalizeBirthday, normalizeJoinedOn } from "@/lib/anniversary";
 import { normalizeNeedsSurvey } from "@/lib/needs-survey";
 import type { NeedsSurvey } from "@/lib/needs-survey";
-import { normalizeValueKeywords } from "@/lib/value-keywords";
+import {
+  VALUE_KEYWORDS_CONFIG_KEY,
+  normalizeValueKeywords,
+  normalizeValueKeywordsConfig,
+} from "@/lib/value-keywords";
 
 export const runtime = "nodejs";
 
@@ -165,12 +169,19 @@ export async function PUT(req: NextRequest) {
     };
   }
 
-  // 価値観キーワード（指示書68）: 送られた場合のみ更新。クライアント値を信用せず
-  // 必ず normalizeValueKeywords（52語ホワイトリスト・重複除去・最大5個・原本順）を通す。
-  const valueKeywords =
-    "valueKeywords" in body
-      ? normalizeValueKeywords(body.valueKeywords)
-      : current.valueKeywords;
+  // 価値観キーワード（指示書68→172）: 送られた場合のみ更新。クライアント値を信用せず
+  // 必ず normalizeValueKeywords を通す（管理画面の一覧をホワイトリストに・重複除去・上限・一覧順）。
+  // 172-3-1: すでに保存している選択（current）は、一覧から外された語でも keep で残す。
+  let valueKeywords = current.valueKeywords;
+  if ("valueKeywords" in body) {
+    const cfgRow = await serverGetContentRow(VALUE_KEYWORDS_CONFIG_KEY);
+    const cfg = normalizeValueKeywordsConfig(cfgRow?.data ?? null);
+    valueKeywords = normalizeValueKeywords(
+      body.valueKeywords,
+      cfg,
+      Array.isArray(current.valueKeywords) ? current.valueKeywords : []
+    );
+  }
 
   // 資料庫お気に入り（指示書97）: 送られた場合のみ更新（未送信は既存保持＝68の教訓）。
   // docId は任意の文字列（ホワイトリスト不可）なので trim・重複除去・上限のみ。

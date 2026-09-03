@@ -72,7 +72,12 @@ import {
   radarValuesOf,
 } from "@/lib/needs-survey";
 import { NeedsRadarChart } from "@/components/NeedsRadarChart";
-import { normalizeValueKeywords } from "@/lib/value-keywords";
+import {
+  DEFAULT_VALUE_KEYWORDS_CONFIG,
+  displayValueKeywords,
+  loadValueKeywordsConfig,
+  type ValueKeywordsConfig,
+} from "@/lib/value-keywords";
 import {
   buildPeriodRangeLabels,
   collectMemberAnswers,
@@ -173,8 +178,15 @@ export default function MembersPage() {
   const [roleDefs, setRoleDefs] = useState<ProfileRoleDef[]>(
     DEFAULT_PROFILE_ROLES
   );
+  // 価値観の語の一覧（識別子→表記の解決用。指示書172。失敗時は既定52語）
+  const [vkConfig, setVkConfig] = useState<ValueKeywordsConfig>(
+    DEFAULT_VALUE_KEYWORDS_CONFIG
+  );
 
   useEffect(() => {
+    loadValueKeywordsConfig()
+      .then(setVkConfig)
+      .catch(() => {});
     loadProfilesIndex()
       .then(setMembers)
       .catch(() => {})
@@ -357,9 +369,11 @@ export default function MembersPage() {
               survey?.visibility === "public" && hasNeedsValues(survey)
                 ? radarValuesOf(survey)
                 : null;
-            // 💎 価値観キーワード（指示書68）: 常に公開＝サーベイの公開設定とは無関係に表示。
-            // 未選択の人はセクションごと非表示（空見出しを出さない）
-            const keywords = normalizeValueKeywords(
+            // 💎 価値観キーワード（指示書68→172）: 常に公開＝サーベイの公開設定とは無関係に表示。
+            // 未選択の人はセクションごと非表示（空見出しを出さない）。
+            // 表示名は管理画面の一覧（識別子→表記）で解決し、一覧から外れた語も表示し続ける（172-3-1）
+            const keywords = displayValueKeywords(
+              vkConfig,
               profiles[m.userId]?.valueKeywords
             );
             return (
@@ -449,10 +463,10 @@ export default function MembersPage() {
                     <div className="flex flex-wrap gap-1.5">
                       {keywords.map((word) => (
                         <span
-                          key={word}
+                          key={word.id}
                           className="inline-flex items-center rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-xs text-teal-700"
                         >
-                          {word}
+                          {word.label}
                         </span>
                       ))}
                     </div>
@@ -625,19 +639,19 @@ export default function MembersPage() {
                 })}
 
               {/* 💎 大切にしている価値観（指示書68・レーダーのすぐ上・常に公開） */}
-              {normalizeValueKeywords(selected.valueKeywords).length > 0 && (
+              {displayValueKeywords(vkConfig, selected.valueKeywords).length > 0 && (
                 <div className="border-t border-gray-100 pt-3 space-y-1.5">
                   <h3 className="text-[13px] text-gray-400">
                     💎 大切にしている価値観
                   </h3>
                   <div className="flex flex-wrap gap-1.5">
-                    {normalizeValueKeywords(selected.valueKeywords).map(
+                    {displayValueKeywords(vkConfig, selected.valueKeywords).map(
                       (word) => (
                         <span
-                          key={word}
+                          key={word.id}
                           className="inline-flex items-center rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-xs text-teal-700"
                         >
-                          {word}
+                          {word.label}
                         </span>
                       )
                     )}

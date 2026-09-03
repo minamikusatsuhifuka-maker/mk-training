@@ -55,10 +55,11 @@ import {
 } from "@/lib/needs-survey";
 import { NeedsRadarChart } from "@/components/NeedsRadarChart";
 import {
-  VALUE_KEYWORDS,
-  VALUE_KEYWORDS_MAX,
-  VALUE_KEYWORDS_MIN_RECOMMENDED,
+  DEFAULT_VALUE_KEYWORDS_CONFIG,
+  loadValueKeywordsConfig,
   normalizeValueKeywords,
+  valueKeywordLabel,
+  type ValueKeywordsConfig,
 } from "@/lib/value-keywords";
 
 export default function ProfilePage() {
@@ -96,8 +97,14 @@ export default function ProfilePage() {
   // 📮 今月あなたに届いたありがとう（46R-B。thanksShowcase OFF・0件なら非表示）
   const [myThanks, setMyThanks] = useState<ThankyouItem[]>([]);
 
-  // 💎 大切にしている価値観（指示書68。保存は「💾 保存」に含める。常に公開）
+  // 💎 大切にしている価値観（指示書68→172。保存は「💾 保存」に含める。常に公開）
+  // 値は語の識別子。一覧（表記・個数）は管理画面の設定から読む（画面に語を直書きしない。172-5-2）
   const [valueKeywords, setValueKeywords] = useState<string[]>([]);
+  // 保存済みの選択（一覧から外れた語でも解除するまで残す＝172-3-1）
+  const [savedValueKeywords, setSavedValueKeywords] = useState<string[]>([]);
+  const [vkConfig, setVkConfig] = useState<ValueKeywordsConfig>(
+    DEFAULT_VALUE_KEYWORDS_CONFIG
+  );
 
   // 🧭 5つの基本的欲求サーベイ（指示書58。保存は「💾 保存」に含める）
   const [surveyValues, setSurveyValues] = useState<
@@ -147,6 +154,10 @@ export default function ProfilePage() {
       loadProfileRoleConfig()
         .then(setRoleDefs)
         .catch(() => {});
+      // 価値観の語の一覧（指示書172。失敗しても既定52語）
+      const vkConfigPromise = loadValueKeywordsConfig().catch(
+        () => DEFAULT_VALUE_KEYWORDS_CONFIG
+      );
       const res = await fetch("/api/profile");
       if (res.status === 401) {
         router.replace("/login?next=/profile");
@@ -168,8 +179,15 @@ export default function ProfilePage() {
           json.profile.photos.map((p) => [p.url, p.caption ?? ""])
         )
       );
-      // 価値観キーワードの編集stateを初期化（指示書68）
-      setValueKeywords(normalizeValueKeywords(json.profile.valueKeywords));
+      // 価値観キーワードの編集stateを初期化（指示書68→172）。
+      // 保存済みの選択は一覧に無い語（外された語）でも残す（keep に保存済みを渡す）
+      const cfg = await vkConfigPromise;
+      setVkConfig(cfg);
+      const saved = Array.isArray(json.profile.valueKeywords)
+        ? json.profile.valueKeywords.filter((v): v is string => typeof v === "string")
+        : [];
+      setSavedValueKeywords(saved);
+      setValueKeywords(normalizeValueKeywords(saved, cfg, saved));
       // サーベイの編集stateを初期化（指示書58）
       setSurveyValues(json.profile.needsSurvey?.values ?? {});
       setSurveyDetails(json.profile.needsSurvey?.details ?? {});
@@ -252,6 +270,8 @@ export default function ProfilePage() {
       fail(j?.error ?? "保存に失敗しました");
       return;
     }
+    // 172: 保存後は今の選択が「保存済み」になる（一覧から外れた語の保持判定に使う）
+    setSavedValueKeywords(valueKeywords);
     flash("💾 プロフィールを保存しました");
   };
 
@@ -992,69 +1012,104 @@ export default function ProfilePage() {
         </p>
       </div>
 
-      {/* 💎 大切にしている価値観（指示書68。常に公開・🌐/🔒トグルなし） */}
-      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-        <h2 className="text-sm font-semibold">
-          💎 大切にしている価値観（3〜5個）
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          52語の中から、あなたが大切にしている価値観を3〜5個選んでください。メンバー紹介に表示されます。相互理解のための共有です（評価・優劣付けには使いません）。
-        </p>
-        <p className="text-xs">
-          {valueKeywords.length >= VALUE_KEYWORDS_MAX ? (
-            <span className="text-amber-700">
-              {valueKeywords.length}個選択中（上限です。変更するには選択中のものを解除してください）
-            </span>
-          ) : valueKeywords.length > 0 ? (
-            <span className="text-teal-700">
-              {valueKeywords.length}個選択中（あと
-              {VALUE_KEYWORDS_MAX - valueKeywords.length}個まで選べます）
-            </span>
-          ) : (
-            <span className="text-muted-foreground">未選択です</span>
-          )}
-          {valueKeywords.length > 0 &&
-            valueKeywords.length < VALUE_KEYWORDS_MIN_RECOMMENDED && (
-              <span className="text-muted-foreground">
-                {" "}
-                — あと{VALUE_KEYWORDS_MIN_RECOMMENDED - valueKeywords.length}
-                個選ぶと、より伝わりやすくなります
-              </span>
+      {/* 💎 大切にしている価値観（指示書68→172。常に公開・🌐/🔒トグルなし。語・個数は管理画面の設定に追従） */}
+      {(() => {
+        const vkMax = vkConfig.max;
+        const vkMin = vkConfig.min;
+        const full = valueKeywords.length >= vkMax;
+        // 一覧から外れた語で、この人がまだ選択している分（解除はできるが新たには選べない）
+        const retiredSelected = valueKeywords.filter(
+          (id) => !vkConfig.words.some((w) => w.id === id)
+        );
+        return (
+          <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+            <h2 className="text-sm font-semibold">
+              💎 大切にしている価値観（{vkMin}〜{vkMax}個）
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              {vkConfig.words.length}語の中から、あなたが大切にしている価値観を{vkMin}〜{vkMax}個選んでください。メンバー紹介に表示されます。相互理解のための共有です（評価・優劣付けには使いません）。
+            </p>
+            <p className="text-xs">
+              {full ? (
+                <span className="text-amber-700">
+                  {valueKeywords.length}個選択中（上限です。変更するには選択中のものを解除してください）
+                </span>
+              ) : valueKeywords.length > 0 ? (
+                <span className="text-teal-700">
+                  {valueKeywords.length}個選択中（あと
+                  {vkMax - valueKeywords.length}個まで選べます）
+                </span>
+              ) : (
+                <span className="text-muted-foreground">未選択です</span>
+              )}
+              {valueKeywords.length > 0 && valueKeywords.length < vkMin && (
+                <span className="text-muted-foreground">
+                  {" "}
+                  — あと{vkMin - valueKeywords.length}
+                  個選ぶと、より伝わりやすくなります
+                </span>
+              )}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {vkConfig.words.map((word) => {
+                const selected = valueKeywords.includes(word.id);
+                return (
+                  <button
+                    key={word.id}
+                    type="button"
+                    disabled={!selected && full}
+                    onClick={() =>
+                      setValueKeywords((prev) =>
+                        prev.includes(word.id)
+                          ? prev.filter((w) => w !== word.id)
+                          : normalizeValueKeywords(
+                              [...prev, word.id],
+                              vkConfig,
+                              savedValueKeywords
+                            )
+                      )
+                    }
+                    className={
+                      selected
+                        ? "rounded-full border border-teal-600 bg-teal-600 px-3 py-1 text-sm text-white"
+                        : full
+                          ? "rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-300 cursor-not-allowed"
+                          : "rounded-full border border-slate-300 bg-white px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
+                    }
+                  >
+                    {word.label}
+                  </button>
+                );
+              })}
+            </div>
+            {retiredSelected.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  現在の一覧にはない語（選択は残っています。解除すると再び選べません）
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {retiredSelected.map((id) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() =>
+                        setValueKeywords((prev) => prev.filter((w) => w !== id))
+                      }
+                      className="rounded-full border border-teal-600 bg-teal-600/80 px-3 py-1 text-sm text-white"
+                      title="解除する"
+                    >
+                      {valueKeywordLabel(vkConfig, id)} ×
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {VALUE_KEYWORDS.map((word) => {
-            const selected = valueKeywords.includes(word);
-            const full = valueKeywords.length >= VALUE_KEYWORDS_MAX;
-            return (
-              <button
-                key={word}
-                type="button"
-                disabled={!selected && full}
-                onClick={() =>
-                  setValueKeywords((prev) =>
-                    prev.includes(word)
-                      ? prev.filter((w) => w !== word)
-                      : normalizeValueKeywords([...prev, word])
-                  )
-                }
-                className={
-                  selected
-                    ? "rounded-full border border-teal-600 bg-teal-600 px-3 py-1 text-sm text-white"
-                    : full
-                      ? "rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-300 cursor-not-allowed"
-                      : "rounded-full border border-slate-300 bg-white px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
-                }
-              >
-                {word}
-              </button>
-            );
-          })}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          選択は「💾 保存」ボタンで確定します。
-        </p>
-      </div>
+            <p className="text-xs text-muted-foreground">
+              選択は「💾 保存」ボタンで確定します。
+            </p>
+          </div>
+        );
+      })()}
 
       {/* 🧭 5つの基本的欲求サーベイ（指示書58） */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
