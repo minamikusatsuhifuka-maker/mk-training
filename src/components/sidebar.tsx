@@ -10,6 +10,7 @@ import { AdminOnly } from "@/components/AdminOnly";
 import { FontSwitcher } from "@/components/FontSwitcher";
 import { DocTasksNavLink } from "@/components/DocTasksNavLink";
 import { StaffContactsNavLink } from "@/components/StaffContactsNavLink";
+import { DirectorRetrospectiveNavLink } from "@/components/DirectorRetrospectiveNavLink";
 import { useSidebarAccordion } from "@/lib/sidebar-accordion";
 
 export function Sidebar() {
@@ -88,6 +89,9 @@ export function Sidebar() {
 
           {/* スタッフ連絡先（169）。指名された人にだけ出る（未許可には描画されない） */}
           <StaffContactsNavLink variant="sidebar" />
+
+          {/* 院長の振り返り記録（173）。管理者にだけ出る（未許可には描画されない） */}
+          <DirectorRetrospectiveNavLink variant="sidebar" />
         </nav>
       </ScrollArea>
 

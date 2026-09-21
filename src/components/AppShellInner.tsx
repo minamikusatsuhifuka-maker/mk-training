@@ -20,6 +20,7 @@ import { AdminOnly } from "@/components/AdminOnly";
 import { FontSwitcher } from "@/components/FontSwitcher";
 import { DocTasksNavLink } from "@/components/DocTasksNavLink";
 import { StaffContactsNavLink } from "@/components/StaffContactsNavLink";
+import { DirectorRetrospectiveNavLink } from "@/components/DirectorRetrospectiveNavLink";
 import { useSidebarAccordion } from "@/lib/sidebar-accordion";
 
 export default function AppShellInner({
@@ -120,6 +121,12 @@ export default function AppShellInner({
 
                 {/* スタッフ連絡先（169）。指名された人にだけ出る */}
                 <StaffContactsNavLink
+                  variant="drawer"
+                  onNavigate={() => setMenuOpen(false)}
+                />
+
+                {/* 院長の振り返り記録（173）。管理者にだけ出る */}
+                <DirectorRetrospectiveNavLink
                   variant="drawer"
                   onNavigate={() => setMenuOpen(false)}
                 />

@@ -26,6 +26,13 @@ export const MENU_DOC_TASKS = "doc-tasks";
  *   仮に値が書き込まれても指名制のまま動く）。
  */
 export const MENU_STAFF_CONTACTS = "staff-contacts";
+/**
+ * 院長の振り返り記録（指示書173）。
+ * 169と同じく **scope（「全員」モード）は使わない**。赤裸々な内容を書く場所で、
+ * スタッフの目に触れない前提（173-1）。判定側 authorizeDirectorRetrospective が scope を読まない。
+ * 指名リストの編集UIも作っていない（判定側に口があるだけ＝実質管理者のみ）。
+ */
+export const MENU_DIRECTOR_RETROSPECTIVE = "director-retrospective";
 
 /**
  * 公開範囲（指示書159-A）。
