@@ -64,7 +64,7 @@ export class RetrospectiveTableMissingError extends Error {
   }
 }
 
-function isMissingTable(message: string | undefined): boolean {
+export function isMissingTable(message: string | undefined): boolean {
   const m = (message ?? "").toLowerCase();
   return (
     m.includes("does not exist") ||

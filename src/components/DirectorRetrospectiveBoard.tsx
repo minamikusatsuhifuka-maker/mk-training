@@ -55,6 +55,7 @@ import {
   QuadrantTrendChart,
 } from "@/components/DirectorRetrospectiveCharts";
 import { DirectorRetrospectiveLogsPanel } from "@/components/admin/DirectorRetrospectiveLogsPanel";
+import { PresentationPlanPanel } from "@/components/PresentationPlanPanel";
 
 // ─── 共通の小さな部品 ───
 
@@ -1384,6 +1385,9 @@ export function DirectorRetrospectiveBoard({ isAdmin }: { isAdmin: boolean }) {
       </section>
 
       {isAdmin && <ExportPanel periods={periods} busy={busy} />}
+
+      {/* 174: 発表の構成案（管理者のみ・AI生成は2案の構成だけ、プロンプト本体はテンプレート） */}
+      {isAdmin && <PresentationPlanPanel periods={periods} />}
 
       {isAdmin && (
         <section className="rounded-xl border border-gray-200 bg-white p-3">
