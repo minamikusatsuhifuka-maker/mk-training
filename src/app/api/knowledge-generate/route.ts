@@ -250,7 +250,6 @@ export async function POST(req: NextRequest) {
     const maxTokens = type === "skillmap" ? 10000 : 8000;
 
     const aiResult = await callAI({
-      claudeModel: "claude-sonnet-4-6",
       maxTokens,
       json: true,
       messages: [{ role: "user", content: (await getAiBackgroundBlock()) + prompt }],

@@ -44,7 +44,6 @@ ${JSON.stringify(content, null, 2).slice(0, 3000)}
 JSON以外のテキストは絶対に含めないでください。`;
 
     const result = await callAI({
-      claudeModel: "claude-sonnet-4-6",
       maxTokens: 6000,
       json: true,
       messages: [{ role: "user", content: (await getAiBackgroundBlock()) + prompt }],

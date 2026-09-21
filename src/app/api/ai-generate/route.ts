@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAiBackgroundBlock } from "@/lib/ai-background";
 import { requireLogin } from "@/lib/require-login";
+import { callAI } from "@/lib/ai-provider";
 
 type GenerateType = "drug" | "disease" | "quiz" | "contraindication";
 type Mode = "fast" | "quality";
@@ -82,41 +83,31 @@ answerIndexは正解の選択肢のインデックス(0-3)です。`,
 {"drug":"薬品名・施術名","disease":"禁忌となる疾患・状態","detail":"禁忌の詳細説明（2-3文）","severity":"critical|caution|note"}`,
 };
 
-async function callAnthropic(
+// 175: モデルの直書き（claude-haiku / claude-sonnet）をやめ、共通の callAI（既定 gemini-3.8-flash・管理トグル対応）へ。
+// fast / quality の差は出力枠（maxTokens）だけ残す。失敗は別モデルへ切り替えず、そのまま返す。
+async function callGenerate(
   keyword: string,
   type: GenerateType,
-  mode: Mode,
-  apiKey: string
+  mode: Mode
 ): Promise<{ data: unknown; error: string | null }> {
-  const model = mode === "fast" ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
   const maxTokens = mode === "fast" ? 1000 : 3000;
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      system: (await getAiBackgroundBlock()) + systemPrompts[type],
-      messages: [{ role: "user", content: keyword }],
-    }),
+  const res = await callAI({
+    system: (await getAiBackgroundBlock()) + systemPrompts[type],
+    messages: [{ role: "user", content: keyword }],
+    maxTokens,
+    json: true,
   });
 
-  if (res.status === 429) {
-    return { data: null, error: "レート制限中です。少し待ってから再試行してください" };
-  }
-
   if (!res.ok) {
-    const errBody = await res.text().catch(() => "");
-    return { data: null, error: `API エラー (${res.status}): ${errBody.slice(0, 200)}` };
+    const err = res.error ?? "";
+    if (err.includes("429") || /rate ?limit|quota|RESOURCE_EXHAUSTED/i.test(err)) {
+      return { data: null, error: "レート制限中です。少し待ってから再試行してください" };
+    }
+    return { data: null, error: `API エラー（${res.provider}）: ${err.slice(0, 200)}` };
   }
 
-  const body = await res.json();
-  const text: string = body.content?.[0]?.text ?? "";
+  const text: string = res.text;
 
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -135,14 +126,6 @@ export async function POST(request: Request) {
   const gate = await requireLogin();
   if (gate.response) return gate.response;
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey || apiKey === "dummy_key_please_replace") {
-    return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY が設定されていません。Vercel管理画面から環境変数を設定してください。" },
-      { status: 500 }
-    );
-  }
-
   const body = await request.json();
   const { type, keywords, mode } = body as {
     type: GenerateType;
@@ -159,7 +142,7 @@ export async function POST(request: Request) {
   const results = await Promise.all(
     limited.map(async (keyword) => {
       try {
-        const { data, error } = await callAnthropic(keyword.trim(), type, mode, apiKey);
+        const { data, error } = await callGenerate(keyword.trim(), type, mode);
         return { keyword, data, error };
       } catch (e) {
         return { keyword, data: null, error: `ネットワークエラー: ${e instanceof Error ? e.message : "不明なエラー"}` };

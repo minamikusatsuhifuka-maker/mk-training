@@ -13,8 +13,7 @@ import {
   isMissingTable,
   type RetroAdminClient,
 } from "./director-retrospective-server";
-import { callAI, getAiProvider } from "./ai-provider";
-import { getSelectedGeminiModel } from "./gemini-models";
+import { callAI, getCurrentAiModel } from "./ai-provider";
 import {
   PLAN_SYSTEM_PROMPT,
   buildPlanUserPrompt,
@@ -67,13 +66,6 @@ export type GenerateOutcome =
   | { ok: true; result: PlanResult; provider: string; model: string }
   | { ok: false; kind: "ai" | "parse" | "same"; message: string; provider: string; model: string };
 
-/** 使ったモデル名（報告・保存用）。Claude は callAI の既定モデルと同じ表記にする */
-async function currentModelLabel(): Promise<{ provider: string; model: string }> {
-  const provider = await getAiProvider();
-  if (provider === "gemini") return { provider, model: await getSelectedGeminiModel() };
-  return { provider, model: "claude-sonnet-4-5" };
-}
-
 /**
  * 構成案2案＋推奨を生成する。素材は**匿名化済み**の文字列を受け取る（呼び出し側で置換する）。
  * 2案の構造が同じと機械判定できたときは1回だけ作り直しを試みる。
@@ -82,7 +74,7 @@ export async function generatePlan(
   conditions: PlanConditions,
   material: string
 ): Promise<GenerateOutcome> {
-  const { provider, model } = await currentModelLabel();
+  const { provider, model } = await getCurrentAiModel();
   const userPrompt = buildPlanUserPrompt(conditions, material);
 
   let lastText = "";

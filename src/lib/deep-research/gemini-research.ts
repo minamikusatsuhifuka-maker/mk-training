@@ -2,9 +2,9 @@
  * ディープリサーチ専用 Gemini 呼び出し（REST + SSE + Google検索Grounding）
  *
  * ※ ai-incho から移植。独立実装だが、モデルIDは gemini-models.ts の
- *    DEFAULT_GEMINI_MODEL に集約（GEMINI_MODEL 環境変数で上書き可・キーは既存 GEMINI_API_KEY）。
+ *    DEFAULT_GEMINI_MODEL に集約（175: 環境変数での上書きは廃止・キーは既存 GEMINI_API_KEY）。
  * ※ 検索Grounding（リサーチ実行）も通常生成（学習資料）も、すべてこのファイル経由。
- * ※ Gemini 3.6 Flash は temperature / topK / topP のカスタム値を無視するため送らない。
+ * ※ Gemini 3.x Flash は temperature / topK / topP のカスタム値を無視するため送らない。
  */
 
 import {
@@ -12,9 +12,9 @@ import {
   GEMINI_THINKING_CONFIG,
 } from "@/lib/gemini-models";
 
-/** リサーチで使用するモデル名を解決する */
+/** リサーチで使用するモデル名（175: 環境変数 GEMINI_MODEL による上書きは廃止。正本は gemini-models.ts の1か所） */
 export function getResearchModel(): string {
-  return process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
+  return DEFAULT_GEMINI_MODEL;
 }
 
 /**

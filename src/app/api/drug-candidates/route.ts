@@ -1,22 +1,16 @@
 import { NextResponse } from "next/server";
 import { requireLogin } from "@/lib/require-login";
+import { callAI } from "@/lib/ai-provider";
 
 export const maxDuration = 30;
 
 // 薬剤候補名の検索API（Step1→Step2用）
 // キーワードを受け取り、PMDA添付文書・保険診療に基づく代表的な薬剤名を返す
+// 175: Claude 直書きをやめ、共通の callAI（既定 gemini-3.8-flash・管理トグル対応）へ
 export async function POST(request: Request) {
   // 161: ログイン必須（関門は proxy.ts。ここは関門が外れたときの二重の歯止め）
   const gate = await requireLogin();
   if (gate.response) return gate.response;
-
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey || apiKey === "dummy_key_please_replace") {
-    return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY が設定されていません" },
-      { status: 500 }
-    );
-  }
 
   const body = await request.json();
   const { keyword } = body as { keyword?: string };
@@ -42,31 +36,21 @@ PMDA添付文書・日本の保険診療に基づいて、実際に処方され�
 }`;
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 2000,
-        messages: [{ role: "user", content: prompt }],
-      }),
+    const res = await callAI({
+      messages: [{ role: "user", content: prompt }],
+      maxTokens: 2000,
+      json: true,
     });
 
-    if (!response.ok) {
-      const errBody = await response.text().catch(() => "");
+    if (!res.ok) {
+      // 失敗は隠さず返す（別モデルへ切り替えない・利用者が再実行する）
       return NextResponse.json(
-        { error: `API エラー (${response.status}): ${errBody.slice(0, 200)}`, candidates: [] },
+        { error: `AI エラー（${res.provider}）: ${(res.error ?? "").slice(0, 200)}`, candidates: [] },
         { status: 500 }
       );
     }
 
-    const data = await response.json();
-    const text: string = data.content?.[0]?.text ?? "";
-    const cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    const cleaned = res.text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       return NextResponse.json({ candidates: [] });
@@ -74,7 +58,7 @@ PMDA添付文書・日本の保険診療に基づいて、実際に処方され�
 
     try {
       const result = JSON.parse(jsonMatch[0]);
-      return NextResponse.json({ candidates: result.candidates ?? [] });
+      return NextResponse.json({ candidates: result.candidates ?? [], model: res.model });
     } catch {
       return NextResponse.json({ candidates: [] });
     }

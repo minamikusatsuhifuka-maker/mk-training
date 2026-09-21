@@ -65,7 +65,6 @@ export async function POST(req: NextRequest) {
 }`;
 
     const result = await callAI({
-      claudeModel: "claude-sonnet-4-6",
       maxTokens: 8000,
       json: true,
       messages: [{ role: "user", content: (await getAiBackgroundBlock()) + prompt }],

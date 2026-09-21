@@ -82,7 +82,6 @@ ${existingItems?.map((i) => `- ${i.title}`).join("\n") || "なし"}
 
   try {
     const result = await callAI({
-      claudeModel: "claude-sonnet-4-6",
       maxTokens: 1500,
       json: true,
       messages: [{ role: "user", content: (await getAiBackgroundBlock()) + prompt }],

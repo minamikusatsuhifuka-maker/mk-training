@@ -2,6 +2,15 @@
 // 管理トグル（content_store キー ai_provider_setting）に応じて Claude / Gemini を切替える。
 // 既定は 'gemini'（DEFAULT_GEMINI_MODEL）。保存値があればそれを優先（トグルで claude に戻せる）。
 // プロンプト本文・理念注入・出力整形は各 route 側に残す。
+//
+// 【175: モデル名の集約】
+//   Gemini のモデル名は lib/gemini-models.ts（DEFAULT_GEMINI_MODEL / getSelectedGeminiModel）だけ。
+//   Claude のモデル名はこのファイルの CLAUDE_TEXT_MODEL だけ。各 route での直書きはしない。
+//   失敗時に別モデルへ黙って切り替えない（ok:false + error を返し、利用者が再実行する）。
+//
+// 【175: 画像・PDF入力】
+//   画像や PDF を渡す機能（extract-image / extract-pdf）は Gemini の inline_data を使う callGeminiParts を使う。
+//   管理トグルの対象外（Claude 側の document 入力は使わない＝モデルを1つに寄せるため）。
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "./supabase-admin";
 import {
@@ -17,8 +26,8 @@ export type AiProvider = "claude" | "gemini";
 // 既定は gemini（新規/未設定では DEFAULT_GEMINI_MODEL で動く。トグルで claude に戻せる）
 export const DEFAULT_AI_PROVIDER: AiProvider = "gemini";
 
-// Claude の既定モデル（各 route の従来モデルを尊重するため override 可能）
-const DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-5";
+// Claude のモデル名（トグルで Claude を選んだときに全機能で使う・1か所）
+export const CLAUDE_TEXT_MODEL = "claude-sonnet-4-6";
 
 // 145: content_store は RLS 有効のため anon では読めない。service-role で読む（サーバー専用）。
 function serverSupabase(): SupabaseClient | null {
@@ -47,6 +56,13 @@ export async function getAiProvider(): Promise<AiProvider> {
   }
 }
 
+/** いま使うモデル名（画面表示・記録用）。175: 174の生成結果に記録して表示する */
+export async function getCurrentAiModel(): Promise<{ provider: AiProvider; model: string }> {
+  const provider = await getAiProvider();
+  if (provider === "gemini") return { provider, model: await getSelectedGeminiModel() };
+  return { provider, model: CLAUDE_TEXT_MODEL };
+}
+
 export interface CallAIMessage {
   role: "user" | "assistant";
   content: string;
@@ -56,13 +72,11 @@ export interface CallAIOptions {
   system?: string;
   messages: CallAIMessage[];
   maxTokens: number;
-  // Claude 専用（Gemini 3.6 Flash はカスタム temperature を無視するため送らない）
+  // Claude 専用（Gemini はカスタム temperature を無視するため送らない）
   temperature?: number;
   // JSON を期待する機能向け。Gemini 時に「JSONのみ出力」を明示する。
   // 実際のパースは呼び出し側の既存処理（3段階パース等）を流用する。
   json?: boolean;
-  // Claude のモデル override（各 route の従来モデルを維持するため）。
-  claudeModel?: string;
 }
 
 export interface CallAIResult {
@@ -71,6 +85,8 @@ export interface CallAIResult {
   // 失敗時の上流エラー本文（呼び出し側が従来どおり整形・フォールバックできる）
   error?: string;
   provider: AiProvider;
+  /** 実際に使ったモデル名（175: 記録・表示用） */
+  model: string;
 }
 
 // プロバイダに応じて分岐し、統一インターフェースで { text } を返す。
@@ -83,17 +99,19 @@ export async function callAI(opts: CallAIOptions): Promise<CallAIResult> {
 
 async function callClaude(opts: CallAIOptions): Promise<CallAIResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
+  const model = CLAUDE_TEXT_MODEL;
   if (!apiKey)
     return {
       ok: false,
       text: "",
       error: "ANTHROPIC_API_KEY が設定されていません",
       provider: "claude",
+      model,
     };
 
   try {
     const body: Record<string, unknown> = {
-      model: opts.claudeModel || DEFAULT_CLAUDE_MODEL,
+      model,
       max_tokens: opts.maxTokens,
       messages: opts.messages.map((m) => ({
         role: m.role,
@@ -115,57 +133,72 @@ async function callClaude(opts: CallAIOptions): Promise<CallAIResult> {
 
     if (!response.ok) {
       const err = await response.text().catch(() => "");
-      return { ok: false, text: "", error: err, provider: "claude" };
+      return { ok: false, text: "", error: err, provider: "claude", model };
     }
 
     const data = await response.json();
     const text: string = data.content?.[0]?.text ?? "";
-    return { ok: true, text, provider: "claude" };
+    return { ok: true, text, provider: "claude", model };
   } catch (e) {
     return {
       ok: false,
       text: "",
       error: e instanceof Error ? e.message : String(e),
       provider: "claude",
+      model,
     };
   }
 }
 
-async function callGemini(opts: CallAIOptions): Promise<CallAIResult> {
-  const apiKey = process.env.GEMINI_API_KEY;
+// ─── Gemini（REST）共通 ───
+
+/** Gemini の contents.parts の1要素（テキスト or 添付） */
+export type GeminiPart =
+  | { text: string }
+  | { inline_data: { mime_type: string; data: string } };
+
+const JSON_ONLY_NOTE =
+  "出力はJSONのみとし、マークダウンのコードフェンス（```）や前後の説明文は一切付けないこと。";
+
+function geminiApiKey(): string {
+  // 環境変数の前後に混ざった改行・空白で失敗しないようにする
+  return (process.env.GEMINI_API_KEY ?? "").replace(/[^\x20-\x7E]/g, "");
+}
+
+/**
+ * Gemini generateContent を1回呼ぶ（全機能共通の呼び出し口）。
+ * モデルは getSelectedGeminiModel()（＝175で gemini-3.8-flash）。失敗しても別モデルへ切り替えない。
+ */
+export async function callGeminiRaw(input: {
+  contents: { role?: "user" | "model"; parts: GeminiPart[] }[];
+  system?: string;
+  maxTokens: number;
+  json?: boolean;
+}): Promise<CallAIResult> {
+  const apiKey = geminiApiKey();
+  const model = await getSelectedGeminiModel();
   if (!apiKey)
     return {
       ok: false,
       text: "",
       error: "GEMINI_API_KEY が設定されていません",
       provider: "gemini",
+      model,
     };
 
-  // 管理画面で選択中の Gemini モデル（3.6-flash / 3.1-pro）を使用
-  const model = await getSelectedGeminiModel();
-
-  // messages を Gemini の contents にマッピング（assistant → model）
-  const contents = opts.messages.map((m) => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
-
-  // system は systemInstruction に。json 指定時は「JSONのみ出力」を明示。
-  let systemText = (opts.system || "").trim();
-  if (opts.json) {
-    const jsonNote =
-      "出力はJSONのみとし、マークダウンのコードフェンス（```）や前後の説明文は一切付けないこと。";
-    systemText = systemText ? `${systemText}\n\n${jsonNote}` : jsonNote;
+  let systemText = (input.system || "").trim();
+  if (input.json) {
+    systemText = systemText ? `${systemText}\n\n${JSON_ONLY_NOTE}` : JSON_ONLY_NOTE;
   }
 
-  // temperature は転送しない（Gemini 3.6 Flash はカスタム値を無視。Claude 側でのみ使用）
-  const generationConfig: Record<string, unknown> = {
-    maxOutputTokens: opts.maxTokens,
-    // Gemini 3.x は思考が既定ON。枠固定JSON抽出が切れるため最小化（既存方針を踏襲）。
-    thinkingConfig: GEMINI_THINKING_CONFIG,
+  const body: Record<string, unknown> = {
+    contents: input.contents,
+    generationConfig: {
+      maxOutputTokens: input.maxTokens,
+      // 3.x は思考が既定ON。枠固定JSON抽出が切れるため抑える（3.8 は "low" が最小）。
+      thinkingConfig: GEMINI_THINKING_CONFIG,
+    },
   };
-
-  const body: Record<string, unknown> = { contents, generationConfig };
   if (systemText) body.systemInstruction = { parts: [{ text: systemText }] };
 
   try {
@@ -180,7 +213,7 @@ async function callGemini(opts: CallAIOptions): Promise<CallAIResult> {
 
     if (!response.ok) {
       const err = await response.text().catch(() => "");
-      return { ok: false, text: "", error: err, provider: "gemini" };
+      return { ok: false, text: "", error: err, provider: "gemini", model };
     }
 
     const data = await response.json();
@@ -191,13 +224,47 @@ async function callGemini(opts: CallAIOptions): Promise<CallAIResult> {
       .map((p) => p?.text)
       .filter(Boolean)
       .join("");
-    return { ok: true, text, provider: "gemini" };
+    return { ok: true, text, provider: "gemini", model };
   } catch (e) {
     return {
       ok: false,
       text: "",
       error: e instanceof Error ? e.message : String(e),
       provider: "gemini",
+      model,
     };
   }
+}
+
+async function callGemini(opts: CallAIOptions): Promise<CallAIResult> {
+  // messages を Gemini の contents にマッピング（assistant → model）
+  const contents = opts.messages.map((m) => ({
+    role: (m.role === "assistant" ? "model" : "user") as "user" | "model",
+    parts: [{ text: m.content }] as GeminiPart[],
+  }));
+  // temperature は転送しない（Gemini はカスタム値を無視。Claude 側でのみ使用）
+  return callGeminiRaw({
+    contents,
+    system: opts.system,
+    maxTokens: opts.maxTokens,
+    json: opts.json,
+  });
+}
+
+/**
+ * 画像・PDF などの添付つきで Gemini を呼ぶ（175: 旧 Claude 専用の抽出系を寄せた口）。
+ * 管理トグルの対象外（常に Gemini）。
+ */
+export async function callGeminiParts(input: {
+  parts: GeminiPart[];
+  system?: string;
+  maxTokens: number;
+  json?: boolean;
+}): Promise<CallAIResult> {
+  return callGeminiRaw({
+    contents: [{ parts: input.parts }],
+    system: input.system,
+    maxTokens: input.maxTokens,
+    json: input.json,
+  });
 }

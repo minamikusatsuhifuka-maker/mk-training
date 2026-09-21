@@ -66,7 +66,6 @@ export async function POST(req: NextRequest) {
 - Markdownの**太字**は使ってよいが、箇条書きは最小限に`;
 
     const result = await callAI({
-      claudeModel: "claude-sonnet-4-6",
       maxTokens: 500,
       system: (await getAiBackgroundBlock()) + systemPrompt,
       messages: messages.map((m) => ({

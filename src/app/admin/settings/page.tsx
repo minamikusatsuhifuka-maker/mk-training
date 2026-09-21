@@ -18,13 +18,13 @@ import { getContentRow, putContentRow } from "@/lib/content-store-core";
 const AI_PROVIDERS: { id: AiProvider; label: string; desc: string }[] = [
   {
     id: "claude",
-    label: "Claude（既定・推奨）",
-    desc: "会話品質が安定。現状の挙動を維持します",
+    label: "Claude",
+    desc: "claude-sonnet-4-6 を使います（モデル名は lib/ai-provider.ts の1か所）",
   },
   {
     id: "gemini",
-    label: "Gemini",
-    desc: "安価・高速。上の「Geminiモデル」設定が適用されます",
+    label: "Gemini（既定）",
+    desc: "gemini-3.8-flash に統一（指示書175）。上の「Geminiモデル」設定が適用されます",
   },
 ];
 
