@@ -60,6 +60,7 @@ import {
 } from "@/components/DirectorRetrospectiveCharts";
 import { DirectorRetrospectiveLogsPanel } from "@/components/admin/DirectorRetrospectiveLogsPanel";
 import { PresentationPlanPanel } from "@/components/PresentationPlanPanel";
+import { RetrospectiveImportPanel } from "@/components/RetrospectiveImportPanel";
 import {
   DISCARD_CONFIRM,
   clearDraft,
@@ -1502,6 +1503,9 @@ export function DirectorRetrospectiveBoard({ isAdmin }: { isAdmin: boolean }) {
           </div>
         )}
       </section>
+
+      {/* 177: 文章から取り込む（管理者のみ・AIは提案だけ、保存は採用したものを既存の保存APIで） */}
+      {isAdmin && loaded && <RetrospectiveImportPanel data={data} onSaved={load} />}
 
       {/* 期 */}
       <section className="space-y-2">
