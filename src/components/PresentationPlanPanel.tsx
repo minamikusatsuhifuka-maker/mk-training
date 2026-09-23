@@ -5,8 +5,12 @@
 // STEP 1 発表条件 → STEP 2 構成案2案と推奨 → STEP 3 確定（1タップで切替） → STEP 4 プロンプト出力
 // 直近の生成結果はサーバーに保存され、開き直しても再生成しない。「作り直す」で再生成。
 // プロンプト本体はテンプレート（lib/presentation-plan.ts）で組み立て、AIには書かせない。
+//
+// 176-補: STEP 1 の入力（発表条件・振り返りシートの貼り付け）は下書きとして sessionStorage に置く。
+//   基準 = サーバーに保存済みの条件（貼り付け欄は空）。基準と違う間だけ下書きがある。
+//   構成案の生成に成功したら下書きを消す（貼り付けた原文はこれまでどおりサーバーに保存しない）。
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PATIENT_NOTICE, type Period, sortPeriods } from "@/lib/director-retrospective";
 import {
   DEFAULT_AUDIENCE,
@@ -23,6 +27,48 @@ import {
   type PlanOption,
   type PresentationPlanSaved,
 } from "@/lib/presentation-plan";
+import {
+  DISCARD_CONFIRM,
+  clearDraft,
+  readDraft,
+  useHasDraft,
+  writeDraft,
+} from "@/lib/retro-drafts";
+
+const PLAN_DRAFT_KEY = "plan:conditions";
+
+type PlanDraft = {
+  source: PlanConditions["source"];
+  periodIds: string[] | null;
+  pasteText: string;
+  minutes: string;
+  audience: string;
+  theme: string;
+  emphasis: string;
+};
+
+/** 比較のために項目の順を固定して作る */
+function planDraft(d: PlanDraft): PlanDraft {
+  return {
+    source: d.source,
+    periodIds: d.periodIds ? [...d.periodIds].sort() : null,
+    pasteText: d.pasteText,
+    minutes: d.minutes,
+    audience: d.audience,
+    theme: d.theme,
+    emphasis: d.emphasis,
+  };
+}
+
+const DEFAULT_PLAN_DRAFT: PlanDraft = planDraft({
+  source: "records",
+  periodIds: null,
+  pasteText: "",
+  minutes: String(DEFAULT_MINUTES),
+  audience: DEFAULT_AUDIENCE,
+  theme: DEFAULT_THEME,
+  emphasis: "",
+});
 
 const INPUT =
   "w-full rounded-md border border-gray-200 px-3 py-2 text-sm min-h-[44px] bg-white";
@@ -142,6 +188,20 @@ export function PresentationPlanPanel({ periods }: { periods: Period[] }) {
 
   const sortedPeriods = useMemo(() => sortPeriods(periods), [periods]);
 
+  // 176-補: 下書きの基準（保存済みの条件）と、下書きの有無
+  const baselineRef = useRef<PlanDraft>(DEFAULT_PLAN_DRAFT);
+  const hasDraft = useHasDraft(PLAN_DRAFT_KEY);
+
+  const applyDraft = (d: PlanDraft) => {
+    setSource(d.source);
+    setSelected(d.periodIds ? new Set(d.periodIds) : null);
+    setPasteText(d.pasteText);
+    setMinutes(d.minutes);
+    setAudience(d.audience);
+    setTheme(d.theme);
+    setEmphasis(d.emphasis);
+  };
+
   const load = useCallback(async () => {
     try {
       const r = await fetchPresentationPlan();
@@ -149,17 +209,27 @@ export function PresentationPlanPanel({ periods }: { periods: Period[] }) {
       if (r.saved) {
         setStep(2);
         const c = r.saved.conditions;
-        setSource(c.source);
-        setSelected(c.periodIds ? new Set(c.periodIds) : null);
-        setMinutes(String(c.minutes));
-        setAudience(c.audience);
-        setTheme(c.theme);
-        setEmphasis(c.emphasis);
+        baselineRef.current = planDraft({
+          source: c.source,
+          periodIds: c.periodIds,
+          pasteText: "",
+          minutes: String(c.minutes),
+          audience: c.audience,
+          theme: c.theme,
+          emphasis: c.emphasis,
+        });
+        applyDraft(baselineRef.current);
       }
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
     } finally {
+      // 書きかけがあれば保存済みの条件より優先し、STEP 1 を開いて見せる
+      const d = readDraft<PlanDraft>(PLAN_DRAFT_KEY);
+      if (d) {
+        applyDraft(planDraft({ ...DEFAULT_PLAN_DRAFT, ...d }));
+        setStep(1);
+      }
       setLoaded(true);
     }
   }, []);
@@ -167,6 +237,33 @@ export function PresentationPlanPanel({ periods }: { periods: Period[] }) {
   useEffect(() => {
     if (open && !loaded) void load();
   }, [open, loaded, load]);
+
+  const currentDraft = useMemo(
+    () =>
+      planDraft({
+        source,
+        periodIds: selected ? Array.from(selected) : null,
+        pasteText,
+        minutes,
+        audience,
+        theme,
+        emphasis,
+      }),
+    [source, selected, pasteText, minutes, audience, theme, emphasis]
+  );
+
+  // 入力が変わるたびに下書きへ（読み込み前は書かない＝保存済みの下書きを既定値で潰さない）
+  useEffect(() => {
+    if (!loaded) return;
+    if (JSON.stringify(currentDraft) === JSON.stringify(baselineRef.current)) clearDraft(PLAN_DRAFT_KEY);
+    else writeDraft(PLAN_DRAFT_KEY, currentDraft);
+  }, [loaded, currentDraft]);
+
+  const discardDraft = () => {
+    if (!confirm(DISCARD_CONFIRM)) return;
+    clearDraft(PLAN_DRAFT_KEY);
+    applyDraft(baselineRef.current);
+  };
 
   const isChecked = (id: string) => selected === null || selected.has(id);
   const togglePeriod = (id: string) =>
@@ -201,6 +298,9 @@ export function PresentationPlanPanel({ periods }: { periods: Period[] }) {
       });
       setSaved(r.saved);
       setStep(2);
+      // 生成に成功した条件を新しい基準にし、下書きを消す
+      baselineRef.current = currentDraft;
+      clearDraft(PLAN_DRAFT_KEY);
       setMsg("✨ 構成案を2案作りました（推奨案が選ばれています）");
     } catch (e) {
       setError(e instanceof Error ? e.message : "生成に失敗しました");
@@ -256,6 +356,11 @@ export function PresentationPlanPanel({ periods }: { periods: Period[] }) {
       >
         <span className="text-gray-400 text-xs">{open ? "▾" : "▸"}</span>
         🎤 発表の構成案を作る
+        {hasDraft && (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-200 text-[10px] font-normal">
+            📝 下書きあり
+          </span>
+        )}
       </button>
 
       {open && (
@@ -399,6 +504,11 @@ export function PresentationPlanPanel({ periods }: { periods: Period[] }) {
                   className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm min-h-[64px] bg-white leading-relaxed"
                 />
               </label>
+              {hasDraft && (
+                <p className="text-[11px] text-amber-900">
+                  📝 書きかけの条件をこのタブに一時保存しています（構成案を作ると消えます・タブを閉じると消えます）。
+                </p>
+              )}
               <div className="flex flex-wrap gap-2 items-center">
                 <button type="button" onClick={generate} disabled={busy} className={BTN_PRIMARY}>
                   {busy ? "AIが構成案を作っています…（30秒ほど）" : saved ? "🔁 作り直す（2案を再生成）" : "✨ 構成案を2案作る"}
@@ -406,6 +516,11 @@ export function PresentationPlanPanel({ periods }: { periods: Period[] }) {
                 {saved && (
                   <button type="button" onClick={() => setStep(2)} disabled={busy} className={BTN_GHOST}>
                     前回の結果を見る
+                  </button>
+                )}
+                {hasDraft && (
+                  <button type="button" onClick={discardDraft} disabled={busy} className={BTN_GHOST}>
+                    🗑 書きかけを破棄
                   </button>
                 )}
               </div>

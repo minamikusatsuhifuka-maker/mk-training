@@ -244,11 +244,18 @@ function text(v: unknown, max: number): string {
   return typeof v === "string" ? v.slice(0, max) : "";
 }
 
-/** YYYY-MM だけを通す（それ以外は空） */
+/** 手入力の揺れ（2022/4・2022-4・2022年4月・2022.04）。月ピッカーの無いブラウザ向け */
+const YM_LOOSE_RE = /^(\d{4})\s*[-/.年]\s*(\d{1,2})\s*月?$/;
+
+/** YYYY-MM に揃えて通す（読めないものは空）。176: 手入力の揺れも受け付ける */
 export function ym(v: unknown): string {
   if (typeof v !== "string") return "";
-  const s = v.trim();
-  return YM_RE.test(s) ? s : "";
+  const s = v.trim().replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
+  if (YM_RE.test(s)) return s;
+  const m = YM_LOOSE_RE.exec(s);
+  if (!m) return "";
+  const out = `${m[1]}-${m[2].padStart(2, "0")}`;
+  return YM_RE.test(out) ? out : "";
 }
 
 function pick<T extends string>(v: unknown, allowed: readonly T[], fallback: T): T {
@@ -962,7 +969,7 @@ export async function createRetrospectiveRecord(
 ): Promise<RetrospectiveRecord> {
   return callApi<RetrospectiveRecord>({
     method: "POST",
-    body: JSON.stringify({ kind, ...input }),
+    body: JSON.stringify({ kind, fields: input }),
   });
 }
 
@@ -973,7 +980,7 @@ export async function patchRetrospectiveRecord(
 ): Promise<RetrospectiveRecord> {
   return callApi<RetrospectiveRecord>({
     method: "PATCH",
-    body: JSON.stringify({ kind, id, ...input }),
+    body: JSON.stringify({ kind, id, fields: input }),
   });
 }
 

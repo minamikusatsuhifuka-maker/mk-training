@@ -2,8 +2,13 @@
 // 非許可ユーザー・未ログインには **すべて 404**（赤裸々な内容を扱うため機能の存在も伏せる）。
 //   GET    ?probe=1 → { ok:true }（ナビのリンク判定用・中身は返さない）
 //   GET             → { periods, events, initiatives, snapshots, delegations, isAdmin, tableMissing }
-//   POST            → 1件登録（**管理者のみ**）body: { kind, ...項目 }
-//   PATCH           → 1件更新（**管理者のみ**）body: { kind, id, ...項目 }
+//   POST            → 1件登録（**管理者のみ**）body: { kind, fields: { ...項目 } }
+//   PATCH           → 1件更新（**管理者のみ**）body: { kind, id, fields: { ...項目 } }
+//
+// 【項目は fields に入れる（指示書176）】
+// 以前は { kind, ...項目 } と平たく送っていたため、出来事の「種別」（項目名も kind）が
+// 記録の種類 kind:"event" を上書きし、出来事だけが「記録の種類が不正です」で保存できなかった。
+// 記録の種類と項目の名前空間を分け、どの項目名でも衝突しないようにする。
 //   DELETE ?kind=&id= → 1件を物理削除（**管理者のみ**。期を消すとその期の記録も消える）
 //
 // 実体アクセスはすべて service-role（RLS全拒否テーブル）。
@@ -104,6 +109,12 @@ async function readBody(req: Request): Promise<Record<string, unknown> | null> {
   }
 }
 
+/** 記録の項目（fields）。無い・形が違うときは null */
+function readFields(body: Record<string, unknown>): Record<string, unknown> | null {
+  const f = body.fields;
+  return f && typeof f === "object" && !Array.isArray(f) ? (f as Record<string, unknown>) : null;
+}
+
 /** 期が実在するか（子の記録を孤児にしない） */
 async function periodExists(
   auth: Extract<Awaited<ReturnType<typeof authorizeDirectorRetrospective>>, { ok: true }>,
@@ -126,7 +137,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "記録の種類が不正です" }, { status: 400 });
   }
 
-  const rec = buildRecord(kind, newRecordId(kind), body, null);
+  const fields = readFields(body);
+  if (!fields) return NextResponse.json({ error: "不正なリクエストです" }, { status: 400 });
+
+  const rec = buildRecord(kind, newRecordId(kind), fields, null);
   if (!rec) return NextResponse.json({ error: REQUIRED_MESSAGE[kind] }, { status: 400 });
   const problem = validateRecord(rec);
   if (problem) return NextResponse.json({ error: problem }, { status: 400 });
@@ -176,13 +190,15 @@ export async function PATCH(req: Request) {
   }
   const id = typeof body.id === "string" ? body.id : "";
   if (!id) return NextResponse.json({ error: "id は必須です" }, { status: 400 });
+  const fields = readFields(body);
+  if (!fields) return NextResponse.json({ error: "不正なリクエストです" }, { status: 400 });
 
   try {
     const prev = await fetchRecord(auth.admin, kind, id);
     if (!prev) {
       return NextResponse.json({ error: "対象が見つかりません" }, { status: 404 });
     }
-    const next = buildRecord(kind, id, body, prev);
+    const next = buildRecord(kind, id, fields, prev);
     if (!next) return NextResponse.json({ error: REQUIRED_MESSAGE[kind] }, { status: 400 });
     const problem = validateRecord(next);
     if (problem) return NextResponse.json({ error: problem }, { status: 400 });

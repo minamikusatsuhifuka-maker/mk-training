@@ -10,6 +10,10 @@
 //   → 期のカード（出来事・スナップショット・施策・権限委譲を期ごとに登録・編集・削除）
 //   → 発表用の出力（期の選択・匿名化・Markdownダウンロード）
 //   → 操作ログ（管理者）
+//
+// 176: 保存に失敗したら理由をフォームの中に出し、入力は残す（黙って消さない）。
+// 176-補: 保存前の入力は下書きとして sessionStorage に置く（lib/retro-drafts.ts）。
+//   開閉で入力欄が画面から外れても、再読み込みしても、書きかけが戻る。
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
@@ -56,6 +60,16 @@ import {
 } from "@/components/DirectorRetrospectiveCharts";
 import { DirectorRetrospectiveLogsPanel } from "@/components/admin/DirectorRetrospectiveLogsPanel";
 import { PresentationPlanPanel } from "@/components/PresentationPlanPanel";
+import {
+  DISCARD_CONFIRM,
+  clearDraft,
+  draftKeyOf,
+  hasAnyDraft,
+  listDraftKeys,
+  useDraft,
+  useDraftKeys,
+  useHasDraft,
+} from "@/lib/retro-drafts";
 
 // ─── 共通の小さな部品 ───
 
@@ -73,16 +87,24 @@ const BTN_SMALL =
 function Field({
   label,
   hint,
+  required,
   children,
 }: {
   label: string;
   hint?: string;
+  /** 176: 必須項目は入力欄に明示する */
+  required?: boolean;
   children: ReactNode;
 }) {
   return (
     <label className="block">
       <span className="block text-[11px] font-medium text-gray-700 mb-1">
         {label}
+        {required && (
+          <span className="ml-1 px-1 py-px rounded bg-red-50 text-red-700 border border-red-200 text-[10px] font-normal">
+            必須
+          </span>
+        )}
         {hint && <span className="ml-1 text-gray-400 font-normal">{hint}</span>}
       </span>
       {children}
@@ -95,10 +117,12 @@ function MonthInput({
   value,
   onChange,
   placeholder,
+  required,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
+  required?: boolean;
 }) {
   return (
     <input
@@ -106,7 +130,7 @@ function MonthInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder ?? "2022-04"}
-      pattern="\\d{4}-\\d{2}"
+      required={required}
       className={INPUT}
     />
   );
@@ -120,75 +144,138 @@ function PatientNotice() {
   );
 }
 
+/** 「下書きあり」の印（176-補） */
+function DraftBadge({ label = "📝 下書きあり" }: { label?: string }) {
+  return (
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-200 text-[10px] font-normal whitespace-nowrap">
+      {label}
+    </span>
+  );
+}
+
+function DraftNote({ dirty }: { dirty: boolean }) {
+  if (!dirty) return null;
+  return (
+    <p className="text-[11px] text-amber-900 flex flex-wrap items-center gap-1.5">
+      <DraftBadge />
+      <span>書きかけはこのタブに一時保存しています（保存ボタンを押すまで記録には入りません・タブを閉じると消えます）。</span>
+    </p>
+  );
+}
+
 function FormActions({
   busy,
   onCancel,
   submitLabel,
+  error,
 }: {
   busy: boolean;
   onCancel: () => void;
   submitLabel: string;
+  /** 176: 保存できなかった理由（フォームの中に出す） */
+  error: string;
 }) {
   return (
-    <div className="flex flex-wrap gap-2 pt-1">
-      <button type="submit" disabled={busy} className={BTN_PRIMARY}>
-        {busy ? "保存中…" : submitLabel}
-      </button>
-      <button type="button" onClick={onCancel} disabled={busy} className={BTN_GHOST}>
-        キャンセル
-      </button>
+    <div className="space-y-2 pt-1">
+      {error && (
+        <p role="alert" className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">
+          ⚠️ 保存できませんでした: {error}
+          <span className="block text-[11px] text-red-600 mt-0.5">入力内容はそのまま残っています。</span>
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" disabled={busy} className={BTN_PRIMARY}>
+          {busy ? "保存中…" : submitLabel}
+        </button>
+        <button type="button" onClick={onCancel} disabled={busy} className={BTN_GHOST}>
+          キャンセル
+        </button>
+      </div>
     </div>
   );
 }
 
-type SubmitFn = (input: RecordInput) => Promise<void>;
+/** 保存する。成功なら ""、失敗なら理由を返す（176: 失敗しても入力は消さない） */
+type SubmitFn = (input: RecordInput) => Promise<string>;
 
-// ─── 期 ───
-
-function PeriodForm({
-  initial,
-  busy,
-  onSubmit,
-  onCancel,
-}: {
-  initial: Period | null;
+type FormProps<T> = {
+  initial: T | null;
+  /** 下書きの置き場所（176-補） */
+  draftKey: string;
   busy: boolean;
   onSubmit: SubmitFn;
   onCancel: () => void;
-}) {
-  const [name, setName] = useState(initial?.name ?? "");
-  const [startYm, setStartYm] = useState(initial?.startYm ?? "");
-  const [endYm, setEndYm] = useState(initial?.endYm ?? "");
-  const [summary, setSummary] = useState(initial?.summary ?? "");
+};
+
+/**
+ * フォーム共通の送信・キャンセル処理。
+ * 成功 → 下書きを消す（閉じるのは呼び出し側）／失敗 → 理由を出し、入力も下書きも残す。
+ * キャンセル → 書きかけがあれば確認のうえ破棄。
+ */
+function useFormFlow(draftKey: string, dirty: boolean, discard: () => void, onSubmit: SubmitFn, onCancel: () => void) {
+  const [error, setError] = useState("");
+  const submit = async (input: RecordInput) => {
+    setError("");
+    const problem = await onSubmit(input);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    clearDraft(draftKey);
+  };
+  const cancel = () => {
+    if (dirty && !confirm(DISCARD_CONFIRM)) return;
+    discard();
+    onCancel();
+  };
+  return { error, submit, cancel };
+}
+
+// ─── 期 ───
+
+function PeriodForm({ initial, draftKey, busy, onSubmit, onCancel }: FormProps<Period>) {
+  const { values: v, set, dirty, discard } = useDraft(draftKey, {
+    name: initial?.name ?? "",
+    startYm: initial?.startYm ?? "",
+    endYm: initial?.endYm ?? "",
+    summary: initial?.summary ?? "",
+  });
+  const flow = useFormFlow(draftKey, dirty, discard, onSubmit, onCancel);
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        void onSubmit({ name, startYm, endYm, summary });
+        void flow.submit({ ...v });
       }}
       className="rounded-xl border border-teal-200 bg-teal-50/40 p-3 space-y-2"
     >
       <PatientNotice />
-      <Field label="期の名称" hint="例: 2022 開業期">
-        <input value={name} onChange={(e) => setName(e.target.value)} className={INPUT} required />
+      <DraftNote dirty={dirty} />
+      <Field label="期の名称" hint="例: 2022 開業期" required>
+        <input value={v.name} onChange={(e) => set("name", e.target.value)} className={INPUT} required />
       </Field>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <Field label="開始年月">
-          <MonthInput value={startYm} onChange={setStartYm} />
+        <Field label="開始年月" required>
+          <MonthInput value={v.startYm} onChange={(x) => set("startYm", x)} required />
         </Field>
         <Field label="終了年月" hint="進行中は空欄">
-          <MonthInput value={endYm} onChange={setEndYm} />
+          <MonthInput value={v.endYm} onChange={(x) => set("endYm", x)} />
         </Field>
       </div>
       <Field label="期の一言要約">
         <textarea
-          value={summary}
-          onChange={(e) => setSummary(e.target.value)}
+          value={v.summary}
+          onChange={(e) => set("summary", e.target.value)}
           className={TEXTAREA}
           rows={2}
         />
       </Field>
-      <FormActions busy={busy} onCancel={onCancel} submitLabel={initial ? "💾 更新" : "＋ 期を登録"} />
+      <FormActions
+        busy={busy}
+        onCancel={flow.cancel}
+        error={flow.error}
+        submitLabel={initial ? "💾 更新" : "＋ 期を登録"}
+      />
     </form>
   );
 }
@@ -197,33 +284,37 @@ function PeriodForm({
 
 function EventForm({
   initial,
+  defaultYm,
+  draftKey,
   busy,
   onSubmit,
   onCancel,
-}: {
-  initial: ClinicEvent | null;
-  busy: boolean;
-  onSubmit: SubmitFn;
-  onCancel: () => void;
+}: FormProps<ClinicEvent> & {
+  /** 176: 年月が未入力のときの初期値（その期の開始年月） */
+  defaultYm: string;
 }) {
-  const [ym, setYm] = useState(initial?.ym ?? "");
-  const [kind, setKind] = useState(initial?.kind ?? "other");
-  const [content, setContent] = useState(initial?.content ?? "");
+  const { values: v, set, dirty, discard } = useDraft(draftKey, {
+    ym: initial?.ym || defaultYm,
+    kind: (initial?.kind ?? "other") as ClinicEvent["kind"],
+    content: initial?.content ?? "",
+  });
+  const flow = useFormFlow(draftKey, dirty, discard, onSubmit, onCancel);
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        void onSubmit({ ym, kind, content });
+        void flow.submit({ ...v });
       }}
       className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2"
     >
       <PatientNotice />
+      <DraftNote dirty={dirty} />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <Field label="年月">
-          <MonthInput value={ym} onChange={setYm} />
+        <Field label="年月" hint="初期値は期の開始年月" required>
+          <MonthInput value={v.ym} onChange={(x) => set("ym", x)} required />
         </Field>
         <Field label="種別">
-          <select value={kind} onChange={(e) => setKind(e.target.value as ClinicEvent["kind"])} className={INPUT}>
+          <select value={v.kind} onChange={(e) => set("kind", e.target.value as ClinicEvent["kind"])} className={INPUT}>
             {EVENT_KINDS.map((k) => (
               <option key={k.value} value={k.value}>
                 {k.label}
@@ -232,58 +323,57 @@ function EventForm({
           </select>
         </Field>
       </div>
-      <Field label="内容">
-        <textarea value={content} onChange={(e) => setContent(e.target.value)} className={TEXTAREA} required />
+      <Field label="内容" required>
+        <textarea value={v.content} onChange={(e) => set("content", e.target.value)} className={TEXTAREA} required />
       </Field>
-      <FormActions busy={busy} onCancel={onCancel} submitLabel={initial ? "💾 更新" : "＋ 出来事を登録"} />
+      <FormActions
+        busy={busy}
+        onCancel={flow.cancel}
+        error={flow.error}
+        submitLabel={initial ? "💾 更新" : "＋ 出来事を登録"}
+      />
     </form>
   );
 }
 
 // ─── 施策 ───
 
-function InitiativeForm({
-  initial,
-  busy,
-  onSubmit,
-  onCancel,
-}: {
-  initial: Initiative | null;
-  busy: boolean;
-  onSubmit: SubmitFn;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState(initial?.name ?? "");
-  const [plannedYm, setPlannedYm] = useState(initial?.plannedYm ?? "");
-  const [doneYm, setDoneYm] = useState(initial?.doneYm ?? "");
-  const [status, setStatus] = useState<Initiative["status"]>(initial?.status ?? "planned");
-  const [quadrant, setQuadrant] = useState<number>(initial?.quadrant ?? 0);
-  const [aim, setAim] = useState(initial?.aim ?? "");
-  const [result, setResult] = useState(initial?.result ?? "");
-  const [learning, setLearning] = useState(initial?.learning ?? "");
+function InitiativeForm({ initial, draftKey, busy, onSubmit, onCancel }: FormProps<Initiative>) {
+  const { values: v, set, dirty, discard } = useDraft(draftKey, {
+    name: initial?.name ?? "",
+    plannedYm: initial?.plannedYm ?? "",
+    doneYm: initial?.doneYm ?? "",
+    status: (initial?.status ?? "planned") as Initiative["status"],
+    quadrant: (initial?.quadrant ?? 0) as number,
+    aim: initial?.aim ?? "",
+    result: initial?.result ?? "",
+    learning: initial?.learning ?? "",
+  });
+  const flow = useFormFlow(draftKey, dirty, discard, onSubmit, onCancel);
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        void onSubmit({ name, plannedYm, doneYm, status, quadrant, aim, result, learning });
+        void flow.submit({ ...v });
       }}
       className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2"
     >
       <PatientNotice />
-      <Field label="施策名">
-        <input value={name} onChange={(e) => setName(e.target.value)} className={INPUT} required />
+      <DraftNote dirty={dirty} />
+      <Field label="施策名" required>
+        <input value={v.name} onChange={(e) => set("name", e.target.value)} className={INPUT} required />
       </Field>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <Field label="計画した時期">
-          <MonthInput value={plannedYm} onChange={setPlannedYm} />
+          <MonthInput value={v.plannedYm} onChange={(x) => set("plannedYm", x)} />
         </Field>
         <Field label="実施した時期" hint="未実施は空欄">
-          <MonthInput value={doneYm} onChange={setDoneYm} />
+          <MonthInput value={v.doneYm} onChange={(x) => set("doneYm", x)} />
         </Field>
         <Field label="状態" hint="「未完了」「中止」も同じ重さで記録する">
           <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value as Initiative["status"])}
+            value={v.status}
+            onChange={(e) => set("status", e.target.value as Initiative["status"])}
             className={INPUT}
           >
             {INITIATIVE_STATUSES.map((s) => (
@@ -294,7 +384,7 @@ function InitiativeForm({
           </select>
         </Field>
         <Field label="四象限" hint="どの領域の仕事だったか">
-          <select value={quadrant} onChange={(e) => setQuadrant(Number(e.target.value))} className={INPUT}>
+          <select value={v.quadrant} onChange={(e) => set("quadrant", Number(e.target.value))} className={INPUT}>
             <option value={0}>（未設定）</option>
             {([1, 2, 3, 4] as const).map((q) => (
               <option key={q} value={q}>
@@ -305,15 +395,20 @@ function InitiativeForm({
         </Field>
       </div>
       <Field label="狙い" hint="何のためにやったか">
-        <textarea value={aim} onChange={(e) => setAim(e.target.value)} className={TEXTAREA} />
+        <textarea value={v.aim} onChange={(e) => set("aim", e.target.value)} className={TEXTAREA} />
       </Field>
       <Field label="結果" hint="どうなったか">
-        <textarea value={result} onChange={(e) => setResult(e.target.value)} className={TEXTAREA} />
+        <textarea value={v.result} onChange={(e) => set("result", e.target.value)} className={TEXTAREA} />
       </Field>
       <Field label="学び" hint="何が分かったか、次にどう活かすか">
-        <textarea value={learning} onChange={(e) => setLearning(e.target.value)} className={TEXTAREA} />
+        <textarea value={v.learning} onChange={(e) => set("learning", e.target.value)} className={TEXTAREA} />
       </Field>
-      <FormActions busy={busy} onCancel={onCancel} submitLabel={initial ? "💾 更新" : "＋ 施策を登録"} />
+      <FormActions
+        busy={busy}
+        onCancel={flow.cancel}
+        error={flow.error}
+        submitLabel={initial ? "💾 更新" : "＋ 施策を登録"}
+      />
     </form>
   );
 }
@@ -329,33 +424,27 @@ function toInt(s: string): number {
   return Number.isInteger(n) && n >= 0 ? n : NaN;
 }
 
-function SnapshotForm({
-  initial,
-  busy,
-  onSubmit,
-  onCancel,
-}: {
-  initial: Snapshot | null;
-  busy: boolean;
-  onSubmit: SubmitFn;
-  onCancel: () => void;
-}) {
-  const [recordedMode, setRecordedMode] = useState<Snapshot["recordedMode"]>(
-    initial?.recordedMode ?? "retrospective"
-  );
-  const [method, setMethod] = useState(initial?.method ?? "");
-  const [reality, setReality] = useState(initial?.reality ?? "");
-  const [shares, setShares] = useState<Record<ShareKey, string>>({
-    q1: initial?.shares ? String(initial.shares.q1) : "",
-    q2: initial?.shares ? String(initial.shares.q2) : "",
-    q3: initial?.shares ? String(initial.shares.q3) : "",
-    q4: initial?.shares ? String(initial.shares.q4) : "",
+function SnapshotForm({ initial, draftKey, busy, onSubmit, onCancel }: FormProps<Snapshot>) {
+  const { values: v, set, setValues, dirty, discard } = useDraft(draftKey, {
+    recordedMode: (initial?.recordedMode ?? "retrospective") as Snapshot["recordedMode"],
+    method: initial?.method ?? "",
+    reality: initial?.reality ?? "",
+    shares: {
+      q1: initial?.shares ? String(initial.shares.q1) : "",
+      q2: initial?.shares ? String(initial.shares.q2) : "",
+      q3: initial?.shares ? String(initial.shares.q3) : "",
+      q4: initial?.shares ? String(initial.shares.q4) : "",
+    } as Record<ShareKey, string>,
+    timeThief: initial?.timeThief ?? "",
+    focus: initial?.focus ?? "",
+    wentWrong: initial?.wentWrong ?? "",
+    wentWell: initial?.wentWell ?? "",
+    feeling: initial?.feeling ?? "",
   });
-  const [timeThief, setTimeThief] = useState(initial?.timeThief ?? "");
-  const [focus, setFocus] = useState(initial?.focus ?? "");
-  const [wentWrong, setWentWrong] = useState(initial?.wentWrong ?? "");
-  const [wentWell, setWentWell] = useState(initial?.wentWell ?? "");
-  const [feeling, setFeeling] = useState(initial?.feeling ?? "");
+  const flow = useFormFlow(draftKey, dirty, discard, onSubmit, onCancel);
+  const { recordedMode, shares } = v;
+  const setShares = (update: (prev: Record<ShareKey, string>) => Record<ShareKey, string>) =>
+    setValues((prev) => ({ ...prev, shares: update(prev.shares) }));
 
   const allEmpty = SHARE_KEYS.every((k) => shares[k].trim() === "");
   const nums = SHARE_KEYS.map((k) => toInt(shares[k]));
@@ -372,24 +461,25 @@ function SnapshotForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        void onSubmit({
+        void flow.submit({
           recordedMode,
-          method,
-          reality,
+          method: v.method,
+          reality: v.reality,
           // 4つとも空なら「未入力」として null を送る（グラフに載せない）
           shares: allEmpty
             ? null
             : { q1: toInt(shares.q1), q2: toInt(shares.q2), q3: toInt(shares.q3), q4: toInt(shares.q4) },
-          timeThief,
-          focus,
-          wentWrong,
-          wentWell,
-          feeling,
+          timeThief: v.timeThief,
+          focus: v.focus,
+          wentWrong: v.wentWrong,
+          wentWell: v.wentWell,
+          feeling: v.feeling,
         });
       }}
       className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2"
     >
       <PatientNotice />
+      <DraftNote dirty={dirty} />
       <Field label="この記録は" hint="後から思い出して書いたものと、当時書いたものを区別します">
         <div className="flex flex-wrap gap-2">
           {RECORDED_MODES.map((m) => (
@@ -406,7 +496,7 @@ function SnapshotForm({
                 name="recordedMode"
                 value={m.value}
                 checked={recordedMode === m.value}
-                onChange={() => setRecordedMode(m.value)}
+                onChange={() => set("recordedMode", m.value)}
               />
               {m.label}
             </label>
@@ -415,10 +505,10 @@ function SnapshotForm({
       </Field>
 
       <Field label="当時の方法" hint="手帳・ツール・ルーティンなど">
-        <textarea value={method} onChange={(e) => setMethod(e.target.value)} className={TEXTAREA} />
+        <textarea value={v.method} onChange={(e) => set("method", e.target.value)} className={TEXTAREA} />
       </Field>
       <Field label="当時の実情" hint="実際はどうだったか">
-        <textarea value={reality} onChange={(e) => setReality(e.target.value)} className={TEXTAREA} />
+        <textarea value={v.reality} onChange={(e) => set("reality", e.target.value)} className={TEXTAREA} />
       </Field>
 
       <div className="rounded-lg border border-gray-200 bg-white p-2.5 space-y-2">
@@ -481,23 +571,24 @@ function SnapshotForm({
       </div>
 
       <Field label="最も時間を奪われていたこと">
-        <textarea value={timeThief} onChange={(e) => setTimeThief(e.target.value)} className={TEXTAREA} />
+        <textarea value={v.timeThief} onChange={(e) => set("timeThief", e.target.value)} className={TEXTAREA} />
       </Field>
       <Field label="注力していたこと">
-        <textarea value={focus} onChange={(e) => setFocus(e.target.value)} className={TEXTAREA} />
+        <textarea value={v.focus} onChange={(e) => set("focus", e.target.value)} className={TEXTAREA} />
       </Field>
       <Field label="うまくいかなかったこと">
-        <textarea value={wentWrong} onChange={(e) => setWentWrong(e.target.value)} className={TEXTAREA} />
+        <textarea value={v.wentWrong} onChange={(e) => set("wentWrong", e.target.value)} className={TEXTAREA} />
       </Field>
       <Field label="うまくいったこと">
-        <textarea value={wentWell} onChange={(e) => setWentWell(e.target.value)} className={TEXTAREA} />
+        <textarea value={v.wentWell} onChange={(e) => set("wentWell", e.target.value)} className={TEXTAREA} />
       </Field>
       <Field label="当時の気持ち" hint="自由記述">
-        <textarea value={feeling} onChange={(e) => setFeeling(e.target.value)} className={TEXTAREA} />
+        <textarea value={v.feeling} onChange={(e) => set("feeling", e.target.value)} className={TEXTAREA} />
       </Field>
       <FormActions
         busy={busy}
-        onCancel={onCancel}
+        onCancel={flow.cancel}
+        error={flow.error}
         submitLabel={initial ? "💾 更新" : "＋ スナップショットを登録"}
       />
     </form>
@@ -506,42 +597,36 @@ function SnapshotForm({
 
 // ─── 権限委譲 ───
 
-function DelegationForm({
-  initial,
-  busy,
-  onSubmit,
-  onCancel,
-}: {
-  initial: Delegation | null;
-  busy: boolean;
-  onSubmit: SubmitFn;
-  onCancel: () => void;
-}) {
-  const [task, setTask] = useState(initial?.task ?? "");
-  const [status, setStatus] = useState<Delegation["status"]>(initial?.status ?? "held");
-  const [toRole, setToRole] = useState(initial?.toRole ?? "");
-  const [toName, setToName] = useState(initial?.toName ?? "");
-  const [memo, setMemo] = useState(initial?.memo ?? "");
+function DelegationForm({ initial, draftKey, busy, onSubmit, onCancel }: FormProps<Delegation>) {
+  const { values: v, set, dirty, discard } = useDraft(draftKey, {
+    task: initial?.task ?? "",
+    status: (initial?.status ?? "held") as Delegation["status"],
+    toRole: initial?.toRole ?? "",
+    toName: initial?.toName ?? "",
+    memo: initial?.memo ?? "",
+  });
+  const flow = useFormFlow(draftKey, dirty, discard, onSubmit, onCancel);
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        void onSubmit({ task, status, toRole, toName, memo });
+        void flow.submit({ ...v });
       }}
       className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2"
     >
       <PatientNotice />
+      <DraftNote dirty={dirty} />
       <p className="text-[11px] text-gray-600 leading-relaxed">
         記録するのは<strong>業務の移り変わり</strong>であり、人の評価ではありません。委譲先は役割で記録します（氏名は任意）。
       </p>
-      <Field label="業務" hint="例: シフト作成、採用面接、発注、教育">
-        <input value={task} onChange={(e) => setTask(e.target.value)} className={INPUT} required />
+      <Field label="業務" hint="例: シフト作成、採用面接、発注、教育" required>
+        <input value={v.task} onChange={(e) => set("task", e.target.value)} className={INPUT} required />
       </Field>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <Field label="状態">
           <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value as Delegation["status"])}
+            value={v.status}
+            onChange={(e) => set("status", e.target.value as Delegation["status"])}
             className={INPUT}
           >
             {DELEGATION_STATUSES.map((s) => (
@@ -552,16 +637,21 @@ function DelegationForm({
           </select>
         </Field>
         <Field label="委譲先（役割）" hint="例: 主任、医療事務">
-          <input value={toRole} onChange={(e) => setToRole(e.target.value)} className={INPUT} />
+          <input value={v.toRole} onChange={(e) => set("toRole", e.target.value)} className={INPUT} />
         </Field>
         <Field label="委譲先（氏名）" hint="任意。匿名化出力では消えます">
-          <input value={toName} onChange={(e) => setToName(e.target.value)} className={INPUT} />
+          <input value={v.toName} onChange={(e) => set("toName", e.target.value)} className={INPUT} />
         </Field>
       </div>
       <Field label="備考">
-        <textarea value={memo} onChange={(e) => setMemo(e.target.value)} className={TEXTAREA} />
+        <textarea value={v.memo} onChange={(e) => set("memo", e.target.value)} className={TEXTAREA} />
       </Field>
-      <FormActions busy={busy} onCancel={onCancel} submitLabel={initial ? "💾 更新" : "＋ 権限委譲を登録"} />
+      <FormActions
+        busy={busy}
+        onCancel={flow.cancel}
+        error={flow.error}
+        submitLabel={initial ? "💾 更新" : "＋ 権限委譲を登録"}
+      />
     </form>
   );
 }
@@ -615,6 +705,7 @@ function SubSection({
   addLabel,
   onAdd,
   canEdit,
+  draft,
   children,
 }: {
   title: string;
@@ -624,6 +715,8 @@ function SubSection({
   addLabel: string;
   onAdd?: () => void;
   canEdit: boolean;
+  /** 176-補: この欄に書きかけがある */
+  draft?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -637,6 +730,7 @@ function SubSection({
           <span className="text-gray-400 text-xs">{open ? "▾" : "▸"}</span>
           {title}
           <span className="text-[11px] text-gray-500 font-normal">（{count}件）</span>
+          {draft && <DraftBadge />}
         </button>
         {canEdit && onAdd && (
           <button type="button" onClick={onAdd} className={BTN_SMALL}>
@@ -648,8 +742,6 @@ function SubSection({
     </section>
   );
 }
-
-type Editing = { kind: RecordKind; id: string } | null;
 
 function PeriodCard({
   period,
@@ -667,10 +759,41 @@ function PeriodCard({
   busy: boolean;
   open: boolean;
   onToggle: () => void;
-  onSave: (kind: RecordKind, id: string | null, input: RecordInput) => Promise<boolean>;
+  onSave: (kind: RecordKind, id: string | null, input: RecordInput) => Promise<string>;
   onDelete: (kind: RecordKind, id: string, label: string, extra?: string) => Promise<void>;
 }) {
-  const [editing, setEditing] = useState<Editing>(null);
+  // 開いている入力欄（"種類:id"・新規は id="new"）。複数同時に開ける。
+  // 176-補: 書きかけの下書きが残っている入力欄は、開いた状態で戻す（再読み込み後も続きから書ける）
+  const [editing, setEditing] = useState<Set<string>>(() => {
+    const init = new Set<string>();
+    for (const k of listDraftKeys()) {
+      const parts = k.split(":");
+      if (parts.length === 2 && parts[0] === "period" && parts[1] === period.id) {
+        init.add(`period:${period.id}`);
+      } else if (parts.length === 3 && parts[1] === period.id) {
+        init.add(`${parts[0]}:${parts[2]}`);
+      }
+    }
+    return init;
+  });
+  const openEditor = (kind: RecordKind, id: string) =>
+    setEditing((prev) => new Set(prev).add(`${kind}:${id}`));
+  const closeEditor = (kind: RecordKind, id: string) =>
+    setEditing((prev) => {
+      const next = new Set(prev);
+      next.delete(`${kind}:${id}`);
+      return next;
+    });
+  const draftKey = (kind: RecordKind, id: string) =>
+    kind === "period" ? draftKeyOf("period", null, id) : draftKeyOf(kind, period.id, id);
+
+  // 「下書きあり」の印（下書きの増減で描き直す）
+  const draftKeys = useDraftKeys();
+  const draftIn = (kind: RecordKind) => draftKeys.some((k) => k.startsWith(`${kind}:${period.id}:`));
+  const hasDraft =
+    draftKeys.includes(`period:${period.id}`) ||
+    (["event", "snapshot", "initiative", "delegation"] as const).some(draftIn);
+
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     event: true,
     snapshot: true,
@@ -699,11 +822,11 @@ function PeriodCard({
   const submitFor =
     (kind: RecordKind, id: string | null): SubmitFn =>
     async (input) => {
-      const ok = await onSave(kind, id, { ...input, periodId: period.id });
-      if (ok) setEditing(null);
+      const problem = await onSave(kind, id, { ...input, periodId: period.id });
+      if (!problem) closeEditor(kind, id ?? "new");
+      return problem;
     };
-  const isEditing = (kind: RecordKind, id: string) =>
-    editing?.kind === kind && editing.id === id;
+  const isEditing = (kind: RecordKind, id: string) => editing.has(`${kind}:${id}`);
 
   const childCount = events.length + initiatives.length + delegations.length + (snapshot ? 1 : 0);
 
@@ -718,6 +841,7 @@ function PeriodCard({
           <p className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
             <span className="text-gray-400 text-xs">{open ? "▾" : "▸"}</span>
             {period.name}
+            {hasDraft && <DraftBadge />}
           </p>
           <p className="text-[11px] text-gray-500">
             {periodRangeLabel(period)}
@@ -727,7 +851,7 @@ function PeriodCard({
         <RowActions
           canEdit={isAdmin}
           busy={busy}
-          onEdit={() => setEditing({ kind: "period", id: period.id })}
+          onEdit={() => openEditor("period", period.id)}
           onDelete={() =>
             void onDelete(
               "period",
@@ -746,8 +870,9 @@ function PeriodCard({
           <PeriodForm
             initial={period}
             busy={busy}
+            draftKey={draftKey("period", period.id)}
             onSubmit={submitFor("period", period.id)}
-            onCancel={() => setEditing(null)}
+            onCancel={() => closeEditor("period", period.id)}
           />
         </div>
       )}
@@ -766,16 +891,19 @@ function PeriodCard({
             count={events.length}
             open={openSections.event}
             onToggle={() => toggle("event")}
+            draft={draftIn("event")}
             addLabel="＋ 追加"
-            onAdd={() => setEditing({ kind: "event", id: "new" })}
+            onAdd={() => openEditor("event", "new")}
             canEdit={isAdmin}
           >
             {isEditing("event", "new") && (
               <EventForm
                 initial={null}
                 busy={busy}
+                draftKey={draftKey("event", "new")}
                 onSubmit={submitFor("event", null)}
-                onCancel={() => setEditing(null)}
+                defaultYm={period.startYm}
+                onCancel={() => closeEditor("event", "new")}
               />
             )}
             {events.length === 0 && !isEditing("event", "new") && (
@@ -787,8 +915,10 @@ function PeriodCard({
                   key={e.id}
                   initial={e}
                   busy={busy}
+                  draftKey={draftKey("event", e.id)}
                   onSubmit={submitFor("event", e.id)}
-                  onCancel={() => setEditing(null)}
+                  defaultYm={period.startYm}
+                  onCancel={() => closeEditor("event", e.id)}
                 />
               ) : (
                 <div key={e.id} className="flex items-start justify-between gap-2 border-t border-gray-100 pt-2">
@@ -804,7 +934,7 @@ function PeriodCard({
                   <RowActions
                     canEdit={isAdmin}
                     busy={busy}
-                    onEdit={() => setEditing({ kind: "event", id: e.id })}
+                    onEdit={() => openEditor("event", e.id)}
                     onDelete={() => void onDelete("event", e.id, `出来事「${e.ym} ${e.content.slice(0, 20)}」`)}
                   />
                 </div>
@@ -818,16 +948,18 @@ function PeriodCard({
             count={snapshot ? 1 : 0}
             open={openSections.snapshot}
             onToggle={() => toggle("snapshot")}
+            draft={draftIn("snapshot")}
             addLabel="＋ 記入"
-            onAdd={snapshot ? undefined : () => setEditing({ kind: "snapshot", id: "new" })}
+            onAdd={snapshot ? undefined : () => openEditor("snapshot", "new")}
             canEdit={isAdmin}
           >
             {isEditing("snapshot", "new") && !snapshot && (
               <SnapshotForm
                 initial={null}
                 busy={busy}
+                draftKey={draftKey("snapshot", "new")}
                 onSubmit={submitFor("snapshot", null)}
-                onCancel={() => setEditing(null)}
+                onCancel={() => closeEditor("snapshot", "new")}
               />
             )}
             {!snapshot && !isEditing("snapshot", "new") && (
@@ -840,8 +972,9 @@ function PeriodCard({
                 <SnapshotForm
                   initial={snapshot}
                   busy={busy}
+                  draftKey={draftKey("snapshot", snapshot.id)}
                   onSubmit={submitFor("snapshot", snapshot.id)}
-                  onCancel={() => setEditing(null)}
+                  onCancel={() => closeEditor("snapshot", snapshot.id)}
                 />
               ) : (
                 <div className="space-y-1">
@@ -865,7 +998,7 @@ function PeriodCard({
                     <RowActions
                       canEdit={isAdmin}
                       busy={busy}
-                      onEdit={() => setEditing({ kind: "snapshot", id: snapshot.id })}
+                      onEdit={() => openEditor("snapshot", snapshot.id)}
                       onDelete={() => void onDelete("snapshot", snapshot.id, "時間管理スナップショット")}
                     />
                   </div>
@@ -886,16 +1019,18 @@ function PeriodCard({
             count={initiatives.length}
             open={openSections.initiative}
             onToggle={() => toggle("initiative")}
+            draft={draftIn("initiative")}
             addLabel="＋ 追加"
-            onAdd={() => setEditing({ kind: "initiative", id: "new" })}
+            onAdd={() => openEditor("initiative", "new")}
             canEdit={isAdmin}
           >
             {isEditing("initiative", "new") && (
               <InitiativeForm
                 initial={null}
                 busy={busy}
+                draftKey={draftKey("initiative", "new")}
                 onSubmit={submitFor("initiative", null)}
-                onCancel={() => setEditing(null)}
+                onCancel={() => closeEditor("initiative", "new")}
               />
             )}
             {initiatives.length === 0 && !isEditing("initiative", "new") && (
@@ -907,8 +1042,9 @@ function PeriodCard({
                   key={i.id}
                   initial={i}
                   busy={busy}
+                  draftKey={draftKey("initiative", i.id)}
                   onSubmit={submitFor("initiative", i.id)}
-                  onCancel={() => setEditing(null)}
+                  onCancel={() => closeEditor("initiative", i.id)}
                 />
               ) : (
                 <div key={i.id} className="border-t border-gray-100 pt-2 space-y-1">
@@ -926,7 +1062,7 @@ function PeriodCard({
                     <RowActions
                       canEdit={isAdmin}
                       busy={busy}
-                      onEdit={() => setEditing({ kind: "initiative", id: i.id })}
+                      onEdit={() => openEditor("initiative", i.id)}
                       onDelete={() => void onDelete("initiative", i.id, `施策「${i.name}」`)}
                     />
                   </div>
@@ -944,16 +1080,18 @@ function PeriodCard({
             count={delegations.length}
             open={openSections.delegation}
             onToggle={() => toggle("delegation")}
+            draft={draftIn("delegation")}
             addLabel="＋ 追加"
-            onAdd={() => setEditing({ kind: "delegation", id: "new" })}
+            onAdd={() => openEditor("delegation", "new")}
             canEdit={isAdmin}
           >
             {isEditing("delegation", "new") && (
               <DelegationForm
                 initial={null}
                 busy={busy}
+                draftKey={draftKey("delegation", "new")}
                 onSubmit={submitFor("delegation", null)}
-                onCancel={() => setEditing(null)}
+                onCancel={() => closeEditor("delegation", "new")}
               />
             )}
             {delegations.length === 0 && !isEditing("delegation", "new") && (
@@ -965,8 +1103,9 @@ function PeriodCard({
                   key={d.id}
                   initial={d}
                   busy={busy}
+                  draftKey={draftKey("delegation", d.id)}
                   onSubmit={submitFor("delegation", d.id)}
-                  onCancel={() => setEditing(null)}
+                  onCancel={() => closeEditor("delegation", d.id)}
                 />
               ) : (
                 <div key={d.id} className="border-t border-gray-100 pt-2 space-y-1">
@@ -988,7 +1127,7 @@ function PeriodCard({
                     <RowActions
                       canEdit={isAdmin}
                       busy={busy}
-                      onEdit={() => setEditing({ kind: "delegation", id: d.id })}
+                      onEdit={() => openEditor("delegation", d.id)}
                       onDelete={() => void onDelete("delegation", d.id, `権限委譲「${d.task}」`)}
                     />
                   </div>
@@ -1183,6 +1322,21 @@ export function DirectorRetrospectiveBoard({ isAdmin }: { isAdmin: boolean }) {
   const [openPeriods, setOpenPeriods] = useState<Set<string> | null>(null);
   const [showCharts, setShowCharts] = useState(true);
   const [showLogs, setShowLogs] = useState(false);
+  // 176-補: 期の新規の書きかけが残っていれば、フォームを開いた状態で戻す
+  const periodNewDraft = useHasDraft(draftKeyOf("period", null, "new"));
+  const showPeriodForm = addingPeriod || periodNewDraft;
+  const draftKeys = useDraftKeys();
+
+  // 176-補: 書きかけがあるままページを離れようとしたら確認を出す
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!hasAnyDraft()) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
 
   const load = useCallback(async () => {
     setError("");
@@ -1212,13 +1366,18 @@ export function DirectorRetrospectiveBoard({ isAdmin }: { isAdmin: boolean }) {
   const delegationRows = useMemo(() => buildDelegationChartRows(data), [data]);
   const initiativeRows = useMemo(() => buildInitiativeStatusRows(data), [data]);
 
-  const isOpen = (id: string) =>
-    openPeriods ? openPeriods.has(id) : periods.length > 0 && periods[periods.length - 1].id === id;
+  // 未操作のときに開く期 = 最新の期＋書きかけの下書きがある期（176-補）
+  const defaultOpenPeriods = (): Set<string> => {
+    const base = new Set(periods.length > 0 ? [periods[periods.length - 1].id] : []);
+    for (const p of periods) {
+      if (draftKeys.some((k) => k === `period:${p.id}` || k.split(":")[1] === p.id)) base.add(p.id);
+    }
+    return base;
+  };
+  const isOpen = (id: string) => (openPeriods ?? defaultOpenPeriods()).has(id);
   const togglePeriod = (id: string) =>
     setOpenPeriods((prev) => {
-      const base = prev
-        ? new Set(prev)
-        : new Set(periods.length > 0 ? [periods[periods.length - 1].id] : []);
+      const base = prev ? new Set(prev) : defaultOpenPeriods();
       if (base.has(id)) base.delete(id);
       else base.add(id);
       return base;
@@ -1229,9 +1388,11 @@ export function DirectorRetrospectiveBoard({ isAdmin }: { isAdmin: boolean }) {
     setError("");
   };
 
-  const save = async (kind: RecordKind, id: string | null, input: RecordInput): Promise<boolean> => {
+  /** 保存。成功なら ""、失敗なら理由（フォームの中に出す・入力は残す）を返す */
+  const save = async (kind: RecordKind, id: string | null, input: RecordInput): Promise<string> => {
     setBusy(true);
     setError("");
+    setMsg("");
     try {
       const rec = id
         ? await patchRetrospectiveRecord(kind, id, input)
@@ -1245,10 +1406,9 @@ export function DirectorRetrospectiveBoard({ isAdmin }: { isAdmin: boolean }) {
         });
       }
       flash(id ? "💾 更新しました" : "💾 登録しました");
-      return true;
+      return "";
     } catch (e) {
-      setError(e instanceof Error ? e.message : "保存に失敗しました");
-      return false;
+      return e instanceof Error && e.message ? e.message : "保存に失敗しました";
     } finally {
       setBusy(false);
     }
@@ -1347,24 +1507,26 @@ export function DirectorRetrospectiveBoard({ isAdmin }: { isAdmin: boolean }) {
       <section className="space-y-2">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-medium text-gray-900">🗂 期（{periods.length}）</h2>
-          {isAdmin && !addingPeriod && (
+          {isAdmin && !showPeriodForm && (
             <button type="button" onClick={() => setAddingPeriod(true)} className={BTN_SMALL}>
               ＋ 期を追加
             </button>
           )}
         </div>
-        {addingPeriod && (
+        {showPeriodForm && (
           <PeriodForm
             initial={null}
+            draftKey={draftKeyOf("period", null, "new")}
             busy={busy}
             onSubmit={async (input) => {
-              const ok = await save("period", null, input);
-              if (ok) setAddingPeriod(false);
+              const problem = await save("period", null, input);
+              if (!problem) setAddingPeriod(false);
+              return problem;
             }}
             onCancel={() => setAddingPeriod(false)}
           />
         )}
-        {loaded && periods.length === 0 && !addingPeriod && (
+        {loaded && periods.length === 0 && !showPeriodForm && (
           <p className="text-[11px] text-gray-500 rounded-xl border border-dashed border-gray-300 p-4 text-center">
             まだ期がありません。「＋ 期を追加」から、例えば「2022 開業期」のように自由に定義してください。
           </p>
