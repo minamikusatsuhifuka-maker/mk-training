@@ -16,7 +16,7 @@ import Link from "next/link";
 import { Sidebar } from "@/components/sidebar";
 import { useResolvedNav } from "@/lib/use-nav";
 import { UserMenu } from "@/components/UserMenu";
-import { AdminOnly } from "@/components/AdminOnly";
+import { AdminAreaLink } from "@/components/AdminAreaLink";
 import { FontSwitcher } from "@/components/FontSwitcher";
 import { DocTasksNavLink } from "@/components/DocTasksNavLink";
 import { StaffContactsNavLink } from "@/components/StaffContactsNavLink";
@@ -144,13 +144,13 @@ export default function AppShellInner({
               <div className="px-3 py-2 border-t">
                 <UserMenu onNavigate={() => setMenuOpen(false)} />
               </div>
-              <AdminOnly>
+              <AdminAreaLink>
                 <div className="px-3 py-3 border-t">
                   <Link href="/admin" onClick={() => setMenuOpen(false)} className="flex items-center gap-1.5 px-2 py-2 text-xs text-muted-foreground hover:text-foreground">
                     <span>⚙</span><span>管理画面</span>
                   </Link>
                 </div>
-              </AdminOnly>
+              </AdminAreaLink>
             </div>
             <div className="flex-1 bg-black/30" onClick={() => setMenuOpen(false)} />
           </div>

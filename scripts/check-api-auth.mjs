@@ -21,6 +21,7 @@ const API_DIR = new URL("../src/app/api", import.meta.url).pathname;
 const GUARDS = [
   "requireLogin", // 161: ログイン必須（汎用）
   "requireAdmin", // 39: 管理者必須
+  "requireAdminItem", // 183: 管理者 or その項目を委任された幹部（/api/admin/<項目>）
   "getSessionUser", // セッションを自分で見て判定している
   "authorizeDocTasks", // 154: 書類進捗ボード（指名制・非許可は404）
   "authorizeMemberNotes", // 149: メンバーノート（指名制・非許可は404）
@@ -50,6 +51,23 @@ function findRoutes(dir) {
   return out;
 }
 
+/**
+ * 183: /api/admin 配下は「管理者判定」か「項目別判定」か「機能固有の認可」のどれかを必ず持つこと。
+ * requireLogin だけのルートは、proxy の秘匿（159-D）に依存した素通りになるので許さない。
+ * 例外は my-items（自分の指名内容だけを返す。proxy でもログイン済みなら通す）。
+ */
+const ADMIN_GUARDS = [
+  "requireAdmin",
+  "requireAdminItem",
+  "authorizeDocTasks",
+  "authorizeMemberNotes",
+  "authorizeStaffContacts",
+  "authorizeDirectorRetrospective",
+  "authorizeGrowth",
+  "isAdminUser",
+];
+const ADMIN_SELF_ROUTES = new Set(["admin/my-items"]);
+
 const files = findRoutes(API_DIR).sort();
 const unguarded = [];
 const guarded = [];
@@ -70,6 +88,18 @@ for (const name of unguarded) {
         `  → src/lib/require-login.ts の requireLogin() を先頭に入れてください。\n` +
         `  → 未認証で到達させるなら、理由を添えて scripts/check-api-auth.mjs の\n` +
         `     PUBLIC_ROUTES と src/proxy.ts の PUBLIC_API_PATHS の両方に追加してください。`
+    );
+  }
+}
+
+for (const f of files) {
+  const name = relative(API_DIR, f).split(sep).slice(0, -1).join("/");
+  if (!name.startsWith("admin/") || ADMIN_SELF_ROUTES.has(name)) continue;
+  const src = readFileSync(f, "utf8");
+  if (!ADMIN_GUARDS.some((g) => src.includes(g))) {
+    errors.push(
+      `管理者判定のない /api/admin ルートです: /api/${name}\n` +
+        `  → requireAdmin()（院長のみ）か requireAdminItem("<項目key>")（委任可の項目）を入れてください。`
     );
   }
 }

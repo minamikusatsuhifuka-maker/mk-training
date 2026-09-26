@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import {
   authorizeGrowth,
+  canViewStaff,
   deleteGoal,
   fetchGoal,
   fetchGoals,
@@ -22,7 +23,9 @@ export async function GET(req: Request) {
   const auth = await authorizeGrowth();
   if (!auth.ok) return hidden();
   const userParam = new URL(req.url).searchParams.get("user") ?? "";
-  if (userParam && userParam !== auth.userId && !auth.isAdmin) return hidden();
+  // 他人の目標は管理者、または担当の幹部（183・閲覧のみ）だけ
+  if (userParam && userParam !== auth.userId && !canViewStaff(auth, userParam)) return hidden();
+  if ((!userParam || userParam === auth.userId) && !auth.selfAllowed) return hidden();
   try {
     const { goals, tableMissing } = await fetchGoals(auth.admin, userParam || auth.userId);
     return NextResponse.json({ goals, tableMissing });
@@ -33,7 +36,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const auth = await authorizeGrowth();
-  if (!auth.ok) return hidden();
+  if (!auth.ok || !auth.selfAllowed) return hidden();
   const body = await readJson(req);
   if (!body) return badRequest("不正なリクエストです");
   const now = new Date().toISOString();

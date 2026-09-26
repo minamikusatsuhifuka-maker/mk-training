@@ -18,6 +18,8 @@ import { getSessionUser } from "@/lib/staff-profiles-server";
 import { isAdminUser, countAdmins } from "@/lib/admin-role";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { AdminShell } from "@/components/admin/AdminShell";
+import { isActiveAccountId, loadDelegatedItems } from "@/lib/admin-delegation-server";
+import { ADMIN_ITEMS } from "@/lib/admin-items";
 import { BootstrapAdminCard } from "@/components/admin/BootstrapAdminCard";
 
 // セッション（cookie）依存のため常に動的レンダリング
@@ -56,11 +58,26 @@ export default async function AdminLayout({
   const { user } = await getSessionUser();
 
   if (user && isAdminUser(user)) {
-    return <AdminShell>{children}</AdminShell>;
+    return (
+      <AdminShell isAdmin allowedKeys={ADMIN_ITEMS.map((i) => i.key)}>
+        {children}
+      </AdminShell>
+    );
   }
 
   // 未ログインは他と区別せず 404（存在しないパスと同じ応答にする）
   if (!user) notFound();
+
+  // 183: 委任された幹部（項目が1つ以上・有効なアカウント）。どのパスを開けるかは proxy が項目ごとに判定済み。
+  // メニューには指名された項目だけを出す（🔒の項目は delegatedItems に入らない）
+  const delegated = await loadDelegatedItems(user.id);
+  if (delegated.length > 0 && (await isActiveAccountId(user.id))) {
+    return (
+      <AdminShell isAdmin={false} allowedKeys={["dashboard", ...delegated]}>
+        {children}
+      </AdminShell>
+    );
+  }
 
   // 例外: 管理者が0人のときだけ、ログイン済みの人に初回セットアップを見せる。
   // これが無いと管理者を1人も作れない状態から復旧できなくなる（アプリ外の手段しか残らない）。

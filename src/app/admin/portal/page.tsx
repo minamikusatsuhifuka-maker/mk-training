@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PORTAL_TABS_ADMIN_ONLY } from "@/lib/admin-items";
 import {
   loadPortalItems,
   savePortalItems,
@@ -501,6 +502,16 @@ function defaultNoticeLocal(days: number): string {
 
 export default function AdminPortalPage() {
   const [tab, setTab] = useState<TabKey>("news");
+  // 183: 委任された幹部には院長だけのタブ（⚙機能・自己評価・1on1・共有ログ/貢献）を出さない。
+  // 表示制御のみ。API側（機能フラグ等は管理者専用キー・private_store は isAdminUser）でも拒否される
+  const [realAdmin, setRealAdmin] = useState<boolean | null>(null);
+  useEffect(() => {
+    fetch("/api/admin/my-items", { credentials: "same-origin", cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { isAdmin: false }))
+      .then((j: { isAdmin?: boolean }) => setRealAdmin(j.isAdmin === true))
+      .catch(() => setRealAdmin(false));
+  }, []);
+  const visibleTabs = realAdmin === true ? TABS : TABS.filter((t) => !PORTAL_TABS_ADMIN_ONLY.includes(t.key));
 
   // 一括選択・一括削除（指示書128・共通部品1本を全対象タブで使用）
   const bulk = useBulkSelection();
@@ -2785,7 +2796,7 @@ export default function AdminPortalPage() {
 
       {/* タブ（116: 横スクロール廃止・折り返しで全タブ一覧表示） */}
       <div className="flex flex-wrap gap-2 pb-2 -mx-1 px-1 border-b border-gray-200">
-        {TABS.map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t.key}
             type="button"

@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 
 export default async function StaffGrowthPage() {
   const auth = await authorizeGrowth();
-  if (!auth.ok || !auth.isAdmin) notFound();
+  // 管理者、または担当スタッフを指定された幹部（183）。それ以外は404
+  if (!auth.ok || (!auth.isAdmin && auth.assignedStaffIds.length === 0)) notFound();
   return <StaffGrowthKarte />;
 }

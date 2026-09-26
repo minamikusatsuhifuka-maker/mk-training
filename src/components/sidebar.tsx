@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useResolvedNav } from "@/lib/use-nav";
 import { UserMenu } from "@/components/UserMenu";
-import { AdminOnly } from "@/components/AdminOnly";
+import { AdminAreaLink } from "@/components/AdminAreaLink";
 import { FontSwitcher } from "@/components/FontSwitcher";
 import { DocTasksNavLink } from "@/components/DocTasksNavLink";
 import { StaffContactsNavLink } from "@/components/StaffContactsNavLink";
@@ -112,7 +112,7 @@ export function Sidebar() {
       </div>
 
       {/* Admin link（管理者ログイン中のみ表示） */}
-      <AdminOnly>
+      <AdminAreaLink>
         <Separator />
         <div className="px-3 py-3">
           <Link
@@ -123,7 +123,7 @@ export function Sidebar() {
             <span>管理画面</span>
           </Link>
         </div>
-      </AdminOnly>
+      </AdminAreaLink>
     </aside>
   );
 }

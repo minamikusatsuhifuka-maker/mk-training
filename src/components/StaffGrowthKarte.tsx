@@ -27,6 +27,7 @@ export function StaffGrowthKarte() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [today, setToday] = useState("");
   const [tableMissing, setTableMissing] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<KarteFilter>(EMPTY_KARTE_FILTER);
@@ -42,6 +43,7 @@ export function StaffGrowthKarte() {
       setCourses(j.courses);
       setToday(j.today);
       setTableMissing(j.tableMissing);
+      setIsAdmin(j.isAdmin !== false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
     } finally {
@@ -106,21 +108,31 @@ export function StaffGrowthKarte() {
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h1 className="text-lg font-bold text-gray-900">📗 スタッフ育成カルテ</h1>
-          <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">
-            1on1・学びの記録・メンバーノート・自己評価・公開されたサーベイ・権限委譲を、人ごとに時系列で見る画面です。
-            <strong>元の画面で見られないものは、ここでも見えません</strong>（非公開のサーベイは管理者にも出ません）。
-            家族構成はこの画面には出しません。
-          </p>
+          {isAdmin ? (
+            <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">
+              1on1・学びの記録・メンバーノート・自己評価・公開されたサーベイ・権限委譲を、人ごとに時系列で見る画面です。
+              <strong>元の画面で見られないものは、ここでも見えません</strong>（非公開のサーベイは管理者にも出ません）。
+              家族構成はこの画面には出しません。
+            </p>
+          ) : (
+            <p className="text-[11px] text-gray-600 mt-1 leading-relaxed" data-delegate-note>
+              院長から担当を指定されたスタッフのカルテを<strong>閲覧</strong>できます（追加・編集はできません）。
+              見られるのは「学びの記録・本人の目標・1on1の約束と取り組み状況・本人が公開したサーベイ」だけです。
+              閲覧は記録されます。
+            </p>
+          )}
         </div>
-        <Link
-          href="/staff-growth/courses"
-          className="px-3 py-2 border border-teal-300 text-teal-800 rounded-full text-xs hover:bg-teal-50 min-h-[40px] flex items-center"
-        >
-          🗂 講座マスタ・設定
-        </Link>
+        {isAdmin && (
+          <Link
+            href="/staff-growth/courses"
+            className="px-3 py-2 border border-teal-300 text-teal-800 rounded-full text-xs hover:bg-teal-50 min-h-[40px] flex items-center"
+          >
+            🗂 講座マスタ・設定
+          </Link>
+        )}
       </header>
 
-      {tableMissing && (
+      {tableMissing && isAdmin && (
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-gray-800 leading-relaxed">
           学びの記録のテーブルがまだ作られていません。
           <code className="mx-1">~/Downloads/179_スタッフ育成カルテ_テーブル作成.sql</code>

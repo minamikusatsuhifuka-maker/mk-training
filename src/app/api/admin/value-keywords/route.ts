@@ -12,7 +12,7 @@
 //      - 一覧から外した語はサーバーが retired に退避する（選択済みの人の表示は消えない）
 
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminItem } from "@/lib/admin-delegation-server";
 import {
   loadValueKeywordUsage,
   loadValueKeywordsConfigServer,
@@ -32,7 +32,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const auth = await requireAdmin();
+  const auth = await requireAdminItem("profile-fields"); // 183: プロフィール項目管理を委任された幹部も可
   if (auth.response) return auth.response;
   const [config, usage] = await Promise.all([
     loadValueKeywordsConfigServer(),
@@ -48,7 +48,7 @@ function parseLimit(v: unknown): number | null {
 }
 
 export async function PUT(req: Request) {
-  const auth = await requireAdmin();
+  const auth = await requireAdminItem("profile-fields"); // 183: プロフィール項目管理を委任された幹部も可
   if (auth.response) return auth.response;
 
   let body: {

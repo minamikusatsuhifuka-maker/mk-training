@@ -12,6 +12,7 @@ import { NextResponse } from "next/server";
 import {
   attachEvidenceUrls,
   authorizeGrowth,
+  canViewStaff,
   deleteLearning,
   fetchCourse,
   fetchCourses,
@@ -31,8 +32,10 @@ export async function GET(req: Request) {
   const auth = await authorizeGrowth();
   if (!auth.ok) return hidden();
   const userParam = new URL(req.url).searchParams.get("user") ?? "";
-  // 他人の記録は管理者だけ（存在も知らせない）
-  if (userParam && userParam !== auth.userId && !auth.isAdmin) return hidden();
+  // 他人の記録は管理者、または担当の幹部（183・閲覧のみ）だけ（存在も知らせない）
+  if (userParam && userParam !== auth.userId && !canViewStaff(auth, userParam)) return hidden();
+  // 自分の記録はフラグON（または管理者）のときだけ
+  if ((!userParam || userParam === auth.userId) && !auth.selfAllowed) return hidden();
   const userId = userParam || auth.userId;
 
   try {
@@ -60,6 +63,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const auth = await authorizeGrowth();
   if (!auth.ok) return hidden();
+  // 183: 幹部は閲覧のみ（自分の記録はフラグONのときだけ）
+  if (!auth.isAdmin && !auth.selfAllowed) return hidden();
   const body = await readJson(req);
   if (!body) return badRequest("不正なリクエストです");
 

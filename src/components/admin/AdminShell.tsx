@@ -1,43 +1,29 @@
 "use client";
 
 // 管理画面の共通シェル（ヘッダー＋サイドナビ）。
-// 認可（管理者のみ）は src/app/admin/layout.tsx（サーバー側）で行う。
+// 認可は src/app/admin/layout.tsx（サーバー側）と proxy.ts で行う。
+// 183: 項目一覧の正本は lib/admin-items.ts。委任された幹部には指名された項目だけを出す（allowedKeys）。
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FontSwitcher } from "@/components/FontSwitcher";
+import { ADMIN_ITEMS } from "@/lib/admin-items";
 
-const adminNav = [
-  { label: "📊 ダッシュボード", href: "/admin" },
-  { label: "🏠 ポータル管理", href: "/admin/portal" },
-  { label: "🧭 サイドバー構成", href: "/admin/nav" },
-  { label: "🏛️ 組織知識ベース管理", href: "/admin/knowledge-system" },
-  { label: "🧭 背景情報・理念管理", href: "/admin/ai-background" },
-  { label: "📚 知識ベース管理", href: "/admin/knowledge" },
-  { label: "🦠 疾患管理", href: "/admin/diseases" },
-  { label: "💊 薬剤管理", href: "/admin/drugs" },
-  { label: "❓ クイズ管理", href: "/admin/quiz" },
-  { label: "⚠️ 禁忌管理", href: "/admin/contraindications" },
-  { label: "💬 カウンセリング管理", href: "/admin/counseling" },
-  { label: "✨ 美容施術管理", href: "/admin/cosmetic" },
-  { label: "🧴 スキンケア管理", href: "/admin/skincare" },
-  { label: "🤰 妊娠授乳管理", href: "/admin/pregnancy" },
-  { label: "⚡ 相互作用管理", href: "/admin/interactions" },
-  { label: "💴 算定点数管理", href: "/admin/medical-fees" },
-  { label: "📋 業務チェック管理", href: "/admin/operations" },
-  { label: "👥 スタッフ名簿", href: "/admin/staff-members" },
-  { label: "🏷️ タスクカテゴリ管理", href: "/admin/task-categories" },
-  { label: "👤 アカウント招待", href: "/admin/staff-accounts" },
-  { label: "🪪 プロフィール項目管理", href: "/admin/profile-fields" },
-  { label: "💉 生物学的製剤管理", href: "/admin/biologics" },
-  { label: "⭐ エキスパート要件管理", href: "/admin/expert" },
-  { label: "🔬 ディープリサーチ", href: "/admin/deep-research" },
-  { label: "📝 更新履歴", href: "/admin/changelog" },
-  { label: "⚙️ AI設定", href: "/admin/settings" },
-];
+// 項目一覧（表示順は lib/admin-items.ts の定義順）
+const adminNav = ADMIN_ITEMS.map((i) => ({ key: i.key, label: i.label, href: i.href }));
 
-export function AdminShell({ children }: { children: React.ReactNode }) {
+export function AdminShell({
+  children,
+  isAdmin,
+  allowedKeys,
+}: {
+  children: React.ReactNode;
+  /** 183: app_metadata の管理者か（false＝委任された幹部） */
+  isAdmin: boolean;
+  /** 183: 出してよい項目key */
+  allowedKeys: string[];
+}) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   // 149: メンバーノートは指名された人だけに見せる。
@@ -72,7 +58,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   const navItems = [
-    ...adminNav,
+    ...adminNav.filter((i) => allowedKeys.includes(i.key)),
     ...(canSeeNotes
       ? [{ label: "📔 メンバーノート", href: "/member-notes" }]
       : []),
@@ -98,8 +84,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     ...(canSeeGrowth
       ? [
           { label: "📗 スタッフ育成カルテ", href: "/staff-growth" },
-          // 179: 講座マスタ・設定はここから開く（/admin 配下だとルートの存在が漏れるため・157と同じ理由）
-          { label: "🗂 講座マスタ・AI下書き設定", href: "/staff-growth/courses" },
+          // 179: 講座マスタ・設定はここから開く（/admin 配下だとルートの存在が漏れるため・157と同じ理由）。
+          // 183: 講座マスタ（AI下書きの設定を含む）は院長のみ
+          ...(isAdmin ? [{ label: "🗂 講座マスタ・AI下書き設定", href: "/staff-growth/courses" }] : []),
         ]
       : []),
   ];

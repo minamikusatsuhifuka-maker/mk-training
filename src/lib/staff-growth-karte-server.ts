@@ -46,6 +46,7 @@ import {
   attendanceCounts,
   attendanceLabel,
   formatDates,
+  promiseStatusLabel,
   promiseTextOf,
   searchTimeline,
   sortLearningDesc,
@@ -55,6 +56,7 @@ import {
   type KarteDetail,
   type KarteListEntry,
   type LearningRecord,
+  type PromiseStatus,
   type PromiseSummary,
   type SearchHit,
   type SurveyView,
@@ -82,7 +84,10 @@ function isBanned(u: User): boolean {
  * 氏名はプロフィール（staff_profiles_index）→ Auth の display_name の順。
  * 入職日は169の連絡先（管理者の認可を通したときだけ）。
  */
-async function loadRoster(admin: GrowthAdminClient): Promise<RosterPerson[]> {
+async function loadRoster(
+  admin: GrowthAdminClient,
+  opts?: { skipContacts?: boolean }
+): Promise<RosterPerson[]> {
   const byId = new Map<string, RosterPerson>();
 
   // Auth の全アカウント（無効化済み含む）
@@ -146,9 +151,9 @@ async function loadRoster(admin: GrowthAdminClient): Promise<RosterPerson[]> {
     /* 飛ばす */
   }
 
-  // 入職日（169）: 既存の認可をそのまま呼ぶ
+  // 入職日（169）: 既存の認可をそのまま呼ぶ。183: 幹部モードでは読まない（連絡先は見せない）
   try {
-    const contactsAuth = await authorizeStaffContacts();
+    const contactsAuth = opts?.skipContacts ? ({ ok: false } as const) : await authorizeStaffContacts();
     if (contactsAuth.ok) {
       const { contacts } = await fetchAllStaffContacts(contactsAuth.admin);
       for (const c of contacts) {
@@ -192,6 +197,14 @@ async function listPrivateRecordsAsAdmin(
 
 // ─── 集約の材料 ───
 
+/**
+ * 183: 集める範囲。
+ *   full     … 管理者。すべて（1on1本文・メンバーノート・自己評価・権限委譲・入職日を含む）
+ *   delegate … 担当の幹部。学びの記録・自分の目標・1on1の約束と取り組み状況・本人が公開したサーベイ **だけ**。
+ *              それ以外は集めない（＝応答にも検索にも入らない）。名簿も担当スタッフだけ
+ */
+export type KarteScope = { mode: "full" } | { mode: "delegate"; staffIds: string[] };
+
 type Sources = {
   roster: RosterPerson[];
   courses: Course[];
@@ -204,6 +217,9 @@ type Sources = {
   delegations: { date: string; task: string; status: string; toName: string; toRole: string }[];
   /** 公開されたサーベイ（履歴を含む・古い順・前回との差つき） */
   surveyByUser: Map<string, SurveyView[]>;
+  /** 183: 1on1の約束の取り組み状況（幹部モードでも出す。本文は約束だけ） */
+  promiseStatuses: Map<string, PromiseStatus[]>;
+  scope: KarteScope;
   tableMissing: boolean;
 };
 
@@ -245,31 +261,61 @@ function summaryOf(view: SurveyView): string {
     .join(" / ");
 }
 
-async function loadSources(admin: GrowthAdminClient, viewerUserId: string): Promise<Sources> {
-  const [roster, coursesRes, learningRes] = await Promise.all([
-    loadRoster(admin),
+async function loadSources(
+  admin: GrowthAdminClient,
+  viewerUserId: string,
+  scope: KarteScope = { mode: "full" }
+): Promise<Sources> {
+  const delegate = scope.mode === "delegate";
+  const allowed = new Set(delegate ? scope.staffIds : []);
+  const [rosterAll, coursesRes, learningRes] = await Promise.all([
+    loadRoster(admin, delegate ? { skipContacts: true } : undefined),
     fetchCourses(admin),
     fetchLearning(admin),
   ]);
+  // 幹部モード: 名簿も学びも担当スタッフだけに絞る（他の人は存在ごと出さない）
+  const roster = delegate ? rosterAll.filter((p) => allowed.has(p.userId)) : rosterAll;
+  if (delegate) learningRes.records = learningRes.records.filter((l) => allowed.has(l.userId));
   const courseMap = new Map(coursesRes.courses.map((c) => [c.id, c]));
   const courseName = (id: string) => courseMap.get(id)?.name ?? "（講座不明）";
 
-  // 1on1・自己評価（基盤の管理者規則の範囲）
+  // 1on1・自己評価（基盤の管理者規則の範囲）。
+  // 183: 幹部モードでは 1on1 は「約束」の抽出にだけ使い（本文は年表に載せない）、自己評価は読まない
   let oneOnOne: PrivateRow[] = [];
   let selfReview: PrivateRow[] = [];
   try {
     [oneOnOne, selfReview] = await Promise.all([
       listPrivateRecordsAsAdmin(admin, "one_on_one"),
-      listPrivateRecordsAsAdmin(admin, "self_review"),
+      delegate ? Promise.resolve([] as PrivateRow[]) : listPrivateRecordsAsAdmin(admin, "self_review"),
     ]);
   } catch {
     /* 読めないときは無しで続ける */
   }
+  if (delegate) {
+    oneOnOne = oneOnOne.filter((r) => {
+      const d = normalizeOneOnOneData(r.data);
+      return allowed.has(r.owner_id) || d.participantIds.some((id) => allowed.has(id));
+    });
+  }
 
-  // メンバーノート（149の認可をそのまま呼ぶ）
+  // 1on1の約束の取り組み状況（本人が書いたもの）
+  const promiseStatuses = new Map<string, PromiseStatus[]>();
+  try {
+    const { statuses } = await fetchPromiseStatuses(admin);
+    for (const s of statuses) {
+      if (delegate && !allowed.has(s.userId)) continue;
+      const list = promiseStatuses.get(s.userId);
+      if (list) list.push(s);
+      else promiseStatuses.set(s.userId, [s]);
+    }
+  } catch {
+    /* 無しで続ける */
+  }
+
+  // メンバーノート（149の認可をそのまま呼ぶ）。183: 幹部モードでは読まない（院長メモは見せない）
   const notesByUser = new Map<string, { updatedAt: string; strengths: string; memo: string }>();
   try {
-    const notesAuth = await authorizeMemberNotes();
+    const notesAuth = delegate ? ({ ok: false } as const) : await authorizeMemberNotes();
     if (notesAuth.ok) {
       const { notes } = await fetchAllNotes(notesAuth.admin);
       for (const n of notes) {
@@ -284,10 +330,10 @@ async function loadSources(admin: GrowthAdminClient, viewerUserId: string): Prom
     /* 飛ばす */
   }
 
-  // 権限委譲（173の認可をそのまま呼ぶ・氏名が入っている記録のみ）
+  // 権限委譲（173の認可をそのまま呼ぶ・氏名が入っている記録のみ）。183: 幹部モードでは読まない
   const delegations: Sources["delegations"] = [];
   try {
-    const retroAuth = await authorizeDirectorRetrospective();
+    const retroAuth = delegate ? ({ ok: false } as const) : await authorizeDirectorRetrospective();
     if (retroAuth.ok) {
       const { data } = await fetchRetrospectiveRecords(retroAuth.admin);
       const periodById = new Map(data.periods.map((p) => [p.id, p]));
@@ -333,6 +379,7 @@ async function loadSources(admin: GrowthAdminClient, viewerUserId: string): Prom
     }
     const byId = new Map(profiles.map((p) => [p.userId, p]));
     for (const p of redactProfilesForViewer(profiles, viewerUserId)) {
+      if (delegate && !allowed.has(p.userId)) continue; // 担当外は集めない
       if (!p.needsSurvey) continue; // 非公開はキーごと落ちている
       const original = byId.get(p.userId)?.needsSurvey;
       const visibility = original?.visibility ?? "private";
@@ -363,6 +410,8 @@ async function loadSources(admin: GrowthAdminClient, viewerUserId: string): Prom
     notesByUser,
     delegations,
     surveyByUser,
+    promiseStatuses,
+    scope,
     tableMissing: coursesRes.tableMissing || learningRes.tableMissing,
   };
 }
@@ -376,7 +425,9 @@ function nameOf(roster: RosterPerson[], userId: string, fallback: string): strin
 function buildTimeline(src: Sources, person: RosterPerson): TimelineItem[] {
   const items: TimelineItem[] = [];
 
-  if (person.joinedOn) {
+  const delegate = src.scope.mode === "delegate";
+
+  if (person.joinedOn && !delegate) {
     items.push({
       kind: "joined",
       date: person.joinedOn,
@@ -390,6 +441,25 @@ function buildTimeline(src: Sources, person: RosterPerson): TimelineItem[] {
     const d = normalizeOneOnOneData(r.data);
     const involved = r.owner_id === person.userId || d.participantIds.includes(person.userId);
     if (!involved || !d.heldOn) continue;
+    if (delegate) {
+      // 183 A-3: 幹部には「約束と取り組み状況」だけ。面談の本文・7つの実・RWDEPC は出さない
+      const promise = promiseTextOf(d);
+      if (!promise) continue;
+      const st = (src.promiseStatuses.get(person.userId) ?? []).find(
+        (s) => s.oneOnOneKey === r.record_key && s.ownerId === r.owner_id
+      );
+      items.push({
+        kind: "one_on_one",
+        date: d.heldOn,
+        title: "1on1の約束",
+        body: [
+          `約束: ${promise}`,
+          st ? `取り組み状況: ${promiseStatusLabel(st.status)}${st.note.trim() ? ` ・ ${st.note}` : ""}` : "取り組み状況: 未記入",
+        ].join("\n"),
+        href: "/one-on-one",
+      });
+      continue;
+    }
     const other =
       r.owner_id === person.userId
         ? d.participantIds[0]
@@ -510,9 +580,10 @@ function buildEntry(src: Sources, p: RosterPerson): KarteListEntry {
 
 export async function buildKarteList(
   admin: GrowthAdminClient,
-  viewerUserId: string
+  viewerUserId: string,
+  scope: KarteScope = { mode: "full" }
 ): Promise<{ entries: KarteListEntry[]; courses: Course[]; tableMissing: boolean; today: string }> {
-  const src = await loadSources(admin, viewerUserId);
+  const src = await loadSources(admin, viewerUserId, scope);
   return {
     entries: src.roster.map((p) => buildEntry(src, p)),
     courses: src.courses,
@@ -524,11 +595,12 @@ export async function buildKarteList(
 export async function buildKarteDetail(
   admin: GrowthAdminClient,
   viewerUserId: string,
-  userId: string
+  userId: string,
+  scope: KarteScope = { mode: "full" }
 ): Promise<(KarteDetail & { courses: Course[]; tableMissing: boolean; today: string }) | null> {
-  const src = await loadSources(admin, viewerUserId);
+  const src = await loadSources(admin, viewerUserId, scope);
   const person = src.roster.find((p) => p.userId === userId);
-  if (!person) return null;
+  if (!person) return null; // 幹部モードでは担当外＝名簿に無い＝「存在しない」と同じ
 
   const timeline = buildTimeline(src, person);
 
@@ -578,9 +650,12 @@ export async function buildKarteDetail(
 export async function searchKarte(
   admin: GrowthAdminClient,
   viewerUserId: string,
-  q: string
+  q: string,
+  scope: KarteScope = { mode: "full" }
 ): Promise<SearchHit[]> {
-  const src = await loadSources(admin, viewerUserId);
+  // 183 A-4: 幹部の検索は担当スタッフの許可された内容（＝幹部モードの年表）だけが対象。
+  // 見せない内容は年表に無いので、件数・抜粋・並び順からも一致の有無が推測できない
+  const src = await loadSources(admin, viewerUserId, scope);
   const byUser = new Map<string, TimelineItem[]>();
   for (const p of src.roster) byUser.set(p.userId, buildTimeline(src, p));
   return searchTimeline(byUser, q);

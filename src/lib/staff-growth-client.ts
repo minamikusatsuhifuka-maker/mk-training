@@ -268,6 +268,8 @@ export type KarteListResponse = {
   courses: Course[];
   tableMissing: boolean;
   today: string;
+  /** 183: false＝担当の幹部（閲覧のみ・担当スタッフだけ） */
+  isAdmin: boolean;
 };
 
 export async function fetchKarteListApi(): Promise<KarteListResponse> {
@@ -278,6 +280,8 @@ export type KarteDetailResponse = KarteDetail & {
   courses: Course[];
   tableMissing: boolean;
   today: string;
+  /** 183: false＝担当の幹部（閲覧のみ） */
+  isAdmin: boolean;
 };
 
 export async function fetchKarteDetailApi(userId: string): Promise<KarteDetailResponse> {

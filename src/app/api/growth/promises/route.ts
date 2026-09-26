@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import {
   authorizeGrowth,
+  canViewStaff,
   fetchPromiseStatuses,
   recordGrowthLog,
   savePromiseStatus,
@@ -63,7 +64,9 @@ export async function GET(req: Request) {
   const auth = await authorizeGrowth();
   if (!auth.ok) return hidden();
   const userParam = new URL(req.url).searchParams.get("user") ?? "";
-  if (userParam && userParam !== auth.userId && !auth.isAdmin) return hidden();
+  // 他人の約束は管理者、または担当の幹部（183・閲覧のみ）だけ
+  if (userParam && userParam !== auth.userId && !canViewStaff(auth, userParam)) return hidden();
+  if ((!userParam || userParam === auth.userId) && !auth.selfAllowed) return hidden();
   const userId = userParam || auth.userId;
 
   try {
@@ -106,7 +109,7 @@ export async function GET(req: Request) {
 
 export async function PUT(req: Request) {
   const auth = await authorizeGrowth();
-  if (!auth.ok) return hidden();
+  if (!auth.ok || !auth.selfAllowed) return hidden();
   const body = await readJson(req);
   if (!body) return badRequest("不正なリクエストです");
   const oneOnOneKey = typeof body.oneOnOneKey === "string" ? body.oneOnOneKey : "";

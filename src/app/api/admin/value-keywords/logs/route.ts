@@ -7,14 +7,14 @@
 // - 保存先は content_store `value_keywords_log`（サーバー専用キー。/api/content-store からは読めない）
 
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminItem } from "@/lib/admin-delegation-server";
 import { fetchValueKeywordLogsServer } from "@/lib/value-keywords-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const auth = await requireAdmin();
+  const auth = await requireAdminItem("profile-fields"); // 183: プロフィール項目管理を委任された幹部も可
   if (auth.response) return auth.response;
   const logs = await fetchValueKeywordLogsServer();
   return NextResponse.json({ logs });

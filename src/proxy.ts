@@ -24,6 +24,16 @@ import { NextResponse, type NextRequest } from "next/server";
 // ここで独自に user_metadata だけを見ると、app_metadata.role で管理者になっている
 // アカウントを締め出してしまう。
 import { isAdminUser } from "@/lib/admin-role";
+// 183: 幹部への項目別委任。指名は content_store の menu_access（サーバー専用キー）にあり、
+// JWT には入れない（無効化・指名変更を即時反映するため）。読めないときは委任なし（fail-close）。
+import { loadMenuAccess } from "@/lib/menu-access-server";
+import {
+  ADMIN_API_SELF_PATHS,
+  adminItemKeyForApiPath,
+  adminItemKeyForPath,
+  findAdminItem,
+} from "@/lib/admin-items";
+import { delegatedItemsOf } from "@/lib/admin-delegation-server";
 
 /** rewrite 先。実在しないパスなら何でもよいが、固定にして応答を1種類に揃える */
 const HIDDEN_PATH = "/__not_found__";
@@ -39,6 +49,36 @@ const HIDDEN_PATH = "/__not_found__";
  * 実在するAPIも存在しないAPIも、ここへ rewrite された同じ結果になる。
  */
 const HIDDEN_API_PATH = "/api/__not_found__";
+
+/**
+ * 183: その人に委任された管理画面の項目key。管理者は呼ばない。
+ * 読み取りに失敗したら空＝何も開けない（実在しないパスと同じ応答になる）。
+ */
+async function delegatedItemsFor(userId: string): Promise<string[]> {
+  try {
+    return delegatedItemsOf(await loadMenuAccess(), userId);
+  } catch {
+    return [];
+  }
+}
+
+/** 183: 委任された項目の集合で、この /admin パスを開けるか（🔒の項目は誰にも開かない） */
+function delegatedCanOpenPath(items: string[], pathname: string): boolean {
+  if (items.length === 0) return false;
+  const key = adminItemKeyForPath(pathname);
+  if (!key) return false;
+  if (key === "dashboard") return true; // 項目が1つでもあれば入口は開ける
+  const item = findAdminItem(key);
+  return !!item && item.delegable && items.includes(key);
+}
+
+/** 183: 委任された項目の集合で、この /api/admin パスを呼べるか */
+function delegatedCanCallApi(items: string[], pathname: string): boolean {
+  const key = adminItemKeyForApiPath(pathname);
+  if (!key) return false; // 対応表に無い /api/admin ルートは院長のみ
+  const item = findAdminItem(key);
+  return !!item && item.delegable && items.includes(key);
+}
 
 /**
  * 未ログインでも通すパス（ログインに至るための最小限）。
@@ -151,6 +191,11 @@ export async function proxy(request: NextRequest) {
     // ページ側（/admin）と同じ手法。ここを通さないと、ログイン済みの非管理者に対して
     // 実在ルートは401/403・非実在ルートは404となり、応答の違いから存在が分かる。
     if (isAdminApiPath(pathname) && !isAdminUser(user)) {
+      // 183: 自分の指名内容だけを返すルートはログイン済みなら通す
+      if (ADMIN_API_SELF_PATHS.includes(pathname)) return response;
+      // 183: 委任された項目のAPIだけ通す。それ以外は従来どおり実在しないAPIと同じ応答
+      const items = await delegatedItemsFor(user.id);
+      if (delegatedCanCallApi(items, pathname)) return response;
       return withSession(
         response,
         NextResponse.rewrite(new URL(HIDDEN_API_PATH, request.url))
@@ -162,6 +207,12 @@ export async function proxy(request: NextRequest) {
   // 管理画面: 管理者以外は存在しないパスと同じ404にする（158）
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
     if (isAdminUser(user)) return response;
+    // 183: 委任された項目のページだけ通す。指名の無い項目・🔒の項目・未委任の人は
+    // 従来どおり実在しないパスと同じ応答（158）。ページ側（各ページ・API）でも再判定する
+    if (user) {
+      const items = await delegatedItemsFor(user.id);
+      if (delegatedCanOpenPath(items, pathname)) return response;
+    }
     return withSession(
       response,
       NextResponse.rewrite(new URL(HIDDEN_PATH, request.url))

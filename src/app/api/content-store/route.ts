@@ -7,6 +7,7 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/staff-profiles-server";
 import { isAdminUser } from "@/lib/admin-role";
+import { canWriteAdminKeyByDelegation } from "@/lib/admin-delegation-server";
 import {
   isAdminOnlyContentKey,
   isAllowedContentPrefix,
@@ -84,7 +85,11 @@ export async function PUT(req: Request) {
   if (data === undefined) {
     return NextResponse.json({ error: "dataが必要です" }, { status: 400 });
   }
-  if (isAdminOnlyContentKey(key) && !isAdminUser(user)) return forbidden();
+  // 183: 管理者専用キーは、その項目を委任された幹部にも書かせる（項目→キーの対応は lib/admin-items.ts）。
+  // 機能フラグ・AI設定・招待設定など委任できない項目のキーは対応表に無いので、従来どおり管理者のみ
+  if (isAdminOnlyContentKey(key) && !isAdminUser(user)) {
+    if (!(await canWriteAdminKeyByDelegation(user.id, key))) return forbidden();
+  }
 
   const type =
     typeof contentType === "string" && contentType
@@ -114,8 +119,10 @@ export async function DELETE(req: Request) {
   // 157: サーバー専用キー（menu_access）はこのAPIからは読み書きさせない
   if (isServerOnlyContentKey(key)) return hidden();
   if (isServerWriteOnlyContentKey(key)) return forbidden(); // 172
-  // 削除は「設定を既定に戻す」用途。書き込みと同じ権限で判定する。
-  if (isAdminOnlyContentKey(key) && !isAdminUser(user)) return forbidden();
+  // 削除は「設定を既定に戻す」用途。書き込みと同じ権限で判定する（183: 委任も同じ）。
+  if (isAdminOnlyContentKey(key) && !isAdminUser(user)) {
+    if (!(await canWriteAdminKeyByDelegation(user.id, key))) return forbidden();
+  }
 
   const ok = await serverDeleteContentRow(key);
   if (!ok) {

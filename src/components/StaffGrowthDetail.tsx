@@ -165,6 +165,7 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
   }
 
   const { entry, latestPromise, recentLearning, timeline, goals, today } = detail;
+  const isAdmin = detail.isAdmin !== false; // 183: false＝担当の幹部（閲覧のみ）
   const tenure = tenureLabel(entry.joinedOn, today);
   const shownTimeline = showAll ? timeline : timeline.slice(0, 30);
 
@@ -189,9 +190,11 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
           )}
         </h1>
         <p className="text-[11px] text-gray-600 mt-1">
-          {entry.joinedOn
-            ? `入職 ${entry.joinedOn.replaceAll("-", "/")}${tenure ? `（在籍 ${tenure}）` : ""}`
-            : "入職日 未登録（スタッフ連絡先に入職日を登録すると表示されます）"}
+          {isAdmin
+            ? entry.joinedOn
+              ? `入職 ${entry.joinedOn.replaceAll("-", "/")}${tenure ? `（在籍 ${tenure}）` : ""}`
+              : "入職日 未登録（スタッフ連絡先に入職日を登録すると表示されます）"
+            : "閲覧のみ（担当スタッフ）"}
           {" ・ "}学びの記録 {entry.learningCount}件
         </p>
       </header>
@@ -319,7 +322,7 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
       {/* 学びの記録（管理者は追加・編集できる・B-4） */}
       <section id="learning" className="space-y-2">
         <h2 className="text-sm font-medium text-gray-900">📚 学びの記録（全件）</h2>
-        {editing === "new" ? (
+        {!isAdmin ? null : editing === "new" ? (
           <LearningRecordForm
             key="new"
             draftKey={`growth:admin-learning:${userId}:new`}
@@ -345,7 +348,7 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
         <LearningRecordList
           records={records}
           courses={courses}
-          canEdit
+          canEdit={isAdmin}
           busy={busy}
           bucketMissing={bucketMissing}
           editingId={editing}

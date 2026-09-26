@@ -27,6 +27,7 @@ import { isAdminUser } from "./admin-role";
 import { serverGetContentRow } from "./content-store-server";
 import { FEATURE_FLAGS_KEY } from "./feature-flags";
 import { isBucketNotFound, signBucketPaths } from "./storage-signed";
+import { loadKarteAssignments } from "./admin-delegation-server";
 import {
   EVIDENCE_MAX_BYTES,
   GROWTH_CONFIG_ID,
@@ -139,12 +140,26 @@ export type GrowthAuth =
       userEmail: string;
       userName: string;
       isAdmin: boolean;
+      /** 自分の記録（マイ成長記録）を扱えるか＝管理者 or フラグ growth_record がON */
+      selfAllowed: boolean;
+      /**
+       * 183: 幹部として担当を指定されたスタッフの userId（自分は含まない）。
+       * 管理者は常に空（全員を見られるので個別指定は不要）。
+       */
+      assignedStaffIds: string[];
     };
+
+/** 183: その人（管理者 or 担当の幹部）が、この userId のカルテ系データを読んでよいか */
+export function canViewStaff(auth: Extract<GrowthAuth, { ok: true }>, userId: string): boolean {
+  if (auth.isAdmin) return true;
+  return userId !== auth.userId && auth.assignedStaffIds.includes(userId);
+}
 
 /**
  * 認証＋認可の共通前段。
  * - 未ログイン・無効化アカウント・service-role未設定 → ok:false（呼び出し側は404）
- * - 非管理者はフラグ growth_record がONのときだけ ok（既定OFF＝説明前は誰も入れない）
+ * - 非管理者は「フラグ growth_record がON（自分の記録）」または「担当スタッフの指定がある（183・幹部）」の
+ *   どちらかで ok。どちらも無ければ 404（既定OFF・既定は誰も指定されていない）
  */
 export async function authorizeGrowth(): Promise<GrowthAuth> {
   const { user } = await getSessionUser();
@@ -158,7 +173,9 @@ export async function authorizeGrowth(): Promise<GrowthAuth> {
   }
 
   const isAdmin = isAdminUser(user);
-  if (!isAdmin && !(await serverFeatureEnabled("growth_record"))) return { ok: false };
+  const selfAllowed = isAdmin || (await serverFeatureEnabled("growth_record"));
+  const assignedStaffIds = isAdmin ? [] : await loadKarteAssignments(user.id);
+  if (!selfAllowed && assignedStaffIds.length === 0) return { ok: false };
 
   if (!(await isActiveAccount(admin, user.id))) return { ok: false };
 
@@ -172,6 +189,8 @@ export async function authorizeGrowth(): Promise<GrowthAuth> {
     userEmail: user.email ?? "",
     userName,
     isAdmin,
+    selfAllowed,
+    assignedStaffIds,
   };
 }
 
