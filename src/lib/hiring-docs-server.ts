@@ -17,9 +17,11 @@ import {
   normalizeHiringDoc,
   normalizeHiringLog,
   normalizeHiringProfile,
+  normalizeProspect,
   type HiringDoc,
   type HiringLog,
   type HiringProfile,
+  type Prospect,
 } from "./hiring-docs";
 
 export { ServiceRoleMissingError };
@@ -30,6 +32,7 @@ export const HIRING_BUCKET = "hiring-docs";
 const DOC_TYPE = "doc";
 const PROFILE_TYPE = "profile";
 const LOG_TYPE = "log";
+const PROSPECT_TYPE = "prospect";
 
 export type HiringAdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
@@ -197,6 +200,88 @@ export async function saveHiringProfile(admin: HiringAdminClient, p: HiringProfi
     updated_at: new Date().toISOString(),
   });
   if (error) throwDb(error.message);
+}
+
+// ─── 入職予定者（187 C）───
+
+export async function fetchProspects(admin: HiringAdminClient): Promise<{ prospects: Prospect[]; tableMissing: boolean }> {
+  const { data, error } = await admin.from(HIRING_TABLE).select("id, data").eq("record_type", PROSPECT_TYPE);
+  if (error) {
+    if (isMissingTable(error.message)) return { prospects: [], tableMissing: true };
+    throw new Error(error.message);
+  }
+  const prospects = (data ?? [])
+    .map((r) => normalizeProspect(String(r.id), r.data))
+    .filter((p): p is Prospect => p !== null)
+    .sort((a, b) => (a.expectedJoinOn || "9999").localeCompare(b.expectedJoinOn || "9999") || a.name.localeCompare(b.name, "ja"));
+  return { prospects, tableMissing: false };
+}
+
+export async function fetchProspect(admin: HiringAdminClient, id: string): Promise<Prospect | null> {
+  const { data, error } = await admin.from(HIRING_TABLE).select("id, data").eq("id", id).eq("record_type", PROSPECT_TYPE).maybeSingle();
+  if (error) throwDb(error.message);
+  return data ? normalizeProspect(String(data.id), data.data) : null;
+}
+
+export async function saveProspect(admin: HiringAdminClient, p: Prospect, updatedBy: string): Promise<void> {
+  const { id, ...data } = p;
+  const { error } = await admin.from(HIRING_TABLE).upsert({ id, record_type: PROSPECT_TYPE, data, updated_by: updatedBy, updated_at: new Date().toISOString() });
+  if (error) throwDb(error.message);
+}
+
+export async function deleteProspectRow(admin: HiringAdminClient, id: string): Promise<void> {
+  const { error } = await admin.from(HIRING_TABLE).delete().eq("id", id).eq("record_type", PROSPECT_TYPE);
+  if (error) throwDb(error.message);
+}
+
+/** 採用資料・経歴の userId を付け替える（入職予定者 → アカウント）。件数を返す */
+export async function moveHiringDataToUser(admin: HiringAdminClient, fromUserId: string, toUserId: string, by: string): Promise<{ docs: number; profile: boolean }> {
+  const { docs } = await fetchHiringDocs(admin, fromUserId);
+  for (const d of docs) await saveHiringDoc(admin, { ...d, userId: toUserId }, by);
+  const prof = await fetchHiringProfile(admin, fromUserId);
+  const hasProfile = !!(prof.education || prof.career || prof.licenses || prof.motivation || prof.selfPr);
+  if (hasProfile) {
+    const existing = await fetchHiringProfile(admin, toUserId);
+    // 既存の経歴があれば空の欄だけ埋める（上書きしない）
+    const merged = { ...existing, userId: toUserId };
+    for (const k of ["education", "career", "licenses", "motivation", "selfPr"] as const) {
+      if (!existing[k].trim() && prof[k].trim()) merged[k] = prof[k];
+    }
+    await saveHiringProfile(admin, merged, by);
+    const { error } = await admin.from(HIRING_TABLE).delete().eq("id", hiringProfileId(fromUserId)).eq("record_type", PROFILE_TYPE);
+    if (error) throwDb(error.message);
+  }
+  return { docs: docs.length, profile: hasProfile };
+}
+
+/** 入職予定者の関連情報（資料の実体・経歴）をまとめて削除する。連絡先は呼び出し側で169の経路で消す */
+export async function deleteHiringDataOfUser(admin: HiringAdminClient, userId: string): Promise<{ docs: number }> {
+  const { docs } = await fetchHiringDocs(admin, userId);
+  for (const d of docs) await deleteHiringDoc(admin, d);
+  const { error } = await admin.from(HIRING_TABLE).delete().eq("id", hiringProfileId(userId)).eq("record_type", PROFILE_TYPE);
+  if (error) throwDb(error.message);
+  return { docs: docs.length };
+}
+
+/** メールアドレスが一致する有効なアカウント（紐づけの候補）。自動では紐づけない */
+export async function findAccountsByEmail(admin: HiringAdminClient, emails: string[]): Promise<Map<string, { userId: string; name: string }>> {
+  const wanted = new Set(emails.map((e) => e.toLowerCase()).filter(Boolean));
+  const out = new Map<string, { userId: string; name: string }>();
+  if (wanted.size === 0) return out;
+  try {
+    const { data } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    for (const u of data?.users ?? []) {
+      const email = (u.email ?? "").toLowerCase();
+      if (!email || !wanted.has(email)) continue;
+      const until = (u as { banned_until?: string | null }).banned_until;
+      if (until && new Date(until).getTime() > Date.now()) continue;
+      const meta = u.user_metadata as Record<string, unknown> | null;
+      out.set(email, { userId: u.id, name: (typeof meta?.display_name === "string" && meta.display_name.trim()) || email });
+    }
+  } catch {
+    /* 候補なし */
+  }
+  return out;
 }
 
 // ─── 操作ログ（本文・抽出内容は残さない）───

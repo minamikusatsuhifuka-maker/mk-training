@@ -75,7 +75,14 @@ export function HiringDocsPanel({ userId, staffName }: { userId: string; staffNa
     ]);
   };
   const setRow = (key: string, patch: Partial<QueueRow>) => setQueue((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
-  const [viewer, setViewer] = useState<{ url: string; mimeType: string; fileName: string } | null>(null);
+  const [viewer, setViewer] = useState<{ url: string; mimeType: string; fileName: string; text?: string } | null>(null);
+  // 187 B: 文章の貼り付け（面接の記録など）
+  const [pasteText, setPasteText] = useState("");
+  const [pasteKind, setPasteKind] = useState<HiringDocKind>("interview");
+  const [pasteDate, setPasteDate] = useState("");
+  const [pasteMemo, setPasteMemo] = useState("");
+  // 187 A: 反映の取り消し（直前の値を1回分だけ保持）
+  const [undo, setUndo] = useState<{ userId: string; contact?: unknown; profile?: unknown; applied: string[] } | null>(null);
   const [profileDraft, setProfileDraft] = useState<HiringProfileText | null>(null);
   const [extract, setExtract] = useState<{ docId: string; proposal: HiringProposal; current: { contact: StaffContact; profile: HiringProfile } } | null>(null);
   const [showLogs, setShowLogs] = useState(false);
@@ -147,9 +154,59 @@ export function HiringDocsPanel({ userId, staffName }: { userId: string; staffNa
     setError("");
     try {
       const j = await api<{ url: string; mimeType: string; fileName: string }>(`/api/admin/hiring/file?id=${encodeURIComponent(doc.id)}`);
-      setViewer(j);
+      if (j.mimeType === "text/plain") {
+        const text = await fetch(j.url).then((r) => (r.ok ? r.text() : "")).catch(() => "");
+        setViewer({ ...j, text });
+      } else {
+        setViewer(j);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "開けませんでした");
+    }
+  };
+
+  // 187 B: 文章を .txt として登録
+  const uploadText = async () => {
+    if (!pasteText.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      const form = new FormData();
+      form.set("userId", userId);
+      form.set("kind", pasteKind);
+      form.set("docDate", pasteDate);
+      form.set("memo", pasteMemo);
+      form.set("text", pasteText);
+      const { doc } = await api<{ doc: HiringDoc }>("/api/admin/hiring", { method: "POST", body: form });
+      setData((d) => (d ? { ...d, docs: [doc, ...d.docs] } : d));
+      setPasteText("");
+      setPasteMemo("");
+      flash("📝 文章を資料として登録しました");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "登録に失敗しました");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const undoApply = async () => {
+    if (!undo) return;
+    if (!confirm(`直前の反映（${undo.applied.join("・")}）を取り消して、前の値に戻します。よろしいですか？`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      const { userId: uid, contact, profile } = undo;
+      const body: Record<string, unknown> = { userId: uid };
+      if (contact !== undefined) body.contact = contact;
+      if (profile !== undefined) body.profile = profile;
+      await api("/api/admin/hiring/apply", { method: "POST", body: JSON.stringify({ undo: body }) });
+      setUndo(null);
+      flash("↩ 直前の反映を取り消しました");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "取り消しに失敗しました");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -276,6 +333,40 @@ export function HiringDocsPanel({ userId, staffName }: { userId: string; staffNa
         )}
       </div>
 
+      {/* 187 B: 文章の貼り付け（面接の記録・院長のメモ・議事録） */}
+      <details className="rounded-lg border border-gray-200 bg-white p-2" data-hiring-paste>
+        <summary className="text-[11px] font-medium text-gray-800 cursor-pointer min-h-[32px] flex items-center">📝 文章を貼り付けて登録（面接の記録・メモ）</summary>
+        <div className="mt-2 space-y-2">
+          <p className="text-[10px] text-gray-600 leading-relaxed">
+            貼り付けた文章は .txt として同じ非公開の保管庫に入り、院長だけが見られます。AI整理では<strong>本人が述べた事実だけ</strong>を取り出し、院長の所感・評価は取り出しません。
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <select value={pasteKind} onChange={(e) => setPasteKind(e.target.value as HiringDocKind)} className={inputClass} aria-label="文章の種類">
+              {HIRING_DOC_KINDS.map((k) => (
+                <option key={k.value} value={k.value}>
+                  {k.label}
+                </option>
+              ))}
+            </select>
+            <input type="date" value={pasteDate} onChange={(e) => setPasteDate(e.target.value)} className={inputClass} aria-label="文章の日付" />
+            <input value={pasteMemo} onChange={(e) => setPasteMemo(e.target.value)} placeholder="メモ（任意）" className={inputClass} aria-label="文章のメモ" />
+          </div>
+          <textarea value={pasteText} onChange={(e) => setPasteText(e.target.value)} rows={6} placeholder="面接の記録・議事録などを貼り付け（2万字まで）" className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm bg-white" aria-label="貼り付ける文章" />
+          <button type="button" onClick={() => void uploadText()} disabled={busy || !pasteText.trim()} className="px-4 py-2 bg-teal-600 text-white rounded-full text-sm hover:bg-teal-700 disabled:opacity-40 min-h-[44px]">
+            📝 文章を登録
+          </button>
+        </div>
+      </details>
+
+      {undo && (
+        <div className="rounded-lg border border-teal-300 bg-teal-50 p-2 flex flex-wrap items-center justify-between gap-2" data-hiring-undo>
+          <p className="text-[11px] text-teal-900">✅ 反映しました: {undo.applied.join("・")}（直前の値を1回分だけ保持しています）</p>
+          <button type="button" onClick={() => void undoApply()} disabled={busy} className="px-3 py-1.5 border border-teal-400 text-teal-900 rounded-full text-xs hover:bg-white disabled:opacity-40 min-h-[36px]">
+            ↩ 取り消し
+          </button>
+        </div>
+      )}
+
       {/* 一覧 */}
       {data.docs.length === 0 ? (
         <p className="text-[11px] text-gray-500">まだ資料がありません。</p>
@@ -326,7 +417,9 @@ export function HiringDocsPanel({ userId, staffName }: { userId: string; staffNa
               <button type="button" onClick={() => setViewer(null)} className="text-[11px] text-gray-700 underline underline-offset-2">閉じる</button>
             </div>
           </div>
-          {viewer.mimeType === "application/pdf" ? (
+          {viewer.mimeType === "text/plain" ? (
+            <pre className="whitespace-pre-wrap text-[12px] text-gray-900 bg-gray-50 rounded border border-gray-200 p-2 max-h-[60vh] overflow-auto">{viewer.text || "（読み込めませんでした）"}</pre>
+          ) : viewer.mimeType === "application/pdf" ? (
             <iframe src={viewer.url} title={viewer.fileName} className="w-full h-[70vh] rounded border border-gray-200" />
           ) : (
             // 署名URLは短時間で切れるため next/image を通さない
@@ -345,8 +438,9 @@ export function HiringDocsPanel({ userId, staffName }: { userId: string; staffNa
           current={extract.current}
           busy={busy}
           onClose={() => setExtract(null)}
-          onApplied={async (applied) => {
+          onApplied={async (applied, undoSnap) => {
             setExtract(null);
+            setUndo(undoSnap ? { ...undoSnap, applied } : null);
             flash(`✅ 反映しました（${applied.join("・") || "なし"}）`);
             await load();
           }}
@@ -424,7 +518,7 @@ function ProposalReview({
   current: { contact: StaffContact; profile: HiringProfile };
   busy: boolean;
   onClose: () => void;
-  onApplied: (applied: string[]) => Promise<void>;
+  onApplied: (applied: string[], undo: { userId: string; contact?: unknown; profile?: unknown } | null) => Promise<void>;
   onError: (m: string) => void;
   setBusy: (b: boolean) => void;
 }) {
@@ -459,8 +553,8 @@ function ProposalReview({
     }
     setBusy(true);
     try {
-      const j = await api<{ applied: string[] }>("/api/admin/hiring/apply", { method: "POST", body: JSON.stringify(input) });
-      await onApplied(j.applied);
+      const j = await api<{ applied: string[]; undo?: { userId: string; contact?: unknown; profile?: unknown } }>("/api/admin/hiring/apply", { method: "POST", body: JSON.stringify(input) });
+      await onApplied(j.applied, j.undo ?? null);
     } catch (e) {
       onError(e instanceof Error ? e.message : "反映に失敗しました");
     } finally {
@@ -478,13 +572,19 @@ function ProposalReview({
         <button type="button" onClick={onClose} className="text-[11px] text-gray-700 underline underline-offset-2">閉じる</button>
       </div>
       <p className="text-[10px] text-violet-900 leading-relaxed">
-        各項目に根拠（資料のどこから読んだか）を付けています。今の登録値がある項目は既定で「反映しない」です。本籍・健康状態・宗教・家族の詳細などは資料にあっても取り出していません。
+        各項目に根拠（資料のどこから読んだか）を付けています。<strong>登録欄が空の項目は最初からチェック済み</strong>で、「まとめて反映」1つで登録できます。
+        <strong>今の登録値と食い違う提案</strong>は下に分けて並べ、既定は「反映しない」（既存値と見比べて個別に選びます）。本籍・健康状態・宗教・家族の詳細などは資料にあっても取り出していません。
       </p>
       {proposal.notes.map((n, i) => (
         <p key={i} className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded-md p-1.5">{n}</p>
       ))}
       {!hasAny && <p className="text-[11px] text-gray-600">読み取れた項目はありませんでした。</p>}
 
+      {CONTACT_PROPOSAL_KEYS.some((k) => proposal.contact[k] && currentContactValue(current.contact, k) && currentContactValue(current.contact, k) !== proposal.contact[k]!.value) && (
+        <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded-md p-1.5" data-conflict-note>
+          ⚠️ 今の登録値と食い違う提案: {CONTACT_PROPOSAL_KEYS.filter((k) => proposal.contact[k] && currentContactValue(current.contact, k) && currentContactValue(current.contact, k) !== proposal.contact[k]!.value).map((k) => CONTACT_FIELD_LABEL[k]).join("・")}（既定は反映しない。表で見比べて選んでください）
+        </p>
+      )}
       {CONTACT_PROPOSAL_KEYS.some((k) => proposal.contact[k]) && (
         <table className="w-full text-[11px] bg-white rounded-md border border-gray-200">
           <thead>
@@ -498,7 +598,7 @@ function ProposalReview({
           </thead>
           <tbody>
             {CONTACT_PROPOSAL_KEYS.filter((k) => proposal.contact[k]).map((k) => (
-              <tr key={k} className="border-b border-gray-50 align-top">
+              <tr key={k} className={`border-b border-gray-50 align-top ${currentContactValue(current.contact, k) && currentContactValue(current.contact, k) !== proposal.contact[k]!.value ? "bg-amber-50/60" : ""}`} data-conflict={currentContactValue(current.contact, k) && currentContactValue(current.contact, k) !== proposal.contact[k]!.value ? "1" : "0"}>
                 <td className="p-1">
                   <input type="checkbox" checked={pick.contact[k]} onChange={(e) => setPick((p) => ({ ...p, contact: { ...p.contact, [k]: e.target.checked } }))} aria-label={`${CONTACT_FIELD_LABEL[k]} を反映`} />
                 </td>
@@ -580,8 +680,8 @@ function ProposalReview({
       )}
 
       <div className="flex gap-2">
-        <button type="button" onClick={() => void apply()} disabled={busy || !hasAny} className="px-4 py-2 bg-violet-700 text-white rounded-full text-sm hover:bg-violet-800 disabled:opacity-40 min-h-[44px]">
-          ✅ 選んだ項目を反映
+        <button type="button" onClick={() => void apply()} disabled={busy || !hasAny} className="px-4 py-2 bg-violet-700 text-white rounded-full text-sm hover:bg-violet-800 disabled:opacity-40 min-h-[44px]" data-bulk-apply>
+          ✅ まとめて反映（チェック済みの項目を登録）
         </button>
         <button type="button" onClick={onClose} disabled={busy} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-full text-sm hover:bg-gray-50 min-h-[44px]">
           反映しない

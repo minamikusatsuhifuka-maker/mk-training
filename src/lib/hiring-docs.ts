@@ -21,6 +21,7 @@ export const HIRING_DOC_KINDS = [
   { value: "career", label: "職務経歴書" },
   { value: "aptitude", label: "適性検査（スカウター等）" },
   { value: "license", label: "資格証の写し" },
+  { value: "interview", label: "面接の記録" },
   { value: "other", label: "その他" },
 ] as const;
 export type HiringDocKind = (typeof HIRING_DOC_KINDS)[number]["value"];
@@ -54,7 +55,9 @@ export type HiringDoc = {
 export const HIRING_DOC_MAX_BYTES = 20 * 1024 * 1024;
 export const HIRING_DOC_MEMO_MAX = 500;
 export const HIRING_SIGNED_URL_TTL = 600; // 10分（184 2-2）
-export const HIRING_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png"] as const;
+export const HIRING_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png", "text/plain"] as const;
+/** 文章の貼り付け（187 B）の上限 */
+export const HIRING_TEXT_MAX = 20000;
 
 export function isAllowedHiringMime(mime: string): boolean {
   return (HIRING_MIME_TYPES as readonly string[]).includes(mime);
@@ -400,6 +403,7 @@ export const HIRING_EXTRACT_SYSTEM = `あなたはクリニックの人事担当
 - 適性検査・性格検査・スカウター等の結果は、内容を要約・解釈・転記しない。取り出すのは受検者の氏名と受検日だけ。
 - 日付は YYYY-MM-DD。年が読み取れないときは省略する。
 - 志望動機・自己PR・学歴・職歴・免許資格は、資料の言葉のまま（要約しない）。
+- 面接の記録（本人の発言と面接官の所感が混ざる文章）では、**本人が述べた事実だけ**を取り出す。面接官・院長の所感・評価・印象・判断（「〜と感じた」「〜そうだ」「合格」「採用したい」など）は一切出力しない。
 
 【出力JSON（この形だけ。無い項目はキーごと省略）】
 {
@@ -423,6 +427,63 @@ export const HIRING_EXTRACT_SYSTEM = `あなたはクリニックの人事担当
   },
   "testDate": {"value": "YYYY-MM-DD（適性検査の受検日。無ければ省略）", "evidence": "..."}
 }`;
+
+// ─── 入職予定者（187 C）───
+//
+// アカウント作成前（内定〜入職前）の人。対象は**内定後のみ**（選考中の応募者は登録しない）。
+// 採用資料・経歴・連絡先は「userId = 入職予定者id（prospect-…）」で持ち、アカウントに紐づけたときに
+// 本物の userId へ付け替える。閲覧は院長のみ（183の幹部にも出さない・委任不可）。
+
+export type ProspectStatus = "expected" | "linked" | "declined";
+
+export type Prospect = {
+  id: string;
+  name: string;
+  /** アカウントとの照合に使うメールアドレス（任意） */
+  email: string;
+  /** 入職予定日 YYYY-MM-DD */
+  expectedJoinOn: string;
+  status: ProspectStatus;
+  /** 紐づけたアカウントの userId（linked のとき） */
+  linkedUserId: string;
+  memo: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const PROSPECT_PREFIX = "prospect-";
+/** 入職予定日からこの日数たっても紐づかないときに確認を促す（自動削除はしない） */
+export const PROSPECT_STALE_DAYS = 60;
+
+export function isProspectId(userId: string): boolean {
+  return userId.startsWith(PROSPECT_PREFIX);
+}
+
+export function normalizeProspect(id: string, raw: unknown): Prospect | null {
+  if (!id || !raw || typeof raw !== "object") return null;
+  const g = raw as Record<string, unknown>;
+  const name = text(g.name, 60).trim();
+  if (!name) return null;
+  return {
+    id,
+    name,
+    email: text(g.email, 200).trim().toLowerCase(),
+    expectedJoinOn: ymd(g.expectedJoinOn),
+    status: g.status === "linked" ? "linked" : g.status === "declined" ? "declined" : "expected",
+    linkedUserId: text(g.linkedUserId, 100),
+    memo: text(g.memo, 500),
+    createdAt: text(g.createdAt, 40),
+    updatedAt: text(g.updatedAt, 40),
+  };
+}
+
+/** 入職予定日から PROSPECT_STALE_DAYS を過ぎても紐づいていないか */
+export function isProspectStale(p: Prospect, today: string): boolean {
+  if (p.status !== "expected" || !p.expectedJoinOn || !ymd(today)) return false;
+  const [y, m, d] = p.expectedJoinOn.split("-").map(Number);
+  const limit = new Date(Date.UTC(y, m - 1, d + PROSPECT_STALE_DAYS)).toISOString().slice(0, 10);
+  return today > limit;
+}
 
 // ─── 操作ログ ───
 

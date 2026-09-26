@@ -876,6 +876,16 @@ export type KarteListEntry = {
   learningCount: number;
   /** 最新の学びの開始日 */
   lastLearningOn: string;
+  /** 187: 入職予定者（アカウント作成前）。院長のみ・full モードだけ */
+  prospect?: {
+    expectedJoinOn: string;
+    status: "expected" | "linked" | "declined";
+    email: string;
+    /** 入職予定日から一定期間たっても紐づいていない＝確認を促す */
+    stale: boolean;
+    /** メールが一致するアカウント（紐づけの候補・院長が操作して初めて紐づく） */
+    candidate: { userId: string; name: string } | null;
+  };
 };
 
 export type TimelineKind =

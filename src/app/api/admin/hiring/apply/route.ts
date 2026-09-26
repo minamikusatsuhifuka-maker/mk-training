@@ -4,6 +4,7 @@
 //     経歴・入職時の想い            → clinic_hiring_docs の profile 行
 //   送られてこなかった項目は触らない。既存の値の扱い（置換／追記）は院長が項目ごとに選ぶ。
 //   受け取りは normalizeHiringApply（ホワイトリスト＋禁止語の行落とし）を通す＝3-3の項目は保存できない。
+//   187 A: 応答に「直前の値」（undo）を返す。{ undo: {...} } を送ると1回分だけ元に戻せる（院長のみ・確認は画面側）。
 
 import { NextRequest, NextResponse } from "next/server";
 import {
@@ -23,6 +24,8 @@ import {
   staffContactSnapshot,
 } from "@/lib/staff-contacts-server";
 import { EMERGENCY_MAX, FAMILY_MAX, normalizeStaffContact, type StaffContact } from "@/lib/staff-contacts";
+import { deleteStaffContactRow } from "@/lib/staff-contacts-server";
+import { normalizeHiringProfile, type HiringProfile } from "@/lib/hiring-docs";
 import { loadProfilesIndexServer } from "@/lib/staff-growth-roster-server";
 import { HIRING_PROFILE_FIELDS, mergeText, normalizeHiringApply } from "@/lib/hiring-docs";
 
@@ -39,10 +42,50 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "不正なリクエストです" }, { status: 400 });
   }
+  const by = auth.userEmail || auth.userId;
+
+  // ── 187 A: 取り消し（直前の値へ戻す） ──
+  const undoRaw = (raw && typeof raw === "object" ? (raw as Record<string, unknown>).undo : null) as Record<string, unknown> | null;
+  if (undoRaw && typeof undoRaw === "object") {
+    const userId = typeof undoRaw.userId === "string" ? undoRaw.userId : "";
+    if (!userId) return NextResponse.json({ error: "取り消しの対象が不明です" }, { status: 400 });
+    try {
+      const restored: string[] = [];
+      if ("contact" in undoRaw) {
+        const ca = await authorizeStaffContacts();
+        if (!ca.ok || !ca.isAdmin) return hidden();
+        const { contacts } = await fetchAllStaffContacts(ca.admin);
+        const cur = contacts.find((c) => c.userId === userId) ?? null;
+        const prevContact = undoRaw.contact ? normalizeStaffContact(String((undoRaw.contact as { id?: unknown }).id ?? cur?.id ?? ""), undoRaw.contact) : null;
+        if (prevContact) {
+          await saveStaffContactRow(ca.admin, prevContact, by, !cur || cur.id !== prevContact.id);
+          if (cur && cur.id !== prevContact.id) await deleteStaffContactRow(ca.admin, cur.id);
+          await recordStaffContactLog(ca.admin, { by, action: "取り消し（採用資料の反映を戻す）", target: prevContact.name, changes: cur ? buildStaffContactChanges(cur, prevContact) : [] });
+        } else if (cur) {
+          // 反映で新しく作った連絡先 → 消す
+          await deleteStaffContactRow(ca.admin, cur.id);
+          await recordStaffContactLog(ca.admin, { by, action: "取り消し（採用資料の反映で作った連絡先を削除）", target: cur.name, changes: staffContactSnapshot(cur) });
+        }
+        restored.push("連絡先");
+      }
+      if ("profile" in undoRaw) {
+        const prevProfile: HiringProfile = normalizeHiringProfile(userId, undoRaw.profile ?? null);
+        await saveHiringProfile(auth.admin, prevProfile, by);
+        restored.push("経歴・入職時の想い");
+      }
+      await recordHiringLog(auth.admin, { by, action: "取り消し", target: userId, changes: [{ field: "戻した先", before: "", after: restored.join("・") || "なし" }] });
+      return NextResponse.json({ ok: true, restored });
+    } catch (e) {
+      if (e instanceof HiringTableMissingError) return NextResponse.json({ error: e.message, tableMissing: true }, { status: 503 });
+      if (e instanceof ServiceRoleMissingError) return NextResponse.json({ error: e.message }, { status: 503 });
+      return NextResponse.json({ error: e instanceof Error ? e.message : "処理に失敗しました" }, { status: 500 });
+    }
+  }
+
   const input = normalizeHiringApply(raw);
   if (!input) return NextResponse.json({ error: "対象のスタッフが指定されていません" }, { status: 400 });
-  const by = auth.userEmail || auth.userId;
   const applied: string[] = [];
+  const undo: { userId: string; contact?: StaffContact | null; profile?: HiringProfile } = { userId: input.userId };
 
   try {
     // ── 連絡先・緊急連絡先・家族構成（169の経路） ──
@@ -57,6 +100,7 @@ export async function POST(req: NextRequest) {
         );
       }
       const prev = contacts.find((c) => c.userId === input.userId) ?? null;
+      undo.contact = prev; // null＝反映で新しく作る（取り消しでは削除する）
       const now = new Date().toISOString();
       let baseName = prev?.name ?? input.contact?.name ?? "";
       if (!baseName) {
@@ -96,6 +140,7 @@ export async function POST(req: NextRequest) {
     // ── 経歴・入職時の想い ──
     if (input.profile) {
       const prev = await fetchHiringProfile(auth.admin, input.userId);
+      undo.profile = prev;
       const next = { ...prev };
       const changes: { field: string; before: string; after: string }[] = [];
       for (const f of HIRING_PROFILE_FIELDS) {
@@ -119,7 +164,7 @@ export async function POST(req: NextRequest) {
       target: input.userId,
       changes: [{ field: "反映先", before: "", after: applied.join("・") || "なし" }],
     });
-    return NextResponse.json({ ok: true, applied });
+    return NextResponse.json({ ok: true, applied, undo });
   } catch (e) {
     if (e instanceof HiringTableMissingError) return NextResponse.json({ error: e.message, tableMissing: true }, { status: 503 });
     if (e instanceof ServiceRoleMissingError) return NextResponse.json({ error: e.message }, { status: 503 });

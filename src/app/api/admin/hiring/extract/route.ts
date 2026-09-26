@@ -76,21 +76,19 @@ export async function POST(req: NextRequest) {
 
     // 資料はメモリ上だけ。応答を受け取ったら破棄する
     let buffer: Buffer | null = await downloadHiringDoc(auth.admin, doc);
-    const res = await callGeminiParts({
-      system: HIRING_EXTRACT_SYSTEM,
-      parts: [
-        {
-          text:
-            `資料の種類: ${hiringDocKindLabel(doc.kind)}。` +
-            (doc.kind === "aptitude"
-              ? "これは適性検査の結果です。内容は要約・解釈・転記せず、受検者の氏名と受検日（testDate）だけを返してください。"
-              : "この資料から基本情報だけをJSONで返してください。"),
-        },
-        { inline_data: { mime_type: doc.mimeType, data: buffer.toString("base64") } },
-      ],
-      maxTokens: 4096,
-      json: true,
-    });
+    const lead =
+      `資料の種類: ${hiringDocKindLabel(doc.kind)}。` +
+      (doc.kind === "aptitude"
+        ? "これは適性検査の結果です。内容は要約・解釈・転記せず、受検者の氏名と受検日（testDate）だけを返してください。"
+        : doc.kind === "interview"
+          ? "これは面接の記録で、本人の発言と面接官（院長）の所感が混ざっています。**本人が述べた事実だけ**（連絡先・経歴・志望動機・自己PRなど）を取り出し、面接官の所感・評価・印象・判断は一切出力しないでください。"
+          : "この資料から基本情報だけをJSONで返してください。");
+    // 187 B: 文章（.txt）はテキストとして渡す。画像・PDFは inline_data
+    const parts =
+      doc.mimeType === "text/plain"
+        ? [{ text: `${lead}\n\n--- 資料本文 ---\n${buffer.toString("utf8").slice(0, 20000)}` }]
+        : [{ text: lead }, { inline_data: { mime_type: doc.mimeType, data: buffer.toString("base64") } }];
+    const res = await callGeminiParts({ system: HIRING_EXTRACT_SYSTEM, parts, maxTokens: 4096, json: true });
     buffer = null;
 
     if (!res.ok) {

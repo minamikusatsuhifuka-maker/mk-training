@@ -23,8 +23,8 @@ import { redactSurveyForViewer } from "./survey-visibility";
 import { loadSurveyHistory } from "./survey-history-server";
 import { surveyFromEntry } from "./survey-history";
 import { signOne } from "./storage-signed";
-import { fetchHiringDocs } from "./hiring-docs-server";
-import { hiringDocKindLabel, type HiringDoc } from "./hiring-docs";
+import { fetchHiringDocs, fetchProspects, findAccountsByEmail } from "./hiring-docs-server";
+import { hiringDocKindLabel, isProspectStale, type HiringDoc, type Prospect } from "./hiring-docs";
 import { authorizeStaffContacts, fetchAllStaffContacts } from "./staff-contacts-server";
 import { authorizeMemberNotes, fetchAllNotes } from "./member-notes-server";
 import {
@@ -76,6 +76,8 @@ type RosterPerson = {
   roleLabel: string;
   joinedOn: string;
   retired: boolean;
+  /** 187: 入職予定者（アカウント作成前） */
+  prospect?: Prospect;
 };
 
 function isBanned(u: User): boolean {
@@ -168,6 +170,19 @@ async function loadRoster(
     }
   } catch {
     /* 入職日なしで続ける */
+  }
+
+  // 187: 入職予定者（院長のみ）。紐づけ済み・入職しなかった人は一覧に出さない（削除の導線は別）
+  if (!opts?.skipContacts) {
+    try {
+      const { prospects } = await fetchProspects(admin);
+      for (const p of prospects) {
+        if (p.status === "linked") continue;
+        byId.set(p.id, { userId: p.id, name: p.name, roleId: "", roleLabel: "入職予定", joinedOn: "", retired: false, prospect: p });
+      }
+    } catch {
+      /* 無しで続ける */
+    }
   }
 
   return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name, "ja"));
@@ -624,9 +639,21 @@ function buildTimeline(src: Sources, person: RosterPerson): TimelineItem[] {
   return sortTimeline(items);
 }
 
-function buildEntry(src: Sources, p: RosterPerson): KarteListEntry {
+function buildEntry(src: Sources, p: RosterPerson, candidates?: Map<string, { userId: string; name: string }>): KarteListEntry {
   const mine = sortLearningDesc(src.learning.filter((l) => l.userId === p.userId));
+  const today = jstTodayYmd();
   return {
+    ...(p.prospect
+      ? {
+          prospect: {
+            expectedJoinOn: p.prospect.expectedJoinOn,
+            status: p.prospect.status,
+            email: p.prospect.email,
+            stale: isProspectStale(p.prospect, today),
+            candidate: (p.prospect.email && candidates?.get(p.prospect.email)) || null,
+          },
+        }
+      : {}),
     userId: p.userId,
     name: p.name,
     roleId: p.roleId,
@@ -648,8 +675,11 @@ export async function buildKarteList(
   scope: KarteScope = { mode: "full" }
 ): Promise<{ entries: KarteListEntry[]; courses: Course[]; tableMissing: boolean; today: string }> {
   const src = await loadSources(admin, viewerUserId, scope);
+  // 187: 入職予定者のメールに一致するアカウント（紐づけ候補）
+  const emails = src.roster.filter((p) => p.prospect?.email).map((p) => p.prospect!.email);
+  const candidates = scope.mode === "full" && emails.length > 0 ? await findAccountsByEmail(admin, emails) : undefined;
   return {
-    entries: src.roster.map((p) => buildEntry(src, p)),
+    entries: src.roster.map((p) => buildEntry(src, p, candidates)),
     courses: src.courses,
     tableMissing: src.tableMissing,
     today: jstTodayYmd(),

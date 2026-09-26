@@ -1,6 +1,7 @@
 // 採用資料API（指示書184）— **院長のみ**（authorizeHiring。委任は見ない）。非許可は404
 //   GET    ?user=<userId> → { docs（署名URL10分つき）, profile, logs, tableMissing, bucketMissing, aiEnabled }
 //   POST   multipart { userId, kind, docDate, memo, file } → 登録（PDF・JPEG・PNG・20MBまで）
+//          187 B: file の代わりに text（貼り付けた文章）でも登録できる（.txt として同じ保管庫へ・院長のみ）
 //   PATCH  JSON { id, kind?, docDate?, memo? }（資料の項目） または { userId, profile: {...} }（経歴・入職時の想い）
 //   DELETE JSON { id } → 削除（実体も。院長の操作のみ・自動削除はしない）
 // /api/admin 配下なので proxy が管理者以外を実在しないAPIと同じ応答にする（159-D）。183の対応表にも無い＝委任不可。
@@ -29,6 +30,7 @@ import { fetchGrowthConfig } from "@/lib/staff-growth-server";
 import {
   HIRING_DOC_MAX_BYTES,
   HIRING_DOC_MEMO_MAX,
+  HIRING_TEXT_MAX,
   HIRING_PROFILE_FIELDS,
   hiringDocKindLabel,
   isAllowedHiringMime,
@@ -94,8 +96,11 @@ export async function POST(req: NextRequest) {
   const kind = String(form.get("kind") ?? "");
   const docDate = ymd(String(form.get("docDate") ?? ""));
   const memo = String(form.get("memo") ?? "").slice(0, HIRING_DOC_MEMO_MAX);
-  const file = form.get("file");
-  if (!userId || !(file instanceof File)) return NextResponse.json({ error: "対象のスタッフとファイルは必須です" }, { status: 400 });
+  const pasted = String(form.get("text") ?? "").slice(0, HIRING_TEXT_MAX);
+  const fileRaw = form.get("file");
+  // 187 B: 文章の貼り付けは .txt として扱う
+  const file = fileRaw instanceof File ? fileRaw : pasted.trim() ? new File([pasted], `${docDate || "memo"}-記録.txt`, { type: "text/plain" }) : null;
+  if (!userId || !file) return NextResponse.json({ error: "対象のスタッフと、ファイルまたは文章は必須です" }, { status: 400 });
   if (!isHiringDocKind(kind)) return NextResponse.json({ error: "資料の種類が不正です" }, { status: 400 });
   const mime = file.type === "image/jpg" ? "image/jpeg" : file.type;
   if (!isAllowedHiringMime(mime)) {
@@ -107,7 +112,7 @@ export async function POST(req: NextRequest) {
   try {
     await ensureHiringBucket(auth.admin);
     const id = newHiringId("hdoc");
-    const ext = mime === "application/pdf" ? "pdf" : mime === "image/png" ? "png" : "jpg";
+    const ext = mime === "application/pdf" ? "pdf" : mime === "image/png" ? "png" : mime === "text/plain" ? "txt" : "jpg";
     const path = `${userId}/${id}.${ext}`;
     const bytes = Buffer.from(await file.arrayBuffer());
     const { error } = await auth.admin.storage.from(HIRING_BUCKET).upload(path, bytes, { contentType: mime, upsert: false });

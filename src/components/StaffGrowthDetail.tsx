@@ -225,6 +225,13 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
         <p className="text-xs text-teal-800 bg-teal-50 border border-teal-200 rounded-lg p-2">{msg}</p>
       )}
 
+      {entry.prospect && (
+        <p className="text-[11px] text-orange-900 bg-orange-50 border border-orange-200 rounded-lg p-2" data-prospect-banner>
+          🆕 入職予定者（アカウント作成前・院長のみ）。入職予定 {entry.prospect.expectedJoinOn ? entry.prospect.expectedJoinOn.replaceAll("-", "/") : "未設定"}。
+          採用資料の登録・AI整理・連絡先の反映ができます。アカウントができたら一覧から紐づけてください。
+        </p>
+      )}
+
       {/* 上部カード（A-4） */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <Card title="🤝 最新の1on1の約束" href="/one-on-one">
