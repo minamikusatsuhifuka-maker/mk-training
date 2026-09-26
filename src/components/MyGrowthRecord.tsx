@@ -11,7 +11,11 @@ import {
   promiseStatusLabel,
   type Course,
   type CourseRequest,
+  hasImprovementPlan,
+  isFeedbackUnseen,
+  type Feedback,
   type Goal,
+  type GrowthPace,
   type LearningRecord,
   type PromiseStatusValue,
 } from "@/lib/staff-growth";
@@ -38,9 +42,16 @@ import {
   learningFormFrom,
 } from "@/components/LearningRecordForm";
 import { LearningRecordList } from "@/components/LearningRecordList";
-import { useDraft, useHasDraft, DISCARD_CONFIRM } from "@/lib/retro-drafts";
+import { useHasDraft } from "@/lib/retro-drafts";
+import { GoalsStaged, weeklyLinksFromPromises, type WeeklyLink } from "@/components/GoalsStaged";
+import { FeedbackPanel } from "@/components/FeedbackPanel";
+import {
+  fetchFeedbackApi,
+  saveGrowthPrefApi,
+  type GoalInput,
+} from "@/lib/staff-growth-client";
 
-type Tab = "learning" | "goals" | "promises";
+type Tab = "learning" | "goals" | "promises" | "feedback";
 
 export function MyGrowthRecord() {
   const [tab, setTab] = useState<Tab>("learning");
@@ -48,7 +59,11 @@ export function MyGrowthRecord() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [myRequests, setMyRequests] = useState<CourseRequest[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [pace, setPace] = useState<GrowthPace>("");
   const [promises, setPromises] = useState<PromiseItem[]>([]);
+  // 185: もらった承認・フィードバック（未読の印を出す）
+  const [feedbackAll, setFeedbackAll] = useState<Feedback[]>([]);
+  const unseenCount = useMemo(() => feedbackAll.filter(isFeedbackUnseen).length, [feedbackAll]);
   const [aiDraftEnabled, setAiDraftEnabled] = useState(false);
   const [bucketMissing, setBucketMissing] = useState(false);
   const [tableMissing, setTableMissing] = useState(false);
@@ -63,12 +78,15 @@ export function MyGrowthRecord() {
   const load = useCallback(async () => {
     setError("");
     try {
-      const [l, g, p, rq] = await Promise.all([
+      const [l, g, p, rq, fb] = await Promise.all([
         fetchLearningApi(),
         fetchGoalsApi(),
         fetchPromisesApi(),
         fetchCourseRequestsApi().catch(() => ({ requests: [] as CourseRequest[], tableMissing: false })),
+        fetchFeedbackApi().catch(() => ({ feedback: [] as Feedback[], tableMissing: false, mode: "owner" as const, viewerId: "" })),
       ]);
+      setPace(g.pref?.pace ?? "");
+      setFeedbackAll(fb.feedback);
       setRecords(l.records);
       setCourses(l.courses);
       setMyRequests(rq.requests);
@@ -154,6 +172,7 @@ export function MyGrowthRecord() {
     setBusy(true);
     try {
       const { goal } = await createGoalApi({
+        level: "monthly",
         title: firstLine,
         detail: r.nextAction.trim(),
         status: "active",
@@ -170,8 +189,74 @@ export function MyGrowthRecord() {
     }
   };
 
-  const activeGoals = useMemo(() => goals.filter((g) => g.status === "active"), [goals]);
-  const doneGoals = useMemo(() => goals.filter((g) => g.status === "done"), [goals]);
+  // 185: 週の実践に並べる 1on1の約束＋ギャップFBの改善計画
+  const weeklyLinks = useMemo<WeeklyLink[]>(
+    () => [
+      ...weeklyLinksFromPromises(promises),
+      ...feedbackAll.filter(hasImprovementPlan).map((f) => ({
+        key: `fb:${f.id}`,
+        date: f.planDue || f.date,
+        label: "改善計画",
+        text: f.plan,
+        status: f.progress.trim() ? "進捗あり" : "",
+        href: "/my-growth",
+      })),
+    ],
+    [promises, feedbackAll]
+  );
+  const goalHandlers = {
+    onCreate: async (input: GoalInput) => {
+      setBusy(true);
+      try {
+        const { goal } = await createGoalApi(input);
+        setGoals((prev) => [goal, ...prev]);
+        flash("🎯 目標を追加しました");
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "追加に失敗しました";
+      } finally {
+        setBusy(false);
+      }
+    },
+    onPatch: async (id: string, input: GoalInput) => {
+      setBusy(true);
+      try {
+        const { goal } = await patchGoalApi(id, input);
+        setGoals((prev) => prev.map((g) => (g.id === id ? goal : g)));
+        flash("💾 目標を更新しました");
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "更新に失敗しました";
+      } finally {
+        setBusy(false);
+      }
+    },
+    onDelete: async (g: Goal) => {
+      if (!confirm(`「${g.title}」を削除します。よろしいですか？`)) return;
+      setBusy(true);
+      try {
+        await deleteGoalApi(g.id);
+        setGoals((prev) => prev.filter((x) => x.id !== g.id));
+        flash("🗑 目標を削除しました");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "削除に失敗しました");
+      } finally {
+        setBusy(false);
+      }
+    },
+    onPace: async (p: GrowthPace) => {
+      setBusy(true);
+      try {
+        const { pref } = await saveGrowthPrefApi(p);
+        setPace(pref.pace);
+        flash("💾 希望のペースを保存しました");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "保存に失敗しました");
+      } finally {
+        setBusy(false);
+      }
+    },
+  };
 
   if (hidden) {
     return (
@@ -209,8 +294,9 @@ export function MyGrowthRecord() {
         {(
           [
             ["learning", "📚 学びの記録"],
-            ["goals", "🎯 自分の目標"],
+            ["goals", "🎯 目標"],
             ["promises", "🤝 1on1の約束"],
+            ["feedback", unseenCount > 0 ? `🌟 もらった承認・FB（新着 ${unseenCount}）` : "🌟 もらった承認・FB"],
           ] as const
         ).map(([k, label]) => (
           <button
@@ -295,50 +381,26 @@ export function MyGrowthRecord() {
           />
         </section>
       ) : tab === "goals" ? (
-        <GoalsSection
-          active={activeGoals}
-          done={doneGoals}
+        <GoalsStaged
+          mode="owner"
+          goals={goals}
+          pace={pace}
+          weeklyLinks={weeklyLinks}
           busy={busy}
-          onCreate={async (input) => {
-            setBusy(true);
-            try {
-              const { goal } = await createGoalApi(input);
-              setGoals((prev) => [goal, ...prev]);
-              flash("🎯 目標を追加しました");
-              return null;
-            } catch (e) {
-              return e instanceof Error ? e.message : "追加に失敗しました";
-            } finally {
-              setBusy(false);
-            }
-          }}
-          onPatch={async (id, input) => {
-            setBusy(true);
-            try {
-              const { goal } = await patchGoalApi(id, input);
-              setGoals((prev) => prev.map((g) => (g.id === id ? goal : g)));
-              flash("💾 目標を更新しました");
-              return null;
-            } catch (e) {
-              return e instanceof Error ? e.message : "更新に失敗しました";
-            } finally {
-              setBusy(false);
-            }
-          }}
-          onDelete={async (g) => {
-            if (!confirm(`「${g.title}」を削除します。よろしいですか？`)) return;
-            setBusy(true);
-            try {
-              await deleteGoalApi(g.id);
-              setGoals((prev) => prev.filter((x) => x.id !== g.id));
-              flash("🗑 目標を削除しました");
-            } catch (e) {
-              setError(e instanceof Error ? e.message : "削除に失敗しました");
-            } finally {
-              setBusy(false);
-            }
-          }}
+          draftPrefix="growth:goal"
+          onCreate={goalHandlers.onCreate}
+          onPatch={goalHandlers.onPatch}
+          onDelete={goalHandlers.onDelete}
+          onPace={goalHandlers.onPace}
         />
+      ) : tab === "feedback" ? (
+        <section className="space-y-2">
+          <p className="text-[11px] text-gray-600 leading-relaxed">
+            院長・担当幹部からの<strong>ポジティブフィードバック（もらった承認）</strong>と、対面で話し合ったあとに記録された
+            <strong>ギャップフィードバック</strong>（①事実・②すり合わせ・③改善計画・その後）です。反応や改善計画の進捗はあなたが書けます。
+          </p>
+          <FeedbackPanel mode="owner" onLoaded={(list) => setFeedbackAll(list)} />
+        </section>
       ) : (
         <PromisesSection
           promises={promises}
@@ -386,230 +448,6 @@ function NewLearningButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-// ─── 自分の目標 ───
-
-type GoalForm = { title: string; detail: string; dueDate: string };
-
-function GoalsSection({
-  active,
-  done,
-  busy,
-  onCreate,
-  onPatch,
-  onDelete,
-}: {
-  active: Goal[];
-  done: Goal[];
-  busy: boolean;
-  onCreate: (input: GoalForm & { status: "active" }) => Promise<string | null>;
-  onPatch: (id: string, input: Partial<GoalForm & { status: Goal["status"] }>) => Promise<string | null>;
-  onDelete: (g: Goal) => Promise<void>;
-}) {
-  const [editing, setEditing] = useState("");
-  const [showDone, setShowDone] = useState(false);
-  const hasNewDraft = useHasDraft("growth:goal:new");
-
-  return (
-    <section className="space-y-3">
-      <p className="text-[11px] text-gray-600 leading-relaxed">
-        学びの記録の「次にやること」から移すこともできます。達成したら「達成にする」を押してください。
-      </p>
-      {editing === "new" ? (
-        <GoalEditor
-          key="new"
-          draftKey="growth:goal:new"
-          initial={{ title: "", detail: "", dueDate: "" }}
-          busy={busy}
-          onCancel={() => setEditing("")}
-          onSubmit={async (v) => {
-            const err = await onCreate({ ...v, status: "active" });
-            if (!err) setEditing("");
-            return err;
-          }}
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={() => setEditing("new")}
-          className="px-4 py-2 bg-teal-600 text-white rounded-full text-sm hover:bg-teal-700 min-h-[44px]"
-        >
-          ＋ 目標を追加{hasNewDraft ? "（下書きあり）" : ""}
-        </button>
-      )}
-
-      {active.length === 0 && editing !== "new" && (
-        <p className="text-xs text-gray-600">取り組み中の目標はありません。</p>
-      )}
-      <ul className="space-y-2">
-        {active.map((g) =>
-          editing === g.id ? (
-            <li key={g.id} className="rounded-xl border border-gray-200 bg-white p-3">
-              <GoalEditor
-                key={g.id}
-                draftKey={`growth:goal:${g.id}`}
-                initial={{ title: g.title, detail: g.detail, dueDate: g.dueDate }}
-                busy={busy}
-                onCancel={() => setEditing("")}
-                onSubmit={async (v) => {
-                  const err = await onPatch(g.id, v);
-                  if (!err) setEditing("");
-                  return err;
-                }}
-              />
-            </li>
-          ) : (
-            <li key={g.id} className="rounded-xl border border-gray-200 bg-white p-3 space-y-1">
-              <p className="text-sm font-medium text-gray-900">{g.title}</p>
-              {g.detail.trim() && (
-                <p className="text-[12px] text-gray-700 whitespace-pre-wrap">{g.detail}</p>
-              )}
-              <p className="text-[11px] text-gray-500">
-                {g.dueDate ? `期限 ${g.dueDate.replaceAll("-", "/")}` : "期限なし"}
-                {g.fromLearningId ? " ・ 学びの記録から" : ""}
-              </p>
-              <div className="flex flex-wrap gap-2 pt-1">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void onPatch(g.id, { status: "done" })}
-                  className="px-3 py-2 border border-emerald-300 text-emerald-800 rounded-full text-xs hover:bg-emerald-50 disabled:opacity-40 min-h-[40px]"
-                >
-                  ✅ 達成にする
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setEditing(g.id)}
-                  className="px-3 py-2 border border-teal-300 text-teal-800 rounded-full text-xs hover:bg-teal-50 disabled:opacity-40 min-h-[40px]"
-                >
-                  ✏️ 編集
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void onDelete(g)}
-                  className="px-3 py-2 border border-red-300 text-red-700 rounded-full text-xs hover:bg-red-50 disabled:opacity-40 min-h-[40px]"
-                >
-                  🗑 削除
-                </button>
-              </div>
-            </li>
-          )
-        )}
-      </ul>
-
-      {done.length > 0 && (
-        <div>
-          <button
-            type="button"
-            onClick={() => setShowDone((v) => !v)}
-            className="text-xs text-gray-700 underline underline-offset-2 min-h-[36px]"
-          >
-            {showDone ? "▲ 達成した目標を隠す" : `▼ 達成した目標（${done.length}件）`}
-          </button>
-          {showDone && (
-            <ul className="space-y-1 mt-1">
-              {done.map((g) => (
-                <li key={g.id} className="rounded-lg border border-gray-200 bg-gray-50 p-2 text-[12px]">
-                  <span className="text-gray-900">✅ {g.title}</span>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void onPatch(g.id, { status: "active" })}
-                    className="ml-2 text-[11px] text-teal-800 underline underline-offset-2"
-                  >
-                    取り組み中に戻す
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function GoalEditor({
-  draftKey,
-  initial,
-  busy,
-  onCancel,
-  onSubmit,
-}: {
-  draftKey: string;
-  initial: GoalForm;
-  busy: boolean;
-  onCancel: () => void;
-  onSubmit: (v: GoalForm) => Promise<string | null>;
-}) {
-  const { values, set, dirty, discard } = useDraft<GoalForm>(draftKey, initial);
-  const [error, setError] = useState("");
-  return (
-    <div className="rounded-xl border border-teal-200 bg-teal-50/40 p-3 space-y-2">
-      <label className="block">
-        <span className="text-[11px] text-gray-700">目標（必須）</span>
-        <input
-          value={values.title}
-          onChange={(e) => set("title", e.target.value)}
-          className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm min-h-[44px] bg-white mt-0.5"
-        />
-      </label>
-      <label className="block">
-        <span className="text-[11px] text-gray-700">詳細・やり方</span>
-        <textarea
-          value={values.detail}
-          onChange={(e) => set("detail", e.target.value)}
-          rows={3}
-          className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm bg-white mt-0.5"
-        />
-      </label>
-      <label className="block">
-        <span className="text-[11px] text-gray-700">期限</span>
-        <input
-          type="date"
-          value={values.dueDate}
-          onChange={(e) => set("dueDate", e.target.value)}
-          className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm min-h-[44px] bg-white mt-0.5"
-        />
-      </label>
-      {error && (
-        <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">{error}</p>
-      )}
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={busy || !values.title.trim()}
-          onClick={async () => {
-            const err = await onSubmit({
-              title: values.title.trim(),
-              detail: values.detail,
-              dueDate: values.dueDate,
-            });
-            if (err) setError(err);
-            else discard();
-          }}
-          className="px-4 py-2 bg-teal-600 text-white rounded-full text-sm hover:bg-teal-700 disabled:opacity-40 min-h-[44px]"
-        >
-          💾 保存
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => {
-            if (dirty && !confirm(DISCARD_CONFIRM)) return;
-            discard();
-            onCancel();
-          }}
-          className="px-4 py-2 border border-gray-300 text-gray-700 rounded-full text-sm hover:bg-gray-50 disabled:opacity-40 min-h-[44px]"
-        >
-          キャンセル
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── 1on1の約束 ───
 
 function PromisesSection({
@@ -632,7 +470,7 @@ function PromisesSection({
     <section className="space-y-3">
       <p className="text-[11px] text-gray-600 leading-relaxed">
         約束の本文は1on1で合意したものなので、ここでは変えられません（変更は1on1ノートから）。
-        ここでは<strong>取り組み状況</strong>を書けます。
+        ここでは<strong>取り組み状況</strong>を書けます。ギャップフィードバックの改善計画は「🌟 もらった承認・FB」と「🎯 目標」の週の実践に並びます。
       </p>
       <ul className="space-y-2">
         {promises.map((p) => (

@@ -14,6 +14,8 @@ import {
   formatDates,
   formatDiff,
   promiseStatusLabel,
+  type Goal,
+  type GrowthPace,
   tenureLabel,
   type Course,
   type LearningRecord,
@@ -23,6 +25,9 @@ import {
 import { NEED_KEYS, NEED_LABELS, NEED_GROUP_STYLE, NEEDS_GROUPS } from "@/lib/needs-survey";
 import { NeedsRadarChart } from "@/components/NeedsRadarChart";
 import { HiringDocsPanel } from "@/components/HiringDocsPanel";
+import { GoalsStaged, weeklyLinksFromPromises } from "@/components/GoalsStaged";
+import { FeedbackPanel } from "@/components/FeedbackPanel";
+import { fetchGoalsApi, fetchPromisesApi, supportGoalApi, type PromiseItem } from "@/lib/staff-growth-client";
 import {
   createLearningApi,
   deleteEvidenceApi,
@@ -50,6 +55,7 @@ const KIND_TONE: Record<TimelineKind, string> = {
   survey: "bg-rose-50 text-rose-800",
   delegation: "bg-emerald-50 text-emerald-800",
   hiring_doc: "bg-orange-50 text-orange-800",
+  feedback: "bg-yellow-50 text-yellow-900",
 };
 
 export function StaffGrowthDetail({ userId }: { userId: string }) {
@@ -64,6 +70,9 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState("");
   const [showAll, setShowAll] = useState(false);
+  // 185: 段階的な目標（閲覧＋機会・支援・コメント・合意）と1on1の約束
+  const [goalsState, setGoalsState] = useState<{ goals: Goal[]; pace: GrowthPace; canSupport: boolean } | null>(null);
+  const [promises, setPromises] = useState<PromiseItem[]>([]);
 
   const load = useCallback(async () => {
     setError("");
@@ -74,6 +83,14 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
       setCourses(l.courses);
       setAiDraftEnabled(l.aiDraftEnabled);
       setBucketMissing(l.bucketMissing);
+      // 185: 目標（段階）と約束
+      try {
+        const [g, p] = await Promise.all([fetchGoalsApi(userId), fetchPromisesApi(userId)]);
+        setGoalsState({ goals: g.goals, pace: g.pref?.pace ?? "", canSupport: g.canSupport });
+        setPromises(p.promises);
+      } catch {
+        setGoalsState(null);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
     } finally {
@@ -166,7 +183,7 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
     );
   }
 
-  const { entry, latestPromise, recentLearning, timeline, goals, today } = detail;
+  const { entry, latestPromise, recentLearning, timeline, today } = detail;
   const isAdmin = detail.isAdmin !== false; // 183: false＝担当の幹部（閲覧のみ）
   const tenure = tenureLabel(entry.joinedOn, today);
   const shownTimeline = showAll ? timeline : timeline.slice(0, 30);
@@ -253,24 +270,41 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
         </Card>
       </div>
 
-      {/* 自分の目標（本人が書く・管理者は閲覧のみ） */}
-      <section className="rounded-xl border border-gray-200 bg-white p-3">
-        <h2 className="text-sm font-medium text-gray-900">🎯 本人の目標</h2>
-        {goals.length === 0 ? (
-          <p className="text-[11px] text-gray-500 mt-1">本人が書いた目標はまだありません。</p>
+      {/* 185: 段階的な目標（本人が書く。院長・担当幹部は機会・支援・コメント・合意だけ） */}
+      <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2" data-goals-section>
+        <h2 className="text-sm font-medium text-gray-900">🎯 本人の目標（目的 → 3年後 → 年間 → 半期 → 月 → 週）</h2>
+        <p className="text-[10px] text-gray-500">目標の内容は本人だけが書けます。ここでは「クリニックが提供する機会・支援」の記入、コメント、年間・半期の合意を記録できます。</p>
+        {goalsState ? (
+          <GoalsStaged
+            mode="supporter"
+            goals={goalsState.goals}
+            pace={goalsState.pace}
+            weeklyLinks={weeklyLinksFromPromises(promises)}
+            busy={busy}
+            draftPrefix={`growth:goal-view:${userId}`}
+            onSupport={async (input) => {
+              setBusy(true);
+              try {
+                const { goal } = await supportGoalApi(input);
+                setGoalsState((st) => (st ? { ...st, goals: st.goals.map((g) => (g.id === goal.id ? goal : g)) } : st));
+                flash("💾 保存しました（本人にも見えます）");
+                return null;
+              } catch (e) {
+                return e instanceof Error ? e.message : "保存に失敗しました";
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
         ) : (
-          <ul className="mt-1 space-y-1">
-            {goals.map((g) => (
-              <li key={g.id} className="text-[12px] text-gray-900">
-                {g.status === "done" ? "✅" : "▫️"} {g.title}
-                {g.dueDate && (
-                  <span className="ml-1 text-[11px] text-gray-500">（期限 {g.dueDate.replaceAll("-", "/")}）</span>
-                )}
-              </li>
-            ))}
-          </ul>
+          <p className="text-[11px] text-gray-500">目標を読み込めませんでした。</p>
         )}
-        <p className="text-[10px] text-gray-500 mt-1">目標は本人だけが追加・編集できます。</p>
+      </section>
+
+      {/* 185: フィードバックの記録（院長=全件／担当幹部=自分の記録だけ。本人にも見える） */}
+      <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
+        <h2 className="text-sm font-medium text-gray-900">🌟 フィードバックの記録</h2>
+        <FeedbackPanel mode="recorder" userId={userId} staffName={entry.name} />
       </section>
 
       {/* 成長年表（A-4） */}

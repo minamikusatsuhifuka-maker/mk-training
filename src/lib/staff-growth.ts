@@ -152,17 +152,98 @@ export const TAGS_MAX_COUNT = 10;
 export const EVIDENCE_MAX_COUNT = 5;
 export const EVIDENCE_MAX_BYTES = 8 * 1024 * 1024;
 
-// ─── 自分の目標（C）───
+// ─── 自分の目標（179 C → 185 A: 段階的な目標）───
+//
+// 目的 → 3年後のありたい姿 → 年間目標 → 半期目標 → 月の行動目標 → 週の実践（1on1の約束とつなぐ）。
+// **目標の内容は本人だけが書く**（選択理論: 目標は本人が決める）。院長・担当幹部は
+// 「機会・支援」の記入・コメント・合意（年間・半期）だけ（A-3）。書き分けはサーバー（API）で強制する。
+
+export const GOAL_LEVELS = [
+  { value: "purpose", label: "目的", hint: "なぜ働くのか・どんな自分になりたいか", agree: false },
+  { value: "three_year", label: "3年後のありたい姿", hint: "等級・役割・できるようになっていたいこと", agree: false },
+  { value: "annual", label: "年間目標", hint: "次のステージへの成長課題（年次対話で合意）", agree: true },
+  { value: "half", label: "半期目標", hint: "年間目標を半期に分けたもの（半期面談で合意）", agree: true },
+  { value: "monthly", label: "月の行動目標", hint: "半期目標のための具体的な行動", agree: false },
+  { value: "weekly", label: "週の実践", hint: "1on1の約束とつなぐ", agree: false },
+] as const;
+export type GoalLevel = (typeof GOAL_LEVELS)[number]["value"];
+
+export function isGoalLevel(v: unknown): v is GoalLevel {
+  return GOAL_LEVELS.some((l) => l.value === v);
+}
+export function goalLevelLabel(v: GoalLevel): string {
+  return GOAL_LEVELS.find((l) => l.value === v)?.label ?? "";
+}
+/** 上位の段階（親として選べるもの） */
+export function parentLevelsOf(level: GoalLevel): GoalLevel[] {
+  const i = GOAL_LEVELS.findIndex((l) => l.value === level);
+  return GOAL_LEVELS.slice(0, Math.max(0, i)).map((l) => l.value);
+}
+export function levelNeedsAgreement(level: GoalLevel): boolean {
+  return GOAL_LEVELS.find((l) => l.value === level)?.agree === true;
+}
+
+/** 伸ばしたい7つの実（152のグループkey） */
+export const JITSU_KEYS = ["jikko", "jisseki", "jitsuryoku", "jitsugen", "jujitsu", "seijitsu", "ketsujitsu"] as const;
+export type JitsuKey = (typeof JITSU_KEYS)[number];
+export const JITSU_LABEL: Record<JitsuKey, string> = {
+  jikko: "実行",
+  jisseki: "実績",
+  jitsuryoku: "実力",
+  jitsugen: "実現",
+  jujitsu: "充実",
+  seijitsu: "誠実",
+  ketsujitsu: "結実",
+};
+/** 3軸 */
+export const GOAL_AXES = [
+  { value: "knowledge", label: "知識" },
+  { value: "skill", label: "スキル" },
+  { value: "mind", label: "マインド" },
+] as const;
+export type GoalAxis = (typeof GOAL_AXES)[number]["value"];
+
+/** 希望のペース（A-4・CDB P.47 キャリアの選び方） */
+export const GROWTH_PACES = [
+  { value: "fast", label: "早くステージを進めたい" },
+  { value: "deep", label: "ゆっくり深めたい" },
+] as const;
+export type GrowthPace = (typeof GROWTH_PACES)[number]["value"] | "";
+
+export type GoalComment = { by: string; name: string; text: string; at: string };
 
 export type GoalStatus = "active" | "done";
 
 export type Goal = {
   id: string;
   userId: string;
+  /** 185: 段階（179の記録は level を持たないので "monthly" に倒す） */
+  level: GoalLevel;
+  /** 185: つながる上位目標のid（無ければ空） */
+  parentId: string;
   title: string;
   detail: string;
+  /** 185: 目的とのつながり（なぜこの目標か） */
+  why: string;
+  /** 185: 伸ばしたい7つの実 */
+  jitsu: JitsuKey[];
+  /** 185: 3軸 */
+  axes: GoalAxis[];
+  /** 185: 達成した状態（事実で分かる形） */
+  achievedState: string;
   status: GoalStatus;
   dueDate: string;
+  /** 185: クリニックが提供する機会・支援（院長・担当幹部が書く） */
+  support: string;
+  supportBy: string;
+  /** 185: 院長・担当幹部のコメント */
+  comments: GoalComment[];
+  /** 185: 進捗・振り返り（本人） */
+  review: string;
+  /** 185: 合意（年間・半期のみ） */
+  agreedOn: string;
+  agreedBy: string;
+  agreedByName: string;
   /** 「次にやること」から移したときの元の学びの記録 */
   fromLearningId: string;
   createdAt: string;
@@ -171,6 +252,48 @@ export type Goal = {
 
 export const GOAL_TITLE_MAX = 200;
 export const GOAL_DETAIL_MAX = 2000;
+export const GOAL_TEXT_MAX = 2000;
+export const GOAL_COMMENT_MAX = 1000;
+export const GOAL_COMMENTS_MAX = 50;
+
+/** 本人が書ける項目 */
+export const GOAL_OWNER_FIELDS = ["level", "parentId", "title", "detail", "why", "jitsu", "axes", "achievedState", "status", "dueDate", "review", "fromLearningId"] as const;
+/** 院長・担当幹部が書ける項目（機会・支援／コメント／合意）。目標の内容は触れない */
+export const GOAL_SUPPORTER_FIELDS = ["support", "comments", "agreedOn", "agreedBy", "agreedByName"] as const;
+
+export function normalizeJitsuKeys(raw: unknown): JitsuKey[] {
+  if (!Array.isArray(raw)) return [];
+  return JITSU_KEYS.filter((k) => raw.includes(k));
+}
+export function normalizeAxes(raw: unknown): GoalAxis[] {
+  if (!Array.isArray(raw)) return [];
+  return GOAL_AXES.map((a) => a.value).filter((k) => raw.includes(k));
+}
+export function normalizeGoalComments(raw: unknown): GoalComment[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .slice(-GOAL_COMMENTS_MAX)
+    .map((c) => {
+      const g = (c && typeof c === "object" ? c : {}) as Record<string, unknown>;
+      return {
+        by: text(g.by, 200),
+        name: text(g.name, 100),
+        text: text(g.text, GOAL_COMMENT_MAX),
+        at: text(g.at, 40),
+      };
+    })
+    .filter((c) => c.text.trim());
+}
+
+export type GrowthPref = { userId: string; pace: GrowthPace; updatedAt: string };
+export function normalizeGrowthPref(userId: string, raw: unknown): GrowthPref {
+  const g = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return {
+    userId,
+    pace: g.pace === "fast" || g.pace === "deep" ? g.pace : "",
+    updatedAt: text(g.updatedAt, 40),
+  };
+}
 
 // ─── 1on1の約束の取り組み状況（C）───
 //
@@ -445,14 +568,203 @@ export function normalizeGoal(id: string, raw: unknown): Goal | null {
   return {
     id,
     userId,
+    level: isGoalLevel(g.level) ? g.level : "monthly",
+    parentId: text(g.parentId, 100),
     title,
     detail: text(g.detail, GOAL_DETAIL_MAX),
+    why: text(g.why, GOAL_TEXT_MAX),
+    jitsu: normalizeJitsuKeys(g.jitsu),
+    axes: normalizeAxes(g.axes),
+    achievedState: text(g.achievedState, GOAL_TEXT_MAX),
     status: g.status === "done" ? "done" : "active",
     dueDate: ymd(g.dueDate),
+    support: text(g.support, GOAL_TEXT_MAX),
+    supportBy: text(g.supportBy, 200),
+    comments: normalizeGoalComments(g.comments),
+    review: text(g.review, GOAL_TEXT_MAX),
+    agreedOn: ymd(g.agreedOn),
+    agreedBy: text(g.agreedBy, 200),
+    agreedByName: text(g.agreedByName, 100),
     fromLearningId: text(g.fromLearningId, 100),
     createdAt: text(g.createdAt, 40),
     updatedAt: text(g.updatedAt, 40),
   };
+}
+
+/** 段階ごとに分ける（定義順）。親→子の線は parentId で引く */
+export function groupGoalsByLevel(goals: Goal[]): Record<GoalLevel, Goal[]> {
+  const out = Object.fromEntries(GOAL_LEVELS.map((l) => [l.value, [] as Goal[]])) as Record<GoalLevel, Goal[]>;
+  for (const g of goals) out[g.level].push(g);
+  return out;
+}
+
+/** 目的まで辿る（自分を除く上位の連鎖・近い順）。循環・欠損は打ち切る */
+export function goalAncestors(goals: Goal[], goal: Goal): Goal[] {
+  const byId = new Map(goals.map((g) => [g.id, g]));
+  const out: Goal[] = [];
+  let cur = goal.parentId ? byId.get(goal.parentId) : undefined;
+  const seen = new Set<string>([goal.id]);
+  while (cur && !seen.has(cur.id) && out.length < 10) {
+    out.push(cur);
+    seen.add(cur.id);
+    cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+  }
+  return out;
+}
+
+// ─── フィードバックの記録（185 B/C）───
+//
+// 記録するのは院長と担当幹部。**本人はすべて見られる**（ポジティブ: 全項目／ギャップ: ①②③とその後）。
+// 人物評価・性格の断定を書く欄と、本人に見せないメモ欄は**型に無い**（C-2）。
+// 幹部は自分が記録したものだけ見られる（E）。判定はサーバーで渡す前に行う。
+
+export type FeedbackType = "positive" | "gap";
+
+export const APPROVAL_KINDS = [
+  { value: "result", label: "結果" },
+  { value: "action", label: "行動" },
+  { value: "being", label: "存在" },
+  { value: "thanks", label: "感謝" },
+] as const;
+export type ApprovalKind = (typeof APPROVAL_KINDS)[number]["value"];
+
+/** 観点（任意・複数可）: 7つの実／在り方の3本柱／才徳美 */
+export const PILLAR_KEYS = ["kansha", "seijitsu_pillar", "wakachiai"] as const;
+export const PILLAR_LABEL: Record<(typeof PILLAR_KEYS)[number], string> = {
+  kansha: "感謝",
+  seijitsu_pillar: "誠実",
+  wakachiai: "分かち愛",
+};
+export const STRENGTH_KEYS = ["sai", "toku", "bi"] as const;
+export const STRENGTH_LABEL: Record<(typeof STRENGTH_KEYS)[number], string> = { sai: "才", toku: "徳", bi: "美" };
+export const VIEWPOINT_KEYS = [...JITSU_KEYS, ...PILLAR_KEYS, ...STRENGTH_KEYS] as const;
+export type ViewpointKey = (typeof VIEWPOINT_KEYS)[number];
+export function viewpointLabel(k: ViewpointKey): string {
+  if ((JITSU_KEYS as readonly string[]).includes(k)) return JITSU_LABEL[k as JitsuKey];
+  if ((PILLAR_KEYS as readonly string[]).includes(k)) return PILLAR_LABEL[k as (typeof PILLAR_KEYS)[number]];
+  return STRENGTH_LABEL[k as (typeof STRENGTH_KEYS)[number]];
+}
+export function normalizeViewpoints(raw: unknown): ViewpointKey[] {
+  if (!Array.isArray(raw)) return [];
+  return VIEWPOINT_KEYS.filter((k) => raw.includes(k));
+}
+
+export type Feedback = {
+  id: string;
+  /** 対象のスタッフ */
+  userId: string;
+  /** 記録した人 */
+  authorId: string;
+  authorName: string;
+  type: FeedbackType;
+  /** 日付・場面（事実で） */
+  date: string;
+  scene: string;
+  // ── ポジティブ（B-1） ──
+  approval: ApprovalKind | "";
+  /** 何が良かったか（背景にある想いや努力まで具体的に） */
+  whatGood: string;
+  viewpoints: ViewpointKey[];
+  /** 本人の反応（本人が書く・任意） */
+  reaction: string;
+  // ── ギャップ（C-1・3ステップ） ──
+  /** ① 状況・行動・影響（事実） */
+  fact: string;
+  /** ① 伝えた側の主観（iメッセージ） */
+  iMessage: string;
+  /** ② 問題点のすり合わせ（人ではなく「事」に焦点。何が本質だったか） */
+  issue: string;
+  /** ③ 本人が考えて決めた改善策 */
+  plan: string;
+  planDue: string;
+  /** その後: 次回の確認日・結果 */
+  nextCheckOn: string;
+  result: string;
+  /** ③の進捗・振り返り（本人が書く） */
+  progress: string;
+  /** 本人が最後に見た日時（新しい記録の印に使う） */
+  seenAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const FEEDBACK_TEXT_MAX = 3000;
+export const FEEDBACK_SCENE_MAX = 300;
+
+/** 記録した人（と院長）が書ける項目 */
+export const FEEDBACK_AUTHOR_FIELDS = ["type", "date", "scene", "approval", "whatGood", "viewpoints", "fact", "iMessage", "issue", "plan", "planDue", "nextCheckOn", "result"] as const;
+/** 本人が書ける項目 */
+export const FEEDBACK_OWNER_FIELDS = ["reaction", "progress"] as const;
+
+export function normalizeFeedback(id: string, raw: unknown): Feedback | null {
+  if (!id || !raw || typeof raw !== "object") return null;
+  const g = raw as Record<string, unknown>;
+  const userId = text(g.userId, 100).trim();
+  const authorId = text(g.authorId, 100).trim();
+  const type: FeedbackType = g.type === "gap" ? "gap" : "positive";
+  if (!userId || !authorId) return null;
+  const isPositive = type === "positive";
+  return {
+    id,
+    userId,
+    authorId,
+    authorName: text(g.authorName, 100),
+    type,
+    date: ymd(g.date),
+    scene: text(g.scene, FEEDBACK_SCENE_MAX),
+    approval: isPositive && APPROVAL_KINDS.some((k) => k.value === g.approval) ? (g.approval as ApprovalKind) : "",
+    whatGood: isPositive ? text(g.whatGood, FEEDBACK_TEXT_MAX) : "",
+    viewpoints: isPositive ? normalizeViewpoints(g.viewpoints) : [],
+    reaction: isPositive ? text(g.reaction, FEEDBACK_TEXT_MAX) : "",
+    fact: isPositive ? "" : text(g.fact, FEEDBACK_TEXT_MAX),
+    iMessage: isPositive ? "" : text(g.iMessage, FEEDBACK_TEXT_MAX),
+    issue: isPositive ? "" : text(g.issue, FEEDBACK_TEXT_MAX),
+    plan: isPositive ? "" : text(g.plan, FEEDBACK_TEXT_MAX),
+    planDue: isPositive ? "" : ymd(g.planDue),
+    nextCheckOn: isPositive ? "" : ymd(g.nextCheckOn),
+    result: isPositive ? "" : text(g.result, FEEDBACK_TEXT_MAX),
+    progress: isPositive ? "" : text(g.progress, FEEDBACK_TEXT_MAX),
+    seenAt: text(g.seenAt, 40),
+    createdAt: text(g.createdAt, 40),
+    updatedAt: text(g.updatedAt, 40),
+  };
+}
+
+/** 本人にとって未読か（記録者の更新が seenAt より新しい） */
+export function isFeedbackUnseen(f: Feedback): boolean {
+  return !f.seenAt || f.updatedAt > f.seenAt;
+}
+
+/** ギャップFBの改善計画が本人の一覧（1on1の約束と同じ）に並ぶか */
+export function hasImprovementPlan(f: Feedback): boolean {
+  return f.type === "gap" && f.plan.trim() !== "";
+}
+
+/** 入力欄の上に常時表示する文（185・一言一句そのまま） */
+export const POSITIVE_FEEDBACK_NOTICE = "表面的な褒め言葉ではなく、背景にある想いや努力を具体的に書きます。";
+export const GAP_FEEDBACK_NOTICE_1 =
+  "ギャップフィードバックは、対面で伝え、話し合ったあとに記録します。アプリで初めて伝えることはしません。";
+export const GAP_FEEDBACK_NOTICE_2 = "性格や人柄ではなく、事実と「事」について書きます。";
+/** 他責から自責への問い（インサイドアウト）— ③の入力補助 */
+export const INSIDE_OUT_PROMPT = "自分にできることは何だろう";
+
+export function buildFeedbackChanges(prev: Feedback | null, next: Feedback): GrowthLogChange[] {
+  const c: GrowthLogChange[] = [];
+  valueChange(c, "種類", prev ? (prev.type === "gap" ? "ギャップ" : "ポジティブ") : "", next.type === "gap" ? "ギャップ" : "ポジティブ");
+  valueChange(c, "日付", prev?.date ?? "", next.date);
+  const fields: [keyof Feedback, string][] = [
+    ["scene", "場面"],
+    ["whatGood", "何が良かったか"],
+    ["fact", "① 事実"],
+    ["iMessage", "① iメッセージ"],
+    ["issue", "② すり合わせ"],
+    ["plan", "③ 改善計画"],
+    ["result", "その後の結果"],
+    ["reaction", "本人の反応"],
+    ["progress", "本人の進捗"],
+  ];
+  for (const [k, label] of fields) presenceChange(c, label, String(prev?.[k] ?? ""), String(next[k] ?? ""));
+  return c;
 }
 
 export function normalizePromiseStatus(id: string, raw: unknown): PromiseStatus | null {
@@ -574,7 +886,8 @@ export type TimelineKind =
   | "self_review"
   | "survey"
   | "delegation"
-  | "hiring_doc";
+  | "hiring_doc"
+  | "feedback";
 
 export const TIMELINE_KIND_LABEL: Record<TimelineKind, string> = {
   joined: "入職",
@@ -585,6 +898,7 @@ export const TIMELINE_KIND_LABEL: Record<TimelineKind, string> = {
   survey: "サーベイ公開",
   delegation: "権限委譲",
   hiring_doc: "採用資料",
+  feedback: "フィードバック",
 };
 
 /**
@@ -920,8 +1234,12 @@ export function buildCourseChanges(prev: Course | null, next: Course): GrowthLog
 
 export function buildGoalChanges(prev: Goal | null, next: Goal): GrowthLogChange[] {
   const c: GrowthLogChange[] = [];
+  valueChange(c, "段階", prev ? goalLevelLabel(prev.level) : "", goalLevelLabel(next.level));
   presenceChange(c, "目標", prev?.title ?? "", next.title);
   presenceChange(c, "詳細", prev?.detail ?? "", next.detail);
+  presenceChange(c, "機会・支援", prev?.support ?? "", next.support);
+  valueChange(c, "コメント", `${prev?.comments.length ?? 0}件`, `${next.comments.length}件`);
+  valueChange(c, "合意", prev?.agreedOn ?? "", next.agreedOn);
   valueChange(
     c,
     "状態",

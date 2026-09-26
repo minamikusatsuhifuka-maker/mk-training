@@ -34,7 +34,9 @@ import {
   emptyGrowthConfig,
   normalizeCourse,
   normalizeCourseRequest,
+  normalizeFeedback,
   normalizeGoal,
+  normalizeGrowthPref,
   normalizeGrowthConfig,
   normalizeGrowthLog,
   normalizeLearning,
@@ -42,7 +44,9 @@ import {
   sortCourses,
   type Course,
   type CourseRequest,
+  type Feedback,
   type Goal,
+  type GrowthPref,
   type GrowthConfig,
   type GrowthLog,
   type GrowthLogChange,
@@ -59,6 +63,8 @@ const COURSE_TYPE = "course";
 const REQUEST_TYPE = "request";
 const LEARNING_TYPE = "learning";
 const GOAL_TYPE = "goal";
+const FEEDBACK_TYPE = "feedback";
+const PREF_TYPE = "pref";
 const PROMISE_TYPE = "promise";
 const CONFIG_TYPE = "config";
 const LOG_TYPE = "log";
@@ -428,6 +434,57 @@ export async function saveGoal(admin: GrowthAdminClient, goal: Goal, updatedBy: 
 
 export async function deleteGoal(admin: GrowthAdminClient, id: string): Promise<void> {
   await deleteRow(admin, GOAL_TYPE, id);
+}
+
+// ─── フィードバックの記録（185 B/C）───
+
+export async function fetchFeedback(
+  admin: GrowthAdminClient,
+  filter: { userId?: string; authorId?: string }
+): Promise<{ feedback: Feedback[]; tableMissing: boolean }> {
+  let q = admin.from(GROWTH_TABLE).select("id, data").eq("record_type", FEEDBACK_TYPE);
+  if (filter.userId) q = q.eq("data->>userId", filter.userId);
+  if (filter.authorId) q = q.eq("data->>authorId", filter.authorId);
+  const { data, error } = await q;
+  if (error) {
+    if (isMissingTable(error.message)) return { feedback: [], tableMissing: true };
+    throw new Error(error.message);
+  }
+  const feedback = ((data ?? []) as Row[])
+    .map((r) => normalizeFeedback(String(r.id), r.data))
+    .filter((f): f is Feedback => f !== null)
+    .sort((a, b) => (b.date || b.createdAt).localeCompare(a.date || a.createdAt) || b.createdAt.localeCompare(a.createdAt));
+  return { feedback, tableMissing: false };
+}
+
+export async function fetchFeedbackRow(admin: GrowthAdminClient, id: string): Promise<Feedback | null> {
+  const row = await selectRow(admin, FEEDBACK_TYPE, id);
+  return row ? normalizeFeedback(String(row.id), row.data) : null;
+}
+
+export async function saveFeedback(admin: GrowthAdminClient, f: Feedback, updatedBy: string): Promise<void> {
+  const { id, ...data } = f;
+  await upsertRow(admin, FEEDBACK_TYPE, id, data, updatedBy);
+}
+
+export async function deleteFeedback(admin: GrowthAdminClient, id: string): Promise<void> {
+  await deleteRow(admin, FEEDBACK_TYPE, id);
+}
+
+// ─── 希望のペース（185 A-4）───
+
+export async function fetchGrowthPref(admin: GrowthAdminClient, userId: string): Promise<GrowthPref> {
+  try {
+    const row = await selectRow(admin, PREF_TYPE, `pref-${userId}`);
+    return normalizeGrowthPref(userId, row?.data ?? null);
+  } catch {
+    return normalizeGrowthPref(userId, null);
+  }
+}
+
+export async function saveGrowthPref(admin: GrowthAdminClient, pref: GrowthPref, updatedBy: string): Promise<void> {
+  const { userId, ...data } = pref;
+  await upsertRow(admin, PREF_TYPE, `pref-${userId}`, { ...data, userId }, updatedBy);
 }
 
 // ─── 1on1の約束の取り組み状況 ───

@@ -38,6 +38,7 @@ import { jstTodayYmd } from "./library";
 import {
   attachEvidenceUrls,
   fetchCourses,
+  fetchFeedback,
   fetchGoals,
   fetchLearning,
   fetchPromiseStatuses,
@@ -57,6 +58,7 @@ import {
   type Course,
   type KarteDetail,
   type KarteListEntry,
+  type Feedback,
   type LearningRecord,
   type PromiseStatus,
   type PromiseSummary,
@@ -223,6 +225,8 @@ type Sources = {
   promiseStatuses: Map<string, PromiseStatus[]>;
   /** 184: 採用資料（院長のみ＝full モードだけ集める。幹部モードでは空） */
   hiringDocsByUser: Map<string, HiringDoc[]>;
+  /** 185: フィードバック（院長=全件／幹部=自分が記録したものだけ） */
+  feedbackByUser: Map<string, Feedback[]>;
   scope: KarteScope;
   tableMissing: boolean;
 };
@@ -361,6 +365,20 @@ async function loadSources(
     /* 飛ばす */
   }
 
+  // 185: フィードバック。院長は全件、幹部は**自分が記録したものだけ**（E）
+  const feedbackByUser = new Map<string, Feedback[]>();
+  try {
+    const { feedback } = await fetchFeedback(admin, delegate ? { authorId: viewerUserId } : {});
+    for (const f of feedback) {
+      if (delegate && !allowed.has(f.userId)) continue;
+      const list = feedbackByUser.get(f.userId);
+      if (list) list.push(f);
+      else feedbackByUser.set(f.userId, [f]);
+    }
+  } catch {
+    /* 無しで続ける */
+  }
+
   // 184: 採用資料の日付（院長のみ）。テーブル未作成・失敗は無しで続ける
   const hiringDocsByUser = new Map<string, HiringDoc[]>();
   if (!delegate) {
@@ -431,6 +449,7 @@ async function loadSources(
     surveyByUser,
     promiseStatuses,
     hiringDocsByUser,
+    feedbackByUser,
     scope,
     tableMissing: coursesRes.tableMissing || learningRes.tableMissing,
   };
@@ -551,6 +570,20 @@ function buildTimeline(src: Sources, person: RosterPerson): TimelineItem[] {
         .filter(Boolean)
         .join("\n"),
       href: "/admin/portal",
+    });
+  }
+
+  // 185: フィードバック（院長=全件／幹部=自分の記録だけ）
+  for (const f of src.feedbackByUser.get(person.userId) ?? []) {
+    items.push({
+      kind: "feedback",
+      date: f.date || f.createdAt.slice(0, 10),
+      title: f.type === "positive" ? `ポジティブFB（${f.authorName || "記録者"}）` : `ギャップFB（${f.authorName || "記録者"}）`,
+      body:
+        f.type === "positive"
+          ? [f.scene && `場面: ${f.scene}`, f.whatGood && `良かったこと: ${f.whatGood}`].filter(Boolean).join("\n")
+          : [f.fact && `① 事実: ${f.fact}`, f.issue && `② すり合わせ: ${f.issue}`, f.plan && `③ 改善計画: ${f.plan}`].filter(Boolean).join("\n"),
+      href: `/staff-growth/${encodeURIComponent(person.userId)}#feedback`,
     });
   }
 

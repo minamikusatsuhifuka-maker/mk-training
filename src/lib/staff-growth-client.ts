@@ -4,7 +4,10 @@
 import type {
   Course,
   CourseRequest,
+  Feedback,
   Goal,
+  GrowthPace,
+  GrowthPref,
   GrowthConfig,
   GrowthLog,
   KarteDetail,
@@ -211,18 +214,61 @@ export async function draftLearningApi(file: Blob): Promise<{ draft: LearningDra
 
 // ─── 自分の目標 ───
 
-export async function fetchGoalsApi(userId?: string): Promise<{ goals: Goal[]; tableMissing: boolean }> {
+export async function fetchGoalsApi(userId?: string): Promise<{ goals: Goal[]; pref: GrowthPref; tableMissing: boolean; canSupport: boolean; isOwner: boolean }> {
   const q = userId ? `?user=${encodeURIComponent(userId)}` : "";
   return callApi(`/api/growth/goals${q}`);
 }
 
-export type GoalInput = Pick<Goal, "title" | "detail" | "status" | "dueDate" | "fromLearningId">;
+/** 本人が書ける項目（185 A-3）。機会・支援／コメント／合意は含まない */
+export type GoalInput = Partial<
+  Pick<Goal, "level" | "parentId" | "title" | "detail" | "why" | "jitsu" | "axes" | "achievedState" | "status" | "dueDate" | "review" | "fromLearningId">
+>;
 
-export async function createGoalApi(input: Partial<GoalInput>): Promise<{ goal: Goal }> {
+/** 院長・担当幹部: 機会・支援の記入／コメントの追加／合意の記録 */
+export async function supportGoalApi(input: { id: string; support?: string; comment?: string; agree?: boolean }): Promise<{ goal: Goal }> {
+  return callApi("/api/growth/goals/support", { method: "PUT", body: JSON.stringify(input) });
+}
+
+export async function saveGrowthPrefApi(pace: GrowthPace): Promise<{ pref: GrowthPref }> {
+  return callApi("/api/growth/goals/pref", { method: "PUT", body: JSON.stringify({ pace }) });
+}
+
+// ─── フィードバック（185 B/C）───
+
+export type FeedbackListResponse = { feedback: Feedback[]; tableMissing: boolean; mode: "owner" | "admin" | "delegate"; viewerId: string };
+
+export async function fetchFeedbackApi(userId?: string): Promise<FeedbackListResponse> {
+  const q = userId ? `?user=${encodeURIComponent(userId)}` : "";
+  return callApi(`/api/growth/feedback${q}`);
+}
+
+export type FeedbackAuthorInput = Partial<
+  Pick<Feedback, "type" | "date" | "scene" | "approval" | "whatGood" | "viewpoints" | "fact" | "iMessage" | "issue" | "plan" | "planDue" | "nextCheckOn" | "result">
+>;
+
+export async function createFeedbackApi(userId: string, input: FeedbackAuthorInput): Promise<{ feedback: Feedback }> {
+  return callApi("/api/growth/feedback", { method: "POST", body: JSON.stringify({ userId, ...input }) });
+}
+
+/** 記録者・院長は本文、本人は reaction / progress だけ（サーバーが書き分ける） */
+export async function patchFeedbackApi(id: string, input: FeedbackAuthorInput & Partial<Pick<Feedback, "reaction" | "progress">>): Promise<{ feedback: Feedback }> {
+  return callApi("/api/growth/feedback", { method: "PATCH", body: JSON.stringify({ id, ...input }) });
+}
+
+export async function deleteFeedbackApi(id: string): Promise<void> {
+  await callApi("/api/growth/feedback?id=" + encodeURIComponent(id), { method: "DELETE" });
+}
+
+/** 本人: 一覧を見た印を付ける */
+export async function markFeedbackSeenApi(): Promise<void> {
+  await callApi("/api/growth/feedback/seen", { method: "PUT", body: "{}" });
+}
+
+export async function createGoalApi(input: GoalInput): Promise<{ goal: Goal }> {
   return callApi("/api/growth/goals", { method: "POST", body: JSON.stringify(input) });
 }
 
-export async function patchGoalApi(id: string, input: Partial<GoalInput>): Promise<{ goal: Goal }> {
+export async function patchGoalApi(id: string, input: GoalInput): Promise<{ goal: Goal }> {
   return callApi("/api/growth/goals", { method: "PATCH", body: JSON.stringify({ id, ...input }) });
 }
 
