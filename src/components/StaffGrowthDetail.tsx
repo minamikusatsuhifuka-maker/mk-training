@@ -25,6 +25,8 @@ import {
 import { NEED_KEYS, NEED_LABELS, NEED_GROUP_STYLE, NEEDS_GROUPS } from "@/lib/needs-survey";
 import { NeedsRadarChart } from "@/components/NeedsRadarChart";
 import { HiringDocsPanel } from "@/components/HiringDocsPanel";
+import { ScouterCard } from "@/components/ScouterCard";
+import { ContactQuickView } from "@/components/ContactQuickView";
 import { GoalsStaged, weeklyLinksFromPromises } from "@/components/GoalsStaged";
 import { FeedbackPanel } from "@/components/FeedbackPanel";
 import { fetchGoalsApi, fetchPromisesApi, supportGoalApi, type PromiseItem } from "@/lib/staff-growth-client";
@@ -83,13 +85,18 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
       setCourses(l.courses);
       setAiDraftEnabled(l.aiDraftEnabled);
       setBucketMissing(l.bucketMissing);
-      // 185: 目標（段階）と約束
-      try {
-        const [g, p] = await Promise.all([fetchGoalsApi(userId), fetchPromisesApi(userId)]);
-        setGoalsState({ goals: g.goals, pace: g.pref?.pace ?? "", canSupport: g.canSupport });
-        setPromises(p.promises);
-      } catch {
+      // 185: 目標（段階）と約束。188 6: 入職予定者はアカウントが無く目標が存在しないので読みに行かない（エラーにしない）
+      if (d.entry.prospect) {
         setGoalsState(null);
+        setPromises([]);
+      } else {
+        try {
+          const [g, p] = await Promise.all([fetchGoalsApi(userId), fetchPromisesApi(userId)]);
+          setGoalsState({ goals: g.goals, pace: g.pref?.pace ?? "", canSupport: g.canSupport });
+          setPromises(p.promises);
+        } catch {
+          setGoalsState(null);
+        }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
@@ -185,6 +192,8 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
 
   const { entry, latestPromise, recentLearning, timeline, today } = detail;
   const isAdmin = detail.isAdmin !== false; // 183: false＝担当の幹部（閲覧のみ）
+  const isProspect = !!entry.prospect; // 187/188 6: アカウント作成前
+  const PROSPECT_NOTE = "入職してアカウントを作成すると使えます。";
   const tenure = tenureLabel(entry.joinedOn, today);
   const shownTimeline = showAll ? timeline : timeline.slice(0, 30);
 
@@ -197,6 +206,7 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
       <header className="rounded-xl border border-gray-200 bg-white p-3">
         <h1 className="text-lg font-bold text-gray-900">
           {entry.name}
+          {detail.contactAccess && <ContactQuickView userId={userId} name={entry.name} />}
           {entry.roleLabel && (
             <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700 font-normal">
               {entry.roleLabel}
@@ -234,8 +244,10 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
 
       {/* 上部カード（A-4） */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        <Card title="🤝 最新の1on1の約束" href="/one-on-one">
-          {latestPromise ? (
+        <Card title="🤝 最新の1on1の約束" href={isProspect ? "" : "/one-on-one"}>
+          {isProspect ? (
+            <p className="text-[11px] text-gray-500" data-prospect-note>{PROSPECT_NOTE}</p>
+          ) : latestPromise ? (
             <>
               <p className="text-[11px] text-gray-500">
                 {latestPromise.date.replaceAll("-", "/")} ・ {latestPromise.partnerName}さんと
@@ -268,9 +280,11 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
             </ul>
           )}
         </Card>
-        <Card title="🗓 次回1on1の予定" href="/calendar">
+        <Card title="🗓 次回1on1の予定" href={isProspect ? "" : "/calendar"}>
           <p className="text-[11px] text-gray-500">
-            {detail.nextOneOnOne
+            {isProspect
+              ? PROSPECT_NOTE
+              : detail.nextOneOnOne
               ? detail.nextOneOnOne.replaceAll("-", "/")
               : "予定の記録はありません（1on1の予定は院内カレンダーで管理）。"}
           </p>
@@ -281,7 +295,9 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
       <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2" data-goals-section>
         <h2 className="text-sm font-medium text-gray-900">🎯 本人の目標（目的 → 3年後 → 年間 → 半期 → 月 → 週）</h2>
         <p className="text-[10px] text-gray-500">目標の内容は本人だけが書けます。ここでは「クリニックが提供する機会・支援」の記入、コメント、年間・半期の合意を記録できます。</p>
-        {goalsState ? (
+        {isProspect ? (
+          <p className="text-[11px] text-gray-500" data-prospect-note>{PROSPECT_NOTE}</p>
+        ) : goalsState ? (
           <GoalsStaged
             mode="supporter"
             goals={goalsState.goals}
@@ -311,7 +327,11 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
       {/* 185: フィードバックの記録（院長=全件／担当幹部=自分の記録だけ。本人にも見える） */}
       <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
         <h2 className="text-sm font-medium text-gray-900">🌟 フィードバックの記録</h2>
-        <FeedbackPanel mode="recorder" userId={userId} staffName={entry.name} />
+        {isProspect ? (
+          <p className="text-[11px] text-gray-500" data-prospect-note>{PROSPECT_NOTE}（本人に見せる記録のため、本人のアカウントができてから）</p>
+        ) : (
+          <FeedbackPanel mode="recorder" userId={userId} staffName={entry.name} />
+        )}
       </section>
 
       {/* 成長年表（A-4） */}
@@ -364,6 +384,8 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
 
       {/* 184: 採用資料・経歴・入職時の想い（院長のみ。幹部モードでは描画しない＝APIも404） */}
       {isAdmin && <HiringDocsPanel userId={userId} staffName={entry.name} />}
+      {/* 188 4: 適性検査（スカウター）— 院長のみ・委任対象外 */}
+      {isAdmin && <ScouterCard userId={userId} />}
 
       {/* 学びの記録（管理者は追加・編集できる・B-4） */}
       <section id="learning" className="space-y-2">
@@ -525,6 +547,7 @@ function Card({
   children,
 }: {
   title: string;
+  /** 空＝リンクを出さない（188 6: 入職予定者には記録画面へのボタンを出さない） */
   href: string;
   children: React.ReactNode;
 }) {
@@ -532,9 +555,11 @@ function Card({
     <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-1">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[12px] font-medium text-gray-900">{title}</p>
-        <Link href={href} className="text-[10px] text-teal-800 underline underline-offset-2 shrink-0">
-          元の画面へ
-        </Link>
+        {href && (
+          <Link href={href} className="text-[10px] text-teal-800 underline underline-offset-2 shrink-0">
+            元の画面へ
+          </Link>
+        )}
       </div>
       {children}
     </div>

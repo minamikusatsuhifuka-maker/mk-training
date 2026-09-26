@@ -89,6 +89,18 @@ export async function GET(req: Request) {
   // ナビのリンク判定用。**中身は一切返さない**（開けるかどうかだけ）
   if (probe) return NextResponse.json({ ok: true });
 
+  // 188 5: 名前の横の連絡先（小窓）。1人分だけ返す。権限判定は上と同じ（院長・指名された閲覧者）
+  const one = new URL(req.url).searchParams.get("user") ?? "";
+  if (one) {
+    try {
+      const { contacts, tableMissing } = await fetchAllStaffContacts(auth.admin);
+      const c = contacts.find((x) => x.userId === one) ?? null;
+      return NextResponse.json({ contact: c ? (auth.isAdmin ? c : withoutFamily(c)) : null, tableMissing });
+    } catch (e) {
+      return errorResponse(e);
+    }
+  }
+
   try {
     const [{ contacts, tableMissing }, retiredUserIds] = await Promise.all([
       fetchAllStaffContacts(auth.admin),

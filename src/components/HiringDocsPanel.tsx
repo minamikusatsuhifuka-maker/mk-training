@@ -8,6 +8,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { DropZone } from "@/components/DropZone";
+import { ScouterTranscriptForm } from "@/components/ScouterTranscriptForm";
+import { SCOUTER_SAVED_EVENT } from "@/components/ScouterCard";
+import type { ScouterTranscript } from "@/lib/scouter";
 import {
   CONTACT_FIELD_LABEL,
   CONTACT_PROPOSAL_KEYS,
@@ -91,6 +94,8 @@ export function HiringDocsPanel({ userId, staffName }: { userId: string; staffNa
   const [undo, setUndo] = useState<{ userId: string; contact?: unknown; profile?: unknown; applied: string[] } | null>(null);
   const [profileDraft, setProfileDraft] = useState<HiringProfileText | null>(null);
   const [extract, setExtract] = useState<{ docId: string; proposal: HiringProposal; current: { contact: StaffContact; profile: HiringProfile } } | null>(null);
+  // 188 1: 適性検査（スカウター）の転記（AIの提案 → 院長が確認・修正 → 保存）
+  const [scouterDraft, setScouterDraft] = useState<{ docId: string; transcript: ScouterTranscript; model: string } | null>(null);
   const [showLogs, setShowLogs] = useState(false);
 
   const load = useCallback(async () => {
@@ -244,6 +249,20 @@ export function HiringDocsPanel({ userId, staffName }: { userId: string; staffNa
     }
   };
 
+  const runScouterExtract = async (doc: HiringDoc) => {
+    setBusy(true);
+    setError("");
+    try {
+      const j = await api<{ transcript: ScouterTranscript; model: string; unreadable?: boolean }>("/api/admin/hiring/scouter/extract", { method: "POST", body: JSON.stringify({ docId: doc.id }) });
+      setScouterDraft({ docId: doc.id, transcript: j.transcript, model: j.model });
+      flash(j.unreadable ? "⚠ AIが読み取れませんでした。手入力してください（保存はまだされていません）" : "🪄 記載どおりに転記しました。確認・修正してから保存してください（保存はまだされていません）");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "検査結果の取り込みに失敗しました");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const runExtract = async (doc: HiringDoc) => {
     setBusy(true);
     setError("");
@@ -391,15 +410,28 @@ export function HiringDocsPanel({ userId, staffName }: { userId: string; staffNa
               <button type="button" onClick={() => void open(d)} className="px-3 py-2 border border-teal-300 text-teal-800 rounded-full text-xs hover:bg-teal-50 min-h-[40px]">
                 👁 開く
               </button>
-              <button
-                type="button"
-                onClick={() => void runExtract(d)}
-                disabled={busy || !data.aiEnabled}
-                title={data.aiEnabled ? "" : "AI下書きの設定（有料枠の確認）がOFFのため実行できません（講座マスタ・設定でON）"}
-                className="px-3 py-2 border border-violet-300 text-violet-800 rounded-full text-xs hover:bg-violet-50 disabled:opacity-40 min-h-[40px]"
-              >
-                🪄 AIで内容を整理
-              </button>
+              {d.kind === "aptitude" ? (
+                <button
+                  type="button"
+                  onClick={() => void runScouterExtract(d)}
+                  disabled={busy || !data.aiEnabled}
+                  title={data.aiEnabled ? "" : "AI下書きの設定（有料枠の確認）がOFFのため実行できません（講座マスタ・設定でON）"}
+                  className="px-3 py-2 border border-indigo-300 text-indigo-800 rounded-full text-xs hover:bg-indigo-50 disabled:opacity-40 min-h-[40px]"
+                  data-scouter-extract
+                >
+                  🪄 検査結果を取り込む
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void runExtract(d)}
+                  disabled={busy || !data.aiEnabled}
+                  title={data.aiEnabled ? "" : "AI下書きの設定（有料枠の確認）がOFFのため実行できません（講座マスタ・設定でON）"}
+                  className="px-3 py-2 border border-violet-300 text-violet-800 rounded-full text-xs hover:bg-violet-50 disabled:opacity-40 min-h-[40px]"
+                >
+                  🪄 AIで内容を整理
+                </button>
+              )}
               <button type="button" onClick={() => void remove(d)} disabled={busy} className="px-3 py-2 border border-red-300 text-red-700 rounded-full text-xs hover:bg-red-50 disabled:opacity-40 min-h-[40px]">
                 🗑 削除
               </button>
@@ -436,6 +468,30 @@ export function HiringDocsPanel({ userId, staffName }: { userId: string; staffNa
       )}
 
       {/* AIの提案 */}
+      {scouterDraft && (
+        <ScouterTranscriptForm
+          key={scouterDraft.docId}
+          initial={scouterDraft.transcript}
+          busy={busy}
+          submitLabel="💾 確認して保存（🧭 適性検査のカードに載ります）"
+          onCancel={() => setScouterDraft(null)}
+          onSubmit={async (t) => {
+            setBusy(true);
+            setError("");
+            try {
+              await api("/api/admin/hiring/scouter", { method: "POST", body: JSON.stringify({ docId: scouterDraft.docId, transcript: t }) });
+              setScouterDraft(null);
+              window.dispatchEvent(new Event(SCOUTER_SAVED_EVENT));
+              flash("💾 検査結果を保存しました（🧭 適性検査のカードで確認・ポイント整理ができます）");
+              await load();
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "保存に失敗しました");
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+      )}
       {extract && (
         <ProposalReview
           userId={userId}

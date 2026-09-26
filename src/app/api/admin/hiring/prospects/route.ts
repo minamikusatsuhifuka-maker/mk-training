@@ -22,6 +22,7 @@ import {
   saveProspect,
 } from "@/lib/hiring-docs-server";
 import { PROSPECT_PREFIX, normalizeProspect } from "@/lib/hiring-docs";
+import { deleteScouterResultsOfUser, moveScouterResultsToUser } from "@/lib/scouter-server";
 import {
   authorizeStaffContacts,
   deleteStaffContactRow,
@@ -112,6 +113,7 @@ export async function PATCH(req: NextRequest) {
 
       // 採用資料・経歴を付け替える
       const moved = await moveHiringDataToUser(auth.admin, prev.id, userId, by);
+      const movedScouter = await moveScouterResultsToUser(auth.admin, prev.id, userId, by); // 188
       // 連絡先（169）を付け替える。相手に既に連絡先があれば空の欄だけ埋めて、入職予定者側の行は消す
       let contactMoved = false;
       const ca = await authorizeStaffContacts();
@@ -154,6 +156,7 @@ export async function PATCH(req: NextRequest) {
         changes: [
           { field: "採用資料", before: "", after: `${moved.docs}件` },
           { field: "経歴", before: "", after: moved.profile ? "移動" : "なし" },
+          { field: "検査結果", before: "", after: `${movedScouter}件` },
           { field: "連絡先", before: "", after: contactMoved ? "移動" : "なし" },
         ],
       });
@@ -194,6 +197,7 @@ export async function DELETE(req: NextRequest) {
     if (prev.status !== "declined") return NextResponse.json({ error: "先に「入職しなかった」を付けてください" }, { status: 400 });
     const by = auth.userEmail || auth.userId;
     const { docs } = await deleteHiringDataOfUser(auth.admin, prev.id);
+    const scouter = await deleteScouterResultsOfUser(auth.admin, prev.id); // 188
     let contactDeleted = false;
     const ca = await authorizeStaffContacts();
     if (ca.ok && ca.isAdmin) {
@@ -212,6 +216,7 @@ export async function DELETE(req: NextRequest) {
       target: prev.id,
       changes: [
         { field: "採用資料", before: `${docs}件`, after: "0件" },
+        { field: "検査結果", before: `${scouter}件`, after: "0件" },
         { field: "連絡先", before: contactDeleted ? "あり" : "なし", after: "なし" },
       ],
     });

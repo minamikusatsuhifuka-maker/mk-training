@@ -328,6 +328,8 @@ export type KarteDetailResponse = KarteDetail & {
   today: string;
   /** 183: false＝担当の幹部（閲覧のみ） */
   isAdmin: boolean;
+  /** 188: 連絡先を見る権限がある（院長・169で指名された人）。false なら「📇 連絡先」ボタン自体を出さない */
+  contactAccess?: boolean;
 };
 
 export async function fetchKarteDetailApi(userId: string): Promise<KarteDetailResponse> {

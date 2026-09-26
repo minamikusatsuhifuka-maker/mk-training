@@ -12,6 +12,7 @@
 import { NextResponse } from "next/server";
 import { authorizeGrowth, canViewStaff, recordGrowthLog } from "@/lib/staff-growth-server";
 import { growthErrorResponse, hidden } from "@/lib/staff-growth-route";
+import { authorizeStaffContacts } from "@/lib/staff-contacts-server";
 import {
   buildKarteDetail,
   buildKarteList,
@@ -51,7 +52,14 @@ export async function GET(req: Request) {
           changes: [],
         });
       }
-      return NextResponse.json({ ...detail, isAdmin: auth.isAdmin });
+      // 188 5: 名前の横の「📇 連絡先」は、連絡先を見る権限がある人（院長・169で指名された人）にだけ出す
+      let contactAccess = false;
+      try {
+        contactAccess = (await authorizeStaffContacts()).ok;
+      } catch {
+        contactAccess = false;
+      }
+      return NextResponse.json({ ...detail, isAdmin: auth.isAdmin, contactAccess });
     }
     const q = (sp.get("q") ?? "").trim();
     if (q) {
