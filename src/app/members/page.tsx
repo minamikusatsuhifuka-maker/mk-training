@@ -65,6 +65,7 @@ import {
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
   NEEDS_GROUPS,
+  isSurveyShared,
   NEED_GROUP_STYLE,
   hasSurveyContent,
   hasNeedsValues,
@@ -366,7 +367,7 @@ export default function MembersPage() {
             // 非公開・値なしは何も出さない（空プレースホルダも無し）
             const survey = profiles[m.userId]?.needsSurvey;
             const miniRadar =
-              survey?.visibility === "public" && hasNeedsValues(survey)
+              isSurveyShared(survey?.visibility) && hasNeedsValues(survey)
                 ? radarValuesOf(survey)
                 : null;
             // 💎 価値観キーワード（指示書68→172）: 常に公開＝サーベイの公開設定とは無関係に表示。
@@ -660,7 +661,8 @@ export default function MembersPage() {
               )}
 
               {/* 🧭 5つの基本的欲求（公開している人のみ・指示書58） */}
-              {selected.needsSurvey?.visibility === "public" &&
+              {selected.needsSurvey &&
+                isSurveyShared(selected.needsSurvey.visibility) &&
                 hasSurveyContent(selected.needsSurvey) && (
                   <div className="border-t border-gray-100 pt-3 space-y-2">
                     <h3 className="text-[13px] text-gray-400">

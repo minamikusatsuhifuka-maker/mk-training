@@ -165,6 +165,8 @@ export async function PUT(req: NextRequest) {
       details: n.details,
       visibility: n.visibility,
       aiParsed: n.aiParsed,
+      // 182 A-5: 新しい選択肢の画面から保存した時点で案内は「見た」ことになる
+      optionsNoticeSeen: true,
       updatedAt: new Date().toISOString(),
     };
   }

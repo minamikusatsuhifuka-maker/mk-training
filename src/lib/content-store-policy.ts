@@ -79,8 +79,13 @@ const SERVER_ONLY_KEYS = new Set<string>([
   "value_keywords_log",
 ]);
 
+// 前方一致のサーバー専用キー（指示書182）。
+// survey_history:<userId> はサーベイの履歴（本人の過去の結果・画像）。読み書きは
+// lib/survey-history-server.ts と /api/profile/survey（本人）・育成カルテ（管理者・公開分のみ）だけ。
+const SERVER_ONLY_PREFIXES = ["survey_history:"];
+
 export function isServerOnlyContentKey(key: string): boolean {
-  return SERVER_ONLY_KEYS.has(key);
+  return SERVER_ONLY_KEYS.has(key) || SERVER_ONLY_PREFIXES.some((p) => key.startsWith(p));
 }
 
 // 読むのは全員可だが、書くのは専用の管理者APIだけ（指示書172）。

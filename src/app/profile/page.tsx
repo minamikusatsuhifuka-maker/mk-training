@@ -48,11 +48,18 @@ import {
   NEED_LABELS,
   NEEDS_GROUPS,
   NEED_GROUP_STYLE,
+  SURVEY_VISIBILITY_OPTIONS,
   clampNeedValue,
   isPdfAsset,
   type NeedKey,
   type NeedDetailValues,
+  type SurveyVisibility,
 } from "@/lib/needs-survey";
+import {
+  SURVEY_HISTORY_NOTE,
+  SURVEY_OPTIONS_NOTICE,
+  type SurveyHistoryEntry,
+} from "@/lib/survey-history";
 import { NeedsRadarChart } from "@/components/NeedsRadarChart";
 import {
   DEFAULT_VALUE_KEYWORDS_CONFIG,
@@ -113,9 +120,12 @@ export default function ProfilePage() {
   const [surveyDetails, setSurveyDetails] = useState<
     Record<string, NeedDetailValues>
   >({});
-  const [surveyVisibility, setSurveyVisibility] = useState<
-    "private" | "public"
-  >("private");
+  const [surveyVisibility, setSurveyVisibility] =
+    useState<SurveyVisibility>("private");
+  // 182: 履歴と「選択肢が増えた」案内（本人のみ・/api/profile/survey）
+  const [surveyHistory, setSurveyHistory] = useState<SurveyHistoryEntry[]>([]);
+  const [showSurveyNotice, setShowSurveyNotice] = useState(false);
+  const [surveyHistoryBusy, setSurveyHistoryBusy] = useState(false);
   // AI読み取り由来で確定済みか（指示書61。trueの間はスライダー非表示・修正は削除→再読み取り）
   const [surveyAiParsed, setSurveyAiParsed] = useState(false);
   const [surveyParsing, setSurveyParsing] = useState(false);
@@ -193,6 +203,8 @@ export default function ProfilePage() {
       setSurveyDetails(json.profile.needsSurvey?.details ?? {});
       setSurveyVisibility(json.profile.needsSurvey?.visibility ?? "private");
       setSurveyAiParsed(json.profile.needsSurvey?.aiParsed === true);
+      // 182: 履歴と案内
+      void loadSurveyHistory();
       // 今月自分宛のありがとうカード（宛先名とプロフィール名の一致で紐付け。46R-B）
       loadPortalFeatures()
         .then(async (f) => {
@@ -372,6 +384,96 @@ export default function ProfilePage() {
     }
   };
 
+  // ─── 🧭 サーベイ履歴（指示書182 B）───
+  const loadSurveyHistory = async () => {
+    try {
+      const res = await fetch("/api/profile/survey", { cache: "no-store", credentials: "same-origin" });
+      if (!res.ok) return;
+      const j = (await res.json()) as { entries?: SurveyHistoryEntry[]; showOptionsNotice?: boolean };
+      setSurveyHistory(Array.isArray(j.entries) ? j.entries : []);
+      setShowSurveyNotice(j.showOptionsNotice === true);
+    } catch {
+      /* 履歴は補助情報 */
+    }
+  };
+
+  const dismissSurveyNotice = async () => {
+    setShowSurveyNotice(false);
+    await fetch("/api/profile/survey", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "notice-seen" }),
+    }).catch(() => {});
+  };
+
+  /** 現在の結果を履歴に移して、新しい結果の入力を始める */
+  const handleArchiveSurvey = async () => {
+    if (
+      !confirm(
+        "今の結果を履歴に移して、新しい結果の入力を始めます。\n（画像と数値は履歴に残り、あとから見られます）\n\nよろしいですか？"
+      )
+    )
+      return;
+    setSurveyHistoryBusy(true);
+    try {
+      const res = await fetch("/api/profile/survey", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "archive" }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string; entries?: SurveyHistoryEntry[] };
+      if (!res.ok) {
+        fail(j.error ?? "履歴への移動に失敗しました");
+        return;
+      }
+      setSurveyHistory(j.entries ?? []);
+      setProfile((p) =>
+        p
+          ? {
+              ...p,
+              needsSurvey: {
+                visibility: surveyVisibility,
+                aiParsed: false,
+                updatedAt: new Date().toISOString(),
+              },
+            }
+          : p
+      );
+      setSurveyValues({});
+      setSurveyDetails({});
+      setSurveyAiParsed(false);
+      flash("📚 今の結果を履歴に移しました。新しい結果をアップロードするか、数値を入力してください");
+    } finally {
+      setSurveyHistoryBusy(false);
+    }
+  };
+
+  const handleDeleteSurveyHistory = async (entry: SurveyHistoryEntry) => {
+    if (
+      !confirm(
+        `${entry.recordedAt.slice(0, 10).replaceAll("-", "/")} の結果を履歴から削除します（画像も削除されます）。\n\n削除すると元に戻せません。よろしいですか？`
+      )
+    )
+      return;
+    setSurveyHistoryBusy(true);
+    try {
+      const res = await fetch("/api/profile/survey", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: entry.id }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string; entries?: SurveyHistoryEntry[] };
+      if (!res.ok) {
+        fail(j.error ?? "削除に失敗しました");
+        return;
+      }
+      setSurveyHistory(j.entries ?? []);
+      flash("🗑️ 履歴から削除しました");
+    } finally {
+      setSurveyHistoryBusy(false);
+    }
+  };
+
   // ─── 🧭 サーベイ画像・AI抽出（指示書58。PDF対応は60） ───
   const handleSurveyFiles = async (files: FileList | File[]) => {
     const file = Array.from(files).find(
@@ -380,21 +482,35 @@ export default function ProfilePage() {
     if (!file) return;
     setUploading(true);
     try {
+      const hadResult =
+        !!profile?.needsSurvey?.imageUrl ||
+        Object.keys(surveyValues).length > 0 ||
+        Object.keys(surveyDetails).length > 0;
       const url = await upload("survey", file);
+      // 182 B-1: 前の結果があればサーバーが履歴に移している。新しい結果は数値を空から
       setProfile((p) =>
         p
           ? {
               ...p,
               needsSurvey: {
                 visibility: surveyVisibility,
-                ...(p.needsSurvey ?? {}),
+                ...(hadResult ? {} : (p.needsSurvey ?? {})),
                 imageUrl: url,
+                aiParsed: false,
                 updatedAt: new Date().toISOString(),
               },
             }
           : p
       );
-      flash("🧭 サーベイファイルをアップロードしました");
+      if (hadResult) {
+        setSurveyValues({});
+        setSurveyDetails({});
+        setSurveyAiParsed(false);
+        void loadSurveyHistory();
+        flash("🧭 新しい結果をアップロードしました（前の結果は履歴に残っています）");
+      } else {
+        flash("🧭 サーベイファイルをアップロードしました");
+      }
     } catch (e) {
       fail(e instanceof Error ? e.message : "アップロードに失敗しました");
     } finally {
@@ -1117,40 +1233,130 @@ export default function ProfilePage() {
           <h2 className="text-sm font-semibold">
             🧭 5つの基本的欲求サーベイ
           </h2>
-          {/* 開示トグル（既定🔒） */}
-          <button
-            type="button"
-            onClick={() =>
-              setSurveyVisibility((v) =>
-                v === "public" ? "private" : "public"
-              )
-            }
-            className={`text-xs px-2.5 py-1 rounded-full border ${
-              surveyVisibility === "public"
-                ? "border-teal-200 bg-teal-50 text-teal-700"
-                : "border-amber-300 bg-amber-50 text-amber-700"
-            }`}
-          >
-            {surveyVisibility === "public"
-              ? "🌐 メンバー紹介に公開"
-              : "🔒 自分のみ"}
-          </button>
         </div>
-        {/* 164: 何が・誰に見えるのかが、設定する瞬間に分かるようにする。
-            文言は既存（指示書58）の「相互理解のための共有／評価・優劣付けには使わない」を
-            引き継ぎ、公開範囲と取り消せることを足した。 */}
+        {/* 182 A-5: 「公開」のままで新しい選択肢を見ていない人にだけ1回出す（見たらサーバーに印を残す） */}
+        {showSurveyNotice && (
+          <div
+            className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 space-y-2"
+            role="status"
+            data-survey-notice
+          >
+            <p className="leading-relaxed">{SURVEY_OPTIONS_NOTICE}</p>
+            <button
+              type="button"
+              onClick={() => void dismissSurveyNotice()}
+              className="text-xs px-3 py-1.5 rounded-full border border-amber-400 bg-white text-amber-900 min-h-[36px]"
+            >
+              わかりました
+            </button>
+          </div>
+        )}
+        {/* 182 A-1/A-4: 公開設定は3択。各選択肢の横に「何が誰に見えるか」を書く（164の説明を引き継ぐ） */}
+        <fieldset className="space-y-1.5" data-survey-visibility>
+          <legend className="text-xs font-medium text-gray-800">公開設定（保存は「💾 保存」で確定）</legend>
+          {SURVEY_VISIBILITY_OPTIONS.map((opt) => (
+            <label
+              key={opt.value}
+              className={`flex items-start gap-2 rounded-md border p-2 cursor-pointer min-h-[44px] ${
+                surveyVisibility === opt.value
+                  ? "border-teal-300 bg-teal-50"
+                  : "border-border bg-white hover:bg-gray-50"
+              }`}
+            >
+              <input
+                type="radio"
+                name="survey-visibility"
+                value={opt.value}
+                checked={surveyVisibility === opt.value}
+                onChange={() => setSurveyVisibility(opt.value)}
+                className="mt-1"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm text-gray-900">{opt.label}</span>
+                <span className="block text-[11px] text-muted-foreground leading-relaxed">{opt.desc}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
         <p className="text-xs text-muted-foreground leading-relaxed">
-          選択理論の「5つの基本的欲求」サーベイ結果を共有できます。
-          <strong>🌐 公開にすると</strong>
-          、あなたのレーダーチャートと画像が
-          <strong>メンバー紹介でログイン中のスタッフに見えます</strong>。
+          選択理論の「5つの基本的欲求」サーベイ結果を共有できます。お互いの違いを知り、関わり方を工夫するために使うものです。
+          数値は相互理解のためのもので、評価や優劣付けには使いません。
           <br />
-          <strong>🔒 自分のみ（既定）のあいだは、誰にも見えません。管理者にも見えません。</strong>
-          お互いの違いを知り、関わり方を工夫するために使うものです。数値は相互理解のためのもので、評価や優劣付けには使いません。
+          <strong>管理者にも、選んだ設定と同じ範囲だけが見えます。</strong>
+          <strong>「注力」「現況」の値は、どの設定でも自分以外には見えません。</strong>
           <br />
-          <strong>いつでも切り替えられます。</strong>
-          非公開に戻すと、その時点から他の人には見えなくなります。
+          <strong>いつでも変更でき、変更は保存するとすぐに反映されます。</strong>
+          非公開に戻すと、その時点から他の人には見えなくなります（過去の結果も含めて）。
         </p>
+        {/* 182 B-4: 履歴の説明（常時表示） */}
+        <p className="text-xs text-muted-foreground leading-relaxed rounded-md border border-border bg-gray-50 p-2" data-survey-history-note>
+          {SURVEY_HISTORY_NOTE}
+        </p>
+        {/* 182 B-2: 履歴の一覧と削除（本人のみ） */}
+        <div className="rounded-md border border-border p-2 space-y-2" data-survey-history>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium text-gray-800">📚 これまでの結果（履歴 {surveyHistory.length}件）</p>
+            <button
+              type="button"
+              onClick={() => void handleArchiveSurvey()}
+              disabled={
+                surveyHistoryBusy ||
+                !(profile.needsSurvey?.imageUrl || Object.keys(surveyValues).length > 0 || Object.keys(surveyDetails).length > 0)
+              }
+              className="text-xs px-3 py-1.5 rounded-full border border-teal-300 text-teal-800 hover:bg-teal-50 disabled:opacity-40 min-h-[36px]"
+              title="今の結果を履歴に移して、新しい結果の入力を始めます"
+            >
+              🆕 新しい結果を記録する（今の結果を履歴へ）
+            </button>
+          </div>
+          {surveyHistory.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground">
+              まだ履歴はありません。新しい結果をアップロードすると、今の結果が自動で履歴に残ります。
+            </p>
+          ) : (
+            <ul className="space-y-1.5">
+              {surveyHistory
+                .slice()
+                .reverse()
+                .map((h) => (
+                  <li key={h.id} className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-white p-2">
+                    {h.imageUrl ? (
+                      isPdfAsset(h.imageUrl) ? (
+                        <a href={h.imageUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-teal-700 underline">
+                          📄 PDF
+                        </a>
+                      ) : (
+                        <a href={h.imageUrl} target="_blank" rel="noopener noreferrer">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={h.imageUrl} alt="過去のサーベイ結果" className="w-12 h-12 rounded object-cover border border-border" />
+                        </a>
+                      )
+                    ) : (
+                      <span className="w-12 h-12 rounded border border-dashed border-border text-[10px] text-muted-foreground flex items-center justify-center">
+                        画像なし
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1 text-[11px] text-gray-800">
+                      <span className="block">{h.recordedAt.slice(0, 10).replaceAll("-", "/")}</span>
+                      <span className="block text-muted-foreground">
+                        {NEED_KEYS.filter((k) => typeof h.values[k] === "number")
+                          .map((k) => `${NEED_LABELS[k]} ${h.values[k]}`)
+                          .join(" / ") || "点数なし"}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteSurveyHistory(h)}
+                      disabled={surveyHistoryBusy}
+                      className="text-[11px] px-2.5 py-1.5 rounded-full border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-40 min-h-[36px]"
+                    >
+                      🗑 削除
+                    </button>
+                  </li>
+                ))}
+            </ul>
+          )}
+        </div>
 
         {/* 画像アップロード＋プレビュー */}
         <div className="flex flex-wrap gap-4 items-start">

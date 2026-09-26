@@ -18,7 +18,10 @@ import { serverGetContentRow, serverGetContentRowsByPrefix } from "./content-sto
 import { STAFF_PROFILES_INDEX_KEY, emptyProfile, type StaffProfile } from "./staff-profiles";
 import { PROFILE_ROLE_CONFIG_KEY, normalizeProfileRoles, resolveRole } from "./profile-roles";
 import { redactProfilesForViewer } from "./survey-visibility";
-import { NEED_KEYS, NEED_LABELS, isPdfAsset, radarValuesOf } from "./needs-survey";
+import { NEED_KEYS, NEED_LABELS, isPdfAsset, type NeedsSurvey } from "./needs-survey";
+import { redactSurveyForViewer } from "./survey-visibility";
+import { loadSurveyHistory } from "./survey-history-server";
+import { surveyFromEntry } from "./survey-history";
 import { signOne } from "./storage-signed";
 import { authorizeStaffContacts, fetchAllStaffContacts } from "./staff-contacts-server";
 import { authorizeMemberNotes, fetchAllNotes } from "./member-notes-server";
@@ -39,6 +42,7 @@ import {
   type GrowthAdminClient,
 } from "./staff-growth-server";
 import {
+  attachSurveyDiffs,
   attendanceCounts,
   attendanceLabel,
   formatDates,
@@ -198,9 +202,48 @@ type Sources = {
   selfReview: PrivateRow[];
   notesByUser: Map<string, { updatedAt: string; strengths: string; memo: string }>;
   delegations: { date: string; task: string; status: string; toName: string; toRole: string }[];
-  surveyByUser: Map<string, { updatedAt: string; summary: string; view: SurveyView }>;
+  /** 公開されたサーベイ（履歴を含む・古い順・前回との差つき） */
+  surveyByUser: Map<string, SurveyView[]>;
   tableMissing: boolean;
 };
+
+/** 公開範囲に絞った1件 → 年表用（画像は署名URL） */
+async function toSurveyView(admin: GrowthAdminClient, shared: NeedsSurvey): Promise<SurveyView> {
+  const values: SurveyView["values"] = {};
+  for (const k of NEED_KEYS) {
+    const v = shared.values?.[k];
+    if (typeof v === "number") values[k] = v;
+  }
+  let imageUrl = "";
+  if (shared.imageUrl) {
+    try {
+      imageUrl = await signOne(admin, shared.imageUrl);
+    } catch {
+      imageUrl = "";
+    }
+  }
+  const view: SurveyView = {
+    answeredOn: (shared.updatedAt || "").slice(0, 10),
+    values,
+    imageUrl,
+    isPdf: isPdfAsset(shared.imageUrl),
+  };
+  // 「詳細も公開」の人だけ details（欲求の値だけ）が残っている
+  if (shared.details) {
+    const details: Record<string, number> = {};
+    for (const [key, d] of Object.entries(shared.details)) {
+      if (typeof d.desire === "number") details[key] = d.desire;
+    }
+    if (Object.keys(details).length > 0) view.details = details;
+  }
+  return view;
+}
+
+function summaryOf(view: SurveyView): string {
+  return NEED_KEYS.filter((k) => typeof view.values[k] === "number")
+    .map((k) => `${NEED_LABELS[k]} ${view.values[k]}`)
+    .join(" / ");
+}
 
 async function loadSources(admin: GrowthAdminClient, viewerUserId: string): Promise<Sources> {
   const [roster, coursesRes, learningRes] = await Promise.all([
@@ -275,7 +318,11 @@ async function loadSources(admin: GrowthAdminClient, viewerUserId: string): Prom
   // よってカルテに出すのは 5欲求の点数（レーダー）・結果画像（署名URL）・回答日 まで。
   // 15項目の詳細（details: 欲求／注力／現況）は説明に含まれていないため**ここで作らない＝クライアントに渡らない**
   //（181 2-1。院長の判断で公開範囲を広げるときは、本人の公開設定に選択肢を足してから）。
-  const surveyByUser = new Map<string, { updatedAt: string; summary: string; view: SurveyView }>();
+  //
+  // 【182】履歴（survey_history:<userId>・サーバー専用キー）も、本人の**現在の公開設定**をそのまま
+  // 適用して読む（B-3: 非公開にすれば過去の結果もすべて見えない）。詳細15項目の「欲求」は
+  // 「詳細も公開」の人だけ（redactSurveyForViewer が判定＝渡す前に絞る）。
+  const surveyByUser = new Map<string, SurveyView[]>();
   try {
     const rows = await serverGetContentRowsByPrefix("staff_profile:");
     const profiles: StaffProfile[] = [];
@@ -284,30 +331,22 @@ async function loadSources(admin: GrowthAdminClient, viewerUserId: string): Prom
       if (!p || typeof p.userId !== "string") continue;
       profiles.push({ ...emptyProfile(p.userId), ...p });
     }
+    const byId = new Map(profiles.map((p) => [p.userId, p]));
     for (const p of redactProfilesForViewer(profiles, viewerUserId)) {
       if (!p.needsSurvey) continue; // 非公開はキーごと落ちている
-      // メンバー紹介と同じ算出（values が無ければ詳細の「欲求」平均で補完）
-      const radar = radarValuesOf(p.needsSurvey);
-      const values: SurveyView["values"] = {};
-      for (const k of NEED_KEYS) if (typeof radar[k] === "number") values[k] = radar[k];
-      const summary = NEED_KEYS.filter((k) => typeof values[k] === "number")
-        .map((k) => `${NEED_LABELS[k]} ${values[k]}`)
-        .join(" / ");
-      const answeredOn = (p.needsSurvey.updatedAt || p.updatedAt || "").slice(0, 10);
-      // 結果画像は署名付きURL（163）。署名できなければ空（公開URLへは戻さない）
-      let imageUrl = "";
-      if (p.needsSurvey.imageUrl) {
-        try {
-          imageUrl = await signOne(admin, p.needsSurvey.imageUrl);
-        } catch {
-          imageUrl = "";
-        }
+      const original = byId.get(p.userId)?.needsSurvey;
+      const visibility = original?.visibility ?? "private";
+      const views: SurveyView[] = [];
+      // 現在の結果（中身があるときだけ）
+      if (p.needsSurvey.imageUrl || Object.keys(p.needsSurvey.values ?? {}).length > 0) {
+        views.push(await toSurveyView(admin, { ...p.needsSurvey, updatedAt: original?.updatedAt || p.updatedAt || "" }));
       }
-      surveyByUser.set(p.userId, {
-        updatedAt: p.needsSurvey.updatedAt || p.updatedAt || "",
-        summary,
-        view: { answeredOn, values, imageUrl, isPdf: isPdfAsset(p.needsSurvey.imageUrl) },
-      });
+      // 履歴（現在の公開設定で同じように絞る）
+      for (const entry of await loadSurveyHistory(p.userId)) {
+        const shared = redactSurveyForViewer(surveyFromEntry(entry, visibility));
+        if (shared) views.push(await toSurveyView(admin, shared));
+      }
+      if (views.length > 0) surveyByUser.set(p.userId, attachSurveyDiffs(views, NEED_KEYS));
     }
   } catch {
     /* 飛ばす */
@@ -425,15 +464,15 @@ function buildTimeline(src: Sources, person: RosterPerson): TimelineItem[] {
     });
   }
 
-  const survey = src.surveyByUser.get(person.userId);
-  if (survey) {
+  for (const view of src.surveyByUser.get(person.userId) ?? []) {
+    const nth = view.total && view.total > 1 ? `・${view.seq}回目` : "";
     items.push({
       kind: "survey",
-      date: survey.updatedAt.slice(0, 10),
-      title: "5つの基本的欲求サーベイ（本人が公開）",
-      body: survey.summary,
+      date: view.answeredOn,
+      title: `5つの基本的欲求サーベイ（本人が公開${nth}）`,
+      body: summaryOf(view),
       href: "/members",
-      survey: survey.view,
+      survey: view,
     });
   }
 

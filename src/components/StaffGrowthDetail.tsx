@@ -20,7 +20,7 @@ import {
   type SurveyView,
   type TimelineKind,
 } from "@/lib/staff-growth";
-import { NEED_KEYS, NEED_LABELS, NEED_GROUP_STYLE } from "@/lib/needs-survey";
+import { NEED_KEYS, NEED_LABELS, NEED_GROUP_STYLE, NEEDS_GROUPS } from "@/lib/needs-survey";
 import { NeedsRadarChart } from "@/components/NeedsRadarChart";
 import {
   createLearningApi,
@@ -446,8 +446,37 @@ function SurveyBlock({ view }: { view: SurveyView }) {
                 />
               </a>
             ))}
+          {view.details && (
+            <details className="rounded-md border border-gray-200 bg-white p-2">
+              <summary className="text-[11px] text-teal-800 cursor-pointer min-h-[32px] flex items-center">
+                詳細15項目（本人が「詳細も公開」を選択）
+              </summary>
+              <table className="w-full text-[11px] mt-1">
+                <tbody>
+                  {NEEDS_GROUPS.map((group) => {
+                    const items = group.items.filter((it) => typeof view.details?.[it.key] === "number");
+                    if (items.length === 0) return null;
+                    const s = NEED_GROUP_STYLE[group.key];
+                    return items.map((it, idx) => (
+                      <tr key={it.key} className={`border-l-4 ${s.rowBorder}`}>
+                        <td className={`pl-2 pr-1 py-0.5 ${s.text} w-[5em]`}>{idx === 0 ? group.label : ""}</td>
+                        <td className="py-0.5 pr-2 text-gray-800">{it.label}</td>
+                        <td className="py-0.5 pr-2 text-right tabular-nums text-gray-900">{view.details?.[it.key]}</td>
+                        <td className="py-0.5 text-[10px] text-gray-500 tabular-nums">
+                          {typeof view.detailsDiff?.[it.key] === "number"
+                            ? `（前回比 ${formatDiff(view.detailsDiff[it.key])}）`
+                            : ""}
+                        </td>
+                      </tr>
+                    ));
+                  })}
+                </tbody>
+              </table>
+            </details>
+          )}
           <p className="text-[10px] text-gray-500">
-            本人が公開した内容（レーダーチャート・点数・画像）だけを表示しています。相互理解のための共有で、評価・優劣付けには使いません。
+            本人が公開した内容だけを表示しています（レーダーチャート・点数・画像
+            {view.details ? "・詳細15項目の欲求" : ""}）。相互理解のための共有で、評価・優劣付けには使いません。
           </p>
         </div>
       </div>

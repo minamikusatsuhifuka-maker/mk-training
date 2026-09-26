@@ -121,6 +121,45 @@ export const DETAIL_VALUE_LABELS: { key: keyof NeedDetailValues; label: string }
     { key: "current", label: "現況" },
   ];
 
+// ─── 公開設定（指示書182 A-1: 3択）───
+//   private        … 何も見えない（既定）
+//   public         … レーダーチャート・結果画像（＝182以前の「公開」。詳細は見えない方向に倒す・A-2）
+//   public_details … 上に加えて詳細15項目の「欲求」の値
+// 「注力」「現況」はどの設定でも本人以外に見せない。判定は lib/survey-visibility.ts（サーバーで渡す前に絞る）。
+export type SurveyVisibility = "private" | "public" | "public_details";
+
+export function normalizeSurveyVisibility(v: unknown): SurveyVisibility {
+  return v === "public" || v === "public_details" ? v : "private";
+}
+
+/** 本人以外に何かしら見せる設定か */
+export function isSurveyShared(v: unknown): boolean {
+  return v === "public" || v === "public_details";
+}
+
+export const SURVEY_VISIBILITY_OPTIONS: {
+  value: SurveyVisibility;
+  label: string;
+  /** 何が誰に見えるか（182 A-4） */
+  desc: string;
+}[] = [
+  {
+    value: "private",
+    label: "🔒 非公開（自分のみ）",
+    desc: "誰にも見えません。管理者にも見えません。",
+  },
+  {
+    value: "public",
+    label: "🌐 レーダーと画像を公開",
+    desc: "レーダーチャート（5つの欲求の点数）と結果画像が、ログイン中のスタッフと管理者に見えます。詳細15項目は見えません。",
+  },
+  {
+    value: "public_details",
+    label: "🌐 詳細も公開",
+    desc: "レーダーチャート・結果画像に加えて、詳細15項目の「欲求」の値も、ログイン中のスタッフと管理者に見えます。",
+  },
+];
+
 // ─── プロフィール内の保存形 ───
 export type NeedsSurvey = {
   imageUrl?: string;
@@ -128,8 +167,10 @@ export type NeedsSurvey = {
   values?: Partial<Record<NeedKey, number>>;
   /** 詳細15項目（任意） */
   details?: Record<string, NeedDetailValues>;
-  /** 既定 private（自分のみ）。public でメンバー紹介に公開 */
-  visibility: "private" | "public";
+  /** 既定 private（自分のみ）。182で3択（public / public_details） */
+  visibility: SurveyVisibility;
+  /** 182 A-5: 選択肢が増えた案内を見たか（「公開」のままの人に1回だけ出す） */
+  optionsNoticeSeen?: boolean;
   /** AI読み取り由来で確定済みか（指示書61・既定false）。
    *  true の間は /profile の5欲求スライダーを出さない（修正は削除→再読み取りで） */
   aiParsed?: boolean;
@@ -147,7 +188,7 @@ export function clampNeedValue(v: unknown): number | undefined {
 export function normalizeNeedsSurvey(raw: unknown): {
   values: Partial<Record<NeedKey, number>>;
   details: Record<string, NeedDetailValues>;
-  visibility: "private" | "public";
+  visibility: SurveyVisibility;
   aiParsed: boolean;
 } {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<
@@ -180,7 +221,7 @@ export function normalizeNeedsSurvey(raw: unknown): {
   return {
     values,
     details,
-    visibility: o.visibility === "public" ? "public" : "private",
+    visibility: normalizeSurveyVisibility(o.visibility),
     aiParsed: o.aiParsed === true,
   };
 }

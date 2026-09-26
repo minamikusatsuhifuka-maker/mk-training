@@ -4,6 +4,8 @@
 // 画面側の実装ミスやレスポンスの直接閲覧では漏れないようにするため。
 
 import type { ContentRow } from "./content-store-server";
+import type { StaffProfile } from "./staff-profiles";
+import { redactProfileForViewer } from "./survey-visibility";
 
 /** 本人以外には渡さないプロフィール項目 */
 const OWNER_ONLY_PROFILE_FIELDS = ["joinedOn", "birthday"] as const;
@@ -23,6 +25,14 @@ export function redactForeignProfileRows(
         delete data[f];
         changed = true;
       }
+    }
+    // 182: サーベイも渡す前に絞る（164/182 の判定を /api/members 以外の配信経路にも適用する）。
+    // ここを通さないと、前方一致取得の応答から非公開のサーベイや注力・現況が読めてしまう
+    if ("needsSurvey" in data && typeof data.userId === "string") {
+      const redacted = redactProfileForViewer(data as unknown as StaffProfile, requesterUserId);
+      delete data.needsSurvey;
+      if (redacted.needsSurvey) data.needsSurvey = redacted.needsSurvey;
+      changed = true;
     }
     return changed ? { ...row, data } : row;
   });

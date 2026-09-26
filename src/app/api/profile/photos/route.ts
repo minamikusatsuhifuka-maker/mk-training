@@ -8,6 +8,7 @@
 // ※ バケット staff-photos はダッシュボードで作成済み前提。未作成時は分かりやすいエラーを返す。
 
 import { NextRequest, NextResponse } from "next/server";
+import { archiveCurrentSurvey } from "@/lib/survey-history-server";
 import { randomUUID } from "crypto";
 import { signOne } from "@/lib/storage-signed";
 import {
@@ -125,26 +126,16 @@ export async function POST(req: NextRequest) {
     if (kind === "avatar") {
       profile.avatarUrl = url;
     } else if (kind === "survey") {
-      // サーベイ画像は1枚のみ＝差し替え。旧ファイルはベストエフォートで削除
-      const oldUrl = profile.needsSurvey?.imageUrl ?? "";
-      const marker = `/storage/v1/object/public/${STAFF_PHOTOS_BUCKET}/`;
-      const oldIdx = oldUrl.indexOf(marker);
-      const oldPath =
-        oldIdx >= 0
-          ? decodeURIComponent(
-              oldUrl.slice(oldIdx + marker.length).split("?")[0]
-            )
-          : "";
-      if (oldPath.startsWith(`${user.id}/survey/`)) {
-        await admin.storage
-          .from(STAFF_PHOTOS_BUCKET)
-          .remove([oldPath])
-          .catch(() => {});
-      }
+      // 182 B-1: 新しい結果のアップロード＝前の結果（画像・数値）を履歴に移す。旧ファイルは削除しない。
+      // 現在の結果に中身が無ければ（初回）そのまま差し替え
+      const archived = await archiveCurrentSurvey(user.id, profile.needsSurvey);
       profile.needsSurvey = {
-        visibility: "private",
-        ...(profile.needsSurvey ?? {}),
+        // 公開設定と案内の印は引き継ぐ。数値は新しい結果として空から（AI読み取り or 手入力）
+        visibility: profile.needsSurvey?.visibility ?? "private",
+        optionsNoticeSeen: profile.needsSurvey?.optionsNoticeSeen,
+        ...(archived ? {} : { values: profile.needsSurvey?.values, details: profile.needsSurvey?.details }),
         imageUrl: url,
+        aiParsed: false,
         updatedAt: new Date().toISOString(),
       };
     } else {

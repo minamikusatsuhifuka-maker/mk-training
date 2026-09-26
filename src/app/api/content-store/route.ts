@@ -50,6 +50,10 @@ export async function GET(req: Request) {
   // 157: サーバー専用キー（menu_access）はこのAPIからは読み書きさせない
   if (isServerOnlyContentKey(key)) return hidden();
   const row = await serverGetContentRow(key);
+  // 182: 他人のプロフィールを1件で読むときも、一覧と同じ伏せ処理（記念日・サーベイ）を通す
+  if (row && key.startsWith("staff_profile:")) {
+    return NextResponse.json({ row: redactForeignProfileRows([row], user.id)[0] });
+  }
   return NextResponse.json({ row });
 }
 
@@ -72,6 +76,11 @@ export async function PUT(req: Request) {
   if (isServerOnlyContentKey(key)) return hidden();
   // 172: 専用APIからしか書けないキー（操作ログを迂回させない）。読めるキーなので存在は隠さない
   if (isServerWriteOnlyContentKey(key)) return forbidden();
+  // 182: プロフィール本体は本人（と管理者）だけ。他人のプロフィール（公開設定・サーベイを含む）を
+  // この汎用APIから書き換えられないようにする（書き込みは /api/profile が正）
+  if (key.startsWith("staff_profile:") && key !== `staff_profile:${user.id}` && !isAdminUser(user)) {
+    return forbidden();
+  }
   if (data === undefined) {
     return NextResponse.json({ error: "dataが必要です" }, { status: 400 });
   }
