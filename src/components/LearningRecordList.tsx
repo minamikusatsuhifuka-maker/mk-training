@@ -10,6 +10,7 @@ import {
   attendanceCounts,
   attendanceLabel,
   courseCategoryLabel,
+  formatDates,
   sortLearningDesc,
   venueTypeLabel,
   type Course,
@@ -75,10 +76,7 @@ export function LearningRecordList({
               className="w-full text-left px-3 py-2.5 min-h-[52px] flex items-center justify-between gap-2 hover:bg-gray-50"
             >
               <span className="min-w-0">
-                <span className="text-[11px] text-gray-500">
-                  📅 {r.startDate.replaceAll("-", "/")}
-                  {r.endDate && r.endDate !== r.startDate ? `〜${r.endDate.replaceAll("-", "/")}` : ""}
-                </span>
+                <span className="text-[11px] text-gray-500">📅 {formatDates(r.dates)}</span>
                 <span className="block text-sm font-medium text-gray-900 truncate">
                   {course?.name ?? "（講座不明）"}
                   {nth && (

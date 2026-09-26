@@ -3,6 +3,7 @@
 
 import type {
   Course,
+  CourseRequest,
   Goal,
   GrowthConfig,
   GrowthLog,
@@ -59,6 +60,8 @@ export async function fetchCoursesApi(): Promise<{
 
 export type CourseInput = Pick<Course, "name" | "organizer" | "category"> & {
   status?: Course["status"];
+  hidden?: boolean;
+  defaultDays?: number;
 };
 
 export async function createCourseApi(
@@ -77,8 +80,37 @@ export async function patchCourseApi(
   });
 }
 
-export async function deleteCourseApi(id: string): Promise<void> {
-  await callApi("/api/growth/courses?id=" + encodeURIComponent(id), { method: "DELETE" });
+/** 並び順の保存（180）。ids の順に並ぶ */
+export async function saveCourseOrderApi(ids: string[]): Promise<void> {
+  await callApi("/api/growth/courses", { method: "PUT", body: JSON.stringify({ ids }) });
+}
+
+// ─── 講座の追加依頼（180）───
+
+export async function fetchCourseRequestsApi(): Promise<{
+  requests: CourseRequest[];
+  tableMissing: boolean;
+}> {
+  return callApi("/api/growth/courses/requests");
+}
+
+/** 既に一覧にある講座なら request は null で existing にその講座が入る */
+export async function createCourseRequestApi(
+  name: string
+): Promise<{ request: CourseRequest | null; existing: Course | null }> {
+  return callApi("/api/growth/courses/requests", { method: "POST", body: JSON.stringify({ name }) });
+}
+
+/** 管理者: add=講座として追加（項目は任意で上書き）／link=既存の講座に紐づけて却下 */
+export async function resolveCourseRequestApi(input: {
+  id: string;
+  action: "add" | "link";
+  courseId?: string;
+  organizer?: string;
+  category?: Course["category"];
+  defaultDays?: number;
+}): Promise<{ request: CourseRequest; course: Course | null }> {
+  return callApi("/api/growth/courses/requests", { method: "PATCH", body: JSON.stringify(input) });
 }
 
 export async function mergeCourseApi(
@@ -110,7 +142,7 @@ export async function fetchLearningApi(userId?: string): Promise<LearningListRes
 
 export type LearningInput = Pick<
   LearningRecord,
-  "courseId" | "startDate" | "endDate" | "venueType" | "venueName" | "learned" | "nextAction" | "tags"
+  "courseId" | "dates" | "venueType" | "venueName" | "learned" | "nextAction" | "tags"
 >;
 
 export async function createLearningApi(
@@ -163,6 +195,7 @@ export type LearningDraft = {
   category: Course["category"] | "";
   startDate: string;
   endDate: string;
+  dates: string[];
   venueType: LearningRecord["venueType"] | "";
   venueName: string;
   candidates: Course[];

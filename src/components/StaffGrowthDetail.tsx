@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   TIMELINE_KIND_LABEL,
+  formatDates,
   promiseStatusLabel,
   tenureLabel,
   type Course,
@@ -227,9 +228,7 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
             <ul className="space-y-1">
               {recentLearning.map((r) => (
                 <li key={r.id} className="text-[12px] text-gray-900">
-                  <span className="text-[11px] text-gray-500 mr-1">
-                    {r.startDate.replaceAll("-", "/")}
-                  </span>
+                  <span className="text-[11px] text-gray-500 mr-1">{formatDates(r.dates)}</span>
                   {courses.find((c) => c.id === r.courseId)?.name ?? "（講座不明）"}
                 </li>
               ))}
@@ -318,11 +317,12 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
             draftKey={`growth:admin-learning:${userId}:new`}
             initial={emptyLearningForm()}
             courses={courses}
+            myRequests={[]}
             aiDraftEnabled={aiDraftEnabled}
             busy={busy}
             isEdit={false}
             onCancel={() => setEditing("")}
-            onCourseCreated={(c) => setCourses((prev) => [...prev, c])}
+            onRequestCreated={() => {}}
             onSubmit={(input, evidence) => submitLearning("new", input, evidence)}
           />
         ) : (
@@ -347,11 +347,12 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
               draftKey={`growth:admin-learning:${userId}:${r.id}`}
               initial={learningFormFrom(r)}
               courses={courses}
+              myRequests={[]}
               aiDraftEnabled={false}
               busy={busy}
               isEdit
               onCancel={() => setEditing("")}
-              onCourseCreated={(c) => setCourses((prev) => [...prev, c])}
+              onRequestCreated={() => {}}
               onSubmit={(input) => submitLearning(r.id, input, null)}
             />
           )}

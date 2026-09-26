@@ -1,42 +1,49 @@
 "use client";
 
-// 学びの記録の入力フォーム（指示書179 B）。本人ページ（C）と管理者のカルテ（A）で共用。
+// 学びの記録の入力フォーム（指示書179 B／180）。本人ページ（C）と管理者のカルテ（A）で共用。
 //
-// - 講座は**マスタから選ぶ**（表記ゆれを入力の段階で防ぐ・B-2）。無ければ「新しい講座」を
-//   ここで登録する（スタッフが登録すると「未確認」になり、管理者が既存の講座に統合できる）
-// - AI下書き（B-3）は設定ONのときだけボタンが出る。画像を読ませて講座名・日付・場所を埋め、
-//   講座マスタの候補を示す。**保存は本人が確認して押したときだけ**（AIは直接保存しない）
+// - 講座は**一覧から選ぶだけ**（180 1-2）。自由入力で新しい講座は作れない。区分ごとに分け、名称で検索できる。
+//   一覧に無ければ「追加を依頼」（名称だけ）。依頼の段階では記録を作らない
+// - 参加日は**複数日**（180 2）。「期間で追加」（開始〜終了をまとめて）と「日付を追加」（1日ずつ）。
+//   追加した日付はチップで並び、個別に外せる。標準の日数がある講座は開始日から終了日の候補を出す。
+//   iPhoneで扱いやすいよう標準の <input type="date"> だけを使う（独自カレンダーは作らない）
+// - AI下書き（B-3）は設定ONのときだけボタンが出る。**保存は本人が確認して押したときだけ**
 // - 下書き保持（176-補の仕組みをそのまま使う）: 保存前の入力は sessionStorage に残る
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   COURSE_CATEGORIES,
+  DATES_MAX,
   VENUE_TYPES,
+  addDaysYmd,
+  expandDateRange,
   findSameCourse,
+  formatDates,
+  normalizeCourseName,
+  normalizeDates,
   parseTagsInput,
-  suggestCourses,
+  selectableCourses,
+  ymd,
   type Course,
-  type CourseCategory,
+  type CourseRequest,
   type LearningRecord,
   type VenueType,
 } from "@/lib/staff-growth";
 import {
-  createCourseApi,
+  createCourseRequestApi,
   draftLearningApi,
   type LearningInput,
 } from "@/lib/staff-growth-client";
 import { useDraft, DISCARD_CONFIRM } from "@/lib/retro-drafts";
 import { PHOTO_MAX_EDGE, resizeImageToJpeg } from "@/lib/image-resize";
 
-const NEW_COURSE = "__new__";
-
 export type LearningFormValues = {
   courseId: string;
-  newCourseName: string;
-  newCourseOrganizer: string;
-  newCourseCategory: CourseCategory;
-  startDate: string;
-  endDate: string;
+  /** 参加日の一覧（昇順） */
+  dates: string[];
+  rangeStart: string;
+  rangeEnd: string;
+  singleDate: string;
   venueType: VenueType;
   venueName: string;
   learned: string;
@@ -47,11 +54,10 @@ export type LearningFormValues = {
 export function emptyLearningForm(): LearningFormValues {
   return {
     courseId: "",
-    newCourseName: "",
-    newCourseOrganizer: "",
-    newCourseCategory: "external",
-    startDate: "",
-    endDate: "",
+    dates: [],
+    rangeStart: "",
+    rangeEnd: "",
+    singleDate: "",
     venueType: "venue",
     venueName: "",
     learned: "",
@@ -64,8 +70,7 @@ export function learningFormFrom(r: LearningRecord): LearningFormValues {
   return {
     ...emptyLearningForm(),
     courseId: r.courseId,
-    startDate: r.startDate,
-    endDate: r.endDate,
+    dates: r.dates,
     venueType: r.venueType,
     venueName: r.venueName,
     learned: r.learned,
@@ -78,27 +83,33 @@ export function LearningRecordForm({
   draftKey,
   initial,
   courses,
+  myRequests,
   aiDraftEnabled,
   busy,
   isEdit,
   onCancel,
-  onCourseCreated,
+  onRequestCreated,
   onSubmit,
 }: {
   draftKey: string;
   initial: LearningFormValues;
   courses: Course[];
+  /** 自分が出した追加依頼（状況の表示用） */
+  myRequests: CourseRequest[];
   aiDraftEnabled: boolean;
   busy: boolean;
   isEdit: boolean;
   onCancel: () => void;
-  /** 新しい講座を登録したとき（親の候補一覧を更新する） */
-  onCourseCreated: (course: Course) => void;
+  onRequestCreated: (req: CourseRequest) => void;
   /** 保存。evidence は AI下書きに使った画像（保存後に証跡として添付する・任意） */
   onSubmit: (input: LearningInput, evidence: Blob | null) => Promise<string | null>;
 }) {
   const { values, set, setValues, dirty, discard } = useDraft<LearningFormValues>(draftKey, initial);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [requesting, setRequesting] = useState(false);
+  const [requestName, setRequestName] = useState("");
+  const [requestMsg, setRequestMsg] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const [aiNote, setAiNote] = useState("");
   const [candidates, setCandidates] = useState<Course[]>([]);
@@ -106,35 +117,88 @@ export function LearningRecordForm({
   const [attachEvidence, setAttachEvidence] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const sortedCourses = useMemo(
+  // 選べる講座（確認済み・表示中。編集中の記録の講座は非表示でも残す）→ 検索 → 区分ごと
+  const selectable = useMemo(() => selectableCourses(courses, initial.courseId), [courses, initial.courseId]);
+  const filtered = useMemo(() => {
+    const q = normalizeCourseName(search);
+    return q ? selectable.filter((c) => normalizeCourseName(`${c.name}${c.organizer}`).includes(q)) : selectable;
+  }, [selectable, search]);
+  const groups = useMemo(
     () =>
-      courses
-        .slice()
-        .sort(
-          (a, b) =>
-            (a.status === "unconfirmed" ? 1 : 0) - (b.status === "unconfirmed" ? 1 : 0) ||
-            a.name.localeCompare(b.name, "ja")
-        ),
-    [courses]
+      COURSE_CATEGORIES.map((cat) => ({
+        ...cat,
+        courses: filtered.filter((c) => c.category === cat.value),
+      })).filter((g) => g.courses.length > 0),
+    [filtered]
   );
+  const selected = useMemo(() => courses.find((c) => c.id === values.courseId) ?? null, [courses, values.courseId]);
+  const openRequests = myRequests.filter((r) => r.status === "open");
+  const resolvedRequests = myRequests.filter((r) => r.status !== "open");
 
-  // 新しい講座名を打っているとき、同名の既存講座があれば案内する（表記ゆれ防止）
-  const sameCourse = useMemo(
-    () => (values.courseId === NEW_COURSE ? findSameCourse(courses, values.newCourseName) : null),
-    [courses, values.courseId, values.newCourseName]
-  );
-  const similar = useMemo(
-    () =>
-      values.courseId === NEW_COURSE && !sameCourse
-        ? suggestCourses(courses, values.newCourseName, 5)
-        : [],
-    [courses, values.courseId, values.newCourseName, sameCourse]
-  );
+  // ─── 参加日 ───
+  const setDates = (next: string[]) => set("dates", normalizeDates(next));
+  const addRange = () => {
+    const s = ymd(values.rangeStart);
+    if (!s) {
+      setError("期間の開始日を選んでください");
+      return;
+    }
+    const days = expandDateRange(s, ymd(values.rangeEnd) || s);
+    if (values.dates.length + days.length > DATES_MAX) {
+      setError(`参加日は${DATES_MAX}日までです`);
+      return;
+    }
+    setError("");
+    setValues((prev) => ({
+      ...prev,
+      dates: normalizeDates([...prev.dates, ...days]),
+      rangeStart: "",
+      rangeEnd: "",
+    }));
+  };
+  const addSingle = () => {
+    const d = ymd(values.singleDate);
+    if (!d) {
+      setError("日付を選んでください");
+      return;
+    }
+    setError("");
+    setValues((prev) => ({ ...prev, dates: normalizeDates([...prev.dates, d]), singleDate: "" }));
+  };
+  const removeDate = (d: string) => setDates(values.dates.filter((x) => x !== d));
+  /** 開始日を選んだとき、講座に標準の日数があれば終了日の候補を入れる（既に入力済みなら触らない） */
+  const onRangeStart = (v: string) => {
+    setValues((prev) => {
+      const days = selected?.defaultDays ?? 0;
+      const end = days > 1 && ymd(v) && !prev.rangeEnd ? addDaysYmd(v, days - 1) : prev.rangeEnd;
+      return { ...prev, rangeStart: v, rangeEnd: end };
+    });
+  };
 
-  useEffect(() => {
-    if (values.courseId !== NEW_COURSE) setCandidates([]);
-  }, [values.courseId]);
+  // ─── 追加依頼 ───
+  const sendRequest = async () => {
+    const name = requestName.trim();
+    if (!name) return;
+    setRequesting(true);
+    setRequestMsg("");
+    try {
+      const j = await createCourseRequestApi(name);
+      if (j.existing) {
+        set("courseId", j.existing.id);
+        setRequestMsg(`「${j.existing.name}」は既に一覧にあります。選びました。`);
+      } else if (j.request) {
+        onRequestCreated(j.request);
+        setRequestMsg("依頼しました。管理者が追加すると一覧から選べるようになります（依頼だけでは記録は作られません）。");
+      }
+      setRequestName("");
+    } catch (e) {
+      setRequestMsg(e instanceof Error ? e.message : "依頼に失敗しました");
+    } finally {
+      setRequesting(false);
+    }
+  };
 
+  // ─── AI下書き ───
   const runAiDraft = async (file: File) => {
     setAiBusy(true);
     setAiNote("");
@@ -143,27 +207,23 @@ export function LearningRecordForm({
       const blob = await resizeImageToJpeg(file, PHOTO_MAX_EDGE);
       const { draft } = await draftLearningApi(blob);
       setEvidence(blob);
-      const exact = draft.candidates.find(
-        (c) => findSameCourse([c], draft.courseName) !== null
-      );
+      const exact = draft.candidates.find((c) => findSameCourse([c], draft.courseName) !== null) ?? null;
+      const usable = exact && selectable.some((c) => c.id === exact.id) ? exact : null;
       setValues((prev) => ({
         ...prev,
-        courseId: exact ? exact.id : draft.courseName ? NEW_COURSE : prev.courseId,
-        newCourseName: exact ? prev.newCourseName : draft.courseName || prev.newCourseName,
-        newCourseOrganizer: draft.organizer || prev.newCourseOrganizer,
-        newCourseCategory: draft.category || prev.newCourseCategory,
-        startDate: draft.startDate || prev.startDate,
-        endDate: draft.endDate || draft.startDate || prev.endDate,
+        courseId: usable ? usable.id : prev.courseId,
+        dates: draft.dates.length > 0 ? normalizeDates(draft.dates) : prev.dates,
         venueType: draft.venueType || prev.venueType,
         venueName: draft.venueName || prev.venueName,
       }));
-      setCandidates(exact ? [] : draft.candidates);
+      setCandidates(usable ? [] : draft.candidates.filter((c) => selectable.some((s) => s.id === c.id)));
+      if (!usable && draft.courseName) setRequestName(draft.courseName);
       setAiNote(
         draft.note ||
-          (exact
-            ? `講座マスタの「${exact.name}」に一致しました。内容を確認して保存してください。`
-            : draft.candidates.length > 0
-              ? "似た講座があります。同じ講座なら候補から選んでください。"
+          (usable
+            ? `講座「${usable.name}」に一致しました。参加日と内容を確認して保存してください。`
+            : draft.courseName
+              ? `読み取った講座名「${draft.courseName}」は一覧にありません。候補から選ぶか、追加を依頼してください。`
               : "読み取った内容を確認して保存してください。")
       );
     } catch (e) {
@@ -176,38 +236,17 @@ export function LearningRecordForm({
 
   const submit = async () => {
     setError("");
-    if (!values.startDate) {
-      setError("開催日（開始）を入力してください");
+    if (!values.courseId) {
+      setError("講座を一覧から選んでください");
       return;
     }
-    let courseId = values.courseId;
-    if (courseId === NEW_COURSE) {
-      const name = values.newCourseName.trim();
-      if (!name) {
-        setError("講座の名称を入力してください");
-        return;
-      }
-      try {
-        const { course } = await createCourseApi({
-          name,
-          organizer: values.newCourseOrganizer.trim(),
-          category: values.newCourseCategory,
-        });
-        onCourseCreated(course);
-        courseId = course.id;
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "講座の登録に失敗しました");
-        return;
-      }
-    }
-    if (!courseId) {
-      setError("講座を選んでください");
+    if (values.dates.length === 0) {
+      setError("参加日を1日以上追加してください");
       return;
     }
     const input: LearningInput = {
-      courseId,
-      startDate: values.startDate,
-      endDate: values.endDate || values.startDate,
+      courseId: values.courseId,
+      dates: values.dates,
       venueType: values.venueType,
       venueName: values.venueName.trim(),
       learned: values.learned,
@@ -243,12 +282,9 @@ export function LearningRecordForm({
 
       {aiDraftEnabled && !isEdit && (
         <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-2 space-y-1">
-          <p className="text-[11px] font-medium text-violet-900">
-            🪄 受講証・メモの画像から下書きを作る（AI）
-          </p>
+          <p className="text-[11px] font-medium text-violet-900">🪄 受講証・メモの画像から下書きを作る（AI）</p>
           <p className="text-[10px] text-violet-800 leading-relaxed">
-            講座名・日付・場所を読み取って埋めます。読み取った内容は必ず確認してから保存してください
-            （AIは保存しません）。
+            講座・参加日・場所を読み取って埋めます。読み取った内容は必ず確認してから保存してください（AIは保存しません）。
           </p>
           <input
             ref={fileRef}
@@ -265,139 +301,216 @@ export function LearningRecordForm({
           {aiNote && <p className="text-[11px] text-violet-900">{aiNote}</p>}
           {evidence && (
             <label className="flex items-center gap-2 text-[11px] text-violet-900 min-h-[32px]">
-              <input
-                type="checkbox"
-                checked={attachEvidence}
-                onChange={(e) => setAttachEvidence(e.target.checked)}
-              />
+              <input type="checkbox" checked={attachEvidence} onChange={(e) => setAttachEvidence(e.target.checked)} />
               この画像を証跡として保存時に添付する
             </label>
           )}
         </div>
       )}
 
-      <Field label="講座（必須）">
+      {/* 講座（一覧から選ぶ） */}
+      <div className="space-y-1.5">
+        <Field label="講座（必須・一覧から選ぶ）">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="名称で検索"
+            className={inputClass}
+            aria-label="講座を検索"
+          />
+        </Field>
         <select
           value={values.courseId}
           onChange={(e) => set("courseId", e.target.value)}
           className={inputClass}
+          aria-label="講座"
+          size={Math.min(8, Math.max(3, filtered.length + groups.length + 1))}
         >
-          <option value="">選んでください</option>
-          {sortedCourses.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-              {c.organizer ? `（${c.organizer}）` : ""}
-              {c.status === "unconfirmed" ? " ※未確認" : ""}
-            </option>
+          <option value="">— 選んでください —</option>
+          {groups.map((g) => (
+            <optgroup key={g.value} label={g.label}>
+              {g.courses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.organizer ? `（${c.organizer}）` : ""}
+                  {c.defaultDays ? ` ・${c.defaultDays}日間` : ""}
+                </option>
+              ))}
+            </optgroup>
           ))}
-          <option value={NEW_COURSE}>＋ 新しい講座を入力する</option>
         </select>
-      </Field>
-
-      {candidates.length > 0 && (
-        <div className="rounded-lg border border-gray-200 bg-white p-2 space-y-1">
-          <p className="text-[11px] text-gray-700">講座マスタの候補（同じ講座なら選んでください）</p>
-          <div className="flex flex-wrap gap-1.5">
-            {candidates.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => {
-                  set("courseId", c.id);
-                  setCandidates([]);
-                }}
-                className="px-2.5 py-1.5 rounded-full border border-teal-300 text-teal-800 text-[11px] hover:bg-teal-50 min-h-[36px]"
-              >
-                {c.name}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {values.courseId === NEW_COURSE && (
-        <div className="rounded-lg border border-gray-200 bg-white p-2 space-y-2">
-          <p className="text-[11px] text-gray-700 leading-relaxed">
-            新しい講座は「未確認の講座」として登録されます。同じ講座が既にある場合は、管理者があとから1つにまとめます。
+        {selected && (
+          <p className="text-[11px] text-teal-900">
+            選択中: <strong>{selected.name}</strong>
+            {selected.organizer ? `（${selected.organizer}）` : ""}
+            {selected.defaultDays ? ` ・ 標準 ${selected.defaultDays}日間` : ""}
+            {selected.hidden ? " ・ 非表示の講座" : ""}
           </p>
-          <Field label="講座の名称">
-            <input
-              value={values.newCourseName}
-              onChange={(e) => set("newCourseName", e.target.value)}
-              className={inputClass}
-              placeholder="例: 日本皮膚科学会総会"
-            />
-          </Field>
-          {sameCourse && (
-            <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2">
-              同じ名称の講座「{sameCourse.name}」があります。
-              <button
-                type="button"
-                onClick={() => set("courseId", sameCourse.id)}
-                className="ml-1 underline underline-offset-2"
-              >
-                この講座を選ぶ
-              </button>
-            </p>
-          )}
-          {similar.length > 0 && (
-            <div className="text-[11px] text-gray-700">
-              似た講座:
-              {similar.map((c) => (
+        )}
+        {filtered.length === 0 && (
+          <p className="text-[11px] text-gray-600">該当する講座がありません。</p>
+        )}
+
+        {candidates.length > 0 && (
+          <div className="rounded-lg border border-gray-200 bg-white p-2 space-y-1">
+            <p className="text-[11px] text-gray-700">似た講座（同じ講座なら選んでください）</p>
+            <div className="flex flex-wrap gap-1.5">
+              {candidates.map((c) => (
                 <button
                   key={c.id}
                   type="button"
-                  onClick={() => set("courseId", c.id)}
-                  className="ml-1.5 underline underline-offset-2 text-teal-800"
+                  onClick={() => {
+                    set("courseId", c.id);
+                    setCandidates([]);
+                  }}
+                  className="px-2.5 py-1.5 rounded-full border border-teal-300 text-teal-800 text-[11px] hover:bg-teal-50 min-h-[36px]"
                 >
                   {c.name}
                 </button>
               ))}
             </div>
-          )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <Field label="主催">
+          </div>
+        )}
+
+        {/* 一覧に無いとき: 追加を依頼（名称だけ） */}
+        <details className="rounded-lg border border-gray-200 bg-white p-2">
+          <summary className="text-[11px] text-gray-700 cursor-pointer min-h-[32px] flex items-center">
+            一覧に無い講座は「追加を依頼」
+            {openRequests.length > 0 ? `（依頼中 ${openRequests.length}件）` : ""}
+          </summary>
+          <div className="mt-1 space-y-1.5">
+            <p className="text-[10px] text-gray-600 leading-relaxed">
+              名称だけ送ります。管理者が講座に追加すると一覧から選べるようになります。依頼だけでは学びの記録は作られません。
+            </p>
+            <div className="flex gap-2">
               <input
-                value={values.newCourseOrganizer}
-                onChange={(e) => set("newCourseOrganizer", e.target.value)}
+                value={requestName}
+                onChange={(e) => setRequestName(e.target.value)}
+                placeholder="講座の名称"
                 className={inputClass}
+                aria-label="依頼する講座の名称"
               />
-            </Field>
-            <Field label="区分">
-              <select
-                value={values.newCourseCategory}
-                onChange={(e) => set("newCourseCategory", e.target.value as CourseCategory)}
-                className={inputClass}
+              <button
+                type="button"
+                onClick={() => void sendRequest()}
+                disabled={requesting || busy || !requestName.trim()}
+                className="shrink-0 px-3 py-2 border border-teal-300 text-teal-800 rounded-full text-xs hover:bg-teal-50 disabled:opacity-40 min-h-[44px]"
               >
-                {COURSE_CATEGORIES.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
+                {requesting ? "送信中…" : "追加を依頼"}
+              </button>
+            </div>
+            {requestMsg && <p className="text-[11px] text-teal-900">{requestMsg}</p>}
+            {openRequests.length > 0 && (
+              <ul className="text-[11px] text-gray-700">
+                {openRequests.map((r) => (
+                  <li key={r.id}>⏳ 依頼中: {r.name}</li>
                 ))}
-              </select>
-            </Field>
+              </ul>
+            )}
+            {resolvedRequests.length > 0 && (
+              <ul className="text-[11px] text-gray-700">
+                {resolvedRequests.slice(-3).map((r) => {
+                  const c = courses.find((x) => x.id === r.courseId);
+                  return (
+                    <li key={r.id}>
+                      {r.status === "added" ? "✅ 追加済み" : "↪ 既存の講座で"}: {r.name}
+                      {c && c.id !== r.name ? ` → 「${c.name}」` : ""}
+                      {c && (
+                        <button
+                          type="button"
+                          onClick={() => set("courseId", c.id)}
+                          className="ml-1 underline underline-offset-2 text-teal-800"
+                        >
+                          選ぶ
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </details>
+      </div>
+
+      {/* 参加日（複数日） */}
+      <div className="rounded-lg border border-gray-200 bg-white p-2 space-y-2">
+        <p className="text-[11px] font-medium text-gray-800">参加日（必須・複数日可）</p>
+        {values.dates.length > 0 ? (
+          <>
+            <p className="text-[12px] text-gray-900">{formatDates(values.dates)}</p>
+            <ul className="flex flex-wrap gap-1.5" aria-label="参加日の一覧">
+              {values.dates.map((d) => (
+                <li key={d}>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-teal-300 bg-teal-50 text-teal-900 text-[12px] pl-2.5 pr-1 py-1">
+                    {d.replaceAll("-", "/")}
+                    <button
+                      type="button"
+                      onClick={() => removeDate(d)}
+                      aria-label={`${d.replaceAll("-", "/")} を外す`}
+                      className="h-7 w-7 rounded-full hover:bg-teal-100 text-[13px]"
+                    >
+                      ×
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p className="text-[11px] text-gray-600">まだ参加日がありません。下のどちらかで追加してください。</p>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="rounded-md border border-gray-200 p-2 space-y-1.5">
+            <p className="text-[11px] text-gray-700">📅 期間で追加（連続した日程）</p>
+            <input
+              type="date"
+              value={values.rangeStart}
+              onChange={(e) => onRangeStart(e.target.value)}
+              className={inputClass}
+              aria-label="期間の開始日"
+            />
+            <input
+              type="date"
+              value={values.rangeEnd}
+              min={values.rangeStart || undefined}
+              onChange={(e) => set("rangeEnd", e.target.value)}
+              className={inputClass}
+              aria-label="期間の終了日"
+            />
+            {selected?.defaultDays ? (
+              <p className="text-[10px] text-gray-500">開始日を選ぶと、標準の{selected.defaultDays}日間で終了日の候補が入ります。</p>
+            ) : null}
+            <button
+              type="button"
+              onClick={addRange}
+              disabled={busy || !values.rangeStart}
+              className="px-3 py-2 border border-teal-300 text-teal-800 rounded-full text-xs hover:bg-teal-50 disabled:opacity-40 min-h-[44px]"
+            >
+              期間で追加
+            </button>
+          </div>
+          <div className="rounded-md border border-gray-200 p-2 space-y-1.5">
+            <p className="text-[11px] text-gray-700">📆 日付を追加（1日ずつ・飛び飛び）</p>
+            <input
+              type="date"
+              value={values.singleDate}
+              onChange={(e) => set("singleDate", e.target.value)}
+              className={inputClass}
+              aria-label="追加する日付"
+            />
+            <button
+              type="button"
+              onClick={addSingle}
+              disabled={busy || !values.singleDate}
+              className="px-3 py-2 border border-teal-300 text-teal-800 rounded-full text-xs hover:bg-teal-50 disabled:opacity-40 min-h-[44px]"
+            >
+              日付を追加
+            </button>
           </div>
         </div>
-      )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <Field label="開催日（開始・必須）">
-          <input
-            type="date"
-            value={values.startDate}
-            onChange={(e) => set("startDate", e.target.value)}
-            className={inputClass}
-          />
-        </Field>
-        <Field label="開催日（終了）">
-          <input
-            type="date"
-            value={values.endDate}
-            min={values.startDate || undefined}
-            onChange={(e) => set("endDate", e.target.value)}
-            className={inputClass}
-          />
-        </Field>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-[9em_1fr] gap-2">

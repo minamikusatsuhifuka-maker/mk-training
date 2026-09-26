@@ -32,12 +32,15 @@ import {
   GROWTH_CONFIG_ID,
   emptyGrowthConfig,
   normalizeCourse,
+  normalizeCourseRequest,
   normalizeGoal,
   normalizeGrowthConfig,
   normalizeGrowthLog,
   normalizeLearning,
   normalizePromiseStatus,
+  sortCourses,
   type Course,
+  type CourseRequest,
   type Goal,
   type GrowthConfig,
   type GrowthLog,
@@ -52,6 +55,7 @@ export const GROWTH_TABLE = "clinic_staff_growth";
 export const GROWTH_EVIDENCE_BUCKET = "growth-evidence";
 
 const COURSE_TYPE = "course";
+const REQUEST_TYPE = "request";
 const LEARNING_TYPE = "learning";
 const GOAL_TYPE = "goal";
 const PROMISE_TYPE = "promise";
@@ -241,11 +245,56 @@ export async function fetchCourses(
   admin: GrowthAdminClient
 ): Promise<{ courses: Course[]; tableMissing: boolean }> {
   const { rows, tableMissing } = await selectRows(admin, COURSE_TYPE);
-  const courses = rows
-    .map((r) => normalizeCourse(String(r.id), r.data))
-    .filter((c): c is Course => c !== null)
-    .sort((a, b) => a.name.localeCompare(b.name, "ja"));
+  const courses = sortCourses(
+    rows.map((r) => normalizeCourse(String(r.id), r.data)).filter((c): c is Course => c !== null)
+  );
   return { courses, tableMissing };
+}
+
+/** 並び順の保存（180 1-1）。ids の順に 1,2,… を振る。ids に無い講座は order 0（末尾） */
+export async function saveCourseOrder(
+  admin: GrowthAdminClient,
+  ids: string[],
+  updatedBy: string
+): Promise<void> {
+  const { courses } = await fetchCourses(admin);
+  const pos = new Map(ids.map((id, i) => [id, i + 1]));
+  for (const c of courses) {
+    const order = pos.get(c.id) ?? 0;
+    if (order === c.order) continue;
+    await saveCourse(admin, { ...c, order, updatedAt: new Date().toISOString() }, updatedBy);
+  }
+}
+
+// ─── 講座の追加依頼（180 1-2）───
+
+export async function fetchCourseRequests(
+  admin: GrowthAdminClient,
+  userId?: string
+): Promise<{ requests: CourseRequest[]; tableMissing: boolean }> {
+  const { rows, tableMissing } = await selectRows(admin, REQUEST_TYPE, userId);
+  const requests = rows
+    .map((r) => normalizeCourseRequest(String(r.id), r.data))
+    .filter((c): c is CourseRequest => c !== null)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return { requests, tableMissing };
+}
+
+export async function fetchCourseRequest(
+  admin: GrowthAdminClient,
+  id: string
+): Promise<CourseRequest | null> {
+  const row = await selectRow(admin, REQUEST_TYPE, id);
+  return row ? normalizeCourseRequest(String(row.id), row.data) : null;
+}
+
+export async function saveCourseRequest(
+  admin: GrowthAdminClient,
+  req: CourseRequest,
+  updatedBy: string
+): Promise<void> {
+  const { id, ...data } = req;
+  await upsertRow(admin, REQUEST_TYPE, id, data, updatedBy);
 }
 
 export async function fetchCourse(admin: GrowthAdminClient, id: string): Promise<Course | null> {
@@ -260,10 +309,6 @@ export async function saveCourse(
 ): Promise<void> {
   const { id, ...data } = course;
   await upsertRow(admin, COURSE_TYPE, id, data, updatedBy);
-}
-
-export async function deleteCourse(admin: GrowthAdminClient, id: string): Promise<void> {
-  await deleteRow(admin, COURSE_TYPE, id);
 }
 
 /**
@@ -316,7 +361,8 @@ export async function saveLearning(
   updatedBy: string
 ): Promise<void> {
   const { id, ...data } = rec;
-  // signedUrl は保存しない（署名は返すときに毎回発行する）
+  // signedUrl は保存しない（署名は返すときに毎回発行する）。
+  // 180: dates（参加日の一覧）が正。startDate/endDate も最初/最後の日として一緒に保存する
   const evidence = data.evidence.map(({ path, name, uploadedAt }) => ({ path, name, uploadedAt }));
   await upsertRow(admin, LEARNING_TYPE, id, { ...data, evidence }, updatedBy);
 }

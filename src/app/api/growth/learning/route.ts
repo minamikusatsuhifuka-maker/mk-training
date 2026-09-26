@@ -77,11 +77,15 @@ export async function POST(req: Request) {
     updatedAt: now,
   });
   if (!rec) return badRequest("講座は必須です");
-  if (!rec.startDate) return badRequest("開催日（開始）は必須です");
+  if (rec.dates.length === 0) return badRequest("参加日を1日以上入れてください");
 
   try {
     const course = await fetchCourse(auth.admin, rec.courseId);
-    if (!course) return badRequest("講座が見つかりません（先に講座を登録してください）");
+    if (!course) return badRequest("講座が見つかりません（一覧に無い講座は「追加を依頼」してください）");
+    // 180: スタッフが選べるのは確認済み・表示中の講座だけ（管理者は非表示の講座にも記録できる）
+    if (!auth.isAdmin && (course.status !== "confirmed" || course.hidden)) {
+      return badRequest("この講座は選べません（一覧に無い講座は「追加を依頼」してください）");
+    }
     await saveLearning(auth.admin, rec, by);
     await recordGrowthLog(auth.admin, {
       by,
@@ -120,11 +124,14 @@ export async function PATCH(req: Request) {
       updatedAt: new Date().toISOString(),
     });
     if (!next) return badRequest("講座は必須です");
-    if (!next.startDate) return badRequest("開催日（開始）は必須です");
+    if (next.dates.length === 0) return badRequest("参加日を1日以上入れてください");
 
     if (next.courseId !== prev.courseId) {
       const course = await fetchCourse(auth.admin, next.courseId);
       if (!course) return badRequest("講座が見つかりません");
+      if (!auth.isAdmin && (course.status !== "confirmed" || course.hidden)) {
+        return badRequest("この講座は選べません（一覧に無い講座は「追加を依頼」してください）");
+      }
     }
     const { courses } = await fetchCourses(auth.admin);
     const nameOf = (cid: string) => courses.find((c) => c.id === cid)?.name ?? "（講座不明）";

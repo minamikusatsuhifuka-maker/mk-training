@@ -40,6 +40,7 @@ import {
 import {
   attendanceCounts,
   attendanceLabel,
+  formatDates,
   promiseTextOf,
   searchTimeline,
   sortLearningDesc,
@@ -358,9 +359,10 @@ function buildTimeline(src: Sources, person: RosterPerson): TimelineItem[] {
     const place = [venueTypeLabel(l.venueType), l.venueName].filter(Boolean).join(" ");
     items.push({
       kind: "learning",
+      // 並び順の基準は最初の参加日（180 2-2）
       date: l.startDate || l.createdAt.slice(0, 10),
       title: `${src.courseName(l.courseId)}${n ? `（${n}）` : ""}`,
-      body: [place, l.learned && `学んだこと: ${l.learned}`, l.nextAction && `次にやること: ${l.nextAction}`, l.tags.length ? `タグ: ${l.tags.join("・")}` : ""]
+      body: [l.dates.length > 1 ? `参加日: ${formatDates(l.dates)}` : "", place, l.learned && `学んだこと: ${l.learned}`, l.nextAction && `次にやること: ${l.nextAction}`, l.tags.length ? `タグ: ${l.tags.join("・")}` : ""]
         .filter(Boolean)
         .join("\n"),
       href: "/my-growth",

@@ -1,20 +1,21 @@
-// 講座マスタAPI（指示書179 B-2）
-//   GET    → { courses, tableMissing }（ログイン済み・フラグON or 管理者）
-//   POST   → 講座を登録。スタッフが登録すると「未確認」、管理者は「確認済み」
-//   PATCH  → 名称・主催・区分・状態の更新（**管理者のみ**）
-//   DELETE ?id= → 削除（**管理者のみ**・学びの記録が1件でも紐づいていれば拒否＝統合を使う）
+// 講座マスタAPI（指示書179 B-2／180 1-1）
+//   GET    → { courses, tableMissing, isAdmin }（ログイン済み・フラグON or 管理者。非表示の講座も返す＝
+//             編集中の古い記録の講座名を表示するため。選べるかどうかは画面と POST /learning 側で絞る）
+//   POST   → 講座を登録（**管理者のみ**・180: スタッフは自由入力できない→「追加を依頼」）
+//   PATCH  → 名称・主催・区分・状態・非表示・標準の日数の更新（**管理者のみ**）
+//   PUT    → 並び順の保存 { ids }（**管理者のみ**）
+//   削除の口は無い（180 歯止め: 講座は削除せず非表示のみ＝記録と再受講回数を壊さない）
 // 表記ゆれ対策: 同名（全角半角・空白・記号を無視して一致）の講座があれば、新しく作らずそれを返す。
 
 import { NextResponse } from "next/server";
 import {
   authorizeGrowth,
-  deleteCourse,
   fetchCourse,
   fetchCourses,
-  fetchLearning,
   newGrowthId,
   recordGrowthLog,
   saveCourse,
+  saveCourseOrder,
 } from "@/lib/staff-growth-server";
 import {
   badRequest,
@@ -26,7 +27,6 @@ import {
   buildCourseChanges,
   findSameCourse,
   normalizeCourse,
-  type Course,
 } from "@/lib/staff-growth";
 
 export const runtime = "nodejs";
@@ -45,6 +45,8 @@ export async function GET() {
 export async function POST(req: Request) {
   const auth = await authorizeGrowth();
   if (!auth.ok) return hidden();
+  // 180: 講座を作れるのは管理者だけ（スタッフには作れない口すら見せない）
+  if (!auth.isAdmin) return hidden();
   const body = await readJson(req);
   if (!body) return badRequest("不正なリクエストです");
 
@@ -54,8 +56,9 @@ export async function POST(req: Request) {
     const by = auth.userEmail || auth.userId;
     const course = normalizeCourse(newGrowthId("course"), {
       ...body,
-      // スタッフの登録は必ず未確認（管理者が確認・統合する）。管理者は指定が無ければ確認済み
-      status: auth.isAdmin ? (body.status === "unconfirmed" ? "unconfirmed" : "confirmed") : "unconfirmed",
+      status: body.status === "unconfirmed" ? "unconfirmed" : "confirmed",
+      // 新しい講座は末尾（order 未設定）
+      order: 0,
       createdBy: by,
       createdAt: now,
       updatedAt: now,
@@ -95,6 +98,7 @@ export async function PATCH(req: Request) {
     const next = normalizeCourse(id, {
       ...prev,
       ...body,
+      order: prev.order, // 並び順は PUT でだけ変える
       createdBy: prev.createdBy,
       createdAt: prev.createdAt,
       updatedAt: new Date().toISOString(),
@@ -114,38 +118,34 @@ export async function PATCH(req: Request) {
     if (changes.length > 0) {
       await recordGrowthLog(auth.admin, { by, action: "更新", kind: "講座", target: next.name, changes });
     }
-    return NextResponse.json({ course: next satisfies Course });
+    return NextResponse.json({ course: next });
   } catch (e) {
     return growthErrorResponse(e);
   }
 }
 
-export async function DELETE(req: Request) {
+export async function PUT(req: Request) {
   const auth = await authorizeGrowth();
   if (!auth.ok) return hidden();
   if (!auth.isAdmin) return hidden();
-  const id = new URL(req.url).searchParams.get("id") ?? "";
-  if (!id) return badRequest("id は必須です");
-
+  const body = await readJson(req);
+  if (!body) return badRequest("不正なリクエストです");
+  const ids = Array.isArray(body.ids)
+    ? body.ids.filter((v): v is string => typeof v === "string" && v !== "")
+    : [];
+  if (ids.length === 0) return badRequest("並び順が空です");
   try {
-    const prev = await fetchCourse(auth.admin, id);
-    if (!prev) return NextResponse.json({ error: "対象が見つかりません" }, { status: 404 });
-    const { records } = await fetchLearning(auth.admin);
-    const used = records.filter((r) => r.courseId === id).length;
-    if (used > 0) {
-      return badRequest(
-        `この講座には学びの記録が${used}件あります。削除ではなく、別の講座へ統合してください。`
-      );
-    }
-    await deleteCourse(auth.admin, id);
+    const by = auth.userEmail || auth.userId;
+    await saveCourseOrder(auth.admin, Array.from(new Set(ids)), by);
     await recordGrowthLog(auth.admin, {
-      by: auth.userEmail || auth.userId,
-      action: "削除",
+      by,
+      action: "並び替え",
       kind: "講座",
-      target: prev.name,
-      changes: buildCourseChanges(null, prev),
+      target: "",
+      changes: [{ field: "並び順", before: "", after: `${ids.length}件` }],
     });
-    return NextResponse.json({ ok: true });
+    const { courses } = await fetchCourses(auth.admin);
+    return NextResponse.json({ ok: true, courses });
   } catch (e) {
     return growthErrorResponse(e);
   }

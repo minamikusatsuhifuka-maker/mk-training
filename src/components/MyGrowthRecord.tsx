@@ -10,6 +10,7 @@ import {
   PROMISE_STATUSES,
   promiseStatusLabel,
   type Course,
+  type CourseRequest,
   type Goal,
   type LearningRecord,
   type PromiseStatusValue,
@@ -20,6 +21,7 @@ import {
   deleteEvidenceApi,
   deleteGoalApi,
   deleteLearningApi,
+  fetchCourseRequestsApi,
   fetchGoalsApi,
   fetchLearningApi,
   fetchPromisesApi,
@@ -44,6 +46,7 @@ export function MyGrowthRecord() {
   const [tab, setTab] = useState<Tab>("learning");
   const [records, setRecords] = useState<LearningRecord[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [myRequests, setMyRequests] = useState<CourseRequest[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [promises, setPromises] = useState<PromiseItem[]>([]);
   const [aiDraftEnabled, setAiDraftEnabled] = useState(false);
@@ -60,9 +63,15 @@ export function MyGrowthRecord() {
   const load = useCallback(async () => {
     setError("");
     try {
-      const [l, g, p] = await Promise.all([fetchLearningApi(), fetchGoalsApi(), fetchPromisesApi()]);
+      const [l, g, p, rq] = await Promise.all([
+        fetchLearningApi(),
+        fetchGoalsApi(),
+        fetchPromisesApi(),
+        fetchCourseRequestsApi().catch(() => ({ requests: [] as CourseRequest[], tableMissing: false })),
+      ]);
       setRecords(l.records);
       setCourses(l.courses);
+      setMyRequests(rq.requests);
       setAiDraftEnabled(l.aiDraftEnabled);
       setBucketMissing(l.bucketMissing);
       setTableMissing(l.tableMissing || g.tableMissing || p.tableMissing);
@@ -236,11 +245,12 @@ export function MyGrowthRecord() {
               draftKey="growth:learning:new"
               initial={emptyLearningForm()}
               courses={courses}
+              myRequests={myRequests}
               aiDraftEnabled={aiDraftEnabled}
               busy={busy}
               isEdit={false}
               onCancel={() => setEditing("")}
-              onCourseCreated={(c) => setCourses((prev) => [...prev, c])}
+              onRequestCreated={(r) => setMyRequests((prev) => [...prev, r])}
               onSubmit={(input, evidence) => submitLearning("new", input, evidence)}
             />
           ) : (
@@ -259,11 +269,12 @@ export function MyGrowthRecord() {
                 draftKey={`growth:learning:${r.id}`}
                 initial={learningFormFrom(r)}
                 courses={courses}
+                myRequests={myRequests}
                 aiDraftEnabled={false}
                 busy={busy}
                 isEdit
                 onCancel={() => setEditing("")}
-                onCourseCreated={(c) => setCourses((prev) => [...prev, c])}
+                onRequestCreated={(rq) => setMyRequests((prev) => [...prev, rq])}
                 onSubmit={(input) => submitLearning(r.id, input, null)}
               />
             )}

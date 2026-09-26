@@ -36,8 +36,17 @@ export type Course = {
   name: string;
   organizer: string;
   category: CourseCategory;
-  /** unconfirmed = スタッフが新しく入力した講座（管理者が確認・統合する） */
+  /**
+   * unconfirmed = 179でスタッフが自由入力した講座（180からは自由入力できない）。
+   * 180以降は「追加依頼」と同じ一覧に出し、管理者が追加（確認済みに）または既存講座へ統合する
+   */
   status: CourseStatus;
+  /** 180: 非表示（過去の記録で使われている講座は削除せず非表示にする＝記録と回数を壊さない） */
+  hidden: boolean;
+  /** 180: 並び順（小さい順。0=未設定は末尾） */
+  order: number;
+  /** 180: 標準の日数（例: 3日間）。0=未設定 */
+  defaultDays: number;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -45,6 +54,48 @@ export type Course = {
 
 export const COURSE_NAME_MAX = 120;
 export const ORGANIZER_MAX = 80;
+export const DEFAULT_DAYS_MAX = 60;
+
+// ─── 講座の追加依頼（180 1-2）───
+//
+// スタッフは講座を自由入力できない。一覧に無ければ**名称だけ**で依頼を出し、
+// 管理者が「講座に追加」または「既存の講座に紐づけて却下」で処理する。
+// 依頼の段階では学びの記録を作らない（追加後にスタッフが選んで登録する）。
+
+export type CourseRequestStatus = "open" | "added" | "linked";
+
+export type CourseRequest = {
+  id: string;
+  /** 依頼した人 */
+  userId: string;
+  userName: string;
+  name: string;
+  status: CourseRequestStatus;
+  /** 処理後: 追加した講座 or 紐づけた既存講座 */
+  courseId: string;
+  createdAt: string;
+  resolvedAt: string;
+  resolvedBy: string;
+};
+
+export function normalizeCourseRequest(id: string, raw: unknown): CourseRequest | null {
+  if (!id || !raw || typeof raw !== "object") return null;
+  const g = raw as Record<string, unknown>;
+  const userId = text(g.userId, 100).trim();
+  const name = text(g.name, COURSE_NAME_MAX).trim();
+  if (!userId || !name) return null;
+  return {
+    id,
+    userId,
+    userName: text(g.userName, 100).trim(),
+    name,
+    status: g.status === "added" ? "added" : g.status === "linked" ? "linked" : "open",
+    courseId: text(g.courseId, 100),
+    createdAt: text(g.createdAt, 40),
+    resolvedAt: text(g.resolvedAt, 40),
+    resolvedBy: text(g.resolvedBy, 200),
+  };
+}
 
 // ─── 学びの記録（B-1）───
 
@@ -68,7 +119,15 @@ export type LearningRecord = {
   /** 誰の学びか（Auth の userId） */
   userId: string;
   courseId: string;
+  /**
+   * 180: 参加日の一覧（YYYY-MM-DD・昇順・重複なし）。**これが正**。
+   * 179の記録（startDate/endDate だけ）は normalizeLearning が読み込み時に期間を展開して埋める
+   * （保存データは書き換えない。編集して保存したときに dates を含む新しい形式で保存される）。
+   */
+  dates: string[];
+  /** 最初の参加日（dates[0]）。一覧・並び順・絞り込みの基準。保存時にも持たせる（179の読み手との互換） */
   startDate: string;
+  /** 最後の参加日（dates の末尾） */
   endDate: string;
   venueType: VenueType;
   venueName: string;
@@ -81,6 +140,8 @@ export type LearningRecord = {
   updatedAt: string;
 };
 
+/** 参加日の上限（1回の受講） */
+export const DATES_MAX = 62;
 export const LEARNED_MAX = 4000;
 export const NEXT_ACTION_MAX = 2000;
 export const VENUE_NAME_MAX = 100;
@@ -199,6 +260,70 @@ export function isPromiseStatus(v: unknown): v is PromiseStatusValue {
   return PROMISE_STATUSES.some((c) => c.value === v);
 }
 
+/** YYYY-MM-DD に n 日足す */
+export function addDaysYmd(base: string, n: number): string {
+  if (!ymd(base)) return "";
+  const [y, m, d] = base.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + n));
+  return dt.toISOString().slice(0, 10);
+}
+
+/** 開始日〜終了日の日付をすべて並べる（不正・逆順・上限超過は切り詰め） */
+export function expandDateRange(start: string, end: string, max = DATES_MAX): string[] {
+  const s = ymd(start);
+  if (!s) return [];
+  const e = ymd(end) && end >= s ? end : s;
+  const out: string[] = [];
+  let cur = s;
+  while (cur <= e && out.length < max) {
+    out.push(cur);
+    cur = addDaysYmd(cur, 1);
+  }
+  return out;
+}
+
+/** 参加日の一覧: 実在する日付だけ・重複なし・昇順・上限まで */
+export function normalizeDates(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const set = new Set<string>();
+  for (const v of raw) {
+    const d = ymd(v);
+    if (d) set.add(d);
+  }
+  return Array.from(set).sort().slice(0, DATES_MAX);
+}
+
+/** 連続した日程か（前日+1 が次の日付） */
+export function isConsecutiveDates(dates: string[]): boolean {
+  for (let i = 1; i < dates.length; i++) {
+    if (addDaysYmd(dates[i - 1], 1) !== dates[i]) return false;
+  }
+  return true;
+}
+
+function md(d: string): string {
+  return `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+}
+
+/**
+ * 参加日の表示（180 2-2）:
+ *   連続   → 「2026/9/2〜9/4（3日間）」
+ *   飛び飛び → 「2026/9/2・9/9（2日間）」
+ *   1日     → 「2026/9/2」
+ * 年をまたぐときは各日付に年を付ける。
+ */
+export function formatDates(dates: string[]): string {
+  const ds = normalizeDates(dates);
+  if (ds.length === 0) return "";
+  const sameYear = ds.every((d) => d.slice(0, 4) === ds[0].slice(0, 4));
+  const label = (d: string, first: boolean) =>
+    sameYear ? (first ? `${d.slice(0, 4)}/${md(d)}` : md(d)) : `${d.slice(0, 4)}/${md(d)}`;
+  if (ds.length === 1) return label(ds[0], true);
+  const days = `（${ds.length}日間）`;
+  if (isConsecutiveDates(ds)) return `${label(ds[0], true)}〜${label(ds[ds.length - 1], false)}${days}`;
+  return ds.map((d, i) => label(d, i === 0)).join("・") + days;
+}
+
 export function courseCategoryLabel(v: CourseCategory): string {
   return COURSE_CATEGORIES.find((c) => c.value === v)?.label ?? "";
 }
@@ -248,16 +373,37 @@ export function normalizeCourse(id: string, raw: unknown): Course | null {
   const g = raw as Record<string, unknown>;
   const name = text(g.name, COURSE_NAME_MAX).trim();
   if (!name) return null;
+  const days = typeof g.defaultDays === "string" ? Number(g.defaultDays) : g.defaultDays;
   return {
     id,
     name,
     organizer: text(g.organizer, ORGANIZER_MAX).trim(),
     category: isCourseCategory(g.category) ? g.category : "external",
     status: g.status === "confirmed" ? "confirmed" : "unconfirmed",
+    hidden: g.hidden === true,
+    order: typeof g.order === "number" && Number.isFinite(g.order) && g.order > 0 ? Math.floor(g.order) : 0,
+    defaultDays:
+      typeof days === "number" && Number.isInteger(days) && days >= 1 && days <= DEFAULT_DAYS_MAX ? days : 0,
     createdBy: text(g.createdBy, 200),
     createdAt: text(g.createdAt, 40),
     updatedAt: text(g.updatedAt, 40),
   };
+}
+
+/** 講座の並び: order（1,2,…）→ 未設定（0）は末尾 → 名称 */
+export function sortCourses(list: Course[]): Course[] {
+  return list
+    .slice()
+    .sort(
+      (a, b) =>
+        (a.order || Number.MAX_SAFE_INTEGER) - (b.order || Number.MAX_SAFE_INTEGER) ||
+        a.name.localeCompare(b.name, "ja")
+    );
+}
+
+/** スタッフが選べる講座（確認済み・表示中）。編集中の記録の講座は非表示でも残す */
+export function selectableCourses(list: Course[], keepId = ""): Course[] {
+  return sortCourses(list.filter((c) => (c.status === "confirmed" && !c.hidden) || c.id === keepId));
 }
 
 export function normalizeLearning(id: string, raw: unknown): LearningRecord | null {
@@ -266,15 +412,16 @@ export function normalizeLearning(id: string, raw: unknown): LearningRecord | nu
   const userId = text(g.userId, 100).trim();
   const courseId = text(g.courseId, 100).trim();
   if (!userId || !courseId) return null;
-  const startDate = ymd(g.startDate);
-  const endDate = ymd(g.endDate);
+  // 180: dates があればそれが正。無ければ179の開始日〜終了日を展開する（読み込み時の読み替え）
+  let dates = normalizeDates(g.dates);
+  if (dates.length === 0) dates = expandDateRange(ymd(g.startDate), ymd(g.endDate));
   return {
     id,
     userId,
     courseId,
-    startDate,
-    // 終了日が開始日より前なら開始日に揃える（画面の入れ違い対策）
-    endDate: endDate && startDate && endDate < startDate ? startDate : endDate,
+    dates,
+    startDate: dates[0] ?? "",
+    endDate: dates[dates.length - 1] ?? "",
     venueType: isVenueType(g.venueType) ? g.venueType : "venue",
     venueName: text(g.venueName, VENUE_NAME_MAX).trim(),
     learned: text(g.learned, LEARNED_MAX),
@@ -659,8 +806,7 @@ export function buildLearningChanges(
 ): GrowthLogChange[] {
   const c: GrowthLogChange[] = [];
   valueChange(c, "講座", prev ? courseNameOf(prev.courseId) : "", courseNameOf(next.courseId));
-  valueChange(c, "開催日（開始）", prev?.startDate ?? "", next.startDate);
-  valueChange(c, "開催日（終了）", prev?.endDate ?? "", next.endDate);
+  valueChange(c, "参加日", prev ? formatDates(prev.dates) : "", formatDates(next.dates));
   valueChange(
     c,
     "場所",
@@ -690,6 +836,13 @@ export function buildCourseChanges(prev: Course | null, next: Course): GrowthLog
     "状態",
     prev ? (prev.status === "confirmed" ? "確認済み" : "未確認") : "",
     next.status === "confirmed" ? "確認済み" : "未確認"
+  );
+  valueChange(c, "表示", prev ? (prev.hidden ? "非表示" : "表示") : "", next.hidden ? "非表示" : "表示");
+  valueChange(
+    c,
+    "標準の日数",
+    prev ? (prev.defaultDays ? `${prev.defaultDays}日` : "") : "",
+    next.defaultDays ? `${next.defaultDays}日` : ""
   );
   return c;
 }

@@ -19,8 +19,10 @@ import {
   COURSE_NAME_MAX,
   ORGANIZER_MAX,
   VENUE_NAME_MAX,
+  expandDateRange,
   isCourseCategory,
   isVenueType,
+  normalizeDates,
   suggestCourses,
   ymd,
   type Course,
@@ -39,6 +41,8 @@ export type LearningDraft = {
   category: CourseCategory | "";
   startDate: string;
   endDate: string;
+  /** 180: 参加日の一覧（日程が読み取れたぶん。連続なら期間を展開） */
+  dates: string[];
   venueType: VenueType | "";
   venueName: string;
   /** 講座マスタの候補（同名→部分一致の順） */
@@ -77,6 +81,7 @@ const SYSTEM = `あなたはクリニックスタッフの「学びの記録」�
 - 画像に書かれていないことは絶対に書かない。推測・一般論・創作をしない。
 - 読み取れない項目は空文字 "" にする。埋めようとしないこと。
 - 日付は YYYY-MM-DD。年が読み取れないときは空文字にする。
+- 参加日が複数ある（例: 9月2日〜4日の3日間、9月2日と9日）ときは dates に**すべての日付**を並べる。1日だけなら1つ。
 - 区分は次のどれかの値だけ: ${COURSE_CATEGORIES.map((c) => `${c.value}（${c.label}）`).join("、")}。判断できなければ空文字。
 - 場所の種類は inhouse（院内）／venue（会場）／online（オンライン）のどれか。判断できなければ空文字。
 
@@ -87,6 +92,7 @@ const SYSTEM = `あなたはクリニックスタッフの「学びの記録」�
   "category": "inhouse|conference|external|online|\\"\\"",
   "startDate": "YYYY-MM-DD",
   "endDate": "YYYY-MM-DD（1日なら startDate と同じ、無ければ空文字）",
+  "dates": ["YYYY-MM-DD", "..."],
   "venueType": "inhouse|venue|online|\\"\\"",
   "venueName": "会場名（オンラインならサービス名）"
 }`;
@@ -131,6 +137,7 @@ export async function POST(req: Request) {
       category: "",
       startDate: "",
       endDate: "",
+      dates: [],
       venueType: "",
       venueName: "",
       candidates: [],
@@ -150,12 +157,18 @@ export async function POST(req: Request) {
       });
     }
     const courseName = str(obj.courseName, COURSE_NAME_MAX);
+    const startDate = ymd(obj.startDate);
+    const endDate = ymd(obj.endDate);
+    // 参加日の一覧: AIが並べた dates を優先し、無ければ開始〜終了を展開
+    let dates = normalizeDates(obj.dates);
+    if (dates.length === 0) dates = expandDateRange(startDate, endDate);
     const draft: LearningDraft = {
       courseName,
       organizer: str(obj.organizer, ORGANIZER_MAX),
       category: isCourseCategory(obj.category) ? obj.category : "",
-      startDate: ymd(obj.startDate),
-      endDate: ymd(obj.endDate),
+      startDate: dates[0] ?? startDate,
+      endDate: dates[dates.length - 1] ?? endDate,
+      dates,
       venueType: isVenueType(obj.venueType) ? obj.venueType : "",
       venueName: str(obj.venueName, VENUE_NAME_MAX),
       candidates: suggestCourses(courses, courseName),
