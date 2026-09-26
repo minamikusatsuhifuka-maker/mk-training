@@ -351,6 +351,11 @@ function addPresenceChange(
   });
 }
 
+/** 家族構成も同様に、行の中身ではなく「変わったか」だけを見る（179 D） */
+function familyDigest(c: StaffContact): string {
+  return c.family.map((f) => `${f.relation}|${f.count}|${f.memo}`).join("//");
+}
+
 /** 緊急連絡先はまとめて「何件登録されているか」だけを見る（第三者の情報のため） */
 function emergencyDigest(c: StaffContact): string {
   return c.emergency
@@ -392,6 +397,16 @@ export function buildStaffContactChanges(
       after: `${next.emergency.length}件`,
     });
   }
+  // 家族構成（179 D）: 続柄・人数・備考のいずれも値は残さず、行数だけ
+  const beforeFamily = familyDigest(prev);
+  const afterFamily = familyDigest(next);
+  if (beforeFamily !== afterFamily) {
+    changes.push({
+      field: "家族構成（本人申告）",
+      before: `${prev.family.length}件`,
+      after: `${next.family.length}件`,
+    });
+  }
   return changes;
 }
 
@@ -411,6 +426,7 @@ export function staffContactSnapshot(
     joinedOn: "",
     memo: "",
     emergency: [],
+    family: [],
   };
   return buildStaffContactChanges(empty, contact);
 }

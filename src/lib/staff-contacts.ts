@@ -29,6 +29,21 @@ export type EmergencyContact = {
   memo: string;
 };
 
+/**
+ * 家族構成（本人申告・指示書179 D）。**続柄・人数・備考だけ**。
+ * 家族の住所・勤務先・生年月日の欄は作らない（169の決定を維持）。
+ * 管理者のみ表示（169で指名された閲覧者にも見せない）＝サーバーが返す前に落とす。
+ * 評価には使わない。カルテ（179 A）の年表・検索・絞り込みには出さない。
+ */
+export type FamilyMember = {
+  /** 続柄（配偶者・子 など） */
+  relation: string;
+  /** 人数（空は未記入） */
+  count: string;
+  /** 備考（自由記述・本人が申告した範囲） */
+  memo: string;
+};
+
 export type StaffContact = {
   id: string;
   /**
@@ -55,6 +70,8 @@ export type StaffContact = {
   memo: string;
   /** 緊急連絡先・保証人（複数可） */
   emergency: EmergencyContact[];
+  /** 家族構成（本人申告・管理者のみ・179 D） */
+  family: FamilyMember[];
   createdAt: string;
   updatedAt: string;
 };
@@ -67,6 +84,9 @@ export const MEMO_MAX = 1000;
 export const RELATION_MAX = 20;
 /** 緊急連絡先の上限（本人・保証人・予備で足りる） */
 export const EMERGENCY_MAX = 3;
+/** 家族構成の行数上限（続柄ごとに1行） */
+export const FAMILY_MAX = 6;
+export const FAMILY_MEMO_MAX = 200;
 
 function text(v: unknown, max: number): string {
   return typeof v === "string" ? v.slice(0, max) : "";
@@ -96,6 +116,28 @@ function normalizeEmergency(raw: unknown): EmergencyContact[] {
     .filter((e) => e.name || e.relation || e.phone || e.memo);
 }
 
+function normalizeFamily(raw: unknown): FamilyMember[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .slice(0, FAMILY_MAX)
+    .map((v) => {
+      const g = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+      const countRaw = typeof g.count === "number" ? String(g.count) : text(g.count, 3).trim();
+      return {
+        relation: text(g.relation, RELATION_MAX).trim(),
+        // 人数は 0〜99 の整数だけ（それ以外は未記入）
+        count: /^\d{1,2}$/.test(countRaw) ? String(Number(countRaw)) : "",
+        memo: text(g.memo, FAMILY_MEMO_MAX),
+      };
+    })
+    .filter((f) => f.relation || f.count || f.memo);
+}
+
+/** 管理者以外へ返す形（家族構成を落とす・179 D）。型は保ったまま中身を空にする */
+export function withoutFamily(c: StaffContact): StaffContact {
+  return { ...c, family: [] };
+}
+
 export function normalizeStaffContact(
   id: string,
   raw: unknown
@@ -116,6 +158,7 @@ export function normalizeStaffContact(
     joinedOn: ymd(g.joinedOn),
     memo: text(g.memo, MEMO_MAX),
     emergency: normalizeEmergency(g.emergency),
+    family: normalizeFamily(g.family),
     createdAt: text(g.createdAt, 40),
     updatedAt: text(g.updatedAt, 40),
   };
@@ -134,6 +177,7 @@ export function emptyStaffContact(): StaffContact {
     joinedOn: "",
     memo: "",
     emergency: [],
+    family: [],
     createdAt: "",
     updatedAt: "",
   };

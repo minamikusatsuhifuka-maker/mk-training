@@ -11,6 +11,7 @@ import { FontSwitcher } from "@/components/FontSwitcher";
 import { DocTasksNavLink } from "@/components/DocTasksNavLink";
 import { StaffContactsNavLink } from "@/components/StaffContactsNavLink";
 import { DirectorRetrospectiveNavLink } from "@/components/DirectorRetrospectiveNavLink";
+import { StaffGrowthNavLink } from "@/components/StaffGrowthNavLink";
 import { useSidebarAccordion } from "@/lib/sidebar-accordion";
 
 export function Sidebar() {
@@ -92,6 +93,9 @@ export function Sidebar() {
 
           {/* 院長の振り返り記録（173）。管理者にだけ出る（未許可には描画されない） */}
           <DirectorRetrospectiveNavLink variant="sidebar" />
+
+          {/* スタッフ育成カルテ（179）。管理者にだけ出る（未許可には描画されない） */}
+          <StaffGrowthNavLink variant="sidebar" />
         </nav>
       </ScrollArea>
 

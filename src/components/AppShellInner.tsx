@@ -21,6 +21,7 @@ import { FontSwitcher } from "@/components/FontSwitcher";
 import { DocTasksNavLink } from "@/components/DocTasksNavLink";
 import { StaffContactsNavLink } from "@/components/StaffContactsNavLink";
 import { DirectorRetrospectiveNavLink } from "@/components/DirectorRetrospectiveNavLink";
+import { StaffGrowthNavLink } from "@/components/StaffGrowthNavLink";
 import { useSidebarAccordion } from "@/lib/sidebar-accordion";
 
 export default function AppShellInner({
@@ -127,6 +128,12 @@ export default function AppShellInner({
 
                 {/* 院長の振り返り記録（173）。管理者にだけ出る */}
                 <DirectorRetrospectiveNavLink
+                  variant="drawer"
+                  onNavigate={() => setMenuOpen(false)}
+                />
+
+                {/* スタッフ育成カルテ（179）。管理者にだけ出る */}
+                <StaffGrowthNavLink
                   variant="drawer"
                   onNavigate={() => setMenuOpen(false)}
                 />

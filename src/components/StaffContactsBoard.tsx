@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   EMERGENCY_MAX,
+  FAMILY_MAX,
   createStaffContact,
   deleteStaffContact,
   emptyStaffContact,
@@ -18,9 +19,11 @@ import {
   patchStaffContact,
   sortStaffContacts,
   type EmergencyContact,
+  type FamilyMember,
   type StaffContact,
   type StaffContactInput,
 } from "@/lib/staff-contacts";
+import { FAMILY_NOTICE } from "@/lib/staff-growth";
 import { loadProfilesIndex } from "@/lib/staff-profiles";
 import type { StaffProfileIndexEntry } from "@/lib/staff-profiles";
 
@@ -294,7 +297,7 @@ export function StaffContactsBoard({ isAdmin }: { isAdmin: boolean }) {
 
                   {expanded === c.id && (
                     <div className="px-3 pb-3 border-t border-gray-100 pt-2 space-y-2">
-                      <ContactDetail contact={c} />
+                      <ContactDetail contact={c} isAdmin={isAdmin} />
 
                       {isAdmin && (
                         <div className="flex flex-wrap gap-2 pt-1">
@@ -331,7 +334,7 @@ export function StaffContactsBoard({ isAdmin }: { isAdmin: boolean }) {
 }
 
 /** 詳細（全項目）。電話番号はそのまま発信できるようにする */
-function ContactDetail({ contact }: { contact: StaffContact }) {
+function ContactDetail({ contact, isAdmin }: { contact: StaffContact; isAdmin: boolean }) {
   return (
     <div className="space-y-2 text-[12px] leading-relaxed">
       <dl className="space-y-1">
@@ -389,6 +392,31 @@ function ContactDetail({ contact }: { contact: StaffContact }) {
           <strong>緊急時の連絡のためだけ</strong>に登録されています。
         </p>
       </div>
+
+      {/* 家族構成（本人申告・179 D）: 管理者のみ。サーバーも管理者以外には返していない */}
+      {isAdmin && (
+        <div>
+          <p className="text-[11px] font-medium text-gray-800">👪 家族構成（本人申告）</p>
+          <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">{FAMILY_NOTICE}</p>
+          {contact.family.length === 0 ? (
+            <p className="text-[11px] text-gray-500 mt-0.5">記録がありません。</p>
+          ) : (
+            <ul className="mt-1 space-y-1">
+              {contact.family.map((f, i) => (
+                <li key={`${contact.id}-fam-${i}`} className="rounded-lg border border-gray-200 p-2">
+                  <p className="text-gray-900">
+                    {f.relation || "（続柄未記入）"}
+                    {f.count && <span className="ml-1.5 text-[11px] text-gray-600">{f.count}人</span>}
+                  </p>
+                  {f.memo && (
+                    <p className="text-[11px] text-gray-600 whitespace-pre-wrap">{f.memo}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -452,12 +480,19 @@ function StaffContactForm({
     emergency: initial.emergency.length
       ? initial.emergency
       : [{ name: "", relation: "", phone: "", memo: "" }],
+    family: initial.family,
   });
 
   const set = <K extends keyof StaffContactInput>(
     key: K,
     value: StaffContactInput[K]
   ) => setForm((prev) => ({ ...prev, [key]: value }));
+
+  const setFamily = (index: number, patch: Partial<FamilyMember>) =>
+    setForm((prev) => ({
+      ...prev,
+      family: prev.family.map((f, i) => (i === index ? { ...f, ...patch } : f)),
+    }));
 
   const setEmergency = (index: number, patch: Partial<EmergencyContact>) =>
     setForm((prev) => ({
@@ -631,6 +666,74 @@ function StaffContactForm({
             className="px-3 py-2 border border-gray-300 text-gray-700 rounded-full text-xs hover:bg-gray-50 min-h-[40px]"
           >
             ＋ もう1件ふやす
+          </button>
+        )}
+      </section>
+
+      {/* 家族構成（本人申告・179 D）。このフォームに到達できるのは管理者だけ */}
+      <section className="rounded-lg border border-gray-200 bg-white p-2 space-y-2">
+        <p className="text-xs font-medium text-gray-800">👪 家族構成（本人申告・最大{FAMILY_MAX}行）</p>
+        <p className="text-[10px] text-gray-700 leading-relaxed bg-amber-50 border border-amber-200 rounded-md p-2">
+          {FAMILY_NOTICE}
+        </p>
+        <p className="text-[10px] text-gray-600 leading-relaxed">
+          <strong>続柄・人数・備考だけ</strong>を記録します（家族の住所・勤務先・生年月日の欄は設けていません）。
+          この欄は管理者にだけ表示されます。
+        </p>
+        {form.family.map((f, i) => (
+          <div key={`fam-${i}`} className="rounded-lg border border-gray-200 p-2 space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_6em] gap-2">
+              <Field label="続柄">
+                <input
+                  value={f.relation}
+                  onChange={(ev) => setFamily(i, { relation: ev.target.value })}
+                  className={inputClass}
+                  placeholder="配偶者・子・親 など"
+                />
+              </Field>
+              <Field label="人数">
+                <input
+                  type="number"
+                  min={0}
+                  max={99}
+                  inputMode="numeric"
+                  value={f.count}
+                  onChange={(ev) => setFamily(i, { count: ev.target.value })}
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+            <Field label="備考">
+              <input
+                value={f.memo}
+                onChange={(ev) => setFamily(i, { memo: ev.target.value })}
+                className={inputClass}
+                placeholder="就学中・介護あり など、本人が申告した範囲で"
+              />
+            </Field>
+            <button
+              type="button"
+              onClick={() =>
+                setForm((prev) => ({ ...prev, family: prev.family.filter((_, j) => j !== i) }))
+              }
+              className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-full text-[11px] hover:bg-gray-50 min-h-[36px]"
+            >
+              この行を消す
+            </button>
+          </div>
+        ))}
+        {form.family.length < FAMILY_MAX && (
+          <button
+            type="button"
+            onClick={() =>
+              setForm((prev) => ({
+                ...prev,
+                family: [...prev.family, { relation: "", count: "", memo: "" }],
+              }))
+            }
+            className="px-3 py-2 border border-gray-300 text-gray-700 rounded-full text-xs hover:bg-gray-50 min-h-[40px]"
+          >
+            ＋ 続柄をふやす
           </button>
         )}
       </section>

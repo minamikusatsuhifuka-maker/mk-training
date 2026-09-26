@@ -28,6 +28,7 @@ import {
 } from "@/lib/staff-contacts-server";
 import {
   normalizeStaffContact,
+  withoutFamily,
   type StaffContact,
 } from "@/lib/staff-contacts";
 
@@ -97,8 +98,11 @@ export async function GET(req: Request) {
     // 画面が必要とするのは「この連絡先が退職者かどうか」だけなので、
     // 連絡先に紐付いているIDだけに絞る（無関係なアカウントの状態を配らない）。
     const linked = new Set(contacts.map((c) => c.userId).filter(Boolean));
+    // 179 D: 家族構成（本人申告）は**管理者のみ**。169で指名された閲覧者には渡す前に落とす
+    //（見せない判断は見せる場所ではなく渡す前に行う・164と同じ）
+    const visible = auth.isAdmin ? contacts : contacts.map(withoutFamily);
     return NextResponse.json({
-      contacts,
+      contacts: visible,
       retiredUserIds: retiredUserIds.filter((id) => linked.has(id)),
       isAdmin: auth.isAdmin,
       tableMissing,

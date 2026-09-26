@@ -49,6 +49,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const [canSeeContacts, setCanSeeContacts] = useState(false);
   // 173: 院長の振り返り記録も同じ流儀（管理者だけ・probeが404ならリンクを出さない）
   const [canSeeRetro, setCanSeeRetro] = useState(false);
+  // 179: スタッフ育成カルテも同じ流儀（管理者だけ・probeが404ならリンクを出さない）
+  const [canSeeGrowth, setCanSeeGrowth] = useState(false);
   useEffect(() => {
     let cancelled = false;
     const probe = (path: string, set: (ok: boolean) => void) =>
@@ -63,6 +65,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     probe("/api/doc-tasks?probe=1", setCanSeeDocTasks);
     probe("/api/staff-contacts?probe=1", setCanSeeContacts);
     probe("/api/director-retrospective?probe=1", setCanSeeRetro);
+    probe("/api/growth/karte?probe=1", setCanSeeGrowth);
     return () => {
       cancelled = true;
     };
@@ -91,6 +94,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       : []),
     ...(canSeeRetro
       ? [{ label: "🧭 院長の振り返り記録", href: "/director-retrospective" }]
+      : []),
+    ...(canSeeGrowth
+      ? [
+          { label: "📗 スタッフ育成カルテ", href: "/staff-growth" },
+          // 179: 講座マスタ・設定はここから開く（/admin 配下だとルートの存在が漏れるため・157と同じ理由）
+          { label: "🗂 講座マスタ・AI下書き設定", href: "/staff-growth/courses" },
+        ]
       : []),
   ];
 
