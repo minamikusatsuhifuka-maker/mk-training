@@ -573,7 +573,8 @@ export type TimelineKind =
   | "member_note"
   | "self_review"
   | "survey"
-  | "delegation";
+  | "delegation"
+  | "hiring_doc";
 
 export const TIMELINE_KIND_LABEL: Record<TimelineKind, string> = {
   joined: "入職",
@@ -583,6 +584,7 @@ export const TIMELINE_KIND_LABEL: Record<TimelineKind, string> = {
   self_review: "自己評価",
   survey: "サーベイ公開",
   delegation: "権限委譲",
+  hiring_doc: "採用資料",
 };
 
 /**

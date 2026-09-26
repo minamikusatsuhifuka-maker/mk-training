@@ -380,6 +380,7 @@ export function buildStaffContactChanges(
       after: next.userId ? "あり" : "なし",
     });
   }
+  addPresenceChange(changes, "ふりがな", prev.kana, next.kana);
   addPresenceChange(changes, "住所", prev.address, next.address);
   addPresenceChange(changes, "電話番号（携帯）", prev.phoneMobile, next.phoneMobile);
   addPresenceChange(changes, "電話番号（自宅）", prev.phoneHome, next.phoneHome);
@@ -417,6 +418,7 @@ export function staffContactSnapshot(
   const empty: StaffContact = {
     ...contact,
     name: "",
+    kana: "",
     userId: "",
     address: "",
     phoneMobile: "",

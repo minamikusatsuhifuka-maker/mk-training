@@ -22,6 +22,7 @@ import {
 } from "@/lib/staff-growth";
 import { NEED_KEYS, NEED_LABELS, NEED_GROUP_STYLE, NEEDS_GROUPS } from "@/lib/needs-survey";
 import { NeedsRadarChart } from "@/components/NeedsRadarChart";
+import { HiringDocsPanel } from "@/components/HiringDocsPanel";
 import {
   createLearningApi,
   deleteEvidenceApi,
@@ -48,6 +49,7 @@ const KIND_TONE: Record<TimelineKind, string> = {
   self_review: "bg-violet-50 text-violet-800",
   survey: "bg-rose-50 text-rose-800",
   delegation: "bg-emerald-50 text-emerald-800",
+  hiring_doc: "bg-orange-50 text-orange-800",
 };
 
 export function StaffGrowthDetail({ userId }: { userId: string }) {
@@ -318,6 +320,9 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
           </button>
         )}
       </section>
+
+      {/* 184: 採用資料・経歴・入職時の想い（院長のみ。幹部モードでは描画しない＝APIも404） */}
+      {isAdmin && <HiringDocsPanel userId={userId} staffName={entry.name} />}
 
       {/* 学びの記録（管理者は追加・編集できる・B-4） */}
       <section id="learning" className="space-y-2">

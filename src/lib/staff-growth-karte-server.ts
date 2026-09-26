@@ -23,6 +23,8 @@ import { redactSurveyForViewer } from "./survey-visibility";
 import { loadSurveyHistory } from "./survey-history-server";
 import { surveyFromEntry } from "./survey-history";
 import { signOne } from "./storage-signed";
+import { fetchHiringDocs } from "./hiring-docs-server";
+import { hiringDocKindLabel, type HiringDoc } from "./hiring-docs";
 import { authorizeStaffContacts, fetchAllStaffContacts } from "./staff-contacts-server";
 import { authorizeMemberNotes, fetchAllNotes } from "./member-notes-server";
 import {
@@ -219,6 +221,8 @@ type Sources = {
   surveyByUser: Map<string, SurveyView[]>;
   /** 183: 1on1の約束の取り組み状況（幹部モードでも出す。本文は約束だけ） */
   promiseStatuses: Map<string, PromiseStatus[]>;
+  /** 184: 採用資料（院長のみ＝full モードだけ集める。幹部モードでは空） */
+  hiringDocsByUser: Map<string, HiringDoc[]>;
   scope: KarteScope;
   tableMissing: boolean;
 };
@@ -357,6 +361,21 @@ async function loadSources(
     /* 飛ばす */
   }
 
+  // 184: 採用資料の日付（院長のみ）。テーブル未作成・失敗は無しで続ける
+  const hiringDocsByUser = new Map<string, HiringDoc[]>();
+  if (!delegate) {
+    try {
+      const { docs } = await fetchHiringDocs(admin);
+      for (const d of docs) {
+        const list = hiringDocsByUser.get(d.userId);
+        if (list) list.push(d);
+        else hiringDocsByUser.set(d.userId, [d]);
+      }
+    } catch {
+      /* 無しで続ける */
+    }
+  }
+
   // 公開されたサーベイ（164の判定を閲覧者＝管理者自身で通す）
   //
   // 【181: 出す中身は本人への説明の範囲だけ】
@@ -411,6 +430,7 @@ async function loadSources(
     delegations,
     surveyByUser,
     promiseStatuses,
+    hiringDocsByUser,
     scope,
     tableMissing: coursesRes.tableMissing || learningRes.tableMissing,
   };
@@ -531,6 +551,17 @@ function buildTimeline(src: Sources, person: RosterPerson): TimelineItem[] {
         .filter(Boolean)
         .join("\n"),
       href: "/admin/portal",
+    });
+  }
+
+  // 184: 登録した採用資料の日付（院長のみ）。中身は出さず、種類とメモだけ
+  for (const d of src.hiringDocsByUser.get(person.userId) ?? []) {
+    items.push({
+      kind: "hiring_doc",
+      date: d.docDate || d.createdAt.slice(0, 10),
+      title: `採用資料: ${hiringDocKindLabel(d.kind)}`,
+      body: d.memo,
+      href: `/staff-growth/${encodeURIComponent(person.userId)}#hiring`,
     });
   }
 

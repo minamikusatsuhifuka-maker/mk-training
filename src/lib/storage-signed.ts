@@ -75,7 +75,9 @@ export function logSignFailure(
 export async function signBucketPaths(
   admin: AdminClient,
   bucket: string,
-  paths: readonly string[]
+  paths: readonly string[],
+  /** 有効期間（秒）。既定は SIGNED_URL_TTL。184の採用資料だけ短く（10分）する */
+  ttl: number = SIGNED_URL_TTL
 ): Promise<{ urls: Map<string, string>; bucketMissing: boolean }> {
   const urls = new Map<string, string>();
   const uniq = Array.from(new Set(paths.filter(Boolean)));
@@ -84,7 +86,7 @@ export async function signBucketPaths(
   try {
     const { data, error } = await admin.storage
       .from(bucket)
-      .createSignedUrls(uniq, SIGNED_URL_TTL);
+      .createSignedUrls(uniq, ttl);
     if (error || !data) {
       const bucketMissing = isBucketNotFound(error?.message);
       logSignFailure("createSignedUrls", {

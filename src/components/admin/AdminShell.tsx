@@ -11,7 +11,7 @@ import { FontSwitcher } from "@/components/FontSwitcher";
 import { ADMIN_ITEMS } from "@/lib/admin-items";
 
 // 項目一覧（表示順は lib/admin-items.ts の定義順）
-const adminNav = ADMIN_ITEMS.map((i) => ({ key: i.key, label: i.label, href: i.href }));
+const adminNav = ADMIN_ITEMS.filter((i) => !i.hidden).map((i) => ({ key: i.key, label: i.label, href: i.href }));
 
 export function AdminShell({
   children,

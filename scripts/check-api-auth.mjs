@@ -28,6 +28,7 @@ const GUARDS = [
   "authorizeStaffContacts", // 169: スタッフ連絡先（指名制・閲覧のみ／編集は管理者・非許可は404）
   "authorizeDirectorRetrospective", // 173: 院長の振り返り記録（管理者のみ・非許可は404）
   "authorizeGrowth", // 179: スタッフ育成カルテ／学びの記録（本人=フラグON時のみ・管理者=常に・非許可は404）
+  "authorizeHiring", // 184: 採用資料（院長のみ・委任不可・非許可は404）
   "authorizeEvents", // 128: イベント（閲覧=ログイン済み・投稿=編集者）
   "CRON_SECRET", // 155: Vercel Cron 用の共有鍵
   "HR_CHAT_KNOWLEDGE_TOKEN", // ai-incho からのサーバー間呼び出し
@@ -64,6 +65,7 @@ const ADMIN_GUARDS = [
   "authorizeStaffContacts",
   "authorizeDirectorRetrospective",
   "authorizeGrowth",
+  "authorizeHiring",
   "isAdminUser",
 ];
 const ADMIN_SELF_ROUTES = new Set(["admin/my-items"]);

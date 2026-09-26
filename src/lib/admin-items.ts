@@ -27,6 +27,8 @@ export type AdminItem = {
   contentKeys?: readonly string[];
   /** この項目の画面が書く content_store のキー（前方一致） */
   contentPrefixes?: readonly string[];
+  /** 管理画面のメニューには出さない（別の画面の中にある機能を分類表に載せるため） */
+  hidden?: true;
 };
 
 export const ADMIN_ITEMS: readonly AdminItem[] = [
@@ -102,6 +104,8 @@ export const ADMIN_ITEMS: readonly AdminItem[] = [
   { key: "changelog", label: "📝 更新履歴", href: "/admin/changelog", delegable: true, reason: "閲覧のみ" },
   { key: "settings", label: "⚙️ AI設定", href: "/admin/settings", delegable: false, reason: "AIのプロバイダ・モデル設定（AI／課金）" },
   { key: "delegation", label: "🔑 委任の設定", href: "/admin/delegation", delegable: false, reason: "権限・指名の設定そのもの" },
+  // 184: 採用資料（履歴書・適性検査）は育成カルテの中の機能。院長のみ（179の決定）で委任できない
+  { key: "hiring-docs", label: "📁 採用資料（履歴書・適性検査・経歴）", href: "/staff-growth", delegable: false, reason: "履歴書原本・適性検査・経歴（機微な個人情報）", hidden: true },
 ] as const;
 
 /** 管理画面のメニューには出ないが /admin 配下に存在するものは無い（存在すればここに足して分類する） */

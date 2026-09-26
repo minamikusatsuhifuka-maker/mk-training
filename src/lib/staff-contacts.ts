@@ -54,6 +54,8 @@ export type StaffContact = {
   userId: string;
   /** 氏名（必須） */
   name: string;
+  /** ふりがな（184で追加・任意） */
+  kana: string;
   /** 住所 */
   address: string;
   /** 電話番号（携帯） */
@@ -150,6 +152,7 @@ export function normalizeStaffContact(
     id,
     userId: text(g.userId, 100),
     name,
+    kana: text(g.kana, NAME_MAX).trim(),
     address: text(g.address, ADDRESS_MAX).trim(),
     phoneMobile: text(g.phoneMobile, PHONE_MAX).trim(),
     phoneHome: text(g.phoneHome, PHONE_MAX).trim(),
@@ -169,6 +172,7 @@ export function emptyStaffContact(): StaffContact {
     id: "",
     userId: "",
     name: "",
+    kana: "",
     address: "",
     phoneMobile: "",
     phoneHome: "",

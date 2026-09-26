@@ -338,6 +338,7 @@ function ContactDetail({ contact, isAdmin }: { contact: StaffContact; isAdmin: b
   return (
     <div className="space-y-2 text-[12px] leading-relaxed">
       <dl className="space-y-1">
+        <Row label="ふりがな" value={contact.kana} />
         <Row label="住所" value={contact.address} />
         <Row label="電話（携帯）" value={contact.phoneMobile} tel />
         <Row label="電話（自宅）" value={contact.phoneHome} tel />
@@ -470,6 +471,7 @@ function StaffContactForm({
   const [form, setForm] = useState<StaffContactInput>({
     userId: initial.userId,
     name: initial.name,
+    kana: initial.kana,
     address: initial.address,
     phoneMobile: initial.phoneMobile,
     phoneHome: initial.phoneHome,
@@ -514,6 +516,15 @@ function StaffContactForm({
           onChange={(e) => set("name", e.target.value)}
           className={inputClass}
           placeholder="南草津 花子"
+        />
+      </Field>
+
+      <Field label="ふりがな">
+        <input
+          value={form.kana}
+          onChange={(e) => set("kana", e.target.value)}
+          className={inputClass}
+          placeholder="みなみくさつ はなこ"
         />
       </Field>
 
