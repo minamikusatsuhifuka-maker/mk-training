@@ -431,98 +431,84 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
  * ＝本人への説明（プロフィールの公開設定）の範囲。順位付け・他者比較・高い/低いの評価語は付けない。
  */
 function SurveyBlock({ view }: { view: SurveyView }) {
+  // 186 B: 最初から表示。見出しの「たたむ」で折りたためる
+  const [open, setOpen] = useState(true);
   const hasValues = NEED_KEYS.some((k) => typeof view.values[k] === "number");
+  const summary =
+    NEED_KEYS.filter((k) => typeof view.values[k] === "number")
+      .map((k) => `${NEED_LABELS[k]} ${view.values[k]}`)
+      .join(" / ") || "点数の記録なし";
   return (
-    <details className="mt-1 rounded-lg border border-rose-100 bg-rose-50/40 p-2" data-survey-block>
-      <summary className="text-[11px] text-rose-900 cursor-pointer min-h-[32px] flex items-center gap-2 flex-wrap">
-        {NEED_KEYS.filter((k) => typeof view.values[k] === "number")
-          .map((k) => `${NEED_LABELS[k]} ${view.values[k]}`)
-          .join(" / ") || "点数の記録なし"}
-        <span className="text-[10px] text-rose-700 underline underline-offset-2">詳しく見る</span>
-      </summary>
-      <div className="mt-2 flex flex-wrap items-start gap-3">
-        {hasValues && (
-          <div className="shrink-0">
-            <NeedsRadarChart values={view.values} size={200} />
-          </div>
-        )}
-        <div className="min-w-[12em] flex-1 space-y-1">
-          <p className="text-[11px] text-gray-500">
-            回答日: {view.answeredOn ? view.answeredOn.replaceAll("-", "/") : "記録なし"}
-          </p>
-          <ul className="space-y-0.5" aria-label="5つの欲求の点数">
-            {NEED_KEYS.map((k) => {
-              const s = NEED_GROUP_STYLE[k];
-              const v = view.values[k];
-              const d = view.diff?.[k];
-              return (
-                <li key={k} className={`flex items-center gap-2 text-[12px] border-l-4 pl-2 ${s.rowBorder}`}>
-                  <span className={`inline-block h-2 w-2 rounded-full ${s.dot}`} />
-                  <span className={`w-[5em] ${s.text}`}>{NEED_LABELS[k]}</span>
-                  <span className="tabular-nums text-gray-900">{typeof v === "number" ? v : "—"}</span>
-                  {typeof d === "number" && (
-                    <span className="text-[10px] text-gray-500 tabular-nums">（前回比 {formatDiff(d)}）</span>
+    <div className="mt-1 rounded-lg border border-rose-100 bg-rose-50/40 p-2" data-survey-block data-open={open ? "1" : "0"}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] text-rose-900">{summary}</p>
+        <button type="button" onClick={() => setOpen((v) => !v)} className="text-[10px] text-rose-700 underline underline-offset-2 min-h-[28px] shrink-0">
+          {open ? "たたむ" : "ひらく"}
+        </button>
+      </div>
+      {open && (
+        <div className="mt-1.5 space-y-1.5">
+          {/* レーダー（小さめ）＋5つの点数を横並び（縦に長くしない） */}
+          <div className="flex flex-wrap items-center gap-3">
+            {hasValues && (
+              <div className="shrink-0">
+                <NeedsRadarChart values={view.values} size={140} compact />
+              </div>
+            )}
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-[10px] text-gray-500">回答日: {view.answeredOn ? view.answeredOn.replaceAll("-", "/") : "記録なし"}</p>
+              <ul className="flex flex-wrap gap-1" aria-label="5つの欲求の点数">
+                {NEED_KEYS.map((k) => {
+                  const s = NEED_GROUP_STYLE[k];
+                  const v = view.values[k];
+                  const d = view.diff?.[k];
+                  return (
+                    <li key={k} className={`text-[11px] px-2 py-0.5 rounded-full border ${s.headerBg} ${s.text} border-current/20`}>
+                      {NEED_LABELS[k]} <span className="tabular-nums font-medium">{typeof v === "number" ? v : "—"}</span>
+                      {typeof d === "number" && <span className="text-[10px] text-gray-500 ml-1">（前回比 {formatDiff(d)}）</span>}
+                    </li>
+                  );
+                })}
+              </ul>
+              {/* 詳細15項目（「詳細も公開」の人だけ）: 欲求ごとに色分けしたチップを横に並べて折り返す */}
+              {view.details && (
+                <ul className="flex flex-wrap gap-1" aria-label="詳細15項目" data-survey-detail-chips>
+                  {NEEDS_GROUPS.flatMap((group) =>
+                    group.items
+                      .filter((it) => typeof view.details?.[it.key] === "number")
+                      .map((it) => {
+                        const s = NEED_GROUP_STYLE[group.key];
+                        const d = view.detailsDiff?.[it.key];
+                        return (
+                          <li key={it.key} className={`text-[11px] px-2 py-0.5 rounded-full border-l-4 bg-white ${s.rowBorder} ${s.text}`} title={`${group.label}: ${it.label}`}>
+                            {it.label} <span className="tabular-nums font-medium">{view.details?.[it.key]}</span>
+                            {typeof d === "number" && <span className="text-[10px] text-gray-500 ml-0.5">{formatDiff(d)}</span>}
+                          </li>
+                        );
+                      })
                   )}
-                </li>
-              );
-            })}
-          </ul>
-          {view.imageUrl &&
-            (view.isPdf ? (
-              <a
-                href={view.imageUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] text-teal-800 underline underline-offset-2 min-h-[32px]"
-              >
-                📄 結果PDFを開く（1時間有効のリンク）
-              </a>
-            ) : (
-              <a href={view.imageUrl} target="_blank" rel="noopener noreferrer" className="inline-block">
-                {/* 署名URLは1時間で切れるため next/image を通さない */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={view.imageUrl}
-                  alt="サーベイ結果画像"
-                  className="w-28 rounded-md border border-gray-200 object-cover hover:opacity-90"
-                />
-              </a>
-            ))}
-          {view.details && (
-            <details className="rounded-md border border-gray-200 bg-white p-2">
-              <summary className="text-[11px] text-teal-800 cursor-pointer min-h-[32px] flex items-center">
-                詳細15項目（本人が「詳細も公開」を選択）
-              </summary>
-              <table className="w-full text-[11px] mt-1">
-                <tbody>
-                  {NEEDS_GROUPS.map((group) => {
-                    const items = group.items.filter((it) => typeof view.details?.[it.key] === "number");
-                    if (items.length === 0) return null;
-                    const s = NEED_GROUP_STYLE[group.key];
-                    return items.map((it, idx) => (
-                      <tr key={it.key} className={`border-l-4 ${s.rowBorder}`}>
-                        <td className={`pl-2 pr-1 py-0.5 ${s.text} w-[5em]`}>{idx === 0 ? group.label : ""}</td>
-                        <td className="py-0.5 pr-2 text-gray-800">{it.label}</td>
-                        <td className="py-0.5 pr-2 text-right tabular-nums text-gray-900">{view.details?.[it.key]}</td>
-                        <td className="py-0.5 text-[10px] text-gray-500 tabular-nums">
-                          {typeof view.detailsDiff?.[it.key] === "number"
-                            ? `（前回比 ${formatDiff(view.detailsDiff[it.key])}）`
-                            : ""}
-                        </td>
-                      </tr>
-                    ));
-                  })}
-                </tbody>
-              </table>
-            </details>
-          )}
+                </ul>
+              )}
+              {view.imageUrl &&
+                (view.isPdf ? (
+                  <a href={view.imageUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] text-teal-800 underline underline-offset-2 min-h-[28px]">
+                    📄 結果PDFを開く（1時間有効のリンク）
+                  </a>
+                ) : (
+                  <a href={view.imageUrl} target="_blank" rel="noopener noreferrer" className="inline-block">
+                    {/* 署名URLは1時間で切れるため next/image を通さない */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={view.imageUrl} alt="サーベイ結果画像" className="w-20 rounded-md border border-gray-200 object-cover hover:opacity-90" />
+                  </a>
+                ))}
+            </div>
+          </div>
           <p className="text-[10px] text-gray-500">
-            本人が公開した内容だけを表示しています（レーダーチャート・点数・画像
-            {view.details ? "・詳細15項目の欲求" : ""}）。相互理解のための共有で、評価・優劣付けには使いません。
+            本人が公開した内容だけを表示しています（レーダーチャート・点数・画像{view.details ? "・詳細15項目の欲求" : ""}）。相互理解のための共有で、評価・優劣付けには使いません。
           </p>
         </div>
-      </div>
-    </details>
+      )}
+    </div>
   );
 }
 

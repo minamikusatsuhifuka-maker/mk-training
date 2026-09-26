@@ -5,7 +5,7 @@
 // - 証跡は署名URL（1時間）で表示。追加・削除は専用API
 // - 「次にやること → 目標に移す」は本人ページでだけ出す（onMoveToGoal を渡したとき）
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   attendanceCounts,
   attendanceLabel,
@@ -17,6 +17,7 @@ import {
   type LearningRecord,
 } from "@/lib/staff-growth";
 import { PHOTO_MAX_EDGE, resizeImageToJpeg } from "@/lib/image-resize";
+import { DropZone } from "@/components/DropZone";
 
 export function LearningRecordList({
   records,
@@ -194,23 +195,39 @@ function EvidenceBlock({
   onUpload: (record: LearningRecord, files: Blob[]) => Promise<void>;
   onDelete: (record: LearningRecord, path: string) => Promise<void>;
 }) {
-  const ref = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState("");
+  const [rejected, setRejected] = useState<string[]>([]);
 
-  const pick = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+  // 186: ドロップ／選択のどちらでも。画像以外は理由を出して登録しない（他の画像は止めない）
+  const pick = async (files: File[]) => {
+    if (files.length === 0) return;
     setUploading(true);
     setErr("");
+    const reasons: string[] = [];
     try {
       const blobs: Blob[] = [];
-      for (const f of Array.from(files)) blobs.push(await resizeImageToJpeg(f, PHOTO_MAX_EDGE));
-      await onUpload(record, blobs);
+      for (const f of files) {
+        if (!f.type.startsWith("image/")) {
+          reasons.push(`${f.name}: 画像ではないため登録しません（受講証・メモの写真のみ）`);
+          continue;
+        }
+        if (f.size > 20 * 1024 * 1024) {
+          reasons.push(`${f.name}: 20MBを超えています`);
+          continue;
+        }
+        try {
+          blobs.push(await resizeImageToJpeg(f, PHOTO_MAX_EDGE));
+        } catch {
+          reasons.push(`${f.name}: この端末では変換できません（JPEG か PNG で）`);
+        }
+      }
+      setRejected(reasons);
+      if (blobs.length > 0) await onUpload(record, blobs);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "アップロードに失敗しました");
     } finally {
       setUploading(false);
-      if (ref.current) ref.current.value = "";
     }
   };
 
@@ -260,17 +277,19 @@ function EvidenceBlock({
         </ul>
       )}
       {canEdit && (
-        <div>
-          <input
-            ref={ref}
-            type="file"
+        <div className="space-y-1">
+          <DropZone
+            testId="evidence"
             accept="image/*"
-            multiple
             disabled={busy || uploading}
-            onChange={(e) => void pick(e.target.files)}
-            className="text-xs"
+            onFiles={(files) => void pick(files)}
+            label="証跡の画像をここにドラッグ＆ドロップ（複数可）"
+            className="p-2"
           />
           {uploading && <p className="text-[11px] text-gray-600">アップロード中…</p>}
+          {rejected.map((r) => (
+            <p key={r} className="text-[11px] text-red-700" data-reject-reason>{r}</p>
+          ))}
           {err && <p className="text-[11px] text-red-700">{err}</p>}
         </div>
       )}

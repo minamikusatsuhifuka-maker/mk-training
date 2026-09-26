@@ -6,11 +6,13 @@
 //   有料枠の設定（179）がOFFのときはボタンを無効表示
 // - 経歴・入職時の想い: 院長が直接編集できる
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { DropZone } from "@/components/DropZone";
 import {
   CONTACT_FIELD_LABEL,
   CONTACT_PROPOSAL_KEYS,
   HIRING_DOC_KINDS,
+  HIRING_DOC_MAX_BYTES,
   HIRING_PROFILE_FIELDS,
   hiringDocKindLabel,
   type ContactProposalKey,
@@ -52,11 +54,27 @@ export function HiringDocsPanel({ userId, staffName }: { userId: string; staffNa
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
-  const [kind, setKind] = useState<HiringDocKind>("resume");
-  const [docDate, setDocDate] = useState("");
-  const [memo, setMemo] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  // 186: 複数ファイルをまとめて受け取り、1件ずつ種類・日付・メモを編集してから登録する
+  type QueueRow = { key: string; file: File; kind: HiringDocKind; docDate: string; memo: string; reason: string; state: "ready" | "busy" | "done" };
+  const [queue, setQueue] = useState<QueueRow[]>([]);
+  // 直前に選んでいた種類・日付を次の行の初期値にする（A-2）
+  const [lastKind, setLastKind] = useState<HiringDocKind>("resume");
+  const [lastDate, setLastDate] = useState("");
+  const addFiles = (files: File[]) => {
+    setQueue((prev) => [
+      ...prev,
+      ...files.map((f, i) => {
+        const mime = f.type === "image/jpg" ? "image/jpeg" : f.type;
+        const isImage = mime.startsWith("image/");
+        let reason = "";
+        if (!(mime === "application/pdf" || isImage)) reason = "対象外の形式です（PDF・JPEG・PNG・写真のみ）";
+        else if (f.size === 0) reason = "空のファイルです";
+        else if (f.size > HIRING_DOC_MAX_BYTES) reason = "20MBを超えています";
+        return { key: `${Date.now()}-${i}-${f.name}`, file: f, kind: lastKind, docDate: lastDate, memo: "", reason, state: "ready" as const };
+      }),
+    ]);
+  };
+  const setRow = (key: string, patch: Partial<QueueRow>) => setQueue((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const [viewer, setViewer] = useState<{ url: string; mimeType: string; fileName: string } | null>(null);
   const [profileDraft, setProfileDraft] = useState<HiringProfileText | null>(null);
   const [extract, setExtract] = useState<{ docId: string; proposal: HiringProposal; current: { contact: StaffContact; profile: HiringProfile } } | null>(null);
@@ -82,34 +100,44 @@ export function HiringDocsPanel({ userId, staffName }: { userId: string; staffNa
     setError("");
   };
 
-  // ─── 登録 ───
-  const upload = async () => {
-    if (!file) return;
-    setBusy(true);
+  // ─── 登録（行ごと。対象外の行は登録せず、他の行は止めない・A-2） ───
+  const uploadRow = async (row: QueueRow) => {
+    if (row.reason || row.state !== "ready") return;
+    setRow(row.key, { state: "busy" });
     setError("");
     try {
-      let blob: Blob = file;
-      let name = file.name;
-      // 画像はJPEGに変換（HEIC・大きな写真対策）。PDFはそのまま
-      if (file.type !== "application/pdf" && file.type !== "image/png") {
-        blob = await resizeImageToJpeg(file, PHOTO_MAX_EDGE * 2, 0.9);
-        name = name.replace(/\.[^.]+$/, "") + ".jpg";
+      let blob: Blob = row.file;
+      let name = row.file.name;
+      // 画像はJPEGに変換（HEIC・大きな写真対策）。PDF・PNGはそのまま
+      if (row.file.type !== "application/pdf" && row.file.type !== "image/png") {
+        try {
+          blob = await resizeImageToJpeg(row.file, PHOTO_MAX_EDGE * 2, 0.9);
+          name = name.replace(/\.[^.]+$/, "") + ".jpg";
+        } catch {
+          setRow(row.key, { state: "ready", reason: "この端末では画像を変換できません（JPEG か PNG で登録してください）" });
+          return;
+        }
       }
       const form = new FormData();
       form.set("userId", userId);
-      form.set("kind", kind);
-      form.set("docDate", docDate);
-      form.set("memo", memo);
+      form.set("kind", row.kind);
+      form.set("docDate", row.docDate);
+      form.set("memo", row.memo);
       form.set("file", blob, name);
       const { doc } = await api<{ doc: HiringDoc }>("/api/admin/hiring", { method: "POST", body: form });
       setData((d) => (d ? { ...d, docs: [doc, ...d.docs] } : d));
-      setFile(null);
-      setMemo("");
-      setDocDate("");
-      if (fileRef.current) fileRef.current.value = "";
-      flash("📁 資料を登録しました");
+      setLastKind(row.kind);
+      setLastDate(row.docDate);
+      setQueue((prev) => prev.filter((r) => r.key !== row.key));
+      flash(`📁 ${row.file.name} を登録しました`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "登録に失敗しました");
+      setRow(row.key, { state: "ready", reason: e instanceof Error ? e.message : "登録に失敗しました" });
+    }
+  };
+  const uploadAll = async () => {
+    setBusy(true);
+    try {
+      for (const row of queue) if (!row.reason && row.state === "ready") await uploadRow(row);
     } finally {
       setBusy(false);
     }
@@ -192,24 +220,60 @@ export function HiringDocsPanel({ userId, staffName }: { userId: string; staffNa
       {error && <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">{error}</p>}
       {msg && <p className="text-xs text-teal-800 bg-teal-50 border border-teal-200 rounded-lg p-2">{msg}</p>}
 
-      {/* 登録 */}
-      <div className="rounded-lg border border-gray-200 bg-white p-2 space-y-2">
+      {/* 登録（186: ドラッグ＆ドロップ＋複数ファイル） */}
+      <div className="rounded-lg border border-gray-200 bg-white p-2 space-y-2" data-hiring-upload>
         <p className="text-[11px] font-medium text-gray-800">＋ 資料を登録（PDF・JPEG・PNG・20MBまで。iPhoneの写真も可）</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <select value={kind} onChange={(e) => setKind(e.target.value as HiringDocKind)} className={inputClass} aria-label="資料の種類">
-            {HIRING_DOC_KINDS.map((k) => (
-              <option key={k.value} value={k.value}>
-                {k.label}
-              </option>
+        <DropZone
+          testId="hiring"
+          accept="application/pdf,image/*"
+          disabled={busy}
+          onFiles={addFiles}
+          label="ここにファイルをドラッグ＆ドロップ（複数可）"
+          hint="iPhone・iPad は「ファイルを選択」から"
+        />
+        {queue.length > 0 && (
+          <ul className="space-y-2" data-hiring-queue>
+            {queue.map((row) => (
+              <li key={row.key} className={`rounded-md border p-2 space-y-1.5 ${row.reason ? "border-red-200 bg-red-50/40" : "border-gray-200"}`} data-queue-row data-rejected={row.reason ? "1" : "0"}>
+                <p className="text-[11px] text-gray-800 truncate">
+                  📄 {row.file.name} <span className="text-gray-500">（{Math.round(row.file.size / 1024)} KB）</span>
+                </p>
+                {row.reason ? (
+                  <p className="text-[11px] text-red-700" data-reject-reason>{row.reason}</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <select value={row.kind} onChange={(e) => setRow(row.key, { kind: e.target.value as HiringDocKind })} className={inputClass} aria-label="資料の種類">
+                      {HIRING_DOC_KINDS.map((k) => (
+                        <option key={k.value} value={k.value}>
+                          {k.label}
+                        </option>
+                      ))}
+                    </select>
+                    <input type="date" value={row.docDate} onChange={(e) => setRow(row.key, { docDate: e.target.value })} className={inputClass} aria-label="資料の日付" />
+                    <input value={row.memo} onChange={(e) => setRow(row.key, { memo: e.target.value })} placeholder="メモ（任意）" className={inputClass} aria-label="メモ" />
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {!row.reason && (
+                    <button type="button" onClick={() => void uploadRow(row)} disabled={busy || row.state !== "ready"} className="px-3 py-1.5 bg-teal-600 text-white rounded-full text-xs hover:bg-teal-700 disabled:opacity-40 min-h-[36px]">
+                      {row.state === "busy" ? "登録中…" : "📁 この1件を登録"}
+                    </button>
+                  )}
+                  <button type="button" onClick={() => setQueue((prev) => prev.filter((r) => r.key !== row.key))} disabled={row.state === "busy"} className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-full text-xs hover:bg-gray-50 min-h-[36px]">
+                    外す
+                  </button>
+                </div>
+              </li>
             ))}
-          </select>
-          <input type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} className={inputClass} aria-label="資料の日付" />
-          <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="メモ（任意）" className={inputClass} aria-label="メモ" />
-        </div>
-        <input ref={fileRef} type="file" accept="application/pdf,image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-xs" aria-label="資料ファイル" />
-        <button type="button" onClick={() => void upload()} disabled={busy || !file} className="px-4 py-2 bg-teal-600 text-white rounded-full text-sm hover:bg-teal-700 disabled:opacity-40 min-h-[44px]">
-          {busy ? "登録中…" : "📁 登録"}
-        </button>
+            {queue.filter((r) => !r.reason && r.state === "ready").length > 1 && (
+              <li>
+                <button type="button" onClick={() => void uploadAll()} disabled={busy} className="px-4 py-2 bg-teal-600 text-white rounded-full text-sm hover:bg-teal-700 disabled:opacity-40 min-h-[44px]">
+                  📁 登録できる {queue.filter((r) => !r.reason && r.state === "ready").length} 件をまとめて登録
+                </button>
+              </li>
+            )}
+          </ul>
+        )}
       </div>
 
       {/* 一覧 */}
