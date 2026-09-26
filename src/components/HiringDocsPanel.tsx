@@ -14,7 +14,13 @@ import {
   HIRING_DOC_KINDS,
   HIRING_DOC_MAX_BYTES,
   HIRING_PROFILE_FIELDS,
+  FAMILY_RELATION_CHOICES,
   hiringDocKindLabel,
+  isValidEmail,
+  isValidPhone,
+  joinCareerYm,
+  splitCareerYm,
+  ymd,
   type ContactProposalKey,
   type HiringApplyInput,
   type HiringDoc,
@@ -492,14 +498,132 @@ export function HiringDocsPanel({ userId, staffName }: { userId: string; staffNa
   );
 }
 
-// ─── 提案の確認（3-1 ③④）───
+// ─── 提案の確認（3-1 ③④・187-補: その場で修正・行き先の変更・行の追加/削除）───
+//   修正中の内容は React の状態だけに置く（sessionStorage / localStorage には書かない＝資料の個人情報を端末に残さない）
 
-type Pick = {
-  contact: Record<ContactProposalKey, boolean>;
-  emergency: boolean[];
-  family: boolean[];
-  profile: Record<keyof HiringProfileText, { on: boolean; mode: "replace" | "append" }>;
+type Dest = ContactProposalKey | "emergency" | "family" | keyof HiringProfileText;
+// 行き先の選択肢＝184 3-2 の登録先だけ。3-3の項目（本籍・健康状態・宗教・家族の詳細など）はここに存在しない
+const DEST_OPTIONS: { value: Dest; label: string; group: string }[] = [
+  ...CONTACT_PROPOSAL_KEYS.map((k) => ({ value: k as Dest, label: CONTACT_FIELD_LABEL[k], group: "連絡先" })),
+  { value: "emergency", label: "緊急連絡先", group: "連絡先" },
+  { value: "family", label: "家族構成", group: "連絡先" },
+  ...HIRING_PROFILE_FIELDS.map((f) => ({ value: f.key as Dest, label: f.label, group: f.group })),
+];
+const destLabel = (d: Dest) => DEST_OPTIONS.find((o) => o.value === d)?.label ?? d;
+const isContactDest = (d: Dest): d is ContactProposalKey => (CONTACT_PROPOSAL_KEYS as readonly string[]).includes(d);
+const isProfileDest = (d: Dest): d is keyof HiringProfileText => HIRING_PROFILE_FIELDS.some((f) => f.key === d);
+const isCareerDest = (d: Dest) => d === "education" || d === "career" || d === "licenses";
+
+type Row = {
+  id: string;
+  dest: Dest;
+  on: boolean;
+  mode: "replace" | "append";
+  /** 文字・日付・電話・メール・志望動機/自己PR・経歴の内容 */
+  value: string;
+  /** 経歴の年月（YYYY-MM） */
+  ym: string;
+  /** 緊急連絡先（氏名・続柄・電話）／家族構成（続柄・人数） */
+  name: string;
+  relation: string;
+  phone: string;
+  count: string;
+  evidence: string;
+  /** 院長が「＋ 行を追加」で足した行 */
+  manual: boolean;
+  /** 修正判定用（最初の内容） */
+  orig: string;
 };
+
+const rowText = (r: Row): string =>
+  r.dest === "emergency" ? `${r.name}|${r.relation}|${r.phone}` : r.dest === "family" ? `${r.relation}|${r.count}` : isCareerDest(r.dest) ? joinCareerYm(r.ym, r.value) : r.value.trim();
+const rowEdited = (r: Row): boolean => r.manual || rowText(r) !== r.orig;
+const finalValue = (r: Row): string => (isCareerDest(r.dest) ? joinCareerYm(r.ym, r.value) : r.value.trim());
+
+/** 行ごとの形式チェック。理由を返す（空なら合格）。他の行の反映は止めない */
+function rowError(r: Row): string {
+  if (r.dest === "emergency") {
+    if (!r.name.trim() && !r.phone.trim()) return "氏名か電話番号を入力してください";
+    if (r.phone.trim() && !isValidPhone(r.phone)) return "電話番号の形式が合いません（数字10〜11桁）";
+    return "";
+  }
+  if (r.dest === "family") {
+    if (!r.relation.trim()) return "続柄を選んでください";
+    if (r.count.trim() && !/^\d{1,2}$/.test(r.count.trim())) return "人数は数字（2桁まで）で入力してください";
+    return "";
+  }
+  const v = finalValue(r);
+  if (!v) return "内容が空です";
+  if (r.dest === "birthday" && !ymd(v)) return "生年月日は日付（YYYY-MM-DD）で入力してください";
+  if ((r.dest === "phoneMobile" || r.dest === "phoneHome") && !isValidPhone(v)) return "電話番号の形式が合いません（数字10〜11桁）";
+  if (r.dest === "privateEmail" && !isValidEmail(v)) return "メールアドレスの形式が合いません";
+  return "";
+}
+
+let rowSeq = 0;
+const newRowId = () => `row-${++rowSeq}`;
+
+function blankRow(dest: Dest, on: boolean, evidence: string, manual: boolean): Row {
+  return { id: newRowId(), dest, on, mode: "append", value: "", ym: "", name: "", relation: "", phone: "", count: "", evidence, manual, orig: "" };
+}
+
+function rowsFromProposal(proposal: HiringProposal, current: { contact: StaffContact; profile: HiringProfile }): Row[] {
+  const rows: Row[] = [];
+  for (const k of CONTACT_PROPOSAL_KEYS) {
+    const p = proposal.contact[k];
+    if (!p) continue;
+    const r = blankRow(k, !currentContactValue(current.contact, k), p.evidence, false);
+    r.value = p.value;
+    r.orig = rowText(r);
+    rows.push(r);
+  }
+  for (const e of proposal.emergency) {
+    const r = blankRow("emergency", current.contact.emergency.length === 0, e.evidence, false);
+    r.name = e.name; r.relation = e.relation; r.phone = e.phone;
+    r.orig = rowText(r);
+    rows.push(r);
+  }
+  for (const f of proposal.family) {
+    const r = blankRow("family", current.contact.family.length === 0, f.evidence, false);
+    r.relation = f.relation; r.count = f.count;
+    r.orig = rowText(r);
+    rows.push(r);
+  }
+  for (const f of HIRING_PROFILE_FIELDS) {
+    const p = proposal.profile[f.key];
+    if (!p) continue;
+    const r = blankRow(f.key, !current.profile[f.key].trim(), p.evidence, false);
+    if (isCareerDest(f.key)) {
+      const { ym, rest } = splitCareerYm(p.value);
+      r.ym = ym; r.value = rest;
+    } else {
+      r.value = p.value;
+    }
+    r.orig = rowText(r);
+    rows.push(r);
+  }
+  return rows;
+}
+
+/** 行き先を変える。形が違う行き先へ移すときは、読み取った文字を先頭の欄に引き継ぐ（根拠はそのまま） */
+function retarget(r: Row, dest: Dest, current: { contact: StaffContact; profile: HiringProfile }): Row {
+  const text = rowText(r).replace(/\|/g, " ").trim();
+  const next: Row = { ...r, dest };
+  const wasStructured = r.dest === "emergency" || r.dest === "family";
+  if (dest === "emergency") {
+    if (r.dest !== "emergency") { next.name = r.dest === "family" ? "" : text; next.relation = r.dest === "family" ? r.relation : ""; next.phone = ""; }
+    next.on = current.contact.emergency.length === 0;
+  } else if (dest === "family") {
+    if (r.dest !== "family") { next.relation = r.dest === "emergency" ? r.relation : ""; next.count = ""; }
+    next.on = current.contact.family.length === 0;
+  } else {
+    if (wasStructured) { next.value = text; next.ym = ""; }
+    else if (isCareerDest(dest) && !isCareerDest(r.dest)) { const s = splitCareerYm(r.value); next.ym = s.ym; next.value = s.rest; }
+    else if (!isCareerDest(dest) && isCareerDest(r.dest)) { next.value = joinCareerYm(r.ym, r.value); next.ym = ""; }
+    next.on = isContactDest(dest) ? !currentContactValue(current.contact, dest) : !current.profile[dest].trim();
+  }
+  return next;
+}
 
 function ProposalReview({
   userId,
@@ -523,32 +647,50 @@ function ProposalReview({
   setBusy: (b: boolean) => void;
 }) {
   // 既定: 現在値が空の項目だけON（既存の値は既定で上書きしない）
-  const [pick, setPick] = useState<Pick>(() => ({
-    contact: Object.fromEntries(CONTACT_PROPOSAL_KEYS.map((k) => [k, !!proposal.contact[k] && !currentContactValue(current.contact, k)])) as Record<ContactProposalKey, boolean>,
-    emergency: proposal.emergency.map(() => current.contact.emergency.length === 0),
-    family: proposal.family.map(() => current.contact.family.length === 0),
-    profile: Object.fromEntries(
-      HIRING_PROFILE_FIELDS.map((f) => [f.key, { on: !!proposal.profile[f.key] && !current.profile[f.key].trim(), mode: "append" as const }])
-    ) as Pick["profile"],
-  }));
+  const [rows, setRows] = useState<Row[]>(() => rowsFromProposal(proposal, current));
+  const setRow = (id: string, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const dirty = rows.some(rowEdited);
+
+  // 3: 修正中にページを離れようとしたら確認（ブラウザ離脱＋アプリ内リンク）。保存領域には書かない
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    const onClick = (e: MouseEvent) => {
+      const a = (e.target as HTMLElement | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!a || a.target === "_blank" || a.getAttribute("href")?.startsWith("#")) return;
+      if (!confirm("AIの提案を修正中です。このページを離れると修正中の内容は消えます。離れますか？")) { e.preventDefault(); e.stopPropagation(); }
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    document.addEventListener("click", onClick, true);
+    return () => { window.removeEventListener("beforeunload", onBeforeUnload); document.removeEventListener("click", onClick, true); };
+  }, [dirty]);
+
+  const conflictOf = (r: Row): string => {
+    if (!isContactDest(r.dest)) return "";
+    const cur = currentContactValue(current.contact, r.dest);
+    return cur && cur !== finalValue(r) ? cur : "";
+  };
+  const conflictLabels = Array.from(new Set(rows.filter((r) => conflictOf(r)).map((r) => destLabel(r.dest))));
 
   const apply = async () => {
     const input: HiringApplyInput = { userId };
     const contact: NonNullable<HiringApplyInput["contact"]> = {};
-    for (const k of CONTACT_PROPOSAL_KEYS) if (pick.contact[k] && proposal.contact[k]) contact[k] = proposal.contact[k]!.value;
-    if (Object.keys(contact).length > 0) input.contact = contact;
-    const emergency = proposal.emergency.filter((_, i) => pick.emergency[i]).map(({ name, relation, phone }) => ({ name, relation, phone }));
-    if (emergency.length > 0) input.emergency = emergency;
-    const family = proposal.family.filter((_, i) => pick.family[i]).map(({ relation, count }) => ({ relation, count }));
-    if (family.length > 0) input.family = family;
+    const emergency: NonNullable<HiringApplyInput["emergency"]> = [];
+    const family: NonNullable<HiringApplyInput["family"]> = [];
     const profile: NonNullable<HiringApplyInput["profile"]> = {};
-    for (const f of HIRING_PROFILE_FIELDS) {
-      const p = proposal.profile[f.key];
-      if (p && pick.profile[f.key].on) profile[f.key] = { value: p.value, mode: pick.profile[f.key].mode };
+    for (const r of rows) {
+      if (!r.on || rowError(r)) continue; // 形式に合わない行はその行だけ止める
+      if (r.dest === "emergency") emergency.push({ name: r.name.trim(), relation: r.relation.trim(), phone: r.phone.trim() });
+      else if (r.dest === "family") family.push({ relation: r.relation.trim(), count: r.count.trim() });
+      else if (isContactDest(r.dest)) contact[r.dest] = finalValue(r);
+      else if (isProfileDest(r.dest)) profile[r.dest] = { value: finalValue(r), mode: r.mode };
     }
+    if (Object.keys(contact).length > 0) input.contact = contact;
+    if (emergency.length > 0) input.emergency = emergency;
+    if (family.length > 0) input.family = family;
     if (Object.keys(profile).length > 0) input.profile = profile;
     if (!input.contact && !input.emergency && !input.family && !input.profile) {
-      onError("反映する項目が選ばれていません");
+      onError("反映する項目が選ばれていません（形式に合わない行は反映されません）");
       return;
     }
     setBusy(true);
@@ -562,116 +704,109 @@ function ProposalReview({
     }
   };
 
-  const hasAny =
-    Object.values(proposal.contact).some(Boolean) || proposal.emergency.length > 0 || proposal.family.length > 0 || Object.values(proposal.profile).some(Boolean) || !!proposal.testDate;
+  const hasAny = rows.length > 0 || !!proposal.testDate;
+  const relationChoices = (r: Row) => (r.relation && !(FAMILY_RELATION_CHOICES as readonly string[]).includes(r.relation) ? [r.relation, ...FAMILY_RELATION_CHOICES] : [...FAMILY_RELATION_CHOICES]);
+  const small = "w-full rounded-md border border-gray-200 px-2 py-1.5 text-[12px] min-h-[36px] bg-white";
 
   return (
-    <div className="rounded-lg border border-violet-300 bg-violet-50/50 p-2 space-y-2" data-hiring-proposal>
+    <div className="rounded-lg border border-violet-300 bg-violet-50/50 p-2 space-y-2" data-hiring-proposal data-dirty={dirty ? "1" : "0"}>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-medium text-violet-900">🪄 AIの提案（{staffName} さん）— 反映する項目を選んでください</p>
+        <p className="text-[11px] font-medium text-violet-900">🪄 AIの提案（{staffName} さん）— 内容を確かめ、必要なら直してから反映してください</p>
         <button type="button" onClick={onClose} className="text-[11px] text-gray-700 underline underline-offset-2">閉じる</button>
       </div>
       <p className="text-[10px] text-violet-900 leading-relaxed">
-        各項目に根拠（資料のどこから読んだか）を付けています。<strong>登録欄が空の項目は最初からチェック済み</strong>で、「まとめて反映」1つで登録できます。
-        <strong>今の登録値と食い違う提案</strong>は下に分けて並べ、既定は「反映しない」（既存値と見比べて個別に選びます）。本籍・健康状態・宗教・家族の詳細などは資料にあっても取り出していません。
+        各行は<strong>その場で修正</strong>でき（✏️ 修正済みの印が付き、根拠はそのまま残ります）、<strong>行き先</strong>も選び直せます。<strong>登録欄が空の項目は最初からチェック済み</strong>で、「まとめて反映」1つで修正後の値を登録します。
+        <strong>今の登録値と食い違う行</strong>は既存値と並べ、既定は「反映しない」。形式に合わない行はその行に理由が出て、他の行だけ反映されます。本籍・健康状態・宗教・家族の詳細などは取り出さず、行き先にも選べません。
       </p>
       {proposal.notes.map((n, i) => (
         <p key={i} className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded-md p-1.5">{n}</p>
       ))}
-      {!hasAny && <p className="text-[11px] text-gray-600">読み取れた項目はありませんでした。</p>}
-
-      {CONTACT_PROPOSAL_KEYS.some((k) => proposal.contact[k] && currentContactValue(current.contact, k) && currentContactValue(current.contact, k) !== proposal.contact[k]!.value) && (
+      {!hasAny && <p className="text-[11px] text-gray-600">読み取れた項目はありませんでした。「＋ 行を追加」で手入力できます。</p>}
+      {conflictLabels.length > 0 && (
         <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded-md p-1.5" data-conflict-note>
-          ⚠️ 今の登録値と食い違う提案: {CONTACT_PROPOSAL_KEYS.filter((k) => proposal.contact[k] && currentContactValue(current.contact, k) && currentContactValue(current.contact, k) !== proposal.contact[k]!.value).map((k) => CONTACT_FIELD_LABEL[k]).join("・")}（既定は反映しない。表で見比べて選んでください）
+          ⚠️ 今の登録値と食い違う提案: {conflictLabels.join("・")}（既定は反映しない。既存値と見比べて選んでください）
         </p>
       )}
-      {CONTACT_PROPOSAL_KEYS.some((k) => proposal.contact[k]) && (
-        <table className="w-full text-[11px] bg-white rounded-md border border-gray-200">
-          <thead>
-            <tr className="text-gray-500 border-b border-gray-100">
-              <th className="text-left p-1">反映</th>
-              <th className="text-left p-1">項目</th>
-              <th className="text-left p-1">今の登録値</th>
-              <th className="text-left p-1">提案</th>
-              <th className="text-left p-1">根拠</th>
-            </tr>
-          </thead>
-          <tbody>
-            {CONTACT_PROPOSAL_KEYS.filter((k) => proposal.contact[k]).map((k) => (
-              <tr key={k} className={`border-b border-gray-50 align-top ${currentContactValue(current.contact, k) && currentContactValue(current.contact, k) !== proposal.contact[k]!.value ? "bg-amber-50/60" : ""}`} data-conflict={currentContactValue(current.contact, k) && currentContactValue(current.contact, k) !== proposal.contact[k]!.value ? "1" : "0"}>
-                <td className="p-1">
-                  <input type="checkbox" checked={pick.contact[k]} onChange={(e) => setPick((p) => ({ ...p, contact: { ...p.contact, [k]: e.target.checked } }))} aria-label={`${CONTACT_FIELD_LABEL[k]} を反映`} />
-                </td>
-                <td className="p-1 whitespace-nowrap">{CONTACT_FIELD_LABEL[k]}</td>
-                <td className="p-1 text-gray-600">{currentContactValue(current.contact, k) || "（空）"}</td>
-                <td className="p-1 text-gray-900">{proposal.contact[k]!.value}</td>
-                <td className="p-1 text-gray-500">{proposal.contact[k]!.evidence}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
 
-      {proposal.emergency.length > 0 && (
-        <div className="bg-white rounded-md border border-gray-200 p-1.5 space-y-1">
-          <p className="text-[11px] text-gray-700">🚨 緊急連絡先（氏名・続柄・電話のみ。今の登録: {current.contact.emergency.length}件）</p>
-          {proposal.emergency.map((e, i) => (
-            <label key={i} className="flex items-start gap-2 text-[11px] text-gray-900">
-              <input type="checkbox" checked={pick.emergency[i]} onChange={(ev) => setPick((p) => ({ ...p, emergency: p.emergency.map((v, j) => (j === i ? ev.target.checked : v)) }))} />
-              <span>
-                {e.name}（{e.relation}）{e.phone}
-                <span className="block text-gray-500">根拠: {e.evidence}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      )}
-
-      {proposal.family.length > 0 && (
-        <div className="bg-white rounded-md border border-gray-200 p-1.5 space-y-1">
-          <p className="text-[11px] text-gray-700">👪 家族構成（続柄・人数のみ。今の登録: {current.contact.family.length}件）</p>
-          {proposal.family.map((f, i) => (
-            <label key={i} className="flex items-start gap-2 text-[11px] text-gray-900">
-              <input type="checkbox" checked={pick.family[i]} onChange={(ev) => setPick((p) => ({ ...p, family: p.family.map((v, j) => (j === i ? ev.target.checked : v)) }))} />
-              <span>
-                {f.relation} {f.count ? `${f.count}人` : ""}
-                <span className="block text-gray-500">根拠: {f.evidence}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      )}
-
-      {HIRING_PROFILE_FIELDS.some((f) => proposal.profile[f.key]) && (
-        <div className="bg-white rounded-md border border-gray-200 p-1.5 space-y-2">
-          <p className="text-[11px] text-gray-700">📜 経歴・入職時の想い</p>
-          {HIRING_PROFILE_FIELDS.filter((f) => proposal.profile[f.key]).map((f) => {
-            const p = proposal.profile[f.key]!;
-            const cur = current.profile[f.key];
-            return (
-              <div key={f.key} className="text-[11px] space-y-1 border-b border-gray-50 pb-1.5">
-                <label className="flex items-center gap-2 text-gray-900">
-                  <input type="checkbox" checked={pick.profile[f.key].on} onChange={(e) => setPick((pk) => ({ ...pk, profile: { ...pk.profile, [f.key]: { ...pk.profile[f.key], on: e.target.checked } } }))} />
-                  {f.group}: {f.label}
+      <ul className="space-y-1.5" data-proposal-rows>
+        {rows.map((r) => {
+          const err = rowError(r);
+          const conflict = conflictOf(r);
+          const edited = rowEdited(r);
+          const label = destLabel(r.dest);
+          const curProfile = isProfileDest(r.dest) ? current.profile[r.dest] : "";
+          return (
+            <li key={r.id} className={`rounded-md border p-1.5 space-y-1 text-[11px] ${conflict ? "bg-amber-50/60 border-amber-200" : "bg-white border-gray-200"}`} data-proposal-row data-dest={r.dest} data-conflict={conflict ? "1" : "0"} data-edited={edited ? "1" : "0"} data-error={err ? "1" : "0"}>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-1 text-gray-900">
+                  <input type="checkbox" checked={r.on} onChange={(e) => setRow(r.id, { on: e.target.checked })} aria-label={`${label} を反映`} />
+                  反映
                 </label>
-                {cur.trim() && (
-                  <div className="flex gap-3 pl-5 text-gray-700">
-                    <span>今の登録値あり →</span>
-                    {(["append", "replace"] as const).map((m) => (
-                      <label key={m} className="flex items-center gap-1">
-                        <input type="radio" name={`mode-${f.key}`} checked={pick.profile[f.key].mode === m} onChange={() => setPick((pk) => ({ ...pk, profile: { ...pk.profile, [f.key]: { ...pk.profile[f.key], mode: m } } }))} />
-                        {m === "append" ? "追記" : "置換"}
-                      </label>
-                    ))}
-                  </div>
-                )}
-                <p className="pl-5 text-gray-900 whitespace-pre-wrap">{p.value}</p>
-                <p className="pl-5 text-gray-500">根拠: {p.evidence}</p>
+                <select value={r.dest} onChange={(e) => setRows((rs) => rs.map((x) => (x.id === r.id ? retarget(x, e.target.value as Dest, current) : x)))} className="rounded-md border border-gray-200 px-2 py-1 text-[11px] min-h-[32px] bg-white" aria-label="行き先">
+                  {DEST_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.group}: {o.label}
+                    </option>
+                  ))}
+                </select>
+                {edited && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-900" data-edited-mark>✏️ {r.manual ? "手入力" : "修正済み"}</span>}
+                <button type="button" onClick={() => setRows((rs) => rs.filter((x) => x.id !== r.id))} className="ml-auto text-[11px] text-gray-600 underline underline-offset-2 min-h-[32px]" aria-label={`${label} の行を削除`}>
+                  🗑 行を削除
+                </button>
               </div>
-            );
-          })}
-        </div>
-      )}
+              {r.dest === "emergency" ? (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                  <input value={r.name} onChange={(e) => setRow(r.id, { name: e.target.value })} placeholder="氏名" className={small} aria-label="緊急連絡先の氏名" />
+                  <input value={r.relation} onChange={(e) => setRow(r.id, { relation: e.target.value })} placeholder="続柄" className={small} aria-label="緊急連絡先の続柄" />
+                  <input type="tel" value={r.phone} onChange={(e) => setRow(r.id, { phone: e.target.value })} placeholder="電話番号" className={small} aria-label="緊急連絡先の電話番号" />
+                </div>
+              ) : r.dest === "family" ? (
+                <div className="grid grid-cols-[1fr_6em] gap-1.5">
+                  <select value={r.relation} onChange={(e) => setRow(r.id, { relation: e.target.value })} className={small} aria-label="家族構成の続柄">
+                    <option value="">続柄を選ぶ</option>
+                    {relationChoices(r).map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                  <input type="number" min={0} max={99} inputMode="numeric" value={r.count} onChange={(e) => setRow(r.id, { count: e.target.value })} placeholder="人数" className={small} aria-label="家族構成の人数" />
+                </div>
+              ) : isCareerDest(r.dest) ? (
+                <div className="grid grid-cols-[9em_1fr] gap-1.5">
+                  <input type="month" value={r.ym} onChange={(e) => setRow(r.id, { ym: e.target.value })} className={small} aria-label={`${label} の年月`} />
+                  <input value={r.value} onChange={(e) => setRow(r.id, { value: e.target.value })} placeholder="内容" className={small} aria-label={`${label} の内容`} />
+                </div>
+              ) : r.dest === "motivation" || r.dest === "selfPr" ? (
+                <textarea value={r.value} onChange={(e) => setRow(r.id, { value: e.target.value })} rows={3} className={`${small} min-h-[64px]`} aria-label={`${label} の内容`} />
+              ) : (
+                <input
+                  type={r.dest === "birthday" ? "date" : r.dest === "privateEmail" ? "email" : r.dest === "phoneMobile" || r.dest === "phoneHome" ? "tel" : "text"}
+                  value={r.value}
+                  onChange={(e) => setRow(r.id, { value: e.target.value })}
+                  className={small}
+                  aria-label={`${label} の提案値`}
+                />
+              )}
+              {err && <p className="text-red-700" data-row-error>⚠ {err}</p>}
+              {conflict && <p className="text-amber-900">今の登録値: {conflict} → 提案: {finalValue(r)}</p>}
+              {curProfile.trim() && (
+                <div className="flex gap-3 text-gray-700">
+                  <span>今の登録値あり →</span>
+                  {(["append", "replace"] as const).map((m) => (
+                    <label key={m} className="flex items-center gap-1">
+                      <input type="radio" name={`mode-${r.id}`} checked={r.mode === m} onChange={() => setRow(r.id, { mode: m })} />
+                      {m === "append" ? "追記" : "置換"}
+                    </label>
+                  ))}
+                </div>
+              )}
+              <p className="text-gray-500" data-row-evidence>根拠: {r.evidence || "（なし）"}</p>
+            </li>
+          );
+        })}
+      </ul>
+      <button type="button" onClick={() => setRows((rs) => [...rs, blankRow("career", true, "院長の手入力", true)])} className="px-3 py-1.5 border border-violet-300 text-violet-900 rounded-full text-[11px] hover:bg-white min-h-[36px]" data-add-row>
+        ＋ 行を追加（AIが読み取れなかった項目）
+      </button>
 
       {proposal.testDate && (
         <p className="text-[11px] text-gray-700">
@@ -680,8 +815,8 @@ function ProposalReview({
       )}
 
       <div className="flex gap-2">
-        <button type="button" onClick={() => void apply()} disabled={busy || !hasAny} className="px-4 py-2 bg-violet-700 text-white rounded-full text-sm hover:bg-violet-800 disabled:opacity-40 min-h-[44px]" data-bulk-apply>
-          ✅ まとめて反映（チェック済みの項目を登録）
+        <button type="button" onClick={() => void apply()} disabled={busy || rows.length === 0} className="px-4 py-2 bg-violet-700 text-white rounded-full text-sm hover:bg-violet-800 disabled:opacity-40 min-h-[44px]" data-bulk-apply>
+          ✅ まとめて反映（チェック済みの項目を修正後の値で登録）
         </button>
         <button type="button" onClick={onClose} disabled={busy} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-full text-sm hover:bg-gray-50 min-h-[44px]">
           反映しない

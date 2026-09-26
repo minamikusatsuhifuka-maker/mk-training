@@ -321,6 +321,34 @@ export function proposalHasContent(p: HiringProposal): boolean {
   );
 }
 
+// ─── 187-補: 提案をその場で修正するための検査（画面と純テストで共用） ───
+
+/** 家族構成の続柄の選択肢（169と同じ「続柄・人数だけ」）。AIが別の語を返したときはその語も選択肢に足す */
+export const FAMILY_RELATION_CHOICES = ["配偶者", "子", "父", "母", "祖父", "祖母", "兄弟姉妹", "その他"] as const;
+
+/** 電話番号: 数字10〜11桁（ハイフン・空白・全角は無視）。国番号 + も可 */
+export function isValidPhone(v: string): boolean {
+  const s = v.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[\s\-()（）ー－−‐‑–—]/g, "");
+  return /^\+?\d{10,13}$/.test(s);
+}
+export function isValidEmail(v: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+}
+/** 経歴の「年月」。"2014年4月 入職" → { ym: "2014-04", rest: "入職" }。年月が無ければ ym は空 */
+export function splitCareerYm(v: string): { ym: string; rest: string } {
+  const m = v.match(/^\s*(\d{4})\s*[年\/\-.]\s*(\d{1,2})\s*月?\s*[:：、,\s]*/);
+  if (!m) return { ym: "", rest: v.trim() };
+  const mm = Number(m[2]);
+  if (mm < 1 || mm > 12) return { ym: "", rest: v.trim() };
+  return { ym: `${m[1]}-${String(mm).padStart(2, "0")}`, rest: v.slice(m[0].length).trim() };
+}
+/** 年月（YYYY-MM）と内容を1行に戻す */
+export function joinCareerYm(ym: string, rest: string): string {
+  const m = ym.match(/^(\d{4})-(\d{2})$/);
+  const head = m ? `${m[1]}年${Number(m[2])}月` : "";
+  return [head, rest.trim()].filter(Boolean).join(" ");
+}
+
 // ─── 反映（184 3-1 ④）：院長が選んだ分だけ ───
 
 export type HiringApplyInput = {
