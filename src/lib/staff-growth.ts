@@ -19,6 +19,8 @@
 //
 // このファイルは "@/" や DB に依存しない（node --experimental-strip-types で直接検証できる）。
 
+import type { NeedKey } from "./needs-survey";
+
 // ─── 講座マスタ（B-2）───
 
 export const COURSE_CATEGORIES = [
@@ -583,6 +585,24 @@ export const TIMELINE_KIND_LABEL: Record<TimelineKind, string> = {
   delegation: "権限委譲",
 };
 
+/**
+ * サーベイ（5つの基本的欲求）の年表用の中身（指示書181）。
+ * **本人が公開したものだけ**が入る（164の判定を通した後にしか作らない）。
+ * 中身は「公開時にメンバー紹介で見える範囲」かつ「本人への説明（レーダーチャートと画像）」に揃える。
+ * 15項目の詳細（details）は本人への説明に含まれていないため**入れない**（181 2-1・院長判断待ち）。
+ */
+export type SurveyView = {
+  /** 回答日（needsSurvey.updatedAt。無ければプロフィールの更新日） */
+  answeredOn: string;
+  /** 5欲求の点数（生存／愛・所属／力／自由／楽しみ の順に並べる。無い項目は undefined） */
+  values: Partial<Record<NeedKey, number>>;
+  /** 結果画像（署名付きURL・163の方式）。無ければ空 */
+  imageUrl: string;
+  isPdf: boolean;
+  /** 前回の記録があるときだけ: 項目ごとの差（増減の数値のみ・良し悪しの判定はしない） */
+  diff?: Partial<Record<NeedKey, number>>;
+};
+
 export type TimelineItem = {
   kind: TimelineKind;
   /** 並べ替えに使う日付 YYYY-MM-DD（無ければ ISO の先頭10文字） */
@@ -593,7 +613,39 @@ export type TimelineItem = {
   href: string;
   /** 学びの記録なら記録id（編集導線用） */
   learningId?: string;
+  /** サーベイ公開の項目だけ（展開表示用） */
+  survey?: SurveyView;
 };
+
+/**
+ * サーベイの回ごとの差（181 2）。古い順に並べ、2回目以降に「前回との差」を付ける。
+ * 差は増減の数値だけ（順位付け・良し悪しの判定はしない）。片方に値が無い項目は差を出さない。
+ * 現状のデータは1人1件（上書き保存）なので差が付くことは無いが、履歴を持つようになったときのための純関数。
+ */
+export function attachSurveyDiffs(
+  list: SurveyView[],
+  keys: readonly NeedKey[]
+): SurveyView[] {
+  const sorted = list.slice().sort((a, b) => a.answeredOn.localeCompare(b.answeredOn));
+  return sorted.map((cur, i) => {
+    if (i === 0) return { ...cur, diff: undefined };
+    const prev = sorted[i - 1];
+    const diff: Partial<Record<NeedKey, number>> = {};
+    for (const k of keys) {
+      const a = prev.values[k];
+      const b = cur.values[k];
+      if (typeof a === "number" && typeof b === "number") diff[k] = b - a;
+    }
+    return { ...cur, diff };
+  });
+}
+
+/** 差の表示（+3 / −2 / ±0）。数値だけ・評価語は付けない */
+export function formatDiff(n: number): string {
+  if (n > 0) return `+${n}`;
+  if (n < 0) return `−${Math.abs(n)}`;
+  return "±0";
+}
 
 export type PromiseSummary = {
   date: string;

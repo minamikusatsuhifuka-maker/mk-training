@@ -18,7 +18,8 @@ import { serverGetContentRow, serverGetContentRowsByPrefix } from "./content-sto
 import { STAFF_PROFILES_INDEX_KEY, emptyProfile, type StaffProfile } from "./staff-profiles";
 import { PROFILE_ROLE_CONFIG_KEY, normalizeProfileRoles, resolveRole } from "./profile-roles";
 import { redactProfilesForViewer } from "./survey-visibility";
-import { NEED_KEYS, NEED_LABELS } from "./needs-survey";
+import { NEED_KEYS, NEED_LABELS, isPdfAsset, radarValuesOf } from "./needs-survey";
+import { signOne } from "./storage-signed";
 import { authorizeStaffContacts, fetchAllStaffContacts } from "./staff-contacts-server";
 import { authorizeMemberNotes, fetchAllNotes } from "./member-notes-server";
 import {
@@ -52,6 +53,7 @@ import {
   type LearningRecord,
   type PromiseSummary,
   type SearchHit,
+  type SurveyView,
   type TimelineItem,
 } from "./staff-growth";
 
@@ -196,7 +198,7 @@ type Sources = {
   selfReview: PrivateRow[];
   notesByUser: Map<string, { updatedAt: string; strengths: string; memo: string }>;
   delegations: { date: string; task: string; status: string; toName: string; toRole: string }[];
-  surveyByUser: Map<string, { updatedAt: string; summary: string }>;
+  surveyByUser: Map<string, { updatedAt: string; summary: string; view: SurveyView }>;
   tableMissing: boolean;
 };
 
@@ -267,7 +269,13 @@ async function loadSources(admin: GrowthAdminClient, viewerUserId: string): Prom
   }
 
   // 公開されたサーベイ（164の判定を閲覧者＝管理者自身で通す）
-  const surveyByUser = new Map<string, { updatedAt: string; summary: string }>();
+  //
+  // 【181: 出す中身は本人への説明の範囲だけ】
+  // プロフィールの公開設定の説明は「レーダーチャートと画像がメンバー紹介で見える」。
+  // よってカルテに出すのは 5欲求の点数（レーダー）・結果画像（署名URL）・回答日 まで。
+  // 15項目の詳細（details: 欲求／注力／現況）は説明に含まれていないため**ここで作らない＝クライアントに渡らない**
+  //（181 2-1。院長の判断で公開範囲を広げるときは、本人の公開設定に選択肢を足してから）。
+  const surveyByUser = new Map<string, { updatedAt: string; summary: string; view: SurveyView }>();
   try {
     const rows = await serverGetContentRowsByPrefix("staff_profile:");
     const profiles: StaffProfile[] = [];
@@ -278,13 +286,27 @@ async function loadSources(admin: GrowthAdminClient, viewerUserId: string): Prom
     }
     for (const p of redactProfilesForViewer(profiles, viewerUserId)) {
       if (!p.needsSurvey) continue; // 非公開はキーごと落ちている
-      const values = p.needsSurvey.values ?? {};
+      // メンバー紹介と同じ算出（values が無ければ詳細の「欲求」平均で補完）
+      const radar = radarValuesOf(p.needsSurvey);
+      const values: SurveyView["values"] = {};
+      for (const k of NEED_KEYS) if (typeof radar[k] === "number") values[k] = radar[k];
       const summary = NEED_KEYS.filter((k) => typeof values[k] === "number")
         .map((k) => `${NEED_LABELS[k]} ${values[k]}`)
         .join(" / ");
+      const answeredOn = (p.needsSurvey.updatedAt || p.updatedAt || "").slice(0, 10);
+      // 結果画像は署名付きURL（163）。署名できなければ空（公開URLへは戻さない）
+      let imageUrl = "";
+      if (p.needsSurvey.imageUrl) {
+        try {
+          imageUrl = await signOne(admin, p.needsSurvey.imageUrl);
+        } catch {
+          imageUrl = "";
+        }
+      }
       surveyByUser.set(p.userId, {
         updatedAt: p.needsSurvey.updatedAt || p.updatedAt || "",
         summary,
+        view: { answeredOn, values, imageUrl, isPdf: isPdfAsset(p.needsSurvey.imageUrl) },
       });
     }
   } catch {
@@ -411,6 +433,7 @@ function buildTimeline(src: Sources, person: RosterPerson): TimelineItem[] {
       title: "5つの基本的欲求サーベイ（本人が公開）",
       body: survey.summary,
       href: "/members",
+      survey: survey.view,
     });
   }
 

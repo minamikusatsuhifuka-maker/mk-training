@@ -12,12 +12,16 @@ import Link from "next/link";
 import {
   TIMELINE_KIND_LABEL,
   formatDates,
+  formatDiff,
   promiseStatusLabel,
   tenureLabel,
   type Course,
   type LearningRecord,
+  type SurveyView,
   type TimelineKind,
 } from "@/lib/staff-growth";
+import { NEED_KEYS, NEED_LABELS, NEED_GROUP_STYLE } from "@/lib/needs-survey";
+import { NeedsRadarChart } from "@/components/NeedsRadarChart";
 import {
   createLearningApi,
   deleteEvidenceApi,
@@ -289,8 +293,12 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
                       元の画面へ
                     </Link>
                   </p>
-                  {it.body && (
-                    <p className="text-[11px] text-gray-700 whitespace-pre-wrap line-clamp-6">{it.body}</p>
+                  {it.survey ? (
+                    <SurveyBlock view={it.survey} />
+                  ) : (
+                    it.body && (
+                      <p className="text-[11px] text-gray-700 whitespace-pre-wrap line-clamp-6">{it.body}</p>
+                    )
                   )}
                 </div>
               </li>
@@ -372,6 +380,78 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
         />
       </section>
     </div>
+  );
+}
+
+/**
+ * サーベイ公開の展開表示（指示書181）。
+ * 出すのは本人が公開したもの（サーバー側で164を通した後）で、中身は「レーダーチャート・5欲求の点数・結果画像・回答日」まで
+ * ＝本人への説明（プロフィールの公開設定）の範囲。順位付け・他者比較・高い/低いの評価語は付けない。
+ */
+function SurveyBlock({ view }: { view: SurveyView }) {
+  const hasValues = NEED_KEYS.some((k) => typeof view.values[k] === "number");
+  return (
+    <details className="mt-1 rounded-lg border border-rose-100 bg-rose-50/40 p-2" data-survey-block>
+      <summary className="text-[11px] text-rose-900 cursor-pointer min-h-[32px] flex items-center gap-2 flex-wrap">
+        {NEED_KEYS.filter((k) => typeof view.values[k] === "number")
+          .map((k) => `${NEED_LABELS[k]} ${view.values[k]}`)
+          .join(" / ") || "点数の記録なし"}
+        <span className="text-[10px] text-rose-700 underline underline-offset-2">詳しく見る</span>
+      </summary>
+      <div className="mt-2 flex flex-wrap items-start gap-3">
+        {hasValues && (
+          <div className="shrink-0">
+            <NeedsRadarChart values={view.values} size={200} />
+          </div>
+        )}
+        <div className="min-w-[12em] flex-1 space-y-1">
+          <p className="text-[11px] text-gray-500">
+            回答日: {view.answeredOn ? view.answeredOn.replaceAll("-", "/") : "記録なし"}
+          </p>
+          <ul className="space-y-0.5" aria-label="5つの欲求の点数">
+            {NEED_KEYS.map((k) => {
+              const s = NEED_GROUP_STYLE[k];
+              const v = view.values[k];
+              const d = view.diff?.[k];
+              return (
+                <li key={k} className={`flex items-center gap-2 text-[12px] border-l-4 pl-2 ${s.rowBorder}`}>
+                  <span className={`inline-block h-2 w-2 rounded-full ${s.dot}`} />
+                  <span className={`w-[5em] ${s.text}`}>{NEED_LABELS[k]}</span>
+                  <span className="tabular-nums text-gray-900">{typeof v === "number" ? v : "—"}</span>
+                  {typeof d === "number" && (
+                    <span className="text-[10px] text-gray-500 tabular-nums">（前回比 {formatDiff(d)}）</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          {view.imageUrl &&
+            (view.isPdf ? (
+              <a
+                href={view.imageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] text-teal-800 underline underline-offset-2 min-h-[32px]"
+              >
+                📄 結果PDFを開く（1時間有効のリンク）
+              </a>
+            ) : (
+              <a href={view.imageUrl} target="_blank" rel="noopener noreferrer" className="inline-block">
+                {/* 署名URLは1時間で切れるため next/image を通さない */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={view.imageUrl}
+                  alt="サーベイ結果画像"
+                  className="w-28 rounded-md border border-gray-200 object-cover hover:opacity-90"
+                />
+              </a>
+            ))}
+          <p className="text-[10px] text-gray-500">
+            本人が公開した内容（レーダーチャート・点数・画像）だけを表示しています。相互理解のための共有で、評価・優劣付けには使いません。
+          </p>
+        </div>
+      </div>
+    </details>
   );
 }
 
