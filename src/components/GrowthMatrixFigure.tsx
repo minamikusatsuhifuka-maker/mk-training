@@ -85,7 +85,8 @@ export function GrowthMatrixFigure({
         {GRADE_POINTS.map((p) => (
           <g key={p.grade}>
             <circle cx={px(p.x)} cy={py(p.y)} r={p.grade === "G3" ? 9 : 7} fill={p.grade === "G3" ? "#f59e0b" : "#0f766e"} stroke="#fff" strokeWidth={2} />
-            <text x={px(p.x) + (p.grade === "G5" ? -12 : 12)} y={py(p.y) - (p.grade === "G5" ? 12 : 10)} fontSize={19} fontWeight={700} textAnchor={p.grade === "G5" ? "end" : "start"} fill="#111827">
+            {/* G4・G5 は右端に近いので点の左上に置く（右に伸ばすと枠から切れる） */}
+            <text x={px(p.x) + (p.grade === "G5" || p.grade === "G4" ? -14 : 12)} y={py(p.y) - (p.grade === "G5" || p.grade === "G4" ? 14 : 10)} fontSize={18} fontWeight={700} textAnchor={p.grade === "G5" || p.grade === "G4" ? "end" : "start"} fill="#111827">
               {p.grade === "G3" ? "★" : ""}
               {p.grade} {p.label}
             </text>
@@ -111,7 +112,8 @@ export function GrowthMatrixFigure({
           return (
             <g key={i} data-marker={mk.label}>
               <circle cx={cx} cy={cy} r={11} fill={mk.hollow ? "#fff" : mk.color} stroke={mk.color} strokeWidth={3} />
-              <text x={cx} y={cy - 16} fontSize={17} textAnchor="middle" fill={mk.color} fontWeight={700}>{mk.label}</text>
+              {/* 本人の点のラベルは点の下（上に置くと G4 のラベルと重なりうる） */}
+              <text x={cx} y={cy + 28} fontSize={17} textAnchor="middle" fill={mk.color} fontWeight={700}>{mk.label}</text>
             </g>
           );
         })}
