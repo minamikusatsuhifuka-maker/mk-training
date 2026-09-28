@@ -18,6 +18,8 @@ import {
 import { redactForeignProfileRows } from "@/lib/content-store-redact";
 import { loadTestSeedIds } from "@/lib/test-seed-server";
 import { STAFF_PROFILES_INDEX_KEY } from "@/lib/staff-profiles";
+import { FEATURE_FLAGS_KEY, IMPLEMENTED_FEATURES } from "@/lib/feature-flags";
+import { isTestSeedUser } from "@/lib/test-seed";
 import {
   serverDeleteContentRow,
   serverGetContentRow,
@@ -53,13 +55,20 @@ export async function GET(req: Request) {
   // 157: サーバー専用キー（menu_access）はこのAPIからは読み書きさせない
   if (isServerOnlyContentKey(key)) return hidden();
   const row = await serverGetContentRow(key);
+  // 191-補: 検証用アカウントには、機能フラグがOFFの機能も表示する（実装済みの機能だけON。一般スタッフには適用しない）
+  if (key === FEATURE_FLAGS_KEY && isTestSeedUser(user)) {
+    const d = (row?.data ?? {}) as { features?: Record<string, unknown> };
+    const features = { ...(d.features ?? {}) };
+    for (const id of IMPLEMENTED_FEATURES) features[id] = true;
+    return NextResponse.json({ row: { id: key, ...(row ?? {}), data: { ...d, features } } });
+  }
   // 191 B: 検証用アカウントは一般スタッフの画面（メンバー・宛先候補・集計）に出さない。印は app_metadata（サーバーで判定）
   if (row && key === STAFF_PROFILES_INDEX_KEY && !isAdminUser(user)) {
     const testIds = await loadTestSeedIds();
     if (testIds.size > 0) {
       const d = (row.data ?? {}) as { items?: unknown[] };
       if (Array.isArray(d.items)) {
-        return NextResponse.json({ ...row, data: { ...d, items: d.items.filter((it) => !(it && typeof it === "object" && testIds.has(String((it as { userId?: unknown }).userId ?? "")))) } });
+        return NextResponse.json({ row: { ...row, data: { ...d, items: d.items.filter((it) => !(it && typeof it === "object" && testIds.has(String((it as { userId?: unknown }).userId ?? "")))) } } });
       }
     }
   }

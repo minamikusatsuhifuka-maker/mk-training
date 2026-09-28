@@ -213,6 +213,18 @@ export async function getFeatureFlags(): Promise<FeatureFlags> {
   return next;
 }
 
+/**
+ * 191-補: 検証用アカウント（app_metadata.test_seed）には、機能フラグがOFFの機能も表示する。
+ * 実装済みの機能フラグ（IMPLEMENTED_FEATURES）だけをONに倒す。page系（ページ公開）は触らない。
+ * 一般スタッフには適用しない（保存されたフラグのまま）。
+ */
+export function withTestSeedOverride(flags: FeatureFlags, testSeed: boolean): FeatureFlags {
+  if (!testSeed) return flags;
+  const next = { ...flags };
+  for (const id of IMPLEMENTED_FEATURES) next[id] = true;
+  return next;
+}
+
 // 単一機能の有効判定
 export async function isFeatureEnabled(id: FeatureId): Promise<boolean> {
   const flags = await getFeatureFlags();

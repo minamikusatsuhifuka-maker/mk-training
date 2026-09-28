@@ -26,6 +26,7 @@ import { getSessionUser } from "./staff-profiles-server";
 import { isAdminUser } from "./admin-role";
 import { serverGetContentRow } from "./content-store-server";
 import { FEATURE_FLAGS_KEY } from "./feature-flags";
+import { isTestSeedUser } from "./test-seed";
 import { isBucketNotFound, signBucketPaths } from "./storage-signed";
 import { loadKarteAssignments } from "./admin-delegation-server";
 import {
@@ -179,7 +180,8 @@ export async function authorizeGrowth(): Promise<GrowthAuth> {
   }
 
   const isAdmin = isAdminUser(user);
-  const selfAllowed = isAdmin || (await serverFeatureEnabled("growth_record"));
+  // 191-補: 検証用アカウントは機能フラグがOFFでも自分の記録を扱える（一般スタッフはフラグどおり）
+  const selfAllowed = isAdmin || isTestSeedUser(user) || (await serverFeatureEnabled("growth_record"));
   const assignedStaffIds = isAdmin ? [] : await loadKarteAssignments(user.id);
   if (!selfAllowed && assignedStaffIds.length === 0) return { ok: false };
 
