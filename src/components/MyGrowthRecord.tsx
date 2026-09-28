@@ -45,13 +45,14 @@ import { LearningRecordList } from "@/components/LearningRecordList";
 import { useHasDraft } from "@/lib/retro-drafts";
 import { GoalsStaged, weeklyLinksFromPromises, type WeeklyLink } from "@/components/GoalsStaged";
 import { FeedbackPanel } from "@/components/FeedbackPanel";
+import { CurrentPositionCard } from "@/components/CurrentPositionCard";
 import {
   fetchFeedbackApi,
   saveGrowthPrefApi,
   type GoalInput,
 } from "@/lib/staff-growth-client";
 
-type Tab = "learning" | "goals" | "promises" | "feedback";
+type Tab = "learning" | "goals" | "promises" | "feedback" | "position";
 
 export function MyGrowthRecord() {
   const [tab, setTab] = useState<Tab>("learning");
@@ -297,6 +298,7 @@ export function MyGrowthRecord() {
             ["goals", "🎯 目標"],
             ["promises", "🤝 1on1の約束"],
             ["feedback", unseenCount > 0 ? `🌟 もらった承認・FB（新着 ${unseenCount}）` : "🌟 もらった承認・FB"],
+            ["position", "🧭 現在地"],
           ] as const
         ).map(([k, label]) => (
           <button
@@ -393,6 +395,8 @@ export function MyGrowthRecord() {
           onDelete={goalHandlers.onDelete}
           onPace={goalHandlers.onPace}
         />
+      ) : tab === "position" ? (
+        <CurrentPositionCard mode="owner" />
       ) : tab === "feedback" ? (
         <section className="space-y-2">
           <p className="text-[11px] text-gray-600 leading-relaxed">

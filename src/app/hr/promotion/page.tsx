@@ -13,6 +13,8 @@ import {
   renderInlineBold,
   useScrollToHash,
 } from "@/components/HrPortalParts";
+import { GrowthMatrixFigure } from "@/components/GrowthMatrixFigure";
+import Link from "next/link";
 import {
   HR_PROMOTION_INTRO,
   HR_TRANSITIONS,
@@ -151,6 +153,14 @@ function PromotionBody() {
   return (
     <div className="space-y-4">
       <HrBackLink />
+      {/* 190 A: 移行判定の画面の冒頭にも成長マトリクスの図 */}
+      <div className="space-y-1" data-promotion-figure>
+        <GrowthMatrixFigure compact />
+        <p className="text-[11px] text-gray-600">
+          縦軸マインド × 横軸スキル・ナレッジ。全文は <Link href="/hr/matrix" className="text-teal-700 underline underline-offset-2">成長マトリクス</Link> へ。
+        </p>
+      </div>
+      
 
       {/* 冒頭注記・凡例（そのまま表示） */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 md:p-5 space-y-2">

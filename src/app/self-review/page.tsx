@@ -40,6 +40,12 @@ import {
   type SelfReviewRank,
 } from "@/lib/self-review";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { GrowthMatrixFigure } from "@/components/GrowthMatrixFigure";
+import { MatrixSelfSection } from "@/components/MatrixSelfSection";
+import { enforceReachRules, type MatrixSelf } from "@/lib/growth-matrix";
+import { clearDraft, readDraft, writeDraft } from "@/lib/retro-drafts";
+import { jstTodayYmd } from "@/lib/library";
+import Link from "next/link";
 import { loadProfilesIndex } from "@/lib/staff-profiles";
 
 type LoadState = "loading" | "ready" | "unauthenticated" | "error";
@@ -73,9 +79,10 @@ function SelfReviewPageBody() {
       const cfg = await loadSelfReviewConfig();
       setConfig(cfg);
       const record = await getRecord("self_review", cfg.currentPeriod);
-      setData(
-        record ? normalizeSelfReviewData(record.data) : emptySelfReviewData()
-      );
+      const loaded = record ? normalizeSelfReviewData(record.data) : emptySelfReviewData();
+      // 190 E: 本人の入力欄（マトリクスの位置・根拠）は 176-補の下書き保持（sessionStorage）
+      const draft = loaded.status === "submitted" ? null : readDraft<{ matrix: MatrixSelf }>(`self-review:matrix:${cfg.currentPeriod}`);
+      setData(draft?.matrix ? { ...loaded, matrix: draft.matrix } : loaded);
       setState("ready");
     } catch (e) {
       if (e instanceof PrivateStoreError && e.kind === "unauthenticated") {
@@ -102,6 +109,8 @@ function SelfReviewPageBody() {
     try {
       const next: SelfReviewData = {
         ...data,
+        // 190 ルール1・2: 根拠が足りない「到達」は保存時にも「途上」へ
+        matrix: enforceReachRules(data.matrix, jstTodayYmd()),
         status: submit ? "submitted" : "draft",
         name: myName,
         period_label: config.label,
@@ -113,6 +122,7 @@ function SelfReviewPageBody() {
         next
       );
       setData(normalizeSelfReviewData(saved.data));
+      clearDraft(`self-review:matrix:${config.currentPeriod}`);
       setSavedNote(submit ? "📮 提出しました" : "💾 下書きを保存しました");
     } catch (e) {
       if (e instanceof PrivateStoreError) {
@@ -211,6 +221,14 @@ function SelfReviewPageBody() {
             ✏️ 下書き
           </span>
         )}
+      </div>
+
+      {/* 190 A: 冒頭に成長マトリクスの図 */}
+      <div className="space-y-1" data-self-review-figure>
+        <GrowthMatrixFigure compact markers={data.matrix.s && data.matrix.m ? [{ s: data.matrix.s, m: data.matrix.m, label: "自己評価", color: "#7c3aed" }] : []} />
+        <p className="text-[11px] text-gray-600">
+          縦軸マインド × 横軸スキル・ナレッジ。全文は <Link href="/hr/matrix" className="text-teal-700 underline underline-offset-2">成長マトリクス</Link> へ。
+        </p>
       </div>
 
       {/* 冒頭説明文（指定どおり） */}
@@ -418,6 +436,17 @@ function SelfReviewPageBody() {
           <p className="text-xs text-gray-500">{RANK_NOTE}</p>
         </div>
       </section>
+
+      {/* 190 C: 成長マトリクスの位置と根拠（ルール1〜3） */}
+      <MatrixSelfSection
+        value={data.matrix}
+        locked={locked}
+        today={jstTodayYmd()}
+        onChange={(matrix) => {
+          setData((d) => ({ ...d, matrix }));
+          if (config) writeDraft(`self-review:matrix:${config.currentPeriod}`, { matrix });
+        }}
+      />
 
       {/* 5. 来期に向けて */}
       <section className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">

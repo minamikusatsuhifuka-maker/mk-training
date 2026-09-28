@@ -3,11 +3,20 @@
 import { notFound } from "next/navigation";
 import { authorizeGrowth } from "@/lib/staff-growth-server";
 import { CourseMasterPanel } from "@/components/CourseMasterPanel";
+import { GateMasterPanel } from "@/components/GateMasterPanel";
 
 export const dynamic = "force-dynamic";
 
 export default async function CourseMasterPage() {
   const auth = await authorizeGrowth();
   if (!auth.ok || !auth.isAdmin) notFound();
-  return <CourseMasterPanel />;
+  return (
+    <>
+      <CourseMasterPanel />
+      {/* 190 B-1: 必須の学び（ゲート）の登録と講座の紐づけ（院長のみ） */}
+      <div className="max-w-3xl mx-auto p-3 sm:p-4">
+        <GateMasterPanel />
+      </div>
+    </>
+  );
 }

@@ -27,6 +27,7 @@ import { NeedsRadarChart } from "@/components/NeedsRadarChart";
 import { HiringDocsPanel } from "@/components/HiringDocsPanel";
 import { ScouterCard } from "@/components/ScouterCard";
 import { ContactQuickView } from "@/components/ContactQuickView";
+import { CurrentPositionCard } from "@/components/CurrentPositionCard";
 import { GoalsStaged, weeklyLinksFromPromises } from "@/components/GoalsStaged";
 import { FeedbackPanel } from "@/components/FeedbackPanel";
 import { fetchGoalsApi, fetchPromisesApi, supportGoalApi, type PromiseItem } from "@/lib/staff-growth-client";
@@ -243,6 +244,9 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
       )}
 
       {/* 上部カード（A-4） */}
+      {/* 190 D: 現在地（成長マトリクス）— 院長のみ（担当幹部には出さない）。入職予定者には出さない */}
+      {isAdmin && !isProspect && <CurrentPositionCard userId={userId} mode="director" />}
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <Card title="🤝 最新の1on1の約束" href={isProspect ? "" : "/one-on-one"}>
           {isProspect ? (

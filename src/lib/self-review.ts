@@ -8,6 +8,7 @@
 
 import { loadPortalObject, savePortalObject } from "./portal-store";
 import { RECORD_KEY_RE } from "./private-store-client";
+import { emptyMatrixSelf, normalizeMatrixSelf, type MatrixSelf } from "./growth-matrix";
 
 // ─── シート本体の型 ───
 
@@ -35,6 +36,8 @@ export type SelfReviewData = {
     rank: { value: SelfReviewRank; reason: string };
     raiki: { wants: string; doing: string; support: string };
   };
+  /** 190 C: 成長マトリクスの位置・次に伸ばす軸・到達状態と根拠（ルール1〜3） */
+  matrix: MatrixSelf;
 };
 
 export function emptySelfReviewData(): SelfReviewData {
@@ -59,6 +62,7 @@ export function emptySelfReviewData(): SelfReviewData {
       rank: { value: "", reason: "" },
       raiki: { wants: "", doing: "", support: "" },
     },
+    matrix: emptyMatrixSelf(),
   };
 }
 
@@ -112,6 +116,7 @@ export function normalizeSelfReviewData(raw: unknown): SelfReviewData {
       },
       raiki: sec("raiki", base.sections.raiki),
     },
+    matrix: normalizeMatrixSelf(g.matrix),
   };
 }
 

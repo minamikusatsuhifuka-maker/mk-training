@@ -15,6 +15,8 @@ const PORTAL_CARDS = [
   { href: "/hr/evaluation", emoji: "🌱", title: "評価制度", desc: "S/A/B/C・7つの実・三面鏡" },
   { href: "/hr/promotion", emoji: "🪜", title: "ステージ移行", desc: "必須の学び・到達項目・対話の問い" },
   { href: "/hr/salary", emoji: "💴", title: "給与テーブル", desc: "月給レンジ・全号俸表" },
+  // 190: 成長マトリクス（確定版 v1.0 をそのまま掲載）
+  { href: "/hr/matrix", emoji: "🧭", title: "成長マトリクス", desc: "縦軸マインド × 横軸スキル・ナレッジ" },
 ];
 
 function HrPortalBody() {
