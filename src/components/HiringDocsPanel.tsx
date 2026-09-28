@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { DropZone } from "@/components/DropZone";
 import { ScouterTranscriptForm } from "@/components/ScouterTranscriptForm";
+import { HiringPurgeDialog } from "@/components/HiringPurgeDialog";
 import { SCOUTER_SAVED_EVENT } from "@/components/ScouterCard";
 import type { ScouterTranscript } from "@/lib/scouter";
 import {
@@ -96,6 +97,8 @@ export function HiringDocsPanel({ userId, staffName }: { userId: string; staffNa
   const [extract, setExtract] = useState<{ docId: string; proposal: HiringProposal; current: { contact: StaffContact; profile: HiringProfile } } | null>(null);
   // 188 1: 適性検査（スカウター）の転記（AIの提案 → 院長が確認・修正 → 保存）
   const [scouterDraft, setScouterDraft] = useState<{ docId: string; transcript: ScouterTranscript; model: string } | null>(null);
+  // 189: 経歴・入職時の想いの一括削除（削除用パスワード付き）
+  const [purgeOpen, setPurgeOpen] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
 
   const load = useCallback(async () => {
@@ -514,7 +517,23 @@ export function HiringDocsPanel({ userId, staffName }: { userId: string; staffNa
       {/* 経歴・入職時の想い */}
       {profileDraft && (
         <div className="rounded-lg border border-gray-200 bg-white p-2 space-y-2" data-hiring-profile>
-          <p className="text-[11px] font-medium text-gray-800">📜 経歴・入職時の想い（院長のみ）</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[11px] font-medium text-gray-800">📜 経歴・入職時の想い（院長のみ）</p>
+            <button type="button" onClick={() => setPurgeOpen(true)} disabled={busy} className="px-3 py-1.5 border border-red-300 text-red-700 rounded-full text-[11px] hover:bg-red-50 disabled:opacity-40 min-h-[36px]" data-purge-open>
+              🗑 まとめて削除
+            </button>
+          </div>
+          {purgeOpen && (
+            <HiringPurgeDialog
+              userId={userId}
+              staffName={staffName}
+              onClose={() => setPurgeOpen(false)}
+              onDeleted={async () => {
+                window.dispatchEvent(new Event(SCOUTER_SAVED_EVENT));
+                await load();
+              }}
+            />
+          )}
           {HIRING_PROFILE_FIELDS.map((f) => (
             <label key={f.key} className="block">
               <span className="text-[11px] text-gray-700">
