@@ -667,6 +667,12 @@ function buildEntry(src: Sources, p: RosterPerson, candidates?: Map<string, { us
   };
 }
 
+/** その人のカルテに載る記録（学び・1on1・メンバーノート・自己評価・サーベイ・権限委譲・採用資料・FB・入職日）が1つでもあるか */
+function hasAnyKarteRecord(src: Sources, person: RosterPerson): boolean {
+  if (src.learning.some((l) => l.userId === person.userId)) return true;
+  return buildTimeline(src, person).length > 0;
+}
+
 // ─── 公開API（管理者のみ・呼び出し側で保証）───
 
 export async function buildKarteList(
@@ -678,8 +684,11 @@ export async function buildKarteList(
   // 187: 入職予定者のメールに一致するアカウント（紐づけ候補）
   const emails = src.roster.filter((p) => p.prospect?.email).map((p) => p.prospect!.email);
   const candidates = scope.mode === "full" && emails.length > 0 ? await findAccountsByEmail(admin, emails) : undefined;
+  // 無効化済み（退職）のアカウントで、カルテに載る記録が何も無い人は一覧に出さない
+  //（「使用不可」など、記録の無い無効化アカウントを一覧から外す。記録があれば「退職者も表示」で見られる）
+  const roster = src.roster.filter((p) => !(p.retired && !hasAnyKarteRecord(src, p)));
   return {
-    entries: src.roster.map((p) => buildEntry(src, p, candidates)),
+    entries: roster.map((p) => buildEntry(src, p, candidates)),
     courses: src.courses,
     tableMissing: src.tableMissing,
     today: jstTodayYmd(),
