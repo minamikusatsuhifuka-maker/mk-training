@@ -13,6 +13,7 @@
 // 実体アクセスはすべて service-role（RLS全拒否テーブル）。
 
 import { NextResponse } from "next/server";
+import { loadTestSeedIds } from "@/lib/test-seed-server";
 import {
   authorizeStaffContacts,
   fetchAllStaffContacts,
@@ -116,6 +117,8 @@ export async function GET(req: Request) {
     return NextResponse.json({
       contacts: visible,
       retiredUserIds: retiredUserIds.filter((id) => linked.has(id)),
+      // 191: 検証用アカウントの連絡先に印を付ける（院長の画面）
+      testUserIds: Array.from(await loadTestSeedIds()).filter((id) => linked.has(id)),
       isAdmin: auth.isAdmin,
       tableMissing,
     });

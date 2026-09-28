@@ -417,6 +417,11 @@ export function StaffGrowthKarte() {
                           {e.roleLabel}
                         </span>
                       )}
+                      {e.testSeed && (
+                        <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-900" data-test-seed-badge>
+                          🧪 検証用
+                        </span>
+                      )}
                       {e.retired && (
                         <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded border border-gray-300 bg-gray-50 text-gray-600">
                           退職

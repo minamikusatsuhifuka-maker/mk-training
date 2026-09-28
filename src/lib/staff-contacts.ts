@@ -283,6 +283,8 @@ export type StaffContactsListResponse = {
   contacts: StaffContact[];
   /** 退職者（無効化されたアカウント）の userId。一覧の既定では隠す（169-3-4） */
   retiredUserIds: string[];
+  /** 191: 検証用アカウントの userId（院長の画面で「🧪 検証用」を出す） */
+  testUserIds?: string[];
   isAdmin: boolean;
   tableMissing: boolean;
 };

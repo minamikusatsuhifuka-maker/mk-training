@@ -30,6 +30,7 @@ import type { StaffProfileIndexEntry } from "@/lib/staff-profiles";
 export function StaffContactsBoard({ isAdmin }: { isAdmin: boolean }) {
   const [contacts, setContacts] = useState<StaffContact[]>([]);
   const [retired, setRetired] = useState<Set<string>>(new Set());
+  const [testIds, setTestIds] = useState<Set<string>>(new Set());
   const [members, setMembers] = useState<StaffProfileIndexEntry[]>([]);
   const [tableMissing, setTableMissing] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -56,6 +57,7 @@ export function StaffContactsBoard({ isAdmin }: { isAdmin: boolean }) {
       ]);
       setContacts(json.contacts);
       setRetired(new Set(json.retiredUserIds));
+      setTestIds(new Set(Array.isArray(json.testUserIds) ? (json.testUserIds as string[]) : []));
       setTableMissing(json.tableMissing);
       setMembers(idx);
     } catch (e) {
@@ -281,6 +283,11 @@ export function StaffContactsBoard({ isAdmin }: { isAdmin: boolean }) {
                       <span className="text-sm font-medium text-gray-900">
                         {c.name}
                       </span>
+                      {testIds.has(c.userId) && (
+                        <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-900" data-test-seed-badge>
+                          🧪 検証用
+                        </span>
+                      )}
                       {isRetired(c) && (
                         <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded border border-gray-300 bg-gray-50 text-gray-600">
                           退職

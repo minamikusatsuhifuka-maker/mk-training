@@ -12,6 +12,7 @@
 //   無効化した人を有効に戻す操作が必要なので、あちらは従来どおり全件出す。
 
 import { NextResponse } from "next/server";
+import { loadTestSeedIds } from "@/lib/test-seed-server";
 import type { User } from "@supabase/supabase-js";
 import {
   getSessionUser,
@@ -95,7 +96,9 @@ export async function GET(req: Request) {
         : Promise.resolve([]),
     ]);
 
-    const all = normalizeIndex(indexRow?.data);
+    // 191 B: 検証用アカウント（app_metadata の印）はメンバー紹介・人数に出さない
+    const testIds = await loadTestSeedIds();
+    const all = normalizeIndex(indexRow?.data).filter((e) => !testIds.has(e.userId));
     // 判定できなかった場合（disabled === null）は除外しない＝現状どおり表示
     const items = disabled
       ? all.filter((e) => !disabled.ids.has(e.userId))

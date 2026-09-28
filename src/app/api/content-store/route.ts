@@ -16,6 +16,8 @@ import {
   isValidContentKey,
 } from "@/lib/content-store-policy";
 import { redactForeignProfileRows } from "@/lib/content-store-redact";
+import { loadTestSeedIds } from "@/lib/test-seed-server";
+import { STAFF_PROFILES_INDEX_KEY } from "@/lib/staff-profiles";
 import {
   serverDeleteContentRow,
   serverGetContentRow,
@@ -51,6 +53,16 @@ export async function GET(req: Request) {
   // 157: サーバー専用キー（menu_access）はこのAPIからは読み書きさせない
   if (isServerOnlyContentKey(key)) return hidden();
   const row = await serverGetContentRow(key);
+  // 191 B: 検証用アカウントは一般スタッフの画面（メンバー・宛先候補・集計）に出さない。印は app_metadata（サーバーで判定）
+  if (row && key === STAFF_PROFILES_INDEX_KEY && !isAdminUser(user)) {
+    const testIds = await loadTestSeedIds();
+    if (testIds.size > 0) {
+      const d = (row.data ?? {}) as { items?: unknown[] };
+      if (Array.isArray(d.items)) {
+        return NextResponse.json({ ...row, data: { ...d, items: d.items.filter((it) => !(it && typeof it === "object" && testIds.has(String((it as { userId?: unknown }).userId ?? "")))) } });
+      }
+    }
+  }
   // 182: 他人のプロフィールを1件で読むときも、一覧と同じ伏せ処理（記念日・サーベイ）を通す
   if (row && key.startsWith("staff_profile:")) {
     return NextResponse.json({ row: redactForeignProfileRows([row], user.id)[0] });

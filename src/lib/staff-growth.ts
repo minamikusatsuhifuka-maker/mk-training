@@ -876,6 +876,8 @@ export type KarteListEntry = {
   learningCount: number;
   /** 最新の学びの開始日 */
   lastLearningOn: string;
+  /** 191: 検証用アカウント（院長の画面に「🧪 検証用」） */
+  testSeed?: boolean;
   /** 187: 入職予定者（アカウント作成前）。院長のみ・full モードだけ */
   prospect?: {
     expectedJoinOn: string;

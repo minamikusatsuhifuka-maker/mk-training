@@ -208,6 +208,7 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
         <h1 className="text-lg font-bold text-gray-900">
           {entry.name}
           {detail.contactAccess && <ContactQuickView userId={userId} name={entry.name} />}
+          {entry.testSeed && <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-900 font-normal" data-test-seed-badge>🧪 検証用</span>}
           {entry.roleLabel && (
             <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700 font-normal">
               {entry.roleLabel}

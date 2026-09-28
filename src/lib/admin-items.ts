@@ -106,6 +106,8 @@ export const ADMIN_ITEMS: readonly AdminItem[] = [
   { key: "delegation", label: "🔑 委任の設定", href: "/admin/delegation", delegable: false, reason: "権限・指名の設定そのもの" },
   // 189: 経歴・入職時の想いの一括削除の本人確認。院長のみ（機微な個人情報の削除）
   { key: "delete-password", label: "🗑 削除用パスワードの設定", href: "/admin/delete-password", delegable: false, reason: "一括削除の本人確認（機微な個人情報の削除）" },
+  // 191: 検証用アカウントと架空データの作成・削除（アカウント＝権限）
+  { key: "test-seed", label: "🧪 検証用データ", href: "/admin/test-seed", delegable: false, reason: "アカウントの作成・削除（権限・アカウント）" },
   // 184: 採用資料（履歴書・適性検査）は育成カルテの中の機能。院長のみ（179の決定）で委任できない
   { key: "hiring-docs", label: "📁 採用資料（履歴書・適性検査・経歴）", href: "/staff-growth", delegable: false, reason: "履歴書原本・適性検査・経歴（機微な個人情報）", hidden: true },
 ] as const;

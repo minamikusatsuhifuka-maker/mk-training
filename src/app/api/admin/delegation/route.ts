@@ -22,7 +22,7 @@ import { authorizeGrowth, recordGrowthLog } from "@/lib/staff-growth-server";
 
 export const runtime = "nodejs";
 
-type Roster = { userId: string; name: string; isAdmin: boolean; retired: boolean }[];
+type Roster = { userId: string; name: string; isAdmin: boolean; retired: boolean; testSeed?: boolean }[];
 
 /** 名簿（有効なアカウントのみ・氏名はプロフィール→表示名の順） */
 async function loadRoster(): Promise<Roster> {
@@ -39,6 +39,8 @@ async function loadRoster(): Promise<Roster> {
         name: (typeof meta?.display_name === "string" && meta.display_name.trim()) || u.email || "名前未設定",
         isAdmin: app?.role === "admin",
         retired: !!until && new Date(until).getTime() > Date.now(),
+        // 191 B: 検証用（担当指定の候補から外す。検証用どうしの指定は除く）
+        ...(app?.test_seed === true ? { testSeed: true } : {}),
       });
     }
   } catch {

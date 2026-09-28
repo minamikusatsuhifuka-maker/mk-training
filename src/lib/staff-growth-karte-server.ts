@@ -25,6 +25,7 @@ import { surveyFromEntry } from "./survey-history";
 import { signOne } from "./storage-signed";
 import { fetchHiringDocs, fetchProspects, findAccountsByEmail } from "./hiring-docs-server";
 import { hiringDocKindLabel, isProspectStale, type HiringDoc, type Prospect } from "./hiring-docs";
+import { isTestSeedUser } from "./test-seed";
 import { authorizeStaffContacts, fetchAllStaffContacts } from "./staff-contacts-server";
 import { authorizeMemberNotes, fetchAllNotes } from "./member-notes-server";
 import {
@@ -76,6 +77,8 @@ type RosterPerson = {
   roleLabel: string;
   joinedOn: string;
   retired: boolean;
+  /** 191: 検証用アカウント（app_metadata の印）。院長の画面に「🧪 検証用」を出す */
+  testSeed?: boolean;
   /** 187: 入職予定者（アカウント作成前） */
   prospect?: Prospect;
 };
@@ -110,6 +113,7 @@ async function loadRoster(
           roleLabel: "",
           joinedOn: "",
           retired: isBanned(u),
+          ...(isTestSeedUser(u) ? { testSeed: true } : {}),
         });
       }
     }
@@ -660,6 +664,7 @@ function buildEntry(src: Sources, p: RosterPerson, candidates?: Map<string, { us
     roleLabel: p.roleLabel,
     joinedOn: p.joinedOn,
     retired: p.retired,
+    ...(p.testSeed ? { testSeed: true } : {}),
     courseIds: Array.from(new Set(mine.map((l) => l.courseId))),
     tags: Array.from(new Set(mine.flatMap((l) => l.tags))),
     learningCount: mine.length,

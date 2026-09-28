@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Item = { key: string; label: string; href: string; delegable: boolean; reason: string; userIds: string[] };
-type Roster = { userId: string; name: string; isAdmin: boolean; retired: boolean }[];
+type Roster = { userId: string; name: string; isAdmin: boolean; retired: boolean; testSeed?: boolean }[];
 
 export function DelegationPanel() {
   const [items, setItems] = useState<Item[]>([]);
@@ -41,7 +41,8 @@ export function DelegationPanel() {
   }, [load]);
 
   /** 幹部の候補＝管理者でない有効なアカウント */
-  const staff = useMemo(() => roster.filter((r) => !r.isAdmin && !r.retired), [roster]);
+  // 191 B: 検証用アカウントは項目の委任先候補に出さない
+  const staff = useMemo(() => roster.filter((r) => !r.isAdmin && !r.retired && !r.testSeed), [roster]);
   const nameOf = (id: string) => roster.find((r) => r.userId === id)?.name ?? "（不明）";
 
   const save = async (body: { items?: Record<string, string[]>; karte?: Record<string, string[]> }) => {
@@ -118,6 +119,8 @@ export function DelegationPanel() {
             <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1">
               {roster
                 .filter((r) => r.userId !== manager && !r.isAdmin)
+                // 191 B: 検証用の幹部には検証用のスタッフだけ、通常の幹部には検証用を出さない
+                .filter((r) => !!r.testSeed === !!roster.find((m) => m.userId === manager)?.testSeed)
                 .map((r) => (
                   <li key={r.userId}>
                     <label className="flex items-center gap-2 text-sm text-slate-800 min-h-[40px] rounded-md px-2 hover:bg-slate-50">
@@ -128,6 +131,7 @@ export function DelegationPanel() {
                         onChange={() => toggleAssignment(r.userId)}
                       />
                       {r.name}
+                      {r.testSeed && <span className="text-[10px] text-violet-700">🧪 検証用</span>}
                       {r.retired && <span className="text-[10px] text-slate-500">（退職）</span>}
                     </label>
                   </li>

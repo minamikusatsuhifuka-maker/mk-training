@@ -16,6 +16,7 @@ import {
 } from "@/lib/supabase-admin";
 import { getSessionUser } from "@/lib/staff-profiles-server";
 import { isAdminUser, countAdmins } from "@/lib/admin-role";
+import { isTestSeedUser } from "@/lib/test-seed";
 import { STAFF_PROFILES_INDEX_KEY } from "@/lib/staff-profiles";
 import { serverGetContentRow } from "@/lib/content-store-server";
 
@@ -30,6 +31,7 @@ type AccountSummary = {
   lastSignInAt: string | null;
   invitedAt: string | null;
   banned: boolean;
+  testSeed?: boolean;
   isAdmin: boolean;
   /**
    * 招待時の表示名が未設定のときに一覧で代わりに出す、本人がプロフィールに登録した名前。
@@ -74,6 +76,8 @@ function toSummary(u: User, profileNames?: Map<string, string>): AccountSummary 
     banned: !!banned_until && new Date(banned_until).getTime() > Date.now(),
     isAdmin: isAdminUser(u),
     profileName: profileNames?.get(u.id) ?? "",
+    // 191: 検証用アカウント（app_metadata の印）
+    testSeed: isTestSeedUser(u),
   };
 }
 

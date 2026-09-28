@@ -20,6 +20,8 @@ type AccountSummary = {
   invitedAt: string | null;
   banned: boolean;
   isAdmin: boolean;
+  /** 191: 検証用アカウント */
+  testSeed?: boolean;
   /** 招待時の表示名が未設定のときの代替表示用（本人のプロフィール名・APIが付与） */
   profileName?: string;
 };
@@ -570,6 +572,11 @@ export default function StaffAccountsAdminPage() {
                       {u.isAdmin && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
                           👑 管理者
+                        </span>
+                      )}
+                      {u.testSeed && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-800" data-test-seed-badge>
+                          🧪 検証用
                         </span>
                       )}
                       {u.banned ? (
