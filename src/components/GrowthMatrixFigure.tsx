@@ -30,13 +30,14 @@ type Anchor = "start" | "middle" | "end";
 
 function textWidth(text: string, fontSize: number): number {
   let w = 0;
-  for (const ch of text) w += /[\x20-\x7e]/.test(ch) ? 0.62 : 1.02;
+  for (const ch of text) w += /[\x20-\x7e]/.test(ch) ? 0.7 : 1.08;
   return w * fontSize;
 }
+/** 文字の箱は実描画より少し大きめ（左右 3px・上下 2px の余白）に見積もる＝重なりを厳しめに判定 */
 export function textBox(text: string, x: number, baseline: number, fontSize: number, anchor: Anchor): Box {
   const w = textWidth(text, fontSize);
   const x1 = anchor === "start" ? x : anchor === "end" ? x - w : x - w / 2;
-  return { x1, y1: baseline - fontSize * 0.92, x2: x1 + w, y2: baseline + fontSize * 0.2 };
+  return { x1: x1 - 3, y1: baseline - fontSize * 0.95 - 2, x2: x1 + w + 3, y2: baseline + fontSize * 0.22 + 2 };
 }
 function intersects(a: Box, b: Box): boolean {
   return !(a.x2 <= b.x1 || b.x2 <= a.x1 || a.y2 <= b.y1 || b.y2 <= a.y1);
@@ -47,6 +48,19 @@ function inside(b: Box): boolean {
 
 type Placed = { text: string; x: number; y: number; fontSize: number; anchor: Anchor; box: Box };
 
+/** 194 C: 記号（等級の点・質的転換点の印・本人の印）の箱。文字はこれらとも重ならない場所へ置く */
+function circleBox(cx: number, cy: number, r: number): Box {
+  return { x1: cx - r, y1: cy - r, x2: cx + r, y2: cy + r };
+}
+export function fixedShapeBoxes(): Box[] {
+  const out: Box[] = [];
+  for (const p of GRADE_POINTS) out.push(circleBox(px(p.x), py(p.y), p.grade === "G3" ? 9 : 7));
+  const mx = (px(GRADE_POINTS[1].x) + px(GRADE_POINTS[2].x)) / 2;
+  const my = (py(GRADE_POINTS[1].y) + py(GRADE_POINTS[2].y)) / 2;
+  out.push(circleBox(mx, my, 10)); // 質的転換点の印（◆）
+  return out;
+}
+
 /** 固定の文字（等級のラベル・注記・軸・凡例）。本人の点のラベルはこれらを避けて置く */
 function fixedTexts(): Placed[] {
   const out: Placed[] = [];
@@ -54,8 +68,12 @@ function fixedTexts(): Placed[] {
   for (const p of GRADE_POINTS) {
     const cx = px(p.x);
     const cy = py(p.y);
-    const left = p.grade === "G4" || p.grade === "G5";
-    put(`${p.grade === "G3" ? "★" : ""}${p.grade} ${p.label}`, cx + (left ? -20 : 20), cy - 18, 18, left ? "end" : "start");
+    // G2 は右上に置くと G2→G3 の線上の「質的転換点」の印と重なるため左上へ。G4・G5 は右端に近いので左上
+    const left = p.grade === "G2" || p.grade === "G4" || p.grade === "G5";
+    // 隣のマスの本人の印（半径18）と重ならないよう、ラベルは点の上 26px に置く。
+    // G1 だけは点の右下（左下の角で、上に置くと S1×M2 の本人の印のラベルの置き場が無くなる）
+    const below = p.grade === "G1";
+    put(`${p.grade === "G3" ? "★" : ""}${p.grade} ${p.label}`, cx + (left ? -20 : 20), below ? cy + 30 : cy - 26, 18, left ? "end" : "start");
   }
   // 軸
   S_LEVELS.forEach((s, i) => put(s, px(levelCenter(i + 1)), py(0) + 22, 19, "middle"));
@@ -90,36 +108,50 @@ export type MarkerLayout = { group: MarkerGroup; cx: number; cy: number; label: 
 /** 本人の点のラベルを、固定の文字と互いに重ならない場所へ置く（純関数・テスト可能） */
 export function layoutMarkers(markers: MatrixMarker[]): MarkerLayout[] {
   const fixed = fixedTexts();
-  const placedBoxes: Box[] = fixed.map((f) => f.box);
+  const placedBoxes: Box[] = [...fixed.map((f) => f.box), ...fixedShapeBoxes()];
+  const groups = groupMarkers(markers);
+  // 本人の印（円）も避ける対象（自分の印は候補の距離で避ける）
+  const markerBoxes = groups.map((g) => circleBox(px(levelCenter(S_LEVELS.indexOf(g.s) + 1)), py(levelCenter(M_LEVELS.indexOf(g.m) + 1)), g.colors.length > 1 ? 18 : 13));
   const out: MarkerLayout[] = [];
   const fs = 17;
-  for (const g of groupMarkers(markers)) {
+  groups.forEach((g, gi) => {
     const cx = px(levelCenter(S_LEVELS.indexOf(g.s) + 1));
     const cy = py(levelCenter(M_LEVELS.indexOf(g.m) + 1));
     const label = g.labels.join("・");
+    const r = g.colors.length > 1 ? 18 : 13;
+    const dy = r + 4;
     const candidates: { x: number; y: number; anchor: Anchor }[] = [
-      { x: cx, y: cy + 30, anchor: "middle" }, // 下
-      { x: cx, y: cy - 18, anchor: "middle" }, // 上
-      { x: cx + 16, y: cy + 6, anchor: "start" }, // 右
-      { x: cx - 16, y: cy + 6, anchor: "end" }, // 左
-      { x: cx + 12, y: cy + 30, anchor: "start" }, // 右下
-      { x: cx - 12, y: cy + 30, anchor: "end" }, // 左下
-      { x: cx + 12, y: cy - 18, anchor: "start" }, // 右上
-      { x: cx - 12, y: cy - 18, anchor: "end" }, // 左上
-      { x: cx, y: cy + 48, anchor: "middle" }, // さらに下
-      { x: cx, y: cy - 36, anchor: "middle" }, // さらに上
+      { x: cx, y: cy + dy + 16, anchor: "middle" }, // 下
+      { x: cx, y: cy - dy - 3, anchor: "middle" }, // 上
+      { x: cx + r + 6, y: cy + 6, anchor: "start" }, // 右
+      { x: cx - r - 6, y: cy + 6, anchor: "end" }, // 左
+      { x: cx + 8, y: cy + dy + 16, anchor: "start" }, // 右下
+      { x: cx - 8, y: cy + dy + 16, anchor: "end" }, // 左下
+      { x: cx + 8, y: cy - dy - 3, anchor: "start" }, // 右上
+      { x: cx - 8, y: cy - dy - 3, anchor: "end" }, // 左上
+      { x: cx, y: cy + dy + 36, anchor: "middle" }, // さらに下
+      { x: cx, y: cy - dy - 22, anchor: "middle" }, // さらに上
+      { x: cx + r + 6, y: cy - 8, anchor: "start" }, // 右やや上
+      { x: cx + r + 6, y: cy + 22, anchor: "start" }, // 右やや下
+      { x: cx - r - 6, y: cy - 8, anchor: "end" }, // 左やや上
+      { x: cx - r - 6, y: cy + 22, anchor: "end" }, // 左やや下
+      { x: cx, y: cy - dy - 40, anchor: "middle" }, // もっと上
+      { x: cx, y: cy + dy + 54, anchor: "middle" }, // もっと下
+      { x: cx + r + 30, y: cy + 6, anchor: "start" }, // 右へ離す
+      { x: cx - r - 30, y: cy + 6, anchor: "end" }, // 左へ離す
     ];
+    const others = markerBoxes.filter((_, i) => i !== gi);
     let chosen = candidates[0];
     for (const c of candidates) {
       const box = textBox(label, c.x, c.y, fs, c.anchor);
-      if (inside(box) && !placedBoxes.some((b) => intersects(b, box))) {
+      if (inside(box) && !placedBoxes.some((b) => intersects(b, box)) && !others.some((b) => intersects(b, box))) {
         chosen = c;
         break;
       }
     }
     placedBoxes.push(textBox(label, chosen.x, chosen.y, fs, chosen.anchor));
     out.push({ group: g, cx, cy, label, lx: chosen.x, ly: chosen.y, anchor: chosen.anchor, fontSize: fs, color: g.colors[0] });
-  }
+  });
   return out;
 }
 
@@ -207,7 +239,7 @@ export function GrowthMatrixFigure({
         <polygon points={`${mx},${my - 9} ${mx + 9},${my} ${mx},${my + 9} ${mx - 9},${my}`} fill="#b45309" stroke="#fff" strokeWidth={2} pointerEvents="none" data-turning-point />
         {/* 本人の点（同じマスは1つにまとめる。ラベルは空いている場所へ） */}
         {laid.map((m) => (
-          <g key={`${m.group.s}${m.group.m}`} data-marker={m.label} pointerEvents="none">
+          <g key={`${m.group.s}${m.group.m}`} data-marker={m.label} data-marker-cell={`${m.group.s}${m.group.m}`} pointerEvents="none">
             <circle cx={m.cx} cy={m.cy} r={12} fill={m.group.hollow ? "#fff" : m.group.colors[0]} stroke={m.group.colors[m.group.colors.length - 1]} strokeWidth={3} />
             {m.group.colors.length > 1 && <circle cx={m.cx} cy={m.cy} r={17} fill="none" stroke={m.group.colors[1]} strokeWidth={2} strokeDasharray="4 3" />}
             <text x={m.lx} y={m.ly} fontSize={m.fontSize} textAnchor={m.anchor} fill={m.color} fontWeight={700} data-marker-label>

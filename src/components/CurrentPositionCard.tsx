@@ -238,6 +238,7 @@ export function CurrentPositionCard({ userId, mode }: { userId?: string; mode: "
       {/* 193 B-2: 等級ごとの要件表（本人の次の移行を強調して開く。項目の横に本人の到達／途上と院長の確認） */}
       <div className="rounded-lg border border-gray-200 bg-white p-2" data-position-requirements>
         <GrowthRequirementsTable
+          mode="card"
           highlight={data.transition}
           marks={(key) => {
             const st = self?.items[key];
@@ -269,7 +270,7 @@ export function CurrentPositionCard({ userId, mode }: { userId?: string; mode: "
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full mr-1 ${item.axis === "s" ? "bg-cyan-100 text-cyan-900" : "bg-amber-100 text-amber-900"}`}>{item.axis === "s" ? "横" : "縦"}</span>
                     {plainItemText(item.text)}
                     <span className={`ml-1 text-[10px] px-1.5 py-0.5 rounded ${st.status === "reached" ? "bg-teal-100 text-teal-900" : st.status === "in_progress" ? "bg-gray-100 text-gray-700" : "bg-gray-50 text-gray-400"}`}>{st.status === "reached" ? "到達（本人）" : st.status === "in_progress" ? "途上（本人）" : "未記入"}</span>
-                    {rv && <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-900">{ITEM_REVIEW_LABEL[rv]}（院長）</span>}
+                    {rv && !isDirector && <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-900">✓ {ITEM_REVIEW_LABEL[rv]}（院長）</span>}
                   </p>
                   {st.evidence.length > 0 && (
                     <ul className="list-disc pl-5 text-[11px] text-gray-700">
@@ -278,13 +279,22 @@ export function CurrentPositionCard({ userId, mode }: { userId?: string; mode: "
                       ))}
                     </ul>
                   )}
-                  {isDirector && (
-                    <div className="flex gap-2 mt-1">
-                      {(["confirmed", "dialogue", ""] as const).map((v) => (
-                        <button key={v || "none"} type="button" disabled={busy} onClick={() => void run(async () => { await patch({ itemReviews: { [item.key]: v } }); return v ? `「${ITEM_REVIEW_LABEL[v]}」を付けました` : "確認を外しました"; })} className={`text-[11px] px-2 py-1 rounded-full border min-h-[28px] ${rv === v ? "bg-violet-600 text-white border-violet-600" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`} aria-label={`${item.text} を${ITEM_REVIEW_LABEL[v]}にする`}>
-                          {v ? ITEM_REVIEW_LABEL[v] : "外す"}
+                  {/* 194 B: 印が無いときは「確認」「対話で確かめる」の2つだけ（枠線）。印があるときは印＋小さく「取り消す」 */}
+                  {isDirector && !rv && (
+                    <div className="flex gap-2 mt-1" data-review-buttons>
+                      {(["confirmed", "dialogue"] as const).map((v) => (
+                        <button key={v} type="button" disabled={busy} onClick={() => void run(async () => { await patch({ itemReviews: { [item.key]: v } }); return `「${ITEM_REVIEW_LABEL[v]}」を付けました`; })} className="text-[11px] px-2 py-1 rounded-full border border-violet-300 text-violet-900 hover:bg-violet-50 min-h-[28px] disabled:opacity-40" aria-label={`${item.text} を${ITEM_REVIEW_LABEL[v]}にする`}>
+                          {ITEM_REVIEW_LABEL[v]}
                         </button>
                       ))}
+                    </div>
+                  )}
+                  {isDirector && rv && (
+                    <div className="flex items-center gap-2 mt-1" data-review-set>
+                      <span className="text-[11px] px-2 py-1 rounded-full bg-violet-600 text-white">✓ {ITEM_REVIEW_LABEL[rv]}（院長）</span>
+                      <button type="button" disabled={busy} onClick={() => void run(async () => { await patch({ itemReviews: { [item.key]: "" } }); return "確認を取り消しました"; })} className="text-[10px] text-gray-600 underline underline-offset-2 disabled:opacity-40" aria-label={`${item.text} の確認を取り消す`}>
+                        取り消す
+                      </button>
                     </div>
                   )}
                 </li>

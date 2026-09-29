@@ -1,12 +1,13 @@
 "use client";
-// 等級ごとの要件表（指示書193 B）— G1→G2 から G4→G5 までを1枚に。
+// 等級ごとの要件表（指示書193 B・194 A）— G1→G2 から G4→G5 までを1枚に。
 //   文言は確定版 第4節を md から解析した TRANSITION_SPECS をそのまま使う（書き換えない。** は太字として描く）。
-//   パソコン幅: 横に並べた表（行ごとに開閉）。スマートフォン: 移行ごとに開閉できるカード（横スクロールさせない）。
-//   現在地では、本人の次の移行の行を強調して最初から開き、各項目の横に本人の「到達／途上」と院長の「確認」を出す。
+//   194 A: 現在地（mode="card"）は、次の移行を**カード**（見出し1行／必須の学びの○×1段／横軸｜縦軸の2列）で出し、
+//          他の移行は1行の見出しだけ（開くと同じカード）。ポータル（mode="auto"）は、パソコン幅では横軸・縦軸の列に
+//          十分な幅（1行12文字以上）を持たせた表、幅が足りなければカード。
 //   点数・割合・到達の数は出さない。他の人と比べる表示はしない。
 
 import { useState } from "react";
-import { TRANSITIONS, TRANSITION_SPECS, transitionLabel, type ItemReview, type ItemSelf, type TransitionKey } from "@/lib/growth-matrix";
+import { TRANSITIONS, TRANSITION_SPECS, transitionLabel, type ItemReview, type ItemSelf, type TransitionKey, type TransitionSpec } from "@/lib/growth-matrix";
 
 /** ** … ** を太字に（文言は変えない） */
 export function renderBold(text: string): React.ReactNode {
@@ -25,7 +26,7 @@ function Marks({ mark }: { mark?: ItemMark }) {
   return (
     <span className="ml-1 inline-flex gap-1 align-middle" data-item-marks>
       {mark.self && <span className={`text-[10px] px-1 py-0.5 rounded ${mark.self === "reached" ? "bg-teal-100 text-teal-900" : "bg-gray-100 text-gray-700"}`}>{STATUS_LABEL[mark.self]}（本人）</span>}
-      {mark.review && <span className="text-[10px] px-1 py-0.5 rounded bg-violet-100 text-violet-900">{REVIEW_LABEL[mark.review]}（院長）</span>}
+      {mark.review && <span className="text-[10px] px-1 py-0.5 rounded bg-violet-100 text-violet-900">✓ {REVIEW_LABEL[mark.review]}（院長）</span>}
     </span>
   );
 }
@@ -43,19 +44,47 @@ function ItemList({ items, marks }: { items: { key: string; text: string }[]; ma
   );
 }
 
-function GateList({ gates, gateMark }: { gates: string[]; gateMark?: (label: string) => GateMark | undefined }) {
+function GateList({ gates, gateMark, inline = false }: { gates: string[]; gateMark?: (label: string) => GateMark | undefined; inline?: boolean }) {
   return (
-    <ul className="list-disc pl-4 space-y-1">
+    <ul className={inline ? "flex flex-wrap gap-x-3 gap-y-1" : "list-disc pl-4 space-y-1"}>
       {gates.map((g, i) => {
         const mk = gateMark?.(g);
         return (
-          <li key={i} className="leading-relaxed" data-req-gate>
-            {mk && <span className={`mr-1 font-bold ${mk.ok ? "text-teal-700" : "text-gray-400"}`}>{mk.ok ? "○" : "×"}</span>}
-            {renderBold(g)}
+          <li key={i} className={`leading-relaxed ${inline ? "inline-flex items-start gap-1 rounded border border-gray-200 bg-white px-1.5 py-0.5" : ""}`} data-req-gate>
+            {mk && <span className={`mr-0.5 font-bold ${mk.ok ? "text-teal-700" : "text-gray-400"}`}>{mk.ok ? "○" : "×"}</span>}
+            <span>{renderBold(g)}</span>
           </li>
         );
       })}
     </ul>
+  );
+}
+
+/** 194 A: 1移行のカード（見出し1行／必須の学び1段／横軸｜縦軸の2列。スマートフォンでは縦に並ぶ） */
+function TransitionCard({ t, hl, marks, gateMark }: { t: TransitionSpec; hl: boolean; marks?: (key: string) => ItemMark | undefined; gateMark?: (label: string) => GateMark | undefined }) {
+  return (
+    <div className="space-y-2 text-[12px]" data-req-card-body={t.key}>
+      <p className="text-[11px] text-gray-700" data-req-card-head>
+        {renderBold(t.heading)}
+        <span className="mx-1 text-gray-400">｜</span>
+        {renderBold(t.focus)}
+      </p>
+      <div>
+        <p className="text-[11px] font-medium text-gray-800 mb-0.5">必須の学び（ゲート）</p>
+        <GateList gates={t.gates} gateMark={gateMark} inline />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="rounded-md border border-cyan-100 bg-cyan-50/40 p-2" data-req-axis="s">
+          <p className="text-[11px] font-medium text-cyan-900 mb-1">スキル・ナレッジ（横軸）</p>
+          <ItemList items={t.s} marks={marks} />
+        </div>
+        <div className="rounded-md border border-amber-100 bg-amber-50/40 p-2" data-req-axis="m">
+          <p className="text-[11px] font-medium text-amber-900 mb-1">マインド（縦軸）</p>
+          <ItemList items={t.m} marks={marks} />
+        </div>
+      </div>
+      {hl && <p className="text-[10px] text-gray-500">移行はチェックの数で決めず、本人と院長の対話で合意します。</p>}
+    </div>
   );
 }
 
@@ -64,99 +93,78 @@ export function GrowthRequirementsTable({
   marks,
   gateMark,
   title = "等級ごとの要件表（確定版 第4節）",
+  mode = "auto",
 }: {
   /** 本人の次の移行（強調して最初から開く。null なら全部開く） */
   highlight?: TransitionKey | null;
   marks?: (itemKey: string) => ItemMark | undefined;
   gateMark?: (label: string) => GateMark | undefined;
   title?: string;
+  /** card=常にカード（現在地）／auto=パソコン幅は表・足りなければカード（ポータル） */
+  mode?: "card" | "auto";
 }) {
   const [open, setOpen] = useState<Record<TransitionKey, boolean>>(() => Object.fromEntries(TRANSITIONS.map((t) => [t.key, highlight ? t.key === highlight : true])) as Record<TransitionKey, boolean>);
   const toggle = (k: TransitionKey) => setOpen((o) => ({ ...o, [k]: !o[k] }));
-  const COLS = ["移行", "必須の学び", "スキル・ナレッジ（横軸）", "マインド（縦軸）", "見る重心"];
+
+  const cards = (
+    <div className="space-y-2">
+      {TRANSITION_SPECS.map((t) => {
+        const hl = t.key === highlight;
+        const isOpen = open[t.key];
+        return (
+          <div key={t.key} className={`rounded-lg border ${hl ? "border-teal-400 bg-teal-50/50" : "border-gray-200 bg-white"} ${isOpen ? "p-2" : "px-2 py-1"}`} data-req-card={t.key} data-highlight={hl ? "1" : "0"} data-open={isOpen ? "1" : "0"}>
+            <button type="button" onClick={() => toggle(t.key)} className="w-full text-left text-[12px] font-bold text-gray-900 min-h-[36px]" aria-expanded={isOpen} aria-label={`${transitionLabel(t.key)} を${isOpen ? "たたむ" : "開く"}`}>
+              {isOpen ? "▾" : "▸"} {transitionLabel(t.key)}
+              {hl && <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-teal-600 text-white font-normal">次の移行</span>}
+              {!isOpen && <span className="ml-1 font-normal text-[11px] text-gray-700">{renderBold(t.heading)}</span>}
+            </button>
+            {isOpen && <TransitionCard t={t} hl={hl} marks={marks} gateMark={gateMark} />}
+          </div>
+        );
+      })}
+    </div>
+  );
 
   return (
-    <section className="space-y-2" data-requirements-table>
+    <section className="space-y-2" data-requirements-table data-mode={mode}>
       <h3 className="text-sm font-bold text-gray-900">{title}</h3>
       <p className="text-[11px] text-gray-600">移行はチェックの数で決めず、本人と院長の対話で合意します。文言は確定版 v1.0 のままです。</p>
-
-      {/* パソコン幅: 表 */}
-      <div className="hidden sm:block">
-        <table className="w-full text-[12px] border border-gray-200 bg-white table-fixed">
-          <thead>
-            <tr>
-              {COLS.map((c, i) => (
-                <th key={c} className={`border border-gray-200 bg-gray-50 px-2 py-1 text-left text-gray-700 ${i === 0 ? "w-[13em]" : i === 4 ? "w-[11em]" : ""}`}>
-                  {c}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {TRANSITION_SPECS.map((t) => {
-              const hl = t.key === highlight;
-              const isOpen = open[t.key];
-              return (
-                <tr key={t.key} className={hl ? "bg-teal-50/60" : ""} data-req-row={t.key} data-highlight={hl ? "1" : "0"} data-open={isOpen ? "1" : "0"}>
-                  <td className="border border-gray-200 px-2 py-1 align-top">
-                    <button type="button" onClick={() => toggle(t.key)} className="text-left w-full" aria-expanded={isOpen} aria-label={`${transitionLabel(t.key)} の行を${isOpen ? "たたむ" : "開く"}`}>
-                      <span className="font-bold text-gray-900">{isOpen ? "▾" : "▸"} {transitionLabel(t.key)}</span>
-                      {hl && <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-teal-600 text-white">次の移行</span>}
-                      <span className="block text-[11px] text-gray-700 mt-0.5">{renderBold(t.heading)}</span>
-                    </button>
-                  </td>
-                  {isOpen ? (
-                    <>
-                      <td className="border border-gray-200 px-2 py-1 align-top"><GateList gates={t.gates} gateMark={gateMark} /></td>
-                      <td className="border border-gray-200 px-2 py-1 align-top"><ItemList items={t.s} marks={marks} /></td>
-                      <td className="border border-gray-200 px-2 py-1 align-top"><ItemList items={t.m} marks={marks} /></td>
-                      <td className="border border-gray-200 px-2 py-1 align-top">{renderBold(t.focus)}</td>
-                    </>
-                  ) : (
-                    <td className="border border-gray-200 px-2 py-1 align-top text-gray-500" colSpan={4}>
-                      （たたんでいます。「▸」で開く）
-                    </td>
-                  )}
+      {mode === "card" ? (
+        cards
+      ) : (
+        <>
+          {/* パソコン幅（768px以上）: 表。横軸・縦軸の列は1行12文字以上（最小幅 13em）。必須の学び・見る重心は狭く */}
+          <div className="hidden md:block" data-req-table-wrap>
+            <table className="w-full text-[12px] border border-gray-200 bg-white">
+              <thead>
+                <tr>
+                  <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left text-gray-700 w-[8em]">移行</th>
+                  <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left text-gray-700 w-[10em]">必須の学び</th>
+                  <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left text-gray-700 min-w-[13em]">スキル・ナレッジ（横軸）</th>
+                  <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left text-gray-700 min-w-[13em]">マインド（縦軸）</th>
+                  <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left text-gray-700 w-[7em]">見る重心</th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* スマートフォン: 移行ごとのカード */}
-      <div className="sm:hidden space-y-2">
-        {TRANSITION_SPECS.map((t) => {
-          const hl = t.key === highlight;
-          return (
-            <details key={t.key} open={open[t.key]} onToggle={(e) => setOpen((o) => ({ ...o, [t.key]: (e.target as HTMLDetailsElement).open }))} className={`rounded-lg border p-2 ${hl ? "border-teal-400 bg-teal-50/60" : "border-gray-200 bg-white"}`} data-req-card={t.key} data-highlight={hl ? "1" : "0"}>
-              <summary className="cursor-pointer text-[12px] font-bold text-gray-900">
-                {transitionLabel(t.key)}
-                {hl && <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-teal-600 text-white">次の移行</span>}
-                <span className="block text-[11px] font-normal text-gray-700 mt-0.5">{renderBold(t.heading)}</span>
-              </summary>
-              <div className="mt-2 space-y-2 text-[12px]">
-                <div>
-                  <p className="font-medium text-gray-800">必須の学び</p>
-                  <GateList gates={t.gates} gateMark={gateMark} />
-                </div>
-                <div>
-                  <p className="font-medium text-gray-800">スキル・ナレッジ（横軸）</p>
-                  <ItemList items={t.s} marks={marks} />
-                </div>
-                <div>
-                  <p className="font-medium text-gray-800">マインド（縦軸）</p>
-                  <ItemList items={t.m} marks={marks} />
-                </div>
-                <div>
-                  <p className="font-medium text-gray-800">見る重心</p>
-                  <p>{renderBold(t.focus)}</p>
-                </div>
-              </div>
-            </details>
-          );
-        })}
-      </div>
+              </thead>
+              <tbody>
+                {TRANSITION_SPECS.map((t) => (
+                  <tr key={t.key} className={t.key === highlight ? "bg-teal-50/60" : ""} data-req-row={t.key} data-highlight={t.key === highlight ? "1" : "0"} data-open="1">
+                    <td className="border border-gray-200 px-2 py-1 align-top">
+                      <span className="font-bold text-gray-900">{transitionLabel(t.key)}</span>
+                      <span className="block text-[11px] text-gray-700 mt-0.5">{renderBold(t.heading)}</span>
+                    </td>
+                    <td className="border border-gray-200 px-2 py-1 align-top text-[11px]"><GateList gates={t.gates} gateMark={gateMark} /></td>
+                    <td className="border border-gray-200 px-2 py-1 align-top" data-req-col="s"><ItemList items={t.s} marks={marks} /></td>
+                    <td className="border border-gray-200 px-2 py-1 align-top" data-req-col="m"><ItemList items={t.m} marks={marks} /></td>
+                    <td className="border border-gray-200 px-2 py-1 align-top text-[11px]">{renderBold(t.focus)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {/* 幅が足りないとき: 現在地と同じカード */}
+          <div className="md:hidden">{cards}</div>
+        </>
+      )}
     </section>
   );
 }
