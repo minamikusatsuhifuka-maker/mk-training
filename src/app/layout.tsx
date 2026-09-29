@@ -3,6 +3,7 @@ import { Noto_Sans_JP, BIZ_UDPGothic, M_PLUS_Rounded_1c } from "next/font/google
 import { AuthProvider } from "@/components/AuthProvider";
 import { AppShell } from "@/components/AppShell";
 import PageAccessGate from "@/components/PageAccessGate";
+import { TerminalIdleLogout } from "@/components/TerminalIdleLogout";
 import "./globals.css";
 
 // 139: おすすめフォント3種（切替は FontSwitcher・保存は localStorage "app_font"）。
@@ -60,6 +61,8 @@ export default function RootLayout({
       <body className="min-h-full">
         <script dangerouslySetInnerHTML={{ __html: FONT_INIT_SCRIPT }} />
         <AuthProvider>
+          {/* 192 D: 院内端末（鍵あり・スイッチON）だけ、無操作で自動ログアウト。それ以外は何もしない */}
+          <TerminalIdleLogout />
           {/* PageAccessGate: 既存ページの公開スイッチ（指示書124・OFF時のみ準備中） */}
           <AppShell>
             <PageAccessGate>{children}</PageAccessGate>

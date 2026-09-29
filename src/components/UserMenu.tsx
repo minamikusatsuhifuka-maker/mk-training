@@ -8,6 +8,7 @@ import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { reloadTo } from "@/lib/auth-navigation";
+import { clearDraftsIfTerminal } from "@/lib/terminal-client";
 
 function displayNameOf(user: User): string {
   const meta = user.user_metadata as Record<string, unknown> | null;
@@ -33,6 +34,8 @@ export function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
   }, []);
 
   const handleLogout = async () => {
+    // 192 D: 院内端末では、そのタブの下書き（176-補）をログアウト時に消す
+    clearDraftsIfTerminal();
     const supabase = getSupabaseBrowserClient();
     await supabase.auth.signOut();
     onNavigate?.();

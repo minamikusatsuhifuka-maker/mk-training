@@ -16,6 +16,7 @@ import { reloadTo } from "@/lib/auth-navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TerminalPinLogin } from "@/components/TerminalPinLogin";
 
 /**
  * ログイン後の遷移先。`?next=` が付いていればそこへ戻す。
@@ -30,6 +31,10 @@ function nextPath(): string {
 
 function LoginForm() {
   const [mode, setMode] = useState<"login" | "reset">("login");
+  // 192: 院内端末（鍵あり・スイッチON）では番号ログインを先に出す。「パスワードでログインする」で従来の入力へ
+  const [usePassword, setUsePassword] = useState(false);
+  const [pinAvailable, setPinAvailable] = useState(false);
+  const showPassword = !pinAvailable || usePassword;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -88,8 +93,9 @@ function LoginForm() {
           </p>
         </div>
 
+        {mode === "login" && !usePassword && <TerminalPinLogin onSuccess={() => reloadTo(nextPath())} onUsePassword={() => setUsePassword(true)} onAvailable={setPinAvailable} />}
         {mode === "login" ? (
-          <form onSubmit={handleLogin} className="space-y-3">
+          <form onSubmit={handleLogin} className={`space-y-3 ${showPassword ? "" : "hidden"}`} data-password-login data-shown={showPassword ? "1" : "0"}>
             <div className="space-y-1">
               <Label htmlFor="login-email">メールアドレス</Label>
               <Input

@@ -40,6 +40,10 @@ const GUARDS = [
  */
 const PUBLIC_ROUTES = new Map([
   ["join", "招待コードでの登録。ログイン前にしか呼べない。コード一致＋IPレート制限で守る。"],
+  [
+    "auth/pin-login",
+    "192: 院内端末の番号ログイン。ログイン前にしか呼べない。管理画面のスイッチON（192-補）かつ端末の鍵（HttpOnly Cookie・サーバーにはハッシュのみ）の確認を最初に行い、満たさなければ既存の未認証と同じ応答。番号は scrypt、5回/15分・端末20回/時のロック、管理者は不可。",
+  ],
 ]);
 
 function findRoutes(dir) {

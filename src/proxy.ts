@@ -102,11 +102,16 @@ const PUBLIC_PATHS = ["/login", "/reset-password", "/join"];
  * - /api/hr-chat-knowledge
  *     ai-incho からのサーバー間呼び出し。同じくCookieを持たない。
  *     HR_CHAT_KNOWLEDGE_TOKEN 必須（未設定=404・不一致=401 の fail-close）。
+ * - /api/auth/pin-login
+ *     192: 院内端末の番号ログイン。**ログイン前にしか呼ばれない**ためセッションでは守れない。
+ *     route.ts 側で「管理画面のスイッチON（192-補）かつ端末の鍵（HttpOnly Cookie・サーバーにはハッシュのみ）が有効」を
+ *     最初に確かめ、満たさなければここと同じ未認証応答（401・同じ本文）を返す。管理者は番号でログインできない。
  */
 const PUBLIC_API_PATHS = [
   "/api/join",
   "/api/cron/",
   "/api/hr-chat-knowledge",
+  "/api/auth/pin-login",
 ];
 
 function isPublicPath(pathname: string): boolean {

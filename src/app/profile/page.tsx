@@ -8,6 +8,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
+import { TerminalPinSection } from "@/components/TerminalPinSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1592,6 +1593,9 @@ export default function ProfilePage() {
           {saving ? "保存中..." : "💾 保存"}
         </Button>
       </div>
+
+      {/* 192 B: 院内端末用の番号（番号ログインがON、または検証用アカウントのときだけ出る） */}
+      <TerminalPinSection />
 
       {/* パスワード変更 */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
