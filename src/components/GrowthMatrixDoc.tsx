@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { GROWTH_MATRIX_V1_MD } from "@/lib/growth-matrix";
 import { GrowthMatrixFigure } from "@/components/GrowthMatrixFigure";
+import { GrowthRequirementsTable } from "@/components/GrowthRequirementsTable";
 
 type Piece = { kind: "md"; text: string } | { kind: "fence"; text: string };
 
@@ -55,6 +56,8 @@ export function GrowthMatrixDoc() {
         ) : (
           <div key={i} className="space-y-1" data-matrix-figure-slot>
             <GrowthMatrixFigure />
+            {/* 193 B-2: 図の下に等級ごとの要件表（第4節の文言そのまま） */}
+            <GrowthRequirementsTable />
             <details className="text-[11px] text-gray-600">
               <summary className="cursor-pointer">原文の図（テキスト）</summary>
               <pre className="overflow-x-auto text-[11px] leading-tight bg-gray-50 border border-gray-200 rounded p-2 mt-1">{p.text}</pre>

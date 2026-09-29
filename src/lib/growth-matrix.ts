@@ -20,13 +20,17 @@ export const GRADES = ["G1", "G2", "G3", "G4", "G5"] as const;
 export type Grade = (typeof GRADES)[number];
 export const isGrade = (v: unknown): v is Grade => (GRADES as readonly string[]).includes(String(v));
 
-/** 概念図の点（190 A: 見る重心の積み上げ。横=知識+スキル, 縦=マインド） */
-export const GRADE_POINTS: { grade: Grade; x: number; y: number; label: string }[] = [
-  { grade: "G1", x: 8, y: 2, label: "学ぶ" },
-  { grade: "G2", x: 14, y: 6, label: "自走" },
-  { grade: "G3", x: 19, y: 11, label: "体現・伴走" },
-  { grade: "G4", x: 23, y: 17, label: "引き出す・支える" },
-  { grade: "G5", x: 25, y: 25, label: "広げる・創る" },
+/**
+ * 概念図の点（193 A-1: 確定版の目標位置どおり Gn ＝ Sn × Mn のマス目の中心）。
+ * 物語（技能の時代は主に横へ、G2→G3で上へ、在り方の時代は主に上へ）は帯の見出しと「質的転換点」の注記で表す。
+ * x・y は 0〜25 の座標（S1 の中心 = 2.5、S2 = 7.5 …）。
+ */
+export const GRADE_POINTS: { grade: Grade; s: SLevel; m: MLevel; x: number; y: number; label: string }[] = [
+  { grade: "G1", s: "S1", m: "M1", x: 2.5, y: 2.5, label: "学ぶ" },
+  { grade: "G2", s: "S2", m: "M2", x: 7.5, y: 7.5, label: "自走" },
+  { grade: "G3", s: "S3", m: "M3", x: 12.5, y: 12.5, label: "体現・伴走" },
+  { grade: "G4", s: "S4", m: "M4", x: 17.5, y: 17.5, label: "引き出す・支える" },
+  { grade: "G5", s: "S5", m: "M5", x: 22.5, y: 22.5, label: "広げる・創る" },
 ];
 
 // ─── 移行 ───
@@ -61,10 +65,13 @@ export type AttainmentItem = {
 };
 export type TransitionSpec = {
   key: TransitionKey;
+  /** 見出し（確定版の文言そのまま。目標位置を含む） */
   heading: string;
   gates: string[];
   s: AttainmentItem[];
   m: AttainmentItem[];
+  /** 「見る重心 …」の行（確定版の文言そのまま。** は太字） */
+  focus: string;
 };
 
 const STABLE_RE = /安定して|継続して/;
@@ -113,7 +120,8 @@ function parseTransitions(md: string): TransitionSpec[] {
         if (mt) mm.push({ key: `${key}:m:${row}`, axis: "m", text: mt, stable: STABLE_RE.test(mt) });
       }
     }
-    out.push({ key, heading, gates, s, m: mm });
+    const focus = lines.find((l) => l.startsWith("見る重心")) ?? "";
+    out.push({ key, heading, gates, s, m: mm, focus });
   }
   return out;
 }

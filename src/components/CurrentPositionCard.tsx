@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { GrowthMatrixFigure, type MatrixMarker } from "@/components/GrowthMatrixFigure";
+import { GrowthRequirementsTable } from "@/components/GrowthRequirementsTable";
 import {
   CAREER_LINES,
   GRADES,
@@ -232,6 +233,22 @@ export function CurrentPositionCard({ userId, mode }: { userId?: string; mode: "
             })}
           </div>
         )}
+      </div>
+
+      {/* 193 B-2: 等級ごとの要件表（本人の次の移行を強調して開く。項目の横に本人の到達／途上と院長の確認） */}
+      <div className="rounded-lg border border-gray-200 bg-white p-2" data-position-requirements>
+        <GrowthRequirementsTable
+          highlight={data.transition}
+          marks={(key) => {
+            const st = self?.items[key];
+            const rv = data.review.itemReviews[key];
+            return st?.status || rv ? { self: st?.status, review: rv } : undefined;
+          }}
+          gateMark={(label) => {
+            const g = data.gates.find((x) => x.gate.label === label);
+            return g ? { ok: g.ok } : undefined;
+          }}
+        />
       </div>
 
       {/* 到達状態と根拠 */}
