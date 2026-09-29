@@ -69,16 +69,16 @@ export function TransitionCard({ t, hl, marks, gateMark }: { t: TransitionSpec; 
         <span className="mx-1 text-gray-400">｜</span>
         {renderBold(t.focus)}
       </p>
-      <div>
+      <div className="print-card">
         <p className="text-[11px] font-medium text-gray-800 mb-0.5">必須の学び（ゲート）</p>
         <GateList gates={t.gates} gateMark={gateMark} inline />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <div className="rounded-md border border-cyan-100 bg-cyan-50/40 p-2" data-req-axis="s">
+        <div className="print-card rounded-md border border-cyan-100 bg-cyan-50/40 p-2" data-req-axis="s">
           <p className="text-[11px] font-medium text-cyan-900 mb-1">スキル・ナレッジ（横軸）</p>
           <ItemList items={t.s} marks={marks} />
         </div>
-        <div className="rounded-md border border-amber-100 bg-amber-50/40 p-2" data-req-axis="m">
+        <div className="print-card rounded-md border border-amber-100 bg-amber-50/40 p-2" data-req-axis="m">
           <p className="text-[11px] font-medium text-amber-900 mb-1">マインド（縦軸）</p>
           <ItemList items={t.m} marks={marks} />
         </div>

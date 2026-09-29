@@ -57,8 +57,8 @@ const PRINT_CSS = `
 @media screen {
   .print-root { max-width: 190mm; margin: 0 auto; background: #fff; }
 }
-.print-table { width: 100%; border-collapse: collapse; }
-.print-table td { padding: 0; vertical-align: top; }
+.print-table { width: 100%; border-collapse: collapse; border: 0; }
+.print-table td, .print-table th { padding: 0; vertical-align: top; border: 0; }
 `;
 
 function Section({ title, children, id }: { title: string; children: React.ReactNode; id: string }) {
@@ -240,7 +240,7 @@ export function KartePrintView({ userId, backHref }: { userId?: string; backHref
             <Empty text="次の移行が決まっていません（等級の設定、または自己評価シートで移行を選ぶ）。" />
           ) : (
             <>
-              <Card>
+              <div className="rounded border border-gray-200 px-2 py-1.5" data-print-transition>
                 <TransitionCard
                   t={spec}
                   hl
@@ -254,7 +254,7 @@ export function KartePrintView({ userId, backHref }: { userId?: string; backHref
                     return g ? { ok: g.ok } : undefined;
                   }}
                 />
-              </Card>
+              </div>
               {self && Object.entries(self.items).some(([, v]) => v.evidence.length > 0) && (
                 <Card>
                   <p className="font-medium">根拠の記録</p>
