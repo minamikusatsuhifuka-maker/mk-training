@@ -200,9 +200,15 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
 
   return (
     <div className="max-w-3xl mx-auto p-3 sm:p-4 space-y-3">
-      <Link href="/staff-growth" className="text-xs text-teal-800 underline underline-offset-2">
-        ← スタッフ育成カルテ 一覧
-      </Link>
+      <div className="flex items-center justify-between gap-2">
+        <Link href="/staff-growth" className="text-xs text-teal-800 underline underline-offset-2">
+          ← スタッフ育成カルテ 一覧
+        </Link>
+        {/* 195: 印刷用の表示（項目を選んで印刷） */}
+        <Link href={`/staff-growth/${encodeURIComponent(userId)}/print`} className="text-xs px-3 py-1.5 border border-gray-300 text-gray-700 rounded-full hover:bg-gray-50 min-h-[32px] inline-flex items-center" data-print-link>
+          🖨 印刷用に表示
+        </Link>
+      </div>
 
       <header className="rounded-xl border border-gray-200 bg-white p-3">
         <h1 className="text-lg font-bold text-gray-900">

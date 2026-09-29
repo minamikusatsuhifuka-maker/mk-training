@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 
 // 本人ページ「マイ成長記録」（指示書179 C）
 // 表示するのは 自分の学びの記録（B）／自分の目標／1on1の約束 の3つだけ。
@@ -314,6 +315,12 @@ export function MyGrowthRecord() {
             {label}
           </button>
         ))}
+      </div>
+      {/* 195: 印刷用の表示（自分の記録だけ） */}
+      <div className="flex justify-end">
+        <Link href="/my-growth/print" className="text-xs px-3 py-1.5 border border-gray-300 text-gray-700 rounded-full hover:bg-gray-50 min-h-[32px] inline-flex items-center" data-print-link>
+          🖨 印刷用に表示
+        </Link>
       </div>
 
       {error && (

@@ -27,7 +27,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     (p) => pathname === p || pathname.startsWith(`${p}/`)
   );
 
-  if (isAdmin || isPublic) {
+  // 195: 印刷用の表示（/…/print）はサイドメニューなどの外枠を出さない
+  const isPrint = pathname === "/my-growth/print" || /^\/staff-growth\/[^/]+\/print$/.test(pathname);
+  if (isAdmin || isPublic || isPrint) {
     return <>{children}</>;
   }
 

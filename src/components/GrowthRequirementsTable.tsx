@@ -61,7 +61,7 @@ function GateList({ gates, gateMark, inline = false }: { gates: string[]; gateMa
 }
 
 /** 194 A: 1移行のカード（見出し1行／必須の学び1段／横軸｜縦軸の2列。スマートフォンでは縦に並ぶ） */
-function TransitionCard({ t, hl, marks, gateMark }: { t: TransitionSpec; hl: boolean; marks?: (key: string) => ItemMark | undefined; gateMark?: (label: string) => GateMark | undefined }) {
+export function TransitionCard({ t, hl, marks, gateMark }: { t: TransitionSpec; hl: boolean; marks?: (key: string) => ItemMark | undefined; gateMark?: (label: string) => GateMark | undefined }) {
   return (
     <div className="space-y-2 text-[12px]" data-req-card-body={t.key}>
       <p className="text-[11px] text-gray-700" data-req-card-head>
