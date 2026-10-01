@@ -77,6 +77,8 @@ const SERVER_ONLY_KEYS = new Set<string>([
   "menu_access",
   // 172: 価値観キーワードの操作ログ（管理者だけが閲覧。/api/admin/value-keywords/logs 経由のみ）
   "value_keywords_log",
+  // 196: クリニックの歩み CSV 取り込みの操作ログ（/api/admin/clinic-metrics-import 経由のみ）
+  "clinic_metrics_import_log",
 ]);
 
 // 前方一致のサーバー専用キー（指示書182）。

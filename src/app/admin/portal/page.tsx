@@ -215,6 +215,7 @@ import {
   jstTodayYmd,
   type LibraryDoc,
 } from "@/lib/library";
+import ClinicMetricsImportPanel from "@/components/admin/ClinicMetricsImportPanel";
 import {
   loadClinicMetrics,
   saveClinicMetrics,
@@ -6386,6 +6387,15 @@ export default function AdminPortalPage() {
               月別の売上（万円）とカウンセリング数（件）・施策を入力すると、ホームの「📈
               クリニックの歩み」に反映されます。数字は目的ではなく、みなさんが質を尽くした結果を映す鏡です（個人別の数字は扱わず、チーム全体のみ）。
             </p>
+            {/* 196: CSV 一括取り込み（院長のみ。APIも requireAdmin で拒否） */}
+            {realAdmin === true && (
+              <ClinicMetricsImportPanel
+                onImported={(m) => {
+                  setMetrics(m);
+                  flash("📥 CSVの取り込みを反映しました");
+                }}
+              />
+            )}
             {!metrics ? (
               <p className="text-xs text-gray-500">読み込み中...</p>
             ) : (
