@@ -7,7 +7,7 @@
 // - 回答は評価に使わない（冒頭に常時表示）。集計・スコア・ランキングは作らない。
 // - 自動表示（本人の目標・前回の回答・前回の約束）は取れなければ静かに案内だけ出す。
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import NavPageHeader from "@/components/NavPageHeader";
 import FeatureGate from "@/components/FeatureGate";
@@ -49,11 +49,30 @@ import { fetchGoalsApi } from "@/lib/staff-growth-client";
 import { jstTodayYmd } from "@/lib/library";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
+  formatMonthDay,
+  formatScheduleLine,
+  presurveyDeadline,
+} from "@/lib/one-on-one-schedule";
+import {
+  invalidateMySchedules,
+  useMySchedules,
+} from "@/lib/one-on-one-schedule-client";
+import { clearDraft, readDraft, writeDraft } from "@/lib/retro-drafts";
+import {
   loadProfilesIndex,
   type StaffProfileIndexEntry,
 } from "@/lib/staff-profiles";
 
 type LoadState = "loading" | "ready" | "unauthenticated" | "error";
+
+// 197 D: 書きかけの回答の下書き（176-補と同じ仕組み・sessionStorage のみ。タブを閉じれば消える）
+type PresurveyDraft = {
+  heldOn: string;
+  partnerId: string;
+  scheduleId: string;
+  answers: Record<string, PresurveyAnswer>;
+};
+const draftKeyFor = (editingKey: string | null) => `presurvey:${editingKey ?? "new"}`;
 
 function PresurveyPageBody() {
   const [state, setState] = useState<LoadState>("loading");
@@ -74,6 +93,10 @@ function PresurveyPageBody() {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [heldOn, setHeldOn] = useState("");
   const [partnerId, setPartnerId] = useState("");
+  // 197 B-2: 院長・担当幹部が登録した予定から答えている回（自分で作る回は空）
+  const [scheduleId, setScheduleId] = useState("");
+  const [draftRestored, setDraftRestored] = useState(false);
+  const schedules = useMySchedules();
   const [answers, setAnswers] = useState<Record<string, PresurveyAnswer>>({});
   const [saving, setSaving] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -105,6 +128,15 @@ function PresurveyPageBody() {
       setRecords(mine);
       setOneOnOnes(involved);
       setHeldOn((prev) => prev || jstTodayYmd());
+      // 197 D: 書きかけ（新しい回答）があれば戻す
+      const draft = readDraft<PresurveyDraft>(draftKeyFor(null));
+      if (draft && draft.answers && typeof draft.answers === "object") {
+        setHeldOn(draft.heldOn || jstTodayYmd());
+        setPartnerId(draft.partnerId || "");
+        setScheduleId(draft.scheduleId || "");
+        setAnswers(draft.answers);
+        setDraftRestored(true);
+      }
       setState("ready");
 
       // 本人の目標（質問3の自動表示）。フラグOFF・テーブル未作成・未登録でも回答は続けられる
@@ -211,25 +243,95 @@ function PresurveyPageBody() {
     [questions, answers]
   );
 
+  // 197 D: 入力のたびに下書きへ（何も書いていなければ消す）。保存ボタンだけがサーバーへ送る
+  const skipDraftWrite = useRef(true);
+  useEffect(() => {
+    if (state !== "ready") return;
+    if (skipDraftWrite.current) {
+      skipDraftWrite.current = false;
+      return;
+    }
+    const key = draftKeyFor(editingKey);
+    if (!hasAnyAnswer(Object.values(answers))) {
+      clearDraft(key);
+      return;
+    }
+    writeDraft(key, { heldOn, partnerId, scheduleId, answers } satisfies PresurveyDraft);
+  }, [state, editingKey, heldOn, partnerId, scheduleId, answers]);
+
   const resetForm = () => {
+    skipDraftWrite.current = true;
     setEditingKey(null);
     setHeldOn(jstTodayYmd());
     setPartnerId("");
+    setScheduleId("");
     setAnswers({});
+    setDraftRestored(false);
   };
 
-  const startEdit = (record: PrivateRecord) => {
+  const discardDraft = () => {
+    clearDraft(draftKeyFor(editingKey));
+    if (editingKey) {
+      const rec = records.find((r) => r.recordKey === editingKey);
+      if (rec) startEdit(rec, { ignoreDraft: true });
+    } else {
+      resetForm();
+    }
+  };
+
+  /** 197 B-2: 届いている予定（未回答）から答える */
+  const pending = useMemo(
+    () => (schedules?.mine ?? []).filter((s) => !s.answered),
+    [schedules]
+  );
+  function startFromSchedule(id: string) {
+    const s = schedules?.mine.find((x) => x.id === id);
+    if (!s) return;
+    // その予定への回答がもうあれば、それを編集する
+    const existing = records.find((r) => normalizePresurveyData(r.data).scheduleId === s.id);
+    if (existing) {
+      startEdit(existing);
+      return;
+    }
+    setEditingKey(null);
+    setScheduleId(s.id);
+    setHeldOn(s.date);
+    setPartnerId(s.partnerId);
+    setMessage("");
+    setError("");
+  }
+
+  // ?schedule=<id>（ホームの知らせ・マイ成長記録から）で開いたら、その予定を選んだ状態にする（1回だけ）
+  const scheduleParamDone = useRef(false);
+  useEffect(() => {
+    if (scheduleParamDone.current || state !== "ready" || !schedules) return;
+    scheduleParamDone.current = true;
+    const id = new URLSearchParams(window.location.search).get("schedule");
+    if (!id || draftRestored) return;
+    const s = schedules.mine.find((x) => x.id === id);
+    // 回答済みの予定は「これまでの回答」から編集する（ここでは選ばない）
+    if (!s || records.some((r) => normalizePresurveyData(r.data).scheduleId === s.id)) return;
+    setScheduleId(s.id);
+    setHeldOn(s.date);
+    setPartnerId(s.partnerId);
+  }, [state, schedules, records, draftRestored]);
+
+  function startEdit(record: PrivateRecord, opts: { ignoreDraft?: boolean } = {}) {
     const d = normalizePresurveyData(record.data);
+    skipDraftWrite.current = true;
     setEditingKey(record.recordKey);
-    setHeldOn(d.heldOn);
-    setPartnerId(d.participantIds[0] ?? "");
+    const draft = opts.ignoreDraft ? null : readDraft<PresurveyDraft>(draftKeyFor(record.recordKey));
     const next: Record<string, PresurveyAnswer> = {};
     for (const a of d.answers) next[a.questionId] = a;
-    setAnswers(next);
+    setHeldOn(draft?.heldOn || d.heldOn);
+    setPartnerId(draft?.partnerId || d.participantIds[0] || "");
+    setScheduleId(draft ? draft.scheduleId || "" : d.scheduleId);
+    setAnswers(draft?.answers && typeof draft.answers === "object" ? draft.answers : next);
+    setDraftRestored(!!draft);
     setMessage("");
     setError("");
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  }
 
   const save = async () => {
     if (saving) return;
@@ -272,6 +374,7 @@ function PresurveyPageBody() {
         : null;
       const data: PresurveyData = {
         heldOn,
+        scheduleId,
         participantIds: [partnerId],
         partnerName: nameOf(partnerId, "名前未設定"),
         authorName: myName,
@@ -282,6 +385,9 @@ function PresurveyPageBody() {
       };
       const key = editingKey || genPresurveyKey(heldOn);
       const saved = await upsertRecord("one_on_one_presurvey", key, data);
+      clearDraft(draftKeyFor(editingKey));
+      // 197 C: 回答したら知らせ・メニューの印をすぐ消す
+      void invalidateMySchedules();
       setRecords((prev) => {
         const rest = prev.filter((r) => r.recordKey !== key);
         return [saved, ...rest];
@@ -387,6 +493,43 @@ function PresurveyPageBody() {
         <p className="text-sm text-red-600 bg-red-50 rounded-xl p-3">{error}</p>
       )}
 
+      {/* 197 B-2: 届いている事前アンケート（院長・担当幹部が登録した1on1の予定） */}
+      {pending.length > 0 && (
+        <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-3 space-y-2" data-presurvey-pending>
+          <p className="text-sm font-medium text-gray-800">🗓 届いている事前アンケート</p>
+          <ul className="space-y-1.5">
+            {pending.map((s) => (
+              <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-800">
+                <span>
+                  {formatScheduleLine(s)}
+                  <span className="ml-2 text-xs text-gray-500">
+                    締切 {formatMonthDay(presurveyDeadline(s))}（1on1の3日前）
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => startFromSchedule(s.id)}
+                  disabled={scheduleId === s.id}
+                  className="text-xs px-3 py-1.5 rounded-full bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 min-h-[36px]"
+                  data-presurvey-start={s.id}
+                >
+                  {scheduleId === s.id ? "下で回答中" : "この1on1に答える"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {draftRestored && (
+        <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5" data-presurvey-draft>
+          保存していない書きかけの回答を戻しました（この端末のこのタブだけに一時保存）。
+          <button type="button" onClick={discardDraft} className="ml-2 underline hover:opacity-70">
+            書きかけを破棄する
+          </button>
+        </p>
+      )}
+
       {/* 回答フォーム */}
       <div className="space-y-3">
         <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-2">
@@ -397,6 +540,7 @@ function PresurveyPageBody() {
                 type="date"
                 value={heldOn}
                 onChange={(e) => setHeldOn(e.target.value)}
+                disabled={!!scheduleId}
                 className="block border border-gray-200 rounded-xl px-3 py-1.5 text-sm"
               />
             </label>
@@ -405,9 +549,15 @@ function PresurveyPageBody() {
               <select
                 value={partnerId}
                 onChange={(e) => setPartnerId(e.target.value)}
+                disabled={!!scheduleId}
                 className="block border border-gray-200 rounded-xl px-3 py-1.5 text-sm min-w-[160px]"
               >
                 <option value="">選択してください</option>
+                {partnerId && !partnerCandidates.some((p) => p.userId === partnerId) && (
+                  <option value={partnerId}>
+                    {schedules?.mine.find((x) => x.id === scheduleId)?.partnerName || "担当者"}
+                  </option>
+                )}
                 {partnerCandidates.map((p) => (
                   <option key={p.userId} value={p.userId}>
                     {p.name}
@@ -416,7 +566,18 @@ function PresurveyPageBody() {
               </select>
             </label>
           </div>
-          <p className="text-xs text-gray-500">{PRESURVEY_PARTNER_NOTE}</p>
+          {scheduleId ? (
+            <p className="text-xs text-violet-800">
+              登録された1on1の予定への回答です（日付と相手は予定のとおり）。
+              {!editingKey && (
+                <button type="button" onClick={resetForm} className="ml-2 underline hover:opacity-70">
+                  予定を選ばずに答える
+                </button>
+              )}
+            </p>
+          ) : (
+            <p className="text-xs text-gray-500">{PRESURVEY_PARTNER_NOTE}</p>
+          )}
           {editingKey && (
             <p className="text-xs text-violet-800 bg-violet-50 border border-violet-100 rounded-lg px-2.5 py-1.5">
               保存済みの回答を編集しています。

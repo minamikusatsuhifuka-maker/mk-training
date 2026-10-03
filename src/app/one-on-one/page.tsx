@@ -12,6 +12,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import NavPageHeader from "@/components/NavPageHeader";
+import { PartnerPresurveyStatus } from "@/components/OneOnOneSchedule";
 import FeatureGate from "@/components/FeatureGate";
 import {
   listInvolved,
@@ -464,6 +465,9 @@ function OneOnOnePageBody() {
           </span>
         </p>
       )}
+
+      {/* 197 C-3: 自分が担当する1on1の事前アンケートの状態（締切後の未回答は「未回答」）。担当が無ければ出ない */}
+      <PartnerPresurveyStatus />
 
       {/* 記録フォーム */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">

@@ -13,7 +13,7 @@ import { TransitionCard } from "@/components/GrowthRequirementsTable";
 import { PRINT_BROWSER_HINT, PRINT_CONFIDENTIAL, PRINT_NOTE, PRINT_SECTIONS, defaultPrintSections, type PrintRole, type PrintSectionKey } from "@/lib/growth-print";
 import { GOAL_LEVELS, TIMELINE_KIND_LABEL, promiseStatusLabel, viewpointLabel, APPROVAL_KINDS, GROWTH_PACES, type Feedback, type Goal, type KarteListEntry, type LearningRecord, type PromiseSummary, type TimelineItem } from "@/lib/staff-growth";
 import { NEED_DETAIL_ITEMS, NEED_KEYS, NEED_LABELS } from "@/lib/needs-survey";
-import { MEETING_LABEL, NEXT_AXIS_LABEL, transitionSpec, transitionLabel, type AttainmentItem, type GateResult, type ItemReview, type MatrixReview, type MatrixSelf, type StaffGrade, type TransitionKey } from "@/lib/growth-matrix";
+import { MEETING_LABEL, NEXT_AXIS_LABEL, gateDateParts, transitionSpec, transitionLabel, type AttainmentItem, type GateResult, type ItemReview, type MatrixReview, type MatrixSelf, type StaffGrade, type TransitionKey } from "@/lib/growth-matrix";
 import { SCOUTER_SECTIONS, SCOUTER_NOTE, type ScouterResult } from "@/lib/scouter";
 import { HIRING_PROFILE_FIELDS, hiringDocKindLabel, type HiringDocKind, type HiringProfile } from "@/lib/hiring-docs";
 import type { StaffContact } from "@/lib/staff-contacts";
@@ -251,7 +251,7 @@ export function KartePrintView({ userId, backHref }: { userId?: string; backHref
                   }}
                   gateMark={(label) => {
                     const g = pos.gates.find((x) => x.gate.label === label);
-                    return g ? { ok: g.ok } : undefined;
+                    return g ? { ok: g.ok, dates: gateDateParts(g) } : undefined;
                   }}
                 />
               </div>

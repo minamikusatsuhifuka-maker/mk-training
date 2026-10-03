@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { PresurveyAlertBanner } from "@/components/OneOnOneSchedule";
 import {
   loadPortalItems,
   savePortalItems,
@@ -1015,6 +1016,11 @@ export default function PortalHome() {
           </div>
         </div>
       </header>
+
+      {/* 197 C: 1on1の事前アンケートの未回答の知らせ（本人・2週間前/1週間前/締切日・回答すると消える） */}
+      <section className="px-4 pt-4 empty:hidden">
+        <PresurveyAlertBanner />
+      </section>
 
       {/* タスク期限アラート（超過/今日が0なら非表示・並び替え対象外） */}
       {taskAlert && (taskAlert.overdue > 0 || taskAlert.today > 0) && (

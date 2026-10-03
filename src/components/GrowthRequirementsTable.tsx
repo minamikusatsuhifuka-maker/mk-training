@@ -7,7 +7,7 @@
 //   点数・割合・到達の数は出さない。他の人と比べる表示はしない。
 
 import { useState } from "react";
-import { TRANSITIONS, TRANSITION_SPECS, transitionLabel, type ItemReview, type ItemSelf, type TransitionKey, type TransitionSpec } from "@/lib/growth-matrix";
+import { TRANSITIONS, TRANSITION_SPECS, transitionLabel, type GateDatePart, type ItemReview, type ItemSelf, type TransitionKey, type TransitionSpec } from "@/lib/growth-matrix";
 
 /** ** … ** を太字に（文言は変えない） */
 export function renderBold(text: string): React.ReactNode {
@@ -16,7 +16,45 @@ export function renderBold(text: string): React.ReactNode {
 }
 
 export type ItemMark = { self?: ItemSelf["status"]; review?: ItemReview };
-export type GateMark = { ok: boolean };
+export type GateMark = { ok: boolean; dates?: GateDatePart[] };
+
+/** 学びの記録を開く合図（マイ成長記録は別タブにあるので、受け手がタブを切り替える） */
+export const OPEN_LEARNING_EVENT = "mk-open-learning";
+
+function openLearning(e: React.MouseEvent, id: string) {
+  e.preventDefault();
+  window.dispatchEvent(new CustomEvent(OPEN_LEARNING_EVENT, { detail: id }));
+  // タブの切り替えで一覧が描かれてから移る
+  window.setTimeout(() => {
+    const el = document.getElementById(`learning-${id}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    el.classList.add("ring-2", "ring-teal-400");
+    window.setTimeout(() => el.classList.remove("ring-2", "ring-teal-400"), 2000);
+  }, 80);
+}
+
+/**
+ * 197 A: 受講日の行。日付は学びの記録（同じ画面の一覧 #learning-<id>）へのリンク。
+ * 一覧が無い画面（印刷など）では、ただの文字として読める。
+ */
+export function GateDates({ parts, className = "" }: { parts: GateDatePart[]; className?: string }) {
+  if (parts.length === 0) return null;
+  return (
+    <span className={`text-[10px] text-gray-600 ${className}`} data-gate-dates>
+      📅{" "}
+      {parts.map((p, i) =>
+        "learningId" in p ? (
+          <a key={i} href={`#learning-${p.learningId}`} onClick={(e) => openLearning(e, p.learningId)} className="text-teal-800 underline underline-offset-2" data-gate-date-link={p.learningId}>
+            {p.text}
+          </a>
+        ) : (
+          <span key={i}>{p.text}</span>
+        )
+      )}
+    </span>
+  );
+}
 
 const STATUS_LABEL: Record<NonNullable<ItemMark["self"]>, string> = { "": "", reached: "到達", in_progress: "途上" };
 const REVIEW_LABEL: Record<NonNullable<ItemMark["review"]>, string> = { "": "", confirmed: "確認", dialogue: "対話で確かめる" };
@@ -52,7 +90,10 @@ function GateList({ gates, gateMark, inline = false }: { gates: string[]; gateMa
         return (
           <li key={i} className={`leading-relaxed ${inline ? "inline-flex items-start gap-1 rounded border border-gray-200 bg-white px-1.5 py-0.5" : ""}`} data-req-gate>
             {mk && <span className={`mr-0.5 font-bold ${mk.ok ? "text-teal-700" : "text-gray-400"}`}>{mk.ok ? "○" : "×"}</span>}
-            <span>{renderBold(g)}</span>
+            <span>
+              {renderBold(g)}
+              {mk?.dates && mk.dates.length > 0 && <GateDates parts={mk.dates} className="block" />}
+            </span>
           </li>
         );
       })}

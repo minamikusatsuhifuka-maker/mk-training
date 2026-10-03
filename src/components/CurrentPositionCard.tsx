@@ -8,13 +8,14 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { GrowthMatrixFigure, type MatrixMarker } from "@/components/GrowthMatrixFigure";
-import { GrowthRequirementsTable } from "@/components/GrowthRequirementsTable";
+import { GateDates, GrowthRequirementsTable } from "@/components/GrowthRequirementsTable";
 import {
   CAREER_LINES,
   GRADES,
   ITEM_REVIEW_LABEL,
   MEETING_LABEL,
   NEXT_AXIS_LABEL,
+  gateDateParts,
   gateKindLabel,
   plainItemText,
   transitionLabel,
@@ -63,6 +64,7 @@ export function GateStatusList({ gates, transition, tableMissing }: { gates: Gat
           <span className="min-w-0">
             {r.gate.label}
             <span className="ml-1 text-[10px] text-gray-500">（{gateKindLabel(r.gate.kind)}・{r.basis}）</span>
+            <GateDates parts={gateDateParts(r)} className="block" />
             {!r.ok && r.courseNames.length > 0 && <span className="block text-[11px] text-teal-800">→ 次に受ける講座: {r.courseNames.join("・")}</span>}
             {r.check?.note && <span className="block text-[11px] text-gray-600">根拠: {r.check.note}</span>}
           </span>
@@ -247,7 +249,7 @@ export function CurrentPositionCard({ userId, mode }: { userId?: string; mode: "
           }}
           gateMark={(label) => {
             const g = data.gates.find((x) => x.gate.label === label);
-            return g ? { ok: g.ok } : undefined;
+            return g ? { ok: g.ok, dates: gateDateParts(g) } : undefined;
           }}
         />
       </div>

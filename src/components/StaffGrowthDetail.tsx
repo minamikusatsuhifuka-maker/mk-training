@@ -28,6 +28,7 @@ import { HiringDocsPanel } from "@/components/HiringDocsPanel";
 import { ScouterCard } from "@/components/ScouterCard";
 import { ContactQuickView } from "@/components/ContactQuickView";
 import { CurrentPositionCard } from "@/components/CurrentPositionCard";
+import { KarteScheduleCard } from "@/components/OneOnOneSchedule";
 import { GoalsStaged, weeklyLinksFromPromises } from "@/components/GoalsStaged";
 import { FeedbackPanel } from "@/components/FeedbackPanel";
 import { fetchGoalsApi, fetchPromisesApi, supportGoalApi, type PromiseItem } from "@/lib/staff-growth-client";
@@ -291,14 +292,13 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
             </ul>
           )}
         </Card>
-        <Card title="🗓 次回1on1の予定" href={isProspect ? "" : "/calendar"}>
-          <p className="text-[11px] text-gray-500">
-            {isProspect
-              ? PROSPECT_NOTE
-              : detail.nextOneOnOne
-              ? detail.nextOneOnOne.replaceAll("-", "/")
-              : "予定の記録はありません（1on1の予定は院内カレンダーで管理）。"}
-          </p>
+        {/* 197 B-2: 院長・担当幹部が登録。本人に予定と事前アンケートが届く。C-3: 締切後の未回答を表示 */}
+        <Card title="🗓 次回1on1の予定" href="">
+          {isProspect ? (
+            <p className="text-[11px] text-gray-500">{PROSPECT_NOTE}</p>
+          ) : (
+            <KarteScheduleCard userId={userId} />
+          )}
         </Card>
       </div>
 

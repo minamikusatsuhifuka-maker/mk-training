@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { PresurveyNavMark } from "@/components/OneOnOneSchedule";
 import { usePathname } from "next/navigation";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -76,6 +77,7 @@ export function Sidebar() {
                         }`}
                       >
                         {item.label}
+                        <PresurveyNavMark href={item.href} />
                       </Link>
                     </li>
                   );

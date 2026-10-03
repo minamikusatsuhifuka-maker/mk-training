@@ -64,13 +64,13 @@ export function LearningRecordList({
         const open = expanded === r.id;
         if (editingId === r.id) {
           return (
-            <li key={r.id} className="rounded-xl border border-gray-200 bg-white p-3">
+            <li key={r.id} id={`learning-${r.id}`} className="scroll-mt-20 rounded-xl border border-gray-200 bg-white p-3">
               {renderEditor(r)}
             </li>
           );
         }
         return (
-          <li key={r.id} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+          <li key={r.id} id={`learning-${r.id}`} className="scroll-mt-20 rounded-xl border border-gray-200 bg-white overflow-hidden">
             <button
               type="button"
               onClick={() => setExpanded(open ? "" : r.id)}

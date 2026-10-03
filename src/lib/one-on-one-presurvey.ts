@@ -307,6 +307,8 @@ export type PresurveyAnswer = {
 export type PresurveyData = {
   /** 1on1の実施予定日 "YYYY-MM-DD" */
   heldOn: string;
+  /** 197 B-2: 院長・担当幹部が登録した予定から回答したときの予定id（自分で作った回は空） */
+  scheduleId: string;
   /** 1on1の相手（担当者）の userId。これで相手も読める（基盤の participantIds） */
   participantIds: string[];
   partnerName: string;
@@ -351,6 +353,7 @@ export function normalizePresurveyAnswer(raw: unknown): PresurveyAnswer | null {
 export function emptyPresurveyData(): PresurveyData {
   return {
     heldOn: "",
+    scheduleId: "",
     participantIds: [],
     partnerName: "",
     authorName: "",
@@ -368,6 +371,7 @@ export function normalizePresurveyData(raw: unknown): PresurveyData {
   const createdAt = str(g.createdAt, 64);
   return {
     heldOn: /^\d{4}-\d{2}-\d{2}$/.test(str(g.heldOn, 10)) ? str(g.heldOn, 10) : "",
+    scheduleId: str(g.scheduleId, 100),
     participantIds: Array.isArray(g.participantIds)
       ? g.participantIds.filter((v): v is string => typeof v === "string" && !!v)
       : [],

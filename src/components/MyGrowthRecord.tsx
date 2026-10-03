@@ -47,6 +47,8 @@ import { useHasDraft } from "@/lib/retro-drafts";
 import { GoalsStaged, weeklyLinksFromPromises, type WeeklyLink } from "@/components/GoalsStaged";
 import { FeedbackPanel } from "@/components/FeedbackPanel";
 import { CurrentPositionCard } from "@/components/CurrentPositionCard";
+import { OPEN_LEARNING_EVENT } from "@/components/GrowthRequirementsTable";
+import { MyNextOneOnOne } from "@/components/OneOnOneSchedule";
 import {
   fetchFeedbackApi,
   saveGrowthPrefApi,
@@ -57,6 +59,12 @@ type Tab = "learning" | "goals" | "promises" | "feedback" | "position";
 
 export function MyGrowthRecord() {
   const [tab, setTab] = useState<Tab>("learning");
+  // 197 A: 現在地の受講日から「学びの記録」へ移る（別タブなので切り替える）
+  useEffect(() => {
+    const open = () => setTab("learning");
+    window.addEventListener(OPEN_LEARNING_EVENT, open);
+    return () => window.removeEventListener(OPEN_LEARNING_EVENT, open);
+  }, []);
   const [records, setRecords] = useState<LearningRecord[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [myRequests, setMyRequests] = useState<CourseRequest[]>([]);
@@ -291,6 +299,9 @@ export function MyGrowthRecord() {
         ここに載るのは <strong>自分の学びの記録・自分の目標・1on1の約束</strong> の3つだけです。
         自分の学びと目標は自分で書き、院長も見ることができます。ほかのスタッフの記録は見られません。
       </p>
+
+      {/* 197 B-2: 次回1on1（院長・担当幹部が登録した予定）と事前アンケートへの導線 */}
+      <MyNextOneOnOne />
 
       <div className="flex gap-1 border-b border-gray-200">
         {(

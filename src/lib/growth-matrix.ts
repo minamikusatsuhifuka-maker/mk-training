@@ -390,9 +390,65 @@ export type GateResult = {
   /** 直近1年の受講回数（per_year） */
   countLastYear: number;
   check: GateCheck | null;
+  /** 197 A: 紐づいた学びの記録の受講日（古い順）。日付から元の記録へ移るために id も持つ */
+  attended: GateAttendance[];
+  /** 197 A: 直近1年に数えた受講（per_year・古い順） */
+  countedInYear: GateAttendance[];
+  /** 197 A: 直近1年より前の、最後の受講（再受講の時期を知るため） */
+  previous: GateAttendance | null;
 };
 
-type LearningLike = { courseId: string; dates: string[]; startDate: string };
+/** 1回の受講（学びの記録1件）。start/end は最初/最後の参加日 */
+export type GateAttendance = { id: string; start: string; end: string };
+
+type LearningLike = { id?: string; courseId: string; dates: string[]; startDate: string; endDate?: string };
+
+function attendanceOf(l: LearningLike): GateAttendance {
+  const start = l.startDate || l.dates[0] || "";
+  const end = l.endDate || l.dates[l.dates.length - 1] || start;
+  return { id: l.id ?? "", start, end: end >= start ? end : start };
+}
+
+/** "2026-05-15" → "2026/5/15" */
+function slashYmd(ymd: string): string {
+  const [y, m, d] = ymd.split("-");
+  return y && m && d ? `${y}/${Number(m)}/${Number(d)}` : ymd;
+}
+
+/** 受講日の表記: 単日 "2026/5/15"／期間 "2026/5/15〜5/17"（年をまたぐときは終わりにも年） */
+export function formatAttendance(a: GateAttendance): string {
+  if (!a.start) return "";
+  if (!a.end || a.end === a.start) return slashYmd(a.start);
+  const [ys] = a.start.split("-");
+  const [ye, me, de] = a.end.split("-");
+  return ys === ye ? `${slashYmd(a.start)}〜${Number(me)}/${Number(de)}` : `${slashYmd(a.start)}〜${slashYmd(a.end)}`;
+}
+
+/** 197 A: 受講日の行（文の部品。dateは学びの記録へのリンクにする） */
+export type GateDatePart = { text: string } | { text: string; learningId: string };
+
+export function gateDateParts(r: GateResult): GateDatePart[] {
+  const date = (a: GateAttendance): GateDatePart => (a.id ? { text: formatAttendance(a), learningId: a.id } : { text: formatAttendance(a) });
+  const out: GateDatePart[] = [];
+  const kind = r.gate.kind;
+  if (kind === "course") {
+    if (r.attended.length === 1) out.push({ text: "受講 " }, date(r.attended[0]));
+    else if (r.attended.length > 1) out.push({ text: "初回 " }, date(r.attended[0]), { text: "・最新 " }, date(r.attended[r.attended.length - 1]));
+  } else if (kind === "per_year") {
+    out.push({ text: `直近1年 ${r.countedInYear.length}回` });
+    r.countedInYear.forEach((a, i) => {
+      out.push({ text: i === 0 ? "：" : "、" }, date(a));
+    });
+    out.push({ text: `（必要 ${r.gate.perYearMin}回）` });
+  } else if (kind === "license") {
+    if (r.check?.ok && r.check.checkedOn) out.push({ text: `院長の確認 ${slashYmd(r.check.checkedOn)}` });
+    if (r.attended.length > 0) out.push({ text: out.length ? "・取得 " : "取得 " }, date(r.attended[0]));
+  } else if (r.check?.ok && r.check.checkedOn) {
+    out.push({ text: `院長の確認 ${slashYmd(r.check.checkedOn)}` });
+  }
+  if (!r.ok && r.previous) out.push({ text: out.length ? "・前回 " : "前回 " }, date(r.previous));
+  return out;
+}
 
 /** ○×の判定（割合・点数にしない） */
 export function judgeGate(gate: Gate, learning: LearningLike[], checks: GateCheck[], courseNameOf: (id: string) => string, today: string): GateResult {
@@ -403,12 +459,17 @@ export function judgeGate(gate: Gate, learning: LearningLike[], checks: GateChec
   since.setUTCFullYear(since.getUTCFullYear() - 1);
   const sinceYmd = since.toISOString().slice(0, 10);
   // 直近1年の受講回数＝参加日ごと（複数日の講座は1回として startDate で数える）
-  const countLastYear = mine.filter((l) => (l.startDate || l.dates[0] || "") >= sinceYmd).length;
-  if (gate.kind === "course") return { gate, ok: mine.length > 0, basis: mine.length > 0 ? `学びの記録 ${mine.length}件` : gate.courseIds.length ? "学びの記録なし" : "講座が紐づいていません", courseNames, countLastYear, check };
-  if (gate.kind === "per_year") return { gate, ok: countLastYear >= gate.perYearMin, basis: `直近1年 ${countLastYear}回（必要 ${gate.perYearMin}回）`, courseNames, countLastYear, check };
+  const attended = mine.map(attendanceOf).filter((a) => !!a.start).sort((a, b) => a.start.localeCompare(b.start) || a.id.localeCompare(b.id));
+  const countedInYear = attended.filter((a) => a.start >= sinceYmd);
+  const before = attended.filter((a) => a.start < sinceYmd);
+  const previous = before.length > 0 ? before[before.length - 1] : null;
+  const countLastYear = countedInYear.length;
+  const dates = { attended, countedInYear, previous };
+  if (gate.kind === "course") return { gate, ok: mine.length > 0, basis: mine.length > 0 ? `学びの記録 ${mine.length}件` : gate.courseIds.length ? "学びの記録なし" : "講座が紐づいていません", courseNames, countLastYear, check, ...dates };
+  if (gate.kind === "per_year") return { gate, ok: countLastYear >= gate.perYearMin, basis: `直近1年 ${countLastYear}回（必要 ${gate.perYearMin}回）`, courseNames, countLastYear, check, ...dates };
   if (gate.kind === "license") {
     const ok = mine.length > 0 || !!check?.ok;
-    return { gate, ok, basis: check?.ok ? `院長の確認 ${check.checkedOn}` : mine.length > 0 ? `学びの記録 ${mine.length}件` : "記録・確認なし", courseNames, countLastYear, check };
+    return { gate, ok, basis: check?.ok ? `院長の確認 ${check.checkedOn}` : mine.length > 0 ? `学びの記録 ${mine.length}件` : "記録・確認なし", courseNames, countLastYear, check, ...dates };
   }
-  return { gate, ok: !!check?.ok, basis: check?.ok ? `院長の確認 ${check.checkedOn}` : "院長の確認待ち", courseNames, countLastYear, check };
+  return { gate, ok: !!check?.ok, basis: check?.ok ? `院長の確認 ${check.checkedOn}` : "院長の確認待ち", courseNames, countLastYear, check, ...dates };
 }
