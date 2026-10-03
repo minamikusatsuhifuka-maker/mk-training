@@ -210,6 +210,8 @@ export function mergeMetricsImport(
   return normalizeClinicMetrics({
     months: Array.from(byYm.values()),
     initiatives: current.initiatives,
+    // 198: 年度の始まりの設定は取り込みで消さない
+    fiscalStartMonth: current.fiscalStartMonth,
     updatedAt: current.updatedAt,
   });
 }

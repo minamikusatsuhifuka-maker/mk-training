@@ -26,14 +26,38 @@ export type Initiative = {
 export type ClinicMetrics = {
   months: MonthMetric[];
   initiatives: Initiative[];
+  /** 198: 年度の始まりの月（1〜12・既定6＝開業月に合わせる）。未設定は既定扱い */
+  fiscalStartMonth?: number;
   updatedAt: string;
 };
+
+/** 198: 年度の始まりの月の既定（6月＝開業月） */
+export const DEFAULT_FISCAL_START_MONTH = 6;
+
+/** グラフの配色（「月の推移」と「年度で比べる」で同じ色を使う・198-D） */
+export const METRIC_COLOR = {
+  insurance: "#14b8a6", // teal-500（保険）
+  selfPay: "#c026d3", // fuchsia-600（自費・指示書94）
+  legacy: "#94a3b8", // slate-400（旧データ・内訳未入力）
+  total: "#475569", // slate-600（合算）
+  counseling: "#0ea5e9", // sky-500（カウンセリング）
+} as const;
+
+/** 198-D: 数値の出所（画面に常時出す注記） */
+export const METRICS_SOURCE_NOTE =
+  "保険売上＝保険点数×10円、自費売上＝施術＋物販（経営数値把握表）";
 
 const YM_RE = /^\d{4}-\d{2}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function emptyClinicMetrics(): ClinicMetrics {
   return { months: [], initiatives: [], updatedAt: "" };
+}
+
+/** 年度の始まりの月（未設定・不正は既定の6月） */
+export function fiscalStartMonthOf(data: ClinicMetrics): number {
+  const m = data.fiscalStartMonth;
+  return typeof m === "number" && m >= 1 && m <= 12 ? m : DEFAULT_FISCAL_START_MONTH;
 }
 
 export function genInitiativeId(): string {
@@ -138,14 +162,29 @@ export function normalizeClinicMetrics(raw: unknown): ClinicMetrics {
   }
   initiatives.sort((a, b) => a.date.localeCompare(b.date));
 
+  // 198: 年度の始まりの月（1〜12以外・未設定は持たせない＝既定6月に倒れる）
+  const fs = toNumOrNull(o.fiscalStartMonth);
+  const fiscalStartMonth = fs != null && fs >= 1 && fs <= 12 ? fs : undefined;
+
   return {
     months,
     initiatives,
+    ...(fiscalStartMonth ? { fiscalStartMonth } : {}),
     updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : "",
   };
 }
 
 // ─── 表示用ヘルパ ───
+
+/** 軸の上限をきりのよい数に（グラフ共通・198で「月の推移」と年度比較が共有） */
+export function niceCeil(v: number): number {
+  if (v <= 0) return 1;
+  const exp = Math.floor(Math.log10(v));
+  const base = Math.pow(10, exp);
+  const f = v / base;
+  const nice = f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10;
+  return nice * base;
+}
 
 // 表示する月軸 = months と initiatives（開始月・終了月）の和集合を昇順に。
 // 施策だけで数値未入力の月・期間施策の終端月も列として出せる（欠測はグラフ側でスキップ）。
@@ -210,4 +249,184 @@ export function computeMovingAvg12(data: ClinicMetrics): Map<string, number> {
     if (count > 0) result.set(indexToYm(idx), sum / count);
   }
   return result;
+}
+
+// ─── 年度（指示書198）───
+//
+// 年度は「始まりの年」で呼ぶ: 2022年度 = 2022年6月〜2023年5月（既定・開業月に合わせる）。
+// 始まりの月は院長が変更できる（fiscalStartMonth）。ここは純粋関数だけを置き、
+// 表示（色・太さ・並び）は画面側に任せる。
+
+export type FiscalMonthPoint = {
+  ym: string;
+  /** 年度内の位置（0=年度の最初の月 … 11） */
+  offset: number;
+  /** 実際の月（6, 7, … 5） */
+  month: number;
+  insurance: number | null;
+  selfPay: number | null;
+  /** 合計（内訳が無い旧データは sales） */
+  total: number | null;
+};
+
+export type FiscalYearSummary = {
+  /** 年度の始まりの年（2022年度 → 2022） */
+  year: number;
+  label: string; // "2022年度"
+  rangeLabel: string; // "2022年6月〜2023年5月"
+  insurance: number;
+  selfPay: number;
+  /** 内訳なしの旧データの合算（insurance/selfPay には入らない） */
+  legacy: number;
+  total: number;
+  /** 売上のある月数 */
+  monthCount: number;
+  /** 12か月そろっているか */
+  complete: boolean;
+  /** 自費の割合（合計が0なら null） */
+  selfPayRatio: number | null;
+  /** 前年度比（1.07 = 107%）。同じ月どうしでそろわなければ null */
+  yoy: number | null;
+  /** 前年度比に使った月数 */
+  yoyMonths: number;
+  /** 年度内の12か月（offset順・データの無い月は null） */
+  points: (FiscalMonthPoint | null)[];
+};
+
+/** その年月が属する年度（＝始まりの年） */
+export function fiscalYearOf(ym: string, startMonth: number): number {
+  const [y, mo] = ym.split("-").map(Number);
+  return mo >= startMonth ? y : y - 1;
+}
+
+/** 年度内の位置（0〜11） */
+export function fiscalOffset(ym: string, startMonth: number): number {
+  const mo = Number(ym.split("-")[1]);
+  return (mo - startMonth + 12) % 12;
+}
+
+/** 年度の月の並び（例: 始まり6月 → [6,7,8,9,10,11,12,1,2,3,4,5]） */
+export function fiscalMonthSequence(startMonth: number): number[] {
+  return Array.from({ length: 12 }, (_, i) => ((startMonth - 1 + i) % 12) + 1);
+}
+
+export function fiscalLabel(year: number): string {
+  return `${year}年度`;
+}
+
+/** "2022年6月〜2023年5月"（1月始まりなら同じ年の1月〜12月） */
+export function fiscalRangeLabel(year: number, startMonth: number): string {
+  const endMonth = startMonth === 1 ? 12 : startMonth - 1;
+  const endYear = startMonth === 1 ? year : year + 1;
+  return `${year}年${startMonth}月〜${endYear}年${endMonth}月`;
+}
+
+/** offset → "YYYY-MM" */
+function ymOfOffset(year: number, startMonth: number, offset: number): string {
+  const total = startMonth - 1 + offset;
+  const y = year + Math.floor(total / 12);
+  const m = (total % 12) + 1;
+  return `${y}-${String(m).padStart(2, "0")}`;
+}
+
+/**
+ * 年度ごとの集計（古い順）。
+ * - 合計・保険・自費は「売上のある月」だけを足す（欠測は0として扱わない）。
+ * - 前年度比は**前年度の同じ月どうし**で比べる（12か月に満たない年度も同じ期間で比較）。
+ *   前年度にその月がそろっていなければ null（画面では「―」）。
+ */
+export function buildFiscalYears(
+  data: ClinicMetrics,
+  startMonth: number = fiscalStartMonthOf(data)
+): FiscalYearSummary[] {
+  const byYear = new Map<number, Map<number, FiscalMonthPoint>>();
+  for (const m of data.months) {
+    if (!YM_RE.test(m.ym)) continue;
+    const total = monthTotal(m);
+    if (total == null) continue; // 売上の無い月は年度の集計に入れない
+    const year = fiscalYearOf(m.ym, startMonth);
+    const offset = fiscalOffset(m.ym, startMonth);
+    const bucket = byYear.get(year) ?? new Map<number, FiscalMonthPoint>();
+    bucket.set(offset, {
+      ym: m.ym,
+      offset,
+      month: Number(m.ym.split("-")[1]),
+      insurance: hasBreakdown(m) ? m.insurance : null,
+      selfPay: hasBreakdown(m) ? m.selfPay : null,
+      total,
+    });
+    byYear.set(year, bucket);
+  }
+
+  const years = Array.from(byYear.keys()).sort((a, b) => a - b);
+  const summaries: FiscalYearSummary[] = [];
+
+  for (const year of years) {
+    const bucket = byYear.get(year)!;
+    const points: (FiscalMonthPoint | null)[] = Array.from(
+      { length: 12 },
+      (_, i) => bucket.get(i) ?? null
+    );
+    let insurance = 0;
+    let selfPay = 0;
+    let legacy = 0;
+    let total = 0;
+    let monthCount = 0;
+    for (const p of points) {
+      if (!p) continue;
+      monthCount++;
+      total += p.total ?? 0;
+      if (p.insurance == null && p.selfPay == null) legacy += p.total ?? 0;
+      else {
+        insurance += p.insurance ?? 0;
+        selfPay += p.selfPay ?? 0;
+      }
+    }
+
+    // 前年度比: この年度に値のある月と同じ月が、前年度にもすべてそろっているときだけ
+    const prev = byYear.get(year - 1);
+    let yoy: number | null = null;
+    let yoyMonths = 0;
+    if (prev && monthCount > 0) {
+      let prevSum = 0;
+      let ok = true;
+      for (const p of points) {
+        if (!p) continue;
+        const q = prev.get(p.offset);
+        if (!q) {
+          ok = false;
+          break;
+        }
+        prevSum += q.total ?? 0;
+        yoyMonths++;
+      }
+      if (ok && prevSum > 0) yoy = total / prevSum;
+      else {
+        yoy = null;
+        yoyMonths = 0;
+      }
+    }
+
+    summaries.push({
+      year,
+      label: fiscalLabel(year),
+      rangeLabel: fiscalRangeLabel(year, startMonth),
+      insurance,
+      selfPay,
+      legacy,
+      total,
+      monthCount,
+      complete: monthCount === 12,
+      selfPayRatio: total > 0 ? selfPay / total : null,
+      yoy,
+      yoyMonths,
+      points,
+    });
+  }
+  return summaries;
+}
+
+/** 年度の最初の月の "YYYY-MM"（表示の補助） */
+export function fiscalFirstYm(year: number, startMonth: number): string {
+  return ymOfOffset(year, startMonth, 0);
 }

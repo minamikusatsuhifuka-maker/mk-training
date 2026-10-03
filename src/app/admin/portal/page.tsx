@@ -220,6 +220,8 @@ import {
   loadClinicMetrics,
   saveClinicMetrics,
   emptyClinicMetrics,
+  fiscalStartMonthOf,
+  DEFAULT_FISCAL_START_MONTH,
   genInitiativeId,
   monthTotal,
   isLegacyOnly,
@@ -6395,6 +6397,34 @@ export default function AdminPortalPage() {
                   flash("📥 CSVの取り込みを反映しました");
                 }}
               />
+            )}
+            {/* 198: 年度の始まりの月（既定6月＝開業月）。ホームの「年度で比べる」がこの区切りで計算し直される */}
+            {metrics && (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 flex items-center gap-2 flex-wrap">
+                <label className="text-xs text-gray-700 font-medium" htmlFor="fiscal-start">
+                  年度の始まり
+                </label>
+                <select
+                  id="fiscal-start"
+                  value={fiscalStartMonthOf(metrics)}
+                  onChange={(e) =>
+                    setMetrics({ ...metrics, fiscalStartMonth: Number(e.target.value) })
+                  }
+                  className="h-7 rounded border border-gray-200 px-1.5 text-xs bg-white"
+                >
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                    <option key={m} value={m}>
+                      {m}月
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[11px] text-gray-500">
+                  {fiscalStartMonthOf(metrics) === DEFAULT_FISCAL_START_MONTH
+                    ? "既定（開業月に合わせています）"
+                    : `既定は${DEFAULT_FISCAL_START_MONTH}月です`}
+                  ／ホームの「年度で比べる」がこの区切りで計算し直されます（保存が必要）
+                </span>
+              </div>
             )}
             {!metrics ? (
               <p className="text-xs text-gray-500">読み込み中...</p>

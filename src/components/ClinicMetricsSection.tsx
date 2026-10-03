@@ -10,8 +10,12 @@
 //
 // 【整形と描画の分離】期間フィルタ・欠測処理・合算計算は section 側（useMemo）で1度だけ行い、
 // 整形済みの metricMap / plotted / フラグを Chart に渡す。3タイプは同じ整形結果を共有し重複実装しない。
+//
+// 198: 表示の切り替え「月の推移」（従来・変更なし）/「年度で比べる」（ClinicMetricsFiscal）を追加。
+// 見られる人はこれまでと同じ（このセクションの中だけで切り替える・範囲を広げない）。
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ClinicMetricsFiscal } from "@/components/ClinicMetricsFiscal";
 import {
   loadClinicMetrics,
   buildAxisYms,
@@ -22,6 +26,8 @@ import {
   hasBreakdown,
   isLegacyOnly,
   formatInitiative,
+  niceCeil,
+  METRIC_COLOR,
   type ClinicMetrics,
   type MonthMetric,
   type Initiative,
@@ -38,24 +44,18 @@ function circled(n: number): string {
   return CIRCLED[n - 1] ?? `(${n})`;
 }
 
-function niceCeil(v: number): number {
-  if (v <= 0) return 1;
-  const exp = Math.floor(Math.log10(v));
-  const base = Math.pow(10, exp);
-  const f = v / base;
-  const nice = f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10;
-  return nice * base;
-}
-
-// 配色
-const INSURANCE = "#14b8a6"; // teal-500（保険）
-const SELFPAY = "#c026d3"; // fuchsia-600（自費・指示書94で amber から変更）
-const LEGACY = "#94a3b8"; // slate-400（旧データ・内訳未入力）
-const TOTAL = "#475569"; // slate-600（合算の線）
-const COUNSEL = "#0ea5e9"; // sky-500（カウンセリング折れ線）
+// 配色・軸の丸めは core に集約（198: 年度比較と同じ色・同じ軸の作り方を使う）
+const INSURANCE = METRIC_COLOR.insurance;
+const SELFPAY = METRIC_COLOR.selfPay;
+const LEGACY = METRIC_COLOR.legacy;
+const TOTAL = METRIC_COLOR.total;
+const COUNSEL = METRIC_COLOR.counseling;
 
 type ChartType = "bar" | "line" | "area";
 const CHART_TYPE_KEY = "mk_metrics_chart_type";
+// 198: 「月の推移」/「年度で比べる」の選択（localStorage で維持・既定は月の推移）
+type MetricsView = "month" | "fiscal";
+const VIEW_KEY = "mk_metrics_view";
 const AVG_VISIBLE_KEY = "mk_metrics_avg_visible"; // 12か月平均線の表示ON/OFF（指示書94）
 const CHART_TYPES: { key: ChartType; icon: string; label: string }[] = [
   { key: "bar", icon: "📊", label: "棒" },
@@ -662,15 +662,39 @@ export function ClinicMetricsSection() {
   const [rangeInit, setRangeInit] = useState(false);
   const [chartType, setChartType] = useState<ChartType>("bar");
   const [avgVisible, setAvgVisible] = useState(true); // 12か月平均線の表示（指示書94・既定ON）
+  const [view, setView] = useState<MetricsView>("month"); // 198: 表示の切り替え
 
   const boxRef = useRef<HTMLDivElement>(null);
   const [boxWidth, setBoxWidth] = useState(0);
+  // 198: 年度ビューは別の容器で測る（月の推移の測定要素・計算には一切触れない）
+  const fiscalRef = useRef<HTMLDivElement>(null);
+  const [fiscalWidth, setFiscalWidth] = useState(0);
 
   useEffect(() => {
     loadClinicMetrics()
       .then(setData)
       .catch(() => setData({ months: [], initiatives: [], updatedAt: "" }));
   }, []);
+
+  // 198: 表示の切り替えを復元（不正・未保存は「月の推移」）
+  useEffect(() => {
+    try {
+      // SSR では localStorage を読めないため描画後に反映する（chartType・avgVisible と同じやり方）
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (localStorage.getItem(VIEW_KEY) === "fiscal") setView("fiscal");
+    } catch {
+      /* localStorage 不可環境 */
+    }
+  }, []);
+
+  const changeView = (v: MetricsView) => {
+    setView(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* 保存できなくても表示は切替 */
+    }
+  };
 
   // localStorage からタイプ復元（不正/未保存は "bar"）
   useEffect(() => {
@@ -724,6 +748,17 @@ export function ClinicMetricsSection() {
     setBoxWidth(el.clientWidth);
     return () => ro.disconnect();
   }, [data]);
+
+  useLayoutEffect(() => {
+    const el = fiscalRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) setFiscalWidth(e.contentRect.width);
+    });
+    ro.observe(el);
+    setFiscalWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, [data, view]);
 
   const axisYms = useMemo(() => (data ? buildAxisYms(data) : []), [data]);
 
@@ -800,10 +835,35 @@ export function ClinicMetricsSection() {
   return (
     <section className="px-4 py-5 border-b border-gray-100">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <h2 className="text-xs font-medium text-gray-800 uppercase tracking-wider">
-          📈 クリニックの歩み
-        </h2>
-        <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <h2 className="text-xs font-medium text-gray-800 uppercase tracking-wider">
+            📈 クリニックの歩み
+          </h2>
+          {/* 198: 表示の切り替え（見られる人はこれまでと同じ） */}
+          <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden">
+            {(
+              [
+                ["month", "月の推移"],
+                ["fiscal", "年度で比べる"],
+              ] as const
+            ).map(([v, label]) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => changeView(v)}
+                aria-pressed={view === v}
+                className={`text-xs px-2 py-1 transition-colors ${
+                  view === v
+                    ? "bg-teal-500 text-white"
+                    : "text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className={`flex items-center gap-1.5 flex-wrap ${view === "month" ? "" : "hidden"}`}>
           {/* グラフタイプ切替（セグメント） */}
           <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden">
             {CHART_TYPES.map((t) => (
@@ -877,8 +937,8 @@ export function ClinicMetricsSection() {
         </div>
       </div>
 
-      {/* 凡例 */}
-      <div className="flex items-center gap-4 mb-2 flex-wrap">
+      {/* 凡例（月の推移） */}
+      <div className={`flex items-center gap-4 mb-2 flex-wrap ${view === "month" ? "" : "hidden"}`}>
         <div className="flex items-center gap-1.5">
           <span className="inline-block w-4 h-2.5 rounded-sm bg-teal-500" />
           <span className="text-[11px] text-gray-600">保険売上（万円）</span>
@@ -912,7 +972,12 @@ export function ClinicMetricsSection() {
         )}
       </div>
 
-      <div ref={boxRef} className="bg-white border border-gray-100 rounded-xl p-2">
+      <div
+        ref={boxRef}
+        className={`bg-white border border-gray-100 rounded-xl p-2 ${
+          view === "month" ? "" : "hidden"
+        }`}
+      >
         {/* 指示書91-2: 幅が確定してから描画（二段描画の初回アニメを防ぐ）。
             未測定時は同じ高さのプレースホルダでレイアウトシフトも防ぐ。 */}
         {boxWidth > 0 ? (
@@ -933,8 +998,18 @@ export function ClinicMetricsSection() {
         )}
       </div>
 
-      {/* 施策の番号つきリスト */}
-      {plotted.length > 0 && (
+      {/* 198: 年度で比べる（月の推移の表示・計算には影響しない） */}
+      <div ref={fiscalRef} className={view === "fiscal" ? "" : "hidden"}>
+        {view === "fiscal" &&
+          (fiscalWidth > 0 ? (
+            <ClinicMetricsFiscal data={data} containerWidth={fiscalWidth} />
+          ) : (
+            <div style={{ height: PLOT_H }} aria-hidden />
+          ))}
+      </div>
+
+      {/* 施策の番号つきリスト（月の推移） */}
+      {view === "month" && plotted.length > 0 && (
         <ul className="mt-3 space-y-1">
           {plotted.map(({ init, no }) => (
             <li key={init.id} className="flex items-start gap-2 text-xs text-gray-600">
