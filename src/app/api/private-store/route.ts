@@ -20,6 +20,11 @@ import {
   INVOLVED_CONTENT_TYPES,
   RECORD_KEY_RE,
 } from "@/lib/private-store-client";
+import {
+  PRESURVEY_CONTENT_TYPE,
+  canViewPresurvey,
+  presurveyViewerScope,
+} from "@/lib/presurvey-access-server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -143,6 +148,13 @@ export async function GET(req: NextRequest) {
           .eq("content_type", contentType)
           .eq("record_key", recordKey);
         if (error) throw new Error(error.message);
+        // 200: 事前アンケートは「本人・院長・院長が指定した担当者」だけ。それ以外・不存在は 404
+        if (contentType === PRESURVEY_CONTENT_TYPE) {
+          const scope = await presurveyViewerScope(user);
+          const row = ((rows ?? []) as PrivateStoreRow[]).find((r) => canViewPresurvey(r, scope));
+          if (!row) return NextResponse.json({ error: "Not Found" }, { status: 404 });
+          return NextResponse.json({ record: toRecord(row) });
+        }
         const row = ((rows ?? []) as PrivateStoreRow[]).find((r) =>
           isParticipant(r, user.id)
         );
@@ -187,6 +199,13 @@ export async function GET(req: NextRequest) {
         if (seen.has(r.id)) continue;
         seen.add(r.id);
         merged.push(r);
+      }
+      // 200: 事前アンケートは、相手に入っていても「院長が指定した担当者」でなければ渡さない
+      if (contentType === PRESURVEY_CONTENT_TYPE) {
+        const scope = await presurveyViewerScope(user);
+        const visible = merged.filter((r) => canViewPresurvey(r, scope));
+        merged.length = 0;
+        merged.push(...visible);
       }
       merged.sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
       return NextResponse.json({ records: merged.map(toRecord) });
@@ -247,6 +266,14 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json(
       { error: "データが大きすぎます（200KBまで）" },
       { status: 413 }
+    );
+  }
+  // 200: 事前アンケートの回答は、ここ（相手を本人が指定できる汎用の保存口）では受け付けない。
+  // 予定にひもづけ、担当者をサーバーが予定から決める /api/one-on-one/presurvey だけで保存する。
+  if (contentType === PRESURVEY_CONTENT_TYPE) {
+    return NextResponse.json(
+      { error: "事前アンケートは、登録された1on1の予定からだけ保存できます" },
+      { status: 400 }
     );
   }
   // 非管理者は body.owner を無視し、必ずセッションの userId を使う（院長明示要件）

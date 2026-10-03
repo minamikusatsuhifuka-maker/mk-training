@@ -142,6 +142,7 @@ export default function PresurveyAdminPage() {
         <p className="text-xs text-slate-500 mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
           スタッフの画面には冒頭に常時こう出ます: 「{PRESURVEY_INTRO}」
         </p>
+        <PresurveyAccessNote />
       </div>
 
       {message && (
@@ -352,6 +353,33 @@ export default function PresurveyAdminPage() {
       <p className="text-xs text-slate-500 leading-relaxed">
         ※ 保存済みの回答には「回答した時点の質問文」が一緒に入っています。質問を直しても、過去の回答の見え方は変わりません。
       </p>
+    </div>
+  );
+}
+
+// 200: 回答を読める人の説明と、閲覧権を整理した件数（1-4。数だけ・本文や氏名は出さない）
+function PresurveyAccessNote() {
+  const [audit, setAudit] = useState<{ total: number; withPartner: number; revoked: number } | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    fetch("/api/admin/presurvey-audit", { cache: "no-store", credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((j) => setAudit(j))
+      .catch(() => setFailed(true));
+  }, []);
+  return (
+    <div className="text-xs text-slate-600 mt-2 bg-white border border-slate-200 rounded-lg px-3 py-2 space-y-1" data-presurvey-access>
+      <p>
+        回答は、<strong>育成カルテで登録した「次回1on1の予定」</strong>からだけ答えられます（スタッフは日付や相手を選べません）。
+        読めるのは<strong>本人・院長・その1on1の担当者</strong>（院長か、院長がそのスタッフの担当に指定した幹部）だけです。
+      </p>
+      {audit && (
+        <p data-presurvey-audit>
+          これまでの回答 {audit.total}件のうち、本人が選んだ相手が院長でも担当幹部でもなかった
+          <strong> {audit.revoked}件</strong>は、相手が読めないようにしました（回答は本人と院長が読めるまま残しています）。
+        </p>
+      )}
+      {failed && <p className="text-slate-400">閲覧権の整理の件数を読み込めませんでした。</p>}
     </div>
   );
 }

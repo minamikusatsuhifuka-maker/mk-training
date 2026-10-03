@@ -489,10 +489,12 @@ export function sortPresurveys<T extends { data: unknown; updatedAt?: string }>(
 export const PRESURVEY_TITLE = "📝 1on1の事前アンケート";
 
 export const PRESURVEY_LEAD =
-  "次の1on1の前に答えておくと、当日の対話がぐっと深まります。選んだ相手（担当者）と院長が読めます。";
+  "次の1on1の前に答えておくと、当日の対話がぐっと深まります。回答を読めるのは、院長と、院長が指定したその1on1の担当者だけです。";
+
+/** 200: 予定が登録されていないとき（回答欄は出さない） */
+export const PRESURVEY_NO_SCHEDULE =
+  "次回1on1が登録されると、ここに事前アンケートが届きます。";
 
 export const PRESURVEY_EMPTY =
   "まだ回答がありません。次の1on1の前に、答えてみましょう。";
 
-export const PRESURVEY_PARTNER_NOTE =
-  "相手に選べるのは、ポータルに登録済みのメンバーです。選んだ相手が1on1の画面であなたの回答を見られます。";
