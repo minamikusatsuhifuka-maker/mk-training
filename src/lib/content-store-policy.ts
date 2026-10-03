@@ -32,6 +32,8 @@ const ADMIN_ONLY_KEYS = new Set<string>([
   "profile_field_config",
   "profile_role_config",
   "self_review_config",
+  // 197: 1on1の事前アンケートの質問（読みは全員＝スタッフが回答する・書きは院長のみ）
+  "one_on_one_presurvey_config",
   "onboarding_template",
   "portal_question_schedule",
   // 146: 月替わりマスコット当番の手動上書き

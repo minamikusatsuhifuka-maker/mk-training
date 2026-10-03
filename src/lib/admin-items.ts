@@ -89,6 +89,15 @@ export const ADMIN_ITEMS: readonly AdminItem[] = [
   { key: "operations", label: "📋 業務チェック管理", href: "/admin/operations", delegable: true, reason: "業務手順", contentPrefixes: ["operations_"] },
   { key: "staff-members", label: "👥 スタッフ名簿", href: "/admin/staff-members", delegable: true, reason: "タスクの担当者候補（氏名のみ・連絡先は含まない）", contentKeys: ["staff_members"] },
   { key: "task-categories", label: "🏷️ タスクカテゴリ管理", href: "/admin/task-categories", delegable: true, reason: "タスクの分類", contentKeys: ["task_category_config"] },
+  // 197: 1on1の事前アンケートの質問。1on1は「個人の記録」の系統なので院長のみ（183 B-2・/admin/portal の🤝1on1タブと同じ扱い）
+  {
+    key: "presurvey",
+    label: "📝 1on1の事前アンケートの質問",
+    href: "/admin/presurvey",
+    delegable: false,
+    reason: "1on1（個人の記録）の設問設計。院長のみ",
+    contentKeys: ["one_on_one_presurvey_config"],
+  },
   { key: "staff-accounts", label: "👤 アカウント招待", href: "/admin/staff-accounts", delegable: false, reason: "アカウント・招待コード・仮パスワード（権限・アカウント）" },
   {
     key: "profile-fields",

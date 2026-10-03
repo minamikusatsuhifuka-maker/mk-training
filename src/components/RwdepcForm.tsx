@@ -51,6 +51,10 @@ export function RwdepcForm({
   previousWDate,
   /** 153-④: 過去のWの変遷（新しい順・{heldOn, w}） */
   wHistory,
+  /** 197-補: 事前アンケートのうち画面の上部に置く分（最初の話題・承認の材料） */
+  presurveyTop,
+  /** 197-補: 事前アンケートの回答を各欄の隣に置く（W/D/E/P/C） */
+  presurveySlots,
 }: {
   value: RwdepcData;
   onChange: (next: RwdepcData) => void;
@@ -61,6 +65,8 @@ export function RwdepcForm({
   previousW?: string | null;
   previousWDate?: string | null;
   wHistory?: { heldOn: string; w: string }[];
+  presurveyTop?: React.ReactNode;
+  presurveySlots?: Partial<Record<RwdepcStepKey, React.ReactNode>>;
 }) {
   const [openHint, setOpenHint] = useState<RwdepcStepKey | null>(null);
   const [showWHistory, setShowWHistory] = useState(false);
@@ -70,6 +76,9 @@ export function RwdepcForm({
   return (
     <div className="space-y-3">
       <RwdepcReminders />
+
+      {/* 197-補 2.: 最初の話題と承認の材料は画面の上部に置く */}
+      {presurveyTop}
 
       {/* ③ 前回の約束 → ここからDへ自然に入る */}
       {previousPromise && (
@@ -104,6 +113,8 @@ export function RwdepcForm({
       {RWDEPC_STEPS.map((step) => {
         const isW = step.key === "w";
         const isE = step.key === "e";
+        // 197-補 2.: この欄の隣に置く事前アンケートの回答
+        const presurvey = presurveySlots?.[step.key];
         const hintOpen = openHint === step.key;
         const questions = hintOpen
           ? step.questions
@@ -187,13 +198,23 @@ export function RwdepcForm({
               ))}
             </ul>
 
-            <textarea
-              value={value[step.key]}
-              onChange={(e) => set(step.key, e.target.value)}
-              disabled={disabled}
-              rows={3}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-y"
-            />
+            {/* 回答は入力欄の隣（画面が狭いときは入力欄の下）に置く */}
+            <div
+              className={
+                presurvey
+                  ? "md:grid md:grid-cols-[1fr_minmax(0,17rem)] md:gap-3 md:items-start space-y-2 md:space-y-0"
+                  : undefined
+              }
+            >
+              <textarea
+                value={value[step.key]}
+                onChange={(e) => set(step.key, e.target.value)}
+                disabled={disabled}
+                rows={3}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-y"
+              />
+              {presurvey}
+            </div>
           </div>
         );
       })}

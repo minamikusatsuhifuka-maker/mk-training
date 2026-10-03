@@ -6,8 +6,11 @@
 //   閲覧は本人＋ペア相手＋管理者のみ（判定はサーバー側）。記録者のみ編集・削除可。
 // - リアクションなし・実施回数の集計/ランキングなし（指示書の禁止事項）。
 // - 一覧は listInvolved（自分が記録した回＋相手として参加した回）を実施日降順で表示。
+// - 197-補: 相手が答えた事前アンケートを、RWDEPの各欄の隣に読み取り専用で出す
+//   （願望=3・4・5 → 行動=6 → 自己評価=7 → 計画=8 → 支援=9／1・2は画面の上部）。
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import Link from "next/link";
 import NavPageHeader from "@/components/NavPageHeader";
 import FeatureGate from "@/components/FeatureGate";
 import {
@@ -35,6 +38,13 @@ import {
   JitsuCheckSummary,
 } from "@/components/JitsuChecklist";
 import { RwdepcForm, RwdepcGuide } from "@/components/RwdepcForm";
+import { PresurveyAnswerList } from "@/components/PresurveyAnswers";
+import {
+  answersBySlot,
+  normalizePresurveyData,
+  PRESURVEY_SLOT_TITLE,
+  type PresurveyAnswer,
+} from "@/lib/one-on-one-presurvey";
 import {
   EMPTY_RWDEPC,
   RWDEPC_STEPS,
@@ -44,6 +54,7 @@ import {
 import type { OneOnOneMode } from "@/lib/one-on-one";
 import type { JitsuGroupKey } from "@/lib/jitsu-checklist";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { useFeatureFlags } from "@/lib/use-feature-flags";
 import {
   loadProfilesIndex,
   type StaffProfileIndexEntry,
@@ -57,7 +68,11 @@ const EMPTY_SECTIONS: SectionDraft = { theme: "", kizuki: "", nextStep: "" };
 
 function OneOnOnePageBody() {
   const [state, setState] = useState<LoadState>("loading");
+  // 197-補: 事前アンケートが公開されているときだけ、回答する導線を出す
+  const { flags } = useFeatureFlags();
   const [records, setRecords] = useState<PrivateRecord[]>([]);
+  // 197-補: 自分が相手として選ばれた事前アンケート（本人＝owner・自分は participantIds）
+  const [presurveys, setPresurveys] = useState<PrivateRecord[]>([]);
   const [myId, setMyId] = useState("");
   const [myName, setMyName] = useState("");
   const [profiles, setProfiles] = useState<StaffProfileIndexEntry[]>([]);
@@ -109,8 +124,13 @@ function OneOnOnePageBody() {
       const idx = await loadProfilesIndex().catch(() => []);
       setProfiles(idx);
       setMyName(idx.find((p) => p.userId === user.id)?.name?.trim() || "名前未設定");
-      const list = await listInvolved("one_on_one");
+      const [list, pre] = await Promise.all([
+        listInvolved("one_on_one"),
+        // 事前アンケートは機能OFFなら0件（読めなくても1on1ノートは使える）
+        listInvolved("one_on_one_presurvey").catch(() => []),
+      ]);
       setRecords(list);
+      setPresurveys(pre);
       setState("ready");
     } catch (e) {
       if (e instanceof PrivateStoreError && e.kind === "unauthenticated") {
@@ -177,6 +197,87 @@ function OneOnOnePageBody() {
       return past.length > 0 ? past[0].d.jitsuChecks : null;
     },
     [records]
+  );
+
+  /**
+   * 197-補: この回に対応する事前アンケートを引く。
+   * 相手（本人）が答えた回答を優先し、無ければ自分が答えた回答（相手が担当者の場合）を使う。
+   * 予定日が一致する回答を優先し、無ければ実施日以前で最も新しいものを「別の日の回答」と明示して出す。
+   */
+  const presurveyFor = useCallback(
+    (partnerIdValue: string, heldOnValue: string) => {
+      if (!partnerIdValue) return null;
+      const candidates = presurveys
+        .map((r) => ({ r, d: normalizePresurveyData(r.data) }))
+        .filter(
+          ({ r, d }) =>
+            d.answers.length > 0 &&
+            ((r.ownerId === partnerIdValue &&
+              (d.participantIds.includes(myId) || myId === "")) ||
+              (r.ownerId === myId && d.participantIds.includes(partnerIdValue)))
+        )
+        .sort((a, b) => b.d.heldOn.localeCompare(a.d.heldOn));
+      if (candidates.length === 0) return null;
+      // 相手（本人）の回答を先に見る
+      const byPartner = candidates.filter(({ r }) => r.ownerId === partnerIdValue);
+      const pool = byPartner.length > 0 ? byPartner : candidates;
+      const exact = heldOnValue
+        ? pool.find(({ d }) => d.heldOn === heldOnValue)
+        : undefined;
+      const fallback =
+        exact ??
+        (heldOnValue
+          ? pool.find(({ d }) => d.heldOn <= heldOnValue) ?? pool[0]
+          : pool[0]);
+      if (!fallback) return null;
+      return {
+        data: fallback.d,
+        respondentName: nameOf(
+          fallback.r.ownerId,
+          fallback.d.authorName || "本人"
+        ),
+        dateMismatch: !!heldOnValue && fallback.d.heldOn !== heldOnValue,
+      };
+    },
+    [presurveys, myId, nameOf]
+  );
+
+  /** 197-補: RWDEPの各欄の隣に差し込む表示ノード（無ければ null） */
+  const presurveyNodes = useCallback(
+    (partnerIdValue: string, heldOnValue: string) => {
+      const found = presurveyFor(partnerIdValue, heldOnValue);
+      if (!found) return null;
+      const slots = answersBySlot(found.data);
+      const card = (slot: keyof typeof slots, answers: PresurveyAnswer[]) => (
+        <PresurveyAnswerList
+          answers={answers}
+          title={PRESURVEY_SLOT_TITLE[slot]}
+          respondentName={found.respondentName}
+          heldOn={found.data.heldOn}
+          dateMismatch={found.dateMismatch}
+        />
+      );
+      const all = [
+        ...slots.top,
+        ...slots.w,
+        ...slots.d,
+        ...slots.e,
+        ...slots.p,
+        ...slots.c,
+      ];
+      return {
+        top: card("top", slots.top),
+        slots: {
+          w: card("w", slots.w),
+          d: card("d", slots.d),
+          e: card("e", slots.e),
+          p: card("p", slots.p),
+          c: card("c", slots.c),
+        },
+        all: card("top", all),
+      };
+    },
+    [presurveyFor]
   );
 
   const submit = async () => {
@@ -350,6 +451,20 @@ function OneOnOnePageBody() {
         {ONE_ON_ONE_INTRO}
       </p>
 
+      {flags.one_on_one_presurvey && (
+        <p className="text-xs text-gray-600">
+          <Link
+            href="/one-on-one/presurvey"
+            className="text-violet-700 underline hover:opacity-70"
+          >
+            📝 1on1の事前アンケートに答える
+          </Link>
+          <span className="ml-2 text-gray-500">
+            （本人が答えた回答は、下の記録のRWDEPの各欄の隣に出ます）
+          </span>
+        </p>
+      )}
+
       {/* 記録フォーム */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
         <div className="flex items-center gap-4 flex-wrap">
@@ -404,6 +519,10 @@ function OneOnOnePageBody() {
           ))}
         </div>
 
+        {/* 197-補: クイックメモでも回答は読めるように（まとめて1枚） */}
+        {modeDraft === "quick" &&
+          presurveyNodes(partnerIdDraft, heldOnDraft)?.all}
+
         {modeDraft === "quick" ? (
           ONE_ON_ONE_SECTIONS.map((sec) => (
             <div key={sec.key} className="space-y-1">
@@ -428,11 +547,14 @@ function OneOnOnePageBody() {
             const past = pastRwdepcFor(partnerIdDraft, heldOnDraft);
             const prev = past[0] ?? null;
             const withW = past.filter((d) => d.rwdepc.w.trim());
+            const pre = presurveyNodes(partnerIdDraft, heldOnDraft);
             return (
               <RwdepcForm
                 value={rwdepcDraft}
                 onChange={setRwdepcDraft}
                 disabled={submitting}
+                presurveyTop={pre?.top}
+                presurveySlots={pre?.slots}
                 previousPromise={prev?.rwdepc.c.trim() || null}
                 previousPromiseDate={prev?.heldOn ?? null}
                 onOpenJikko={() => setJitsuOpenGroup("jikko")}
@@ -569,6 +691,8 @@ function OneOnOnePageBody() {
                         ))}
                       </select>
                     </div>
+                    {editMode === "quick" &&
+                      presurveyNodes(editPartnerId, editHeldOn)?.all}
                     {editMode === "quick" ? (
                       ONE_ON_ONE_SECTIONS.map((sec) => (
                         <div key={sec.key} className="space-y-1">
@@ -597,11 +721,14 @@ function OneOnOnePageBody() {
                         );
                         const prev = past[0] ?? null;
                         const withW = past.filter((x) => x.rwdepc.w.trim());
+                        const pre = presurveyNodes(editPartnerId, editHeldOn);
                         return (
                           <RwdepcForm
                             value={editRwdepc}
                             onChange={setEditRwdepc}
                             disabled={savingEdit}
+                            presurveyTop={pre?.top}
+                            presurveySlots={pre?.slots}
                             previousPromise={prev?.rwdepc.c.trim() || null}
                             previousPromiseDate={prev?.heldOn ?? null}
                             onOpenJikko={() => setEditJitsuOpenGroup("jikko")}

@@ -16,7 +16,10 @@ import {
 } from "@/lib/supabase-admin";
 import { getSessionUser } from "@/lib/staff-profiles-server";
 import { isAdminUser } from "@/lib/admin-role";
-import { RECORD_KEY_RE } from "@/lib/private-store-client";
+import {
+  INVOLVED_CONTENT_TYPES,
+  RECORD_KEY_RE,
+} from "@/lib/private-store-client";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -25,6 +28,8 @@ export const maxDuration = 60;
 const CONTENT_TYPES = [
   "self_review",
   "one_on_one",
+  // 197: 1on1の事前アンケートの回答。閲覧は本人＋選んだ相手＋管理者（one_on_one と同じ規則）
+  "one_on_one_presurvey",
   "onboarding",
   // quotes_port: 格言のお気に入り（本人のみ・1ユーザー1レコード）。
   //   専用テーブルを足さずに済むよう private_store を使う（owner_id で本人に閉じる）。
@@ -46,6 +51,11 @@ function isContentType(v: unknown): v is PrivateContentType {
     typeof v === "string" &&
     (CONTENT_TYPES as readonly string[]).includes(v)
   );
+}
+
+// involved=1（owner または participantIds）で読める type か（112: 1on1ノート／197: 事前アンケート）
+function isInvolvedType(v: string): boolean {
+  return (INVOLVED_CONTENT_TYPES as readonly string[]).includes(v);
 }
 
 // DB行 → クライアント返却形（camelCase）
@@ -71,7 +81,7 @@ function toRecord(row: PrivateStoreRow) {
   };
 }
 
-// one_on_one: 対象ユーザーがレコードの閲覧者（owner または participant）か（指示書112）
+// 対象ユーザーがレコードの閲覧者（owner または participant）か（指示書112・197）
 function isParticipant(row: PrivateStoreRow, userId: string): boolean {
   if (row.owner_id === userId) return true;
   const ids = (row.data as { participantIds?: unknown } | null)?.participantIds;
@@ -100,10 +110,10 @@ export async function GET(req: NextRequest) {
   const ownerParam = sp.get("owner");
   const all = sp.get("all") === "1";
   const involved = sp.get("involved") === "1";
-  // involved=1 は one_on_one 限定（他の content_type の意味論を広げない・指示書112）
-  if (involved && contentType !== "one_on_one") {
+  // involved=1 は「本人＋相手」で読む type だけ（他の content_type の意味論を広げない・112／197）
+  if (involved && !isInvolvedType(contentType)) {
     return NextResponse.json(
-      { error: "involved は one_on_one でのみ使えます" },
+      { error: "involved はこの種類では使えません" },
       { status: 400 }
     );
   }
@@ -123,9 +133,10 @@ export async function GET(req: NextRequest) {
           { status: 400 }
         );
       }
-      // 指示書112: one_on_one の単一取得は「owner or participant or 管理者」をサーバー側で判定。
+      // 指示書112・197: 「本人＋相手」で読む type の単一取得は
+      // 「owner or participant or 管理者」をサーバー側で判定。
       // 権限外・不存在はどちらも record: null（存在自体を漏らさない）
-      if (contentType === "one_on_one" && !admin && !ownerParam) {
+      if (isInvolvedType(contentType) && !admin && !ownerParam) {
         const { data: rows, error } = await db
           .from("private_store")
           .select("*")
@@ -150,7 +161,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 指示書112・C案: involved=1 は「owner=自分」「participantIds contains 自分」の
+    // 指示書112・C案（197も同じ）: involved=1 は「owner=自分」「participantIds contains 自分」の
     // 2クエリを並行実行し id で重複除去してマージ（.or() の JSONB パス構文の罠を避ける）
     if (involved) {
       const [mine, joined] = await Promise.all([

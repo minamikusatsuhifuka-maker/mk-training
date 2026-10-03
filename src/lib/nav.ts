@@ -44,6 +44,8 @@ export const MASTER_ITEMS: MasterItem[] = [
   { key: "/self-review", href: "/self-review", label: "📝 自己評価シート", categoryId: "home", featureId: "self_review" },
   // 1on1ノート（指示書112・private_store 基盤・本人＋ペア相手＋院長のみ）
   { key: "/one-on-one", href: "/one-on-one", label: "🤝 1on1ノート", categoryId: "home", featureId: "one_on_one" },
+  // 1on1の事前アンケート（指示書197・197-補・本人が1on1の前に答える。既定OFF＝説明後に院長がON）
+  { key: "/one-on-one/presurvey", href: "/one-on-one/presurvey", label: "📝 1on1の事前アンケート", categoryId: "home", featureId: "one_on_one_presurvey" },
   // マイ成長記録（指示書179-C・本人の学び／目標／1on1の約束。既定OFF＝説明後に院長がON）
   { key: "/my-growth", href: "/my-growth", label: "🌱 マイ成長記録", categoryId: "home", featureId: "growth_record" },
   // 外部リンク（別タブ）。指示書59

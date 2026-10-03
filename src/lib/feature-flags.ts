@@ -33,6 +33,8 @@ export const FEATURE_IDS = [
   "anniversary", // 146-E: 入職記念日・誕生日のお祝い
   // ── スタッフ育成カルテ 第1便（指示書179）──
   "growth_record", // 179-C: 本人ページ「マイ成長記録」（学び・目標・1on1の約束）。既定OFF＝説明後に院長がON
+  // ── 1on1の事前アンケート（指示書197・197-補）──
+  "one_on_one_presurvey", // 197: 本人が1on1の前に答える9問（/one-on-one/presurvey）。既定OFF＝説明後に院長がON
 ] as const;
 export type FeatureId = (typeof FEATURE_IDS)[number];
 
@@ -91,6 +93,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   seasonal_skin: false, // 146-D
   anniversary: false, // 146-E
   growth_record: false, // 179-C（記録する項目と目的をスタッフに説明してからON）
+  one_on_one_presurvey: false, // 197（質問の内容と「評価に使わない」ことを説明してからON）
   page_members: true,
   page_philosophy: true,
   page_corporate_book: true,
@@ -136,6 +139,7 @@ export const FEATURE_META: FeatureMeta[] = [
   { id: "seasonal_skin", label: "季節の装飾", description: "月ごとのささやかな飾り（桜・あじさい・紅葉・雪など）", phase: 5 },
   { id: "anniversary", label: "記念日のお祝い", description: "入職記念日・誕生日に本人のホームだけでお祝い（誕生日は本人が設定した場合のみ）", phase: 5 },
   { id: "growth_record", label: "マイ成長記録", description: "本人が自分の学びの記録・目標・1on1の約束を見て書けるページ（/my-growth）。記録する項目と目的を説明してからONにする", phase: 5 },
+  { id: "one_on_one_presurvey", label: "1on1の事前アンケート", description: "本人が1on1の前に答える9問（/one-on-one/presurvey）。回答は1on1画面のRWDEPの各欄の隣に並ぶ。評価には使わないことを説明してからONにする", phase: 5 },
 ];
 
 // 実装済み機能の集合。各フェーズの実装指示書でIDを追加していく。
@@ -159,6 +163,7 @@ export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
   "seasonal_skin", // 指示書146-D
   "anniversary", // 指示書146-E
   "growth_record", // 指示書179-C: マイ成長記録（/my-growth・学び／目標／1on1の約束）
+  "one_on_one_presurvey", // 指示書197・197-補: 1on1の事前アンケート（/one-on-one/presurvey）
 ]);
 
 // ページの公開設定の管理UI用メタ（指示書124・「📄 ページの公開設定」セクション）

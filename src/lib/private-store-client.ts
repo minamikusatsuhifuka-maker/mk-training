@@ -9,9 +9,18 @@
 export type PrivateContentType =
   | "self_review"
   | "one_on_one"
+  // 197: 1on1の事前アンケートの回答（本人=owner・1on1の相手=participantIds）
+  | "one_on_one_presurvey"
   | "onboarding"
   // quotes_port: 格言のお気に入り（本人のみ・1ユーザー1レコード）
   | "quote_favorites";
+
+// 「本人＋相手」で読める content_type（involved=1 が使える・指示書112／197）
+export const INVOLVED_CONTENT_TYPES = [
+  "one_on_one",
+  "one_on_one_presurvey",
+] as const;
+export type InvolvedContentType = (typeof INVOLVED_CONTENT_TYPES)[number];
 
 // record_key の形式（APIルートと共有・指示書111でlib共有化）
 export const RECORD_KEY_RE = /^[\w.-]{1,64}$/;
@@ -111,10 +120,11 @@ export async function deleteRecord(
   });
 }
 
-// one_on_one 限定: 自分が記録者または相手として参加している一覧（指示書112）。
-// 他の contentType では API が 400 を返す（listMine の意味論は変えない）
+// 自分が記録者（owner）または相手（participantIds）として関わる一覧（指示書112・197）。
+// 対象は INVOLVED_CONTENT_TYPES のみ。他の contentType では API が 400 を返す
+//（listMine の意味論は変えない）
 export async function listInvolved<T = unknown>(
-  contentType: "one_on_one"
+  contentType: InvolvedContentType
 ): Promise<PrivateRecord<T>[]> {
   const j = await call<{ records: PrivateRecord<T>[] }>(
     `${API}?contentType=${encodeURIComponent(contentType)}&involved=1`
