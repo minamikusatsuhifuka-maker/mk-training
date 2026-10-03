@@ -117,6 +117,10 @@ export const ADMIN_ITEMS: readonly AdminItem[] = [
   { key: "delete-password", label: "🗑 削除用パスワードの設定", href: "/admin/delete-password", delegable: false, reason: "一括削除の本人確認（機微な個人情報の削除）" },
   // 191: 検証用アカウントと架空データの作成・削除（アカウント＝権限）
   { key: "test-seed", label: "🧪 検証用データ", href: "/admin/test-seed", delegable: false, reason: "アカウントの作成・削除（権限・アカウント）" },
+  // 201: 院長の四象限マトリクス（プライオリティマネジメント）。院長のみ・委任不可。
+  //   タスクの本文（やること・メモ・9マス）は院長の思考そのもので、スタッフの画面には一切出さない。
+  //   保存先は private_store（owner_id＝院長）なので content_store のキーは持たない。
+  { key: "priority-matrix", label: "🧭 四象限マトリクス", href: "/admin/priority-matrix", delegable: false, reason: "院長が注力することを決めるための記録（機微な個人の記録）" },
   // 192: 院内端末の登録・番号ログインの開始（ログインの守りに関わる＝権限）
   { key: "terminals", label: "🖥 院内端末", href: "/admin/terminals", delegable: false, reason: "院内端末の登録・番号ログインの開始／停止（ログインの守り）" },
   // 184: 採用資料（履歴書・適性検査）は育成カルテの中の機能。院長のみ（179の決定）で委任できない

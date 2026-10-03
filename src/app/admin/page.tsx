@@ -7,6 +7,8 @@ import { drugs } from "@/data/drugs";
 import { quizQuestions } from "@/data/quiz";
 import { contraindications } from "@/data/contraindications";
 import { EXPERT_ROLES } from "@/data/expertRoles";
+// 201: 院長の「★ いま注力すること」3件。院長でなければ何も出ない（部品側で fail-close）
+import { PriorityFocusMini } from "@/components/admin/PriorityFocusMini";
 
 const stats = [
   { label: "疾患", count: diseases.length, unit: "件", href: "/admin/diseases" },
@@ -22,6 +24,8 @@ export default function AdminDashboard() {
         <h1 className="text-2xl font-bold text-slate-800">管理ダッシュボード</h1>
         <p className="text-sm text-slate-600 mt-1">コンテンツの管理・編集が行えます</p>
       </div>
+
+      <PriorityFocusMini />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {stats.map((s) => (
@@ -45,6 +49,18 @@ export default function AdminDashboard() {
               <CardTitle className="text-base">🏠 ポータル管理</CardTitle>
               <CardDescription className="text-xs">
                 ポータルトップ（新着情報・気づきシェア・ありがとうカード・経営方針・今日の一言）の管理
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
+        {/* 四象限マトリクス（201・院長のみ） */}
+        <Link href="/admin/priority-matrix">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-amber-400 border-l-4 border-l-amber-500 sm:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">🧭 四象限マトリクス</CardTitle>
+              <CardDescription className="text-xs">
+                タスクを緊急度×重要度の四象限で管理。★で「いま注力すること」を3件まで、各タスクは9マスで分解（院長のみ）
               </CardDescription>
             </CardHeader>
           </Card>
