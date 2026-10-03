@@ -310,6 +310,36 @@ export function fiscalMonthSequence(startMonth: number): number[] {
   return Array.from({ length: 12 }, (_, i) => ((startMonth - 1 + i) % 12) + 1);
 }
 
+// ─── 年度の色（指示書199）───
+// 色の見分けにくい人にも区別しやすい Okabe–Ito 系。**色は年度に固定**（来年も2025年度は橙のまま）。
+// 比較表の差の色（緑＝上回り・赤＝下回り）と紛れないよう、純粋な緑・赤は使わない
+// （Okabe–Ito の bluish green #009E73・vermillion #D55E00 は除外）。
+
+/** 指示書199の表のとおり */
+export const FISCAL_YEAR_COLORS: Record<number, string> = {
+  2022: "#8C8C8C", // 灰
+  2023: "#56B4E9", // 水色
+  2024: "#CC79A7", // 赤紫
+  2025: "#E69F00", // 橙
+  2026: "#0072B2", // 青
+};
+
+/**
+ * 2027年度以降（と、年度の始まりを変えて2022年度より前が出たとき）に順に割り当てる色。
+ * 上の5色・緑・赤と重ならない、同じ系統の色（Okabe–Ito の黒・黄を白地で読める濃さにしたもの → 紫・茶・紺）。
+ */
+export const FISCAL_YEAR_EXTRA_COLORS = ["#1F1F1F", "#B59B00", "#7B5EA7", "#8C5A2B", "#2B4C7E"] as const;
+
+/** 年度の色（年度で決まる。並び順や表示期間・年度の始まりの月には左右されない） */
+export function fiscalYearColor(year: number): string {
+  const fixed = FISCAL_YEAR_COLORS[year];
+  if (fixed) return fixed;
+  const n = FISCAL_YEAR_EXTRA_COLORS.length;
+  // 2027→0, 2028→1 …／2021→n-1, 2020→n-2 …（前後どちらに増えても固定の5色とは重ならない）
+  const i = year >= 2027 ? (year - 2027) % n : (((year - 2022) % n) + n) % n;
+  return FISCAL_YEAR_EXTRA_COLORS[i];
+}
+
 export function fiscalLabel(year: number): string {
   return `${year}年度`;
 }

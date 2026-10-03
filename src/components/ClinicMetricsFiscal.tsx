@@ -17,6 +17,7 @@ import {
   buildFiscalYears,
   fiscalMonthSequence,
   fiscalStartMonthOf,
+  fiscalYearColor,
   niceCeil,
   type ClinicMetrics,
   type FiscalMetric,
@@ -33,11 +34,55 @@ const LINE_METRICS: { key: LineMetric; label: string; color: string }[] = [
 
 const man = (v: number) => `${Math.round(v).toLocaleString("ja-JP")}`;
 
-/** 新しい年度ほど濃く・太く（最新=1本目） */
-function yearStyle(indexFromLatest: number): { opacity: number; width: number } {
-  if (indexFromLatest === 0) return { opacity: 1, width: 2.6 };
-  const o = Math.max(0.25, 0.7 - (indexFromLatest - 1) * 0.13);
-  return { opacity: o, width: 1.4 };
+/** 199: 年度ごとに色を変える（色は年度に固定）。最新の年度は太く・各月に点、過去の年度は細い線 */
+function yearStyle(isLatest: boolean): { width: number; points: boolean } {
+  return isLatest ? { width: 3, points: true } : { width: 1.6, points: false };
+}
+
+/** 年度の色の小さな丸（凡例・比較表の見出し・ツールチップ） */
+export function YearDot({ year, size = 8 }: { year: number; size?: number }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-block rounded-full shrink-0 align-middle"
+      style={{ width: size, height: size, backgroundColor: fiscalYearColor(year) }}
+      data-year-dot={year}
+    />
+  );
+}
+
+/**
+ * 199: 線の右端の年度名が重ならないよう、縦に押し分ける。
+ * 横に重なるラベルどうしだけを比べ、上から順に最小間隔 gap を空ける（下端を超えたら上へ戻す）。
+ */
+function placeLabels(
+  labels: { key: number; x: number; y: number; w: number }[],
+  top: number,
+  bottom: number,
+  gap: number
+): Map<number, number> {
+  const out = new Map<number, number>();
+  const sorted = [...labels].sort((a, b) => a.y - b.y);
+  const placed: { x: number; w: number; y: number }[] = [];
+  for (const l of sorted) {
+    let y = Math.max(top, l.y);
+    for (const p of placed) {
+      const overlapX = l.x < p.x + p.w && p.x < l.x + l.w;
+      if (overlapX && y < p.y + gap) y = p.y + gap;
+    }
+    placed.push({ x: l.x, w: l.w, y });
+  }
+  // 下端を超えた分は、横に重なる組ごと上へ詰め直す
+  for (let i = placed.length - 1; i >= 0; i--) {
+    const p = placed[i];
+    const limit =
+      i === placed.length - 1
+        ? bottom
+        : Math.min(bottom, ...placed.slice(i + 1).filter((q) => p.x < q.x + q.w && q.x < p.x + p.w).map((q) => q.y - gap));
+    if (p.y > limit) p.y = limit;
+  }
+  sorted.forEach((l, i) => out.set(l.key, placed[i].y));
+  return out;
 }
 
 // ─── ① 年度の合計（積み上げ棒） ───
@@ -150,7 +195,8 @@ function FiscalLines({
   width: number;
 }) {
   const padL = 44;
-  const padR = 26;
+  // 199: 右端に「2025年度」を直接書くための余白
+  const padR = 50;
   const padT = 18;
   const padB = 34;
   const plotH = 210;
@@ -174,12 +220,42 @@ function FiscalLines({
   max = niceCeil(max);
   const yOf = (v: number) => baseline - (v / max) * plotH;
   const ticks = [0, 0.5, 1].map((r) => Math.round(max * r));
-  const color = LINE_METRICS.find((m) => m.key === metric)!.color;
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<number | null>(null);
 
-  const ordered = [...years].reverse(); // 新しい年度が先（濃い）
+  const ordered = [...years].reverse(); // 新しい年度が先（ツールチップの並び）
+  const latestYear = years.length ? years[years.length - 1].year : null;
+
+  // 各年度の線（欠測で途切れる）と、右端の年度名の位置
+  const LABEL_FONT = 9;
+  const labelW = (text: string) => Array.from(text).reduce((w, ch) => w + (/[0-9]/.test(ch) ? LABEL_FONT * 0.6 : LABEL_FONT), 0);
+  const series = years.map((y) => {
+    const runs: { x: number; y: number }[][] = [];
+    let pts: { x: number; y: number }[] = [];
+    for (let i = 0; i < 12; i++) {
+      const v = valueOf(y, i);
+      if (v == null) {
+        if (pts.length) runs.push(pts);
+        pts = [];
+        continue;
+      }
+      pts.push({ x: xCenter(i), y: yOf(v) });
+    }
+    if (pts.length) runs.push(pts);
+    const last = runs.length ? runs[runs.length - 1][runs[runs.length - 1].length - 1] : null;
+    const text = `${y.year}年度`;
+    return { y, runs, last, text, w: labelW(text) };
+  });
+  const labelY = placeLabels(
+    series
+      .filter((s) => s.last)
+      .map((s) => ({ key: s.y.year, x: Math.min(s.last!.x + 6, width - s.w - 2), y: s.last!.y + 3, w: s.w })),
+    padT + 6,
+    baseline - 2,
+    // 文字（9px）＋白い縁取りの高さ。これより詰めると縁取りどうしが重なる
+    LABEL_FONT + 4
+  );
 
   return (
     <div ref={wrapRef} className="relative">
@@ -205,48 +281,56 @@ function FiscalLines({
           />
         )}
 
-        {ordered.map((y, idx) => {
-          const st = yearStyle(idx);
-          const pts: { x: number; y: number }[] = [];
-          const runs: { x: number; y: number }[][] = [];
-          for (let i = 0; i < 12; i++) {
-            const v = valueOf(y, i);
-            if (v == null) {
-              if (pts.length) runs.push(pts.splice(0));
-              continue;
-            }
-            pts.push({ x: xCenter(i), y: yOf(v) });
-          }
-          if (pts.length) runs.push(pts);
-          const lastPoint = runs.length ? runs[runs.length - 1][runs[runs.length - 1].length - 1] : null;
+        {/* 199: 過去の年度を先に描き、最新の年度を最前面に */}
+        {series.map(({ y, runs }) => {
+          const isLatest = y.year === latestYear;
+          const st = yearStyle(isLatest);
+          const color = fiscalYearColor(y.year);
           return (
-            <g key={y.year} opacity={st.opacity}>
-              {runs.map((run, ri) => (
-                <polyline
-                  key={ri}
-                  points={run.map((p) => `${p.x},${p.y}`).join(" ")}
-                  fill="none"
-                  stroke={color}
-                  strokeWidth={st.width}
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                />
-              ))}
-              {runs.flat().map((p, pi) => (
-                <circle key={pi} cx={p.x} cy={p.y} r={idx === 0 ? 2.8 : 2} fill={color} />
-              ))}
-              {lastPoint && (
-                <text
-                  x={Math.min(lastPoint.x + 5, width - 2)}
-                  y={lastPoint.y - 5}
-                  fontSize={9}
-                  fill={color}
-                  fontWeight={idx === 0 ? 700 : 400}
-                >
-                  {y.year}
-                </text>
+            <g key={y.year} data-fiscal-line={y.year} data-latest={isLatest ? "1" : "0"}>
+              {runs.map((run, ri) =>
+                run.length === 1 ? (
+                  // 1か月だけの線は点で見せる
+                  <circle key={ri} cx={run[0].x} cy={run[0].y} r={st.width} fill={color} />
+                ) : (
+                  <polyline
+                    key={ri}
+                    points={run.map((p) => `${p.x},${p.y}`).join(" ")}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth={st.width}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                  />
+                )
               )}
+              {st.points &&
+                runs.flat().map((p, pi) => (
+                  <circle key={pi} cx={p.x} cy={p.y} r={3.4} fill={color} stroke="#ffffff" strokeWidth={1.2} data-fiscal-point />
+                ))}
             </g>
+          );
+        })}
+        {/* 199: 線の右端に年度名（凡例を見に行かなくても分かる）。重ならないよう縦に押し分け済み */}
+        {series.map(({ y, last, text, w }) => {
+          if (!last) return null;
+          const isLatest = y.year === latestYear;
+          const ly = labelY.get(y.year) ?? last.y;
+          return (
+            <text
+              key={`label-${y.year}`}
+              x={Math.min(last.x + 6, width - w - 2)}
+              y={ly}
+              fontSize={LABEL_FONT}
+              fontWeight={isLatest ? 700 : 500}
+              fill={fiscalYearColor(y.year)}
+              stroke="#ffffff"
+              strokeWidth={3}
+              paintOrder="stroke"
+              data-fiscal-label={y.year}
+            >
+              {text}
+            </text>
           );
         })}
 
@@ -277,7 +361,9 @@ function FiscalLines({
             fill="transparent"
             onMouseEnter={() => setHover(i)}
             onMouseLeave={() => setHover(null)}
-            onClick={() => setHover((prev) => (prev === i ? null : i))}
+            // 199: タップではマウスの「乗った」と「クリック」が続けて起きるため、切り替えにすると
+            // 開いた直後に閉じてしまう（スマートフォンで値が出なかった）。タップはその月を開くだけにする
+            onClick={() => setHover(i)}
           />
         ))}
       </svg>
@@ -296,7 +382,8 @@ function FiscalLines({
             const p = y.points[hover];
             if (!p) return null;
             return (
-              <p key={y.year} className="text-[11px] text-gray-600 whitespace-nowrap">
+              <p key={y.year} className="text-[11px] text-gray-600 whitespace-nowrap flex items-center gap-1">
+                <YearDot year={y.year} />
                 <span className="font-medium text-gray-700">{y.year}年度</span>{" "}
                 保険 {p.insurance == null ? "―" : man(p.insurance)}／自費{" "}
                 {p.selfPay == null ? "―" : man(p.selfPay)}／
@@ -429,11 +516,17 @@ function MonthlyDiffTable({
           <tr className="text-gray-500 border-b border-gray-200">
             <th className="text-left font-medium py-1.5 w-[15%]">月</th>
             <th className="text-right font-medium py-1.5 w-[26%]">
-              {base ? base.label : "―"}
+              <span className="inline-flex items-center justify-end gap-1">
+                {base && <YearDot year={base.year} />}
+                {base ? base.label : "―"}
+              </span>
               <span className="block text-[10px] font-normal text-gray-400">基準</span>
             </th>
             <th className="text-right font-medium py-1.5 w-[26%]">
-              {target.label}
+              <span className="inline-flex items-center justify-end gap-1">
+                <YearDot year={target.year} />
+                {target.label}
+              </span>
               <span className="block text-[10px] font-normal text-gray-400">比べる</span>
             </th>
             <th className="text-right font-medium py-1.5 w-[33%]">差</th>
@@ -649,9 +742,28 @@ export function ClinicMetricsFiscal({
             ))}
           </div>
         </div>
+        {/* 199: 凡例（年度の色と同じ順＝古い年度から） */}
+        <div className="flex items-center gap-x-3 gap-y-1 flex-wrap px-1 mb-1" data-fiscal-legend>
+          {years.map((y, i) => (
+            <span key={y.year} className="flex items-center gap-1 text-[10px] text-gray-600">
+              <span
+                aria-hidden="true"
+                className="inline-block rounded-full"
+                style={{
+                  width: 14,
+                  height: i === years.length - 1 ? 3 : 2,
+                  backgroundColor: fiscalYearColor(y.year),
+                }}
+              />
+              <span className={i === years.length - 1 ? "font-semibold text-gray-800" : ""}>
+                {y.label}
+              </span>
+            </span>
+          ))}
+        </div>
         <FiscalLines years={years} startMonth={startMonth} metric={metric} width={width} />
         <p className="text-[10px] text-gray-400 px-1">
-          線に触れる（タップする）と、その月の保険・自費・合計が出ます。最新の年度が濃い線です。
+          線に触れる（タップする）と、その月の保険・自費・合計が出ます。年度ごとに色を分け、最新の年度は太い線と点です。
         </p>
       </div>
 
