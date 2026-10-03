@@ -430,3 +430,98 @@ export function buildFiscalYears(
 export function fiscalFirstYm(year: number, startMonth: number): string {
   return ymOfOffset(year, startMonth, 0);
 }
+
+// ─── 月ごとの比較（指示書198-補）───
+//
+// 2つの年度を同じ月どうしで並べ、各月の差を出す。
+// 合計は**両方の年度にデータがある月だけ**を足す（月数をそろえる）。
+
+/** 比べる値（グラフの切り替えと同じ） */
+export type FiscalMetric = "total" | "insurance" | "selfPay";
+
+export type FiscalDiffRow = {
+  offset: number;
+  /** 実際の月（6, 7, … 5） */
+  month: number;
+  /** 基準の年度の値（未集計は null） */
+  base: number | null;
+  /** 比べる年度の値（未集計は null） */
+  target: number | null;
+  /** 比べる年度 − 基準の年度（両方そろう月だけ） */
+  diff: number | null;
+  /** 増減率（基準が0・片方が未集計なら null） */
+  ratio: number | null;
+};
+
+export type FiscalDiffTable = {
+  rows: FiscalDiffRow[]; // 12件（年度の月順）
+  /** 両方にデータがある月だけの合計 */
+  baseTotal: number;
+  targetTotal: number;
+  diff: number;
+  ratio: number | null;
+  /** 合計に使った月（実際の月番号・年度の月順） */
+  commonMonths: number[];
+  /** 合計行の注記（例: "6〜8月の3か月で比較"） */
+  noteLabel: string;
+};
+
+function metricValue(
+  p: FiscalMonthPoint | null,
+  metric: FiscalMetric
+): number | null {
+  if (!p) return null;
+  if (metric === "total") return p.total;
+  return metric === "insurance" ? p.insurance : p.selfPay;
+}
+
+export function buildFiscalDiff(
+  base: FiscalYearSummary | null,
+  target: FiscalYearSummary | null,
+  metric: FiscalMetric,
+  startMonth: number
+): FiscalDiffTable {
+  const months = fiscalMonthSequence(startMonth);
+  const rows: FiscalDiffRow[] = [];
+  const commonOffsets: number[] = [];
+  let baseTotal = 0;
+  let targetTotal = 0;
+
+  for (let offset = 0; offset < 12; offset++) {
+    const b = metricValue(base?.points[offset] ?? null, metric);
+    const t = metricValue(target?.points[offset] ?? null, metric);
+    const both = b != null && t != null;
+    if (both) {
+      commonOffsets.push(offset);
+      baseTotal += b;
+      targetTotal += t;
+    }
+    rows.push({
+      offset,
+      month: months[offset],
+      base: b,
+      target: t,
+      diff: both ? t - b : null,
+      ratio: both && b !== 0 ? (t - b) / b : null,
+    });
+  }
+
+  const commonMonths = commonOffsets.map((o) => months[o]);
+  const n = commonOffsets.length;
+  let noteLabel: string;
+  if (n === 0) noteLabel = "比べられる月がありません";
+  else if (n === 1) noteLabel = `${commonMonths[0]}月の1か月で比較`;
+  else if (commonOffsets[n - 1] - commonOffsets[0] === n - 1)
+    noteLabel = `${commonMonths[0]}〜${commonMonths[n - 1]}月の${n}か月で比較`;
+  else noteLabel = `${n}か月で比較（両方そろっている月のみ）`;
+
+  return {
+    rows,
+    baseTotal,
+    targetTotal,
+    diff: targetTotal - baseTotal,
+    ratio: n > 0 && baseTotal !== 0 ? (targetTotal - baseTotal) / baseTotal : null,
+    commonMonths,
+    noteLabel,
+  };
+}

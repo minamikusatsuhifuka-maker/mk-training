@@ -2,7 +2,8 @@
 
 // 「📈 クリニックの歩み」— 年度で比べる（指示書198）
 // - 年度は始まりの年で呼ぶ（既定: 2022年度 = 2022年6月〜2023年5月）。始まりの月は院長が変更できる。
-// - ① 年度の合計（積み上げ棒・上に合計）② 月ごとに年度を重ねる（折れ線・6月→翌5月）③ 年度の表
+// - ① 年度の合計（積み上げ棒・上に合計）② 月ごとに年度を重ねる（折れ線・6月→翌5月）
+//   ③ 月ごとの比較表（198-補・前年との差。上回る=緑▲／下回る=赤▼／同じ=灰±0）④ 年度の表
 // - 12か月に満たない年度は薄く・月数を添える。前年度比は**前年度の同じ月どうし**。
 // - 色は「月の推移」と同じ（METRIC_COLOR）。純SVG・コンテナ幅に収める（横スクロールさせない）。
 //
@@ -12,16 +13,18 @@ import { useMemo, useRef, useState } from "react";
 import {
   METRICS_SOURCE_NOTE,
   METRIC_COLOR,
+  buildFiscalDiff,
   buildFiscalYears,
   fiscalMonthSequence,
   fiscalStartMonthOf,
   niceCeil,
   type ClinicMetrics,
+  type FiscalMetric,
   type FiscalYearSummary,
 } from "@/lib/clinic-metrics";
 
-/** 折れ線で見る値 */
-type LineMetric = "total" | "insurance" | "selfPay";
+/** 折れ線・比較表で見る値（グラフと表で同じ切り替えを使う＝198-補 1-1） */
+type LineMetric = FiscalMetric;
 const LINE_METRICS: { key: LineMetric; label: string; color: string }[] = [
   { key: "total", label: "合計", color: METRIC_COLOR.total },
   { key: "insurance", label: "保険", color: METRIC_COLOR.insurance },
@@ -310,7 +313,171 @@ function FiscalLines({
   );
 }
 
-// ─── ③ 年度の表 ───
+// ─── ③ 月ごとの比較表（198-補）───
+//
+// 色だけに頼らず ▲▼ の記号も必ず付ける（色の見分けにくい方・白黒印刷でも分かるように）。
+// 列は4つだけ（月・基準・比べる・差）。罫線は横線のみ・数字は右寄せ・桁区切り。
+
+const UP_COLOR = "text-emerald-700";
+const DOWN_COLOR = "text-red-600";
+const FLAT_COLOR = "text-gray-400";
+
+/** 差の表示（記号・符号・色をまとめて決める） */
+function diffParts(diff: number | null, ratio: number | null) {
+  if (diff == null) return null;
+  const rounded = Math.round(diff);
+  // 同じときは記号も符号も付けず、灰色の「±0」だけにする（198-補 1-2）
+  if (rounded === 0) return { mark: "", color: FLAT_COLOR, amount: "±0", pct: "" };
+  const mark = rounded > 0 ? "▲" : "▼";
+  const color = rounded > 0 ? UP_COLOR : DOWN_COLOR;
+  const amount = `${rounded > 0 ? "+" : "−"}${Math.abs(rounded).toLocaleString("ja-JP")}`;
+  const pct =
+    ratio == null
+      ? ""
+      : `（${ratio > 0 ? "+" : "−"}${Math.abs(Math.round(ratio * 100))}%）`;
+  return { mark, color, amount, pct };
+}
+
+function DiffCell({ diff, ratio }: { diff: number | null; ratio: number | null }) {
+  const p = diffParts(diff, ratio);
+  if (!p) return <span className="text-gray-400">―</span>;
+  return (
+    <span className={`${p.color} tabular-nums`}>
+      <span className="whitespace-nowrap">
+        {p.mark ? `${p.mark} ` : ""}
+        {p.amount}
+      </span>
+      {p.pct && (
+        <span className="block text-[10px] leading-tight opacity-80">{p.pct}</span>
+      )}
+    </span>
+  );
+}
+
+function MonthlyDiffTable({
+  years,
+  startMonth,
+  metric,
+}: {
+  years: FiscalYearSummary[];
+  startMonth: number;
+  metric: LineMetric;
+}) {
+  // 既定: 最新の年度（比べる）と その前年度（基準）
+  const latest = years[years.length - 1];
+  const prev = years[years.length - 2];
+  const [targetYear, setTargetYear] = useState<number>(latest.year);
+  const [baseYear, setBaseYear] = useState<number>(prev ? prev.year : latest.year);
+
+  const target = years.find((y) => y.year === targetYear) ?? latest;
+  const base = years.find((y) => y.year === baseYear) ?? null;
+  const metricLabel = LINE_METRICS.find((m) => m.key === metric)!.label;
+  const table = useMemo(
+    () => buildFiscalDiff(base, target, metric, startMonth),
+    [base, target, metric, startMonth]
+  );
+
+  const cell = (v: number | null) =>
+    v == null ? (
+      <span className="text-gray-400 text-[11px]">未集計</span>
+    ) : (
+      <span className="tabular-nums">{man(v)}</span>
+    );
+
+  return (
+    <div className="bg-white border border-gray-100 rounded-xl p-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+        <p className="text-[11px] font-medium text-gray-600">
+          月ごとの比較（{metricLabel}・万円）
+        </p>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <label className="text-[11px] text-gray-500">
+            基準
+            <select
+              value={baseYear}
+              onChange={(e) => setBaseYear(Number(e.target.value))}
+              aria-label="基準にする年度"
+              className="ml-1 h-7 rounded border border-gray-200 px-1 text-xs bg-white"
+            >
+              {years.map((y) => (
+                <option key={y.year} value={y.year}>
+                  {y.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-[11px] text-gray-500">
+            比べる
+            <select
+              value={targetYear}
+              onChange={(e) => setTargetYear(Number(e.target.value))}
+              aria-label="比べる年度"
+              className="ml-1 h-7 rounded border border-gray-200 px-1 text-xs bg-white"
+            >
+              {years.map((y) => (
+                <option key={y.year} value={y.year}>
+                  {y.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <table className="w-full text-xs table-fixed">
+        <thead>
+          <tr className="text-gray-500 border-b border-gray-200">
+            <th className="text-left font-medium py-1.5 w-[15%]">月</th>
+            <th className="text-right font-medium py-1.5 w-[26%]">
+              {base ? base.label : "―"}
+              <span className="block text-[10px] font-normal text-gray-400">基準</span>
+            </th>
+            <th className="text-right font-medium py-1.5 w-[26%]">
+              {target.label}
+              <span className="block text-[10px] font-normal text-gray-400">比べる</span>
+            </th>
+            <th className="text-right font-medium py-1.5 w-[33%]">差</th>
+          </tr>
+        </thead>
+        <tbody>
+          {table.rows.map((r) => (
+            <tr key={r.offset} className="border-b border-gray-100">
+              <td className="py-1.5 text-gray-600">{r.month}月</td>
+              <td className="py-1.5 text-right text-gray-700">{cell(r.base)}</td>
+              <td className="py-1.5 text-right text-gray-700">{cell(r.target)}</td>
+              <td className="py-1.5 text-right">
+                <DiffCell diff={r.diff} ratio={r.ratio} />
+              </td>
+            </tr>
+          ))}
+          <tr className="border-b-2 border-gray-300 bg-gray-50/60">
+            <td className="py-1.5 font-semibold text-gray-700">合計</td>
+            <td className="py-1.5 text-right font-semibold text-gray-800 tabular-nums">
+              {man(table.baseTotal)}
+            </td>
+            <td className="py-1.5 text-right font-semibold text-gray-800 tabular-nums">
+              {man(table.targetTotal)}
+            </td>
+            <td className="py-1.5 text-right font-semibold">
+              {table.commonMonths.length > 0 ? (
+                <DiffCell diff={table.diff} ratio={table.ratio} />
+              ) : (
+                <span className="text-gray-400">―</span>
+              )}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p className="text-[10px] text-gray-400 mt-1.5 leading-relaxed">
+        合計は両方の年度にそろっている月だけで比べています（{table.noteLabel}）。
+        <br />
+        ▲は上回っている月（緑）、▼は下回っている月（赤）、±0は同じです。
+      </p>
+    </div>
+  );
+}
+
+// ─── ④ 年度の表 ───
 
 function ratioText(r: number | null): string {
   return r == null ? "―" : `${(r * 100).toFixed(1)}%`;
@@ -488,7 +655,16 @@ export function ClinicMetricsFiscal({
         </p>
       </div>
 
-      {/* ③ 年度の表 */}
+      {/* ③ 月ごとの比較表（198-補・グラフの下・指標は上の切り替えと連動） */}
+      {years.length >= 2 ? (
+        <MonthlyDiffTable years={years} startMonth={startMonth} metric={metric} />
+      ) : (
+        <p className="text-[11px] text-gray-500 px-1">
+          年度が2つそろうと、月ごとの比較表が出ます。
+        </p>
+      )}
+
+      {/* ④ 年度の表 */}
       <div className="bg-white border border-gray-100 rounded-xl p-3">
         <p className="text-[11px] font-medium text-gray-600 mb-1">年度の表（万円）</p>
         <FiscalTable years={years} />
