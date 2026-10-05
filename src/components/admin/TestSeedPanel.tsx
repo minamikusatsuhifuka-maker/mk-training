@@ -16,11 +16,39 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return j;
 }
 
+// 一括削除の対象一覧の読み方（203 §3-8）。知らない種類はそのまま出す（取りこぼしに気づけるように）
+const COUNT_LABEL: Record<string, string> = {
+  learning: "学びの記録",
+  goal: "目標",
+  feedback: "フィードバック",
+  promise: "1on1の約束の取り組み状況",
+  schedule: "次回1on1の予定",
+  course: "講座",
+  grade: "等級・キャリアライン",
+  gate_check: "ゲートの確認",
+  matrix_review: "合意した位置",
+  pref: "表示の設定",
+  "private:one_on_one": "1on1の記録",
+  "private:one_on_one_presurvey": "1on1の事前アンケートの回答",
+  "private:self_review": "自己評価シート",
+  private_store: "（private_store 合計）",
+  contacts: "連絡先",
+  hiring_docs: "採用資料",
+  prospects: "入職予定者",
+};
+
+function countLines(counts: Record<string, number>): string {
+  return Object.entries(counts)
+    .filter(([k]) => k !== "private_store")
+    .map(([k, v]) => `${COUNT_LABEL[k] ?? k} ${v}`)
+    .join("・");
+}
+
 const inputClass = "w-full rounded-md border border-gray-200 px-3 py-2 text-sm min-h-[44px] bg-white";
 
 const DATA_LIST = [
-  "テスト花子: 連絡先（架空の住所・電話・緊急連絡先・家族構成）／学びの記録 2件（ATC 初回・2回目、複数日）／目標 6件（目的→3年後→年間→半期→月→週）／院長との1on1 2回（約束と取り組み状況）／フィードバック 3件（ポジティブ2・ギャップ1）／5つの基本的欲求サーベイ 2回分（詳細も公開）／自己評価シート（S1×M1・G1→G2 の到達状態）／ゲート「医療安全・感染対策の理解」の確認○／合意した位置 1件（半期面談）",
-  "テスト次郎: 学びの記録 3件（ATC・ダイナミック・リードマネジメント）／自己評価の位置 S3×M3／テスト花子の担当幹部に指定",
+  "テスト花子: 連絡先（架空の住所・電話・緊急連絡先・家族構成）／学びの記録 2件（ATC 初回・2回目、複数日）／目標 6件（目的→3年後→年間→半期→月→週）／院長との1on1 4回（6/1・7/7・8/4・9/1。約束と取り組み状況つき）／テスト次郎（担当幹部）が記録した1on1 1回（9/22）／フィードバック 3件（ポジティブ2・ギャップ1）／5つの基本的欲求サーベイ 2回分（詳細も公開）／自己評価シート（S1×M1・G1→G2 の到達状態）／ゲート「医療安全・感染対策の理解」の確認○／合意した位置 1件（半期面談）",
+  "テスト次郎: 学びの記録 3件（ATC・ダイナミック・リードマネジメント）／自己評価の位置 S3×M3／テスト花子の担当幹部に指定／院長との1on1 1回（9/15。約束と取り組み状況つき）／次回1on1の予定 10/20（相手：院長）と、その回答済みの事前アンケート 1件",
   `入職予定者「${TEST_PROSPECT_NAME}」: 面接の記録（架空の文章）を登録済み`,
   "作らないもの: お知らせ・気づき・ありがとうカード・書類進捗・ヒヤリハットなどの投稿、採用資料・スカウターの原本（画像・PDF）",
 ];
@@ -114,7 +142,11 @@ export function TestSeedPanel() {
             ))}
             <li>{TEST_PROSPECT_NAME} — {status.prospect ? "登録済み" : "未登録"}</li>
           </ul>
-          {Object.keys(status.counts).length > 0 && <p className="text-[11px] text-gray-600">紐づく記録: {Object.entries(status.counts).map(([k, v]) => `${k} ${v}`).join("・")}</p>}
+          {Object.keys(status.counts).length > 0 && (
+            <p className="text-[11px] text-gray-600" data-seed-counts>
+              一括削除の対象: {countLines(status.counts)}
+            </p>
+          )}
         </div>
       )}
 

@@ -9,10 +9,9 @@ import {
   type NavConfig,
   type ResolvedCategory,
 } from "@/lib/nav";
-import {
-  getFeatureFlags,
-  DEFAULT_FEATURE_FLAGS,
-} from "@/lib/feature-flags";
+import { DEFAULT_FEATURE_FLAGS } from "@/lib/feature-flags";
+// 203 §1: 機能フラグは「自分の立場で」サーバーに解決してもらう（院長・検証用アカウントは準備中も開ける）
+import { fetchViewerFlags } from "@/lib/viewer-flags";
 
 // スタッフ側サイドバー用。まず既定（マスター）で即描画し、その後 content_store の設定を反映する。
 // 取得失敗・未設定・不正時は既定にフォールバックするため、メニューが消えない。
@@ -53,7 +52,7 @@ export function useResolvedNav(): ResolvedCategory[] {
     let active = true;
     Promise.all([
       getContentObject<NavConfig>(NAV_CONFIG_KEY).catch(() => null),
-      getFeatureFlags().catch(() => DEFAULT_FEATURE_FLAGS),
+      fetchViewerFlags().then((v) => v.flags).catch(() => DEFAULT_FEATURE_FLAGS),
     ])
       .then(([cfg, flags]) => {
         if (active) setCategories(resolveNav(cfg, flags));

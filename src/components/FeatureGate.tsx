@@ -1,15 +1,25 @@
 "use client";
 
-// 機能フラグのアクセスガード（指示書103）
+// 機能フラグのアクセスガード（指示書103 → 203 §1）
 // OFFの機能ページに直URLでアクセスされた場合に「準備中」を表示する。
 // 各機能ページは <FeatureGate feature="hiyari">…</FeatureGate> で包むだけでよい。
 // ロード前は中身を出さない（既定全OFFのフェイルセーフと同じ向き）。
 // ※ 既存ページの公開スイッチ（指示書124・既定ON・fail-open）は PageAccessGate 側。
 //   「準備中」表示は FeatureUnavailable として共通化し両者で使う（重複実装禁止）。
+//
+// 【203 §1: 院長（と検証用アカウント）はOFFでも開ける】
+// 判定は /api/feature-flags（サーバー）が行う。ここは結果を受け取って、
+// 「準備中だが開けている」ときに帯を出すだけ。スタッフには従来どおり「準備中」。
+// この1か所で済むので、自己評価シート・事前アンケートなどOFFの他の機能にも同じように効く。
 
 import Link from "next/link";
 import { useFeatureFlags } from "@/lib/use-feature-flags";
-import type { FeatureId } from "@/lib/feature-flags";
+import {
+  FEATURE_PREVIEW_DETAIL,
+  FEATURE_PREVIEW_TITLE,
+  type FeatureId,
+  type PreviewReason,
+} from "@/lib/feature-flags";
 
 // 「準備中」表示（指示書103の文言のまま・FeatureGate と PageAccessGate で共用）
 export function FeatureUnavailable() {
@@ -32,6 +42,22 @@ export function FeatureUnavailable() {
   );
 }
 
+/** 203 §1: 「準備中なのに開けている」ことを、開いている人に必ず知らせる帯 */
+export function FeaturePreviewBanner({ reason }: { reason: Exclude<PreviewReason, ""> }) {
+  return (
+    <div
+      className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 space-y-0.5"
+      data-feature-preview={reason}
+      role="status"
+    >
+      <p className="text-sm font-bold text-amber-900">🔒 {FEATURE_PREVIEW_TITLE}</p>
+      <p className="text-[11px] text-amber-900 leading-relaxed">
+        {FEATURE_PREVIEW_DETAIL[reason]}
+      </p>
+    </div>
+  );
+}
+
 export default function FeatureGate({
   feature,
   children,
@@ -39,7 +65,7 @@ export default function FeatureGate({
   feature: FeatureId;
   children: React.ReactNode;
 }) {
-  const { flags, loaded } = useFeatureFlags();
+  const { flags, loaded, previewReason, previewIds } = useFeatureFlags();
 
   if (!loaded) {
     return (
@@ -53,5 +79,13 @@ export default function FeatureGate({
     return <FeatureUnavailable />;
   }
 
-  return <>{children}</>;
+  // 保存はOFF＝スタッフには出ていない。開いている人にだけ帯を出す
+  const previewing = previewReason !== "" && previewIds.includes(feature);
+
+  return (
+    <>
+      {previewing && <FeaturePreviewBanner reason={previewReason} />}
+      {children}
+    </>
+  );
 }

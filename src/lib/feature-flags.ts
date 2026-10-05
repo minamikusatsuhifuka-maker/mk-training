@@ -221,16 +221,57 @@ export async function getFeatureFlags(): Promise<FeatureFlags> {
   return next;
 }
 
+// ─── プレビュー（指示書191-補・203 §1）───
+//
+// 「準備中」の機能を、**公開前に中の人だけが開けるようにする**ための仕組み。
+//   ・院長（app_metadata.role === "admin"）… 203 §1。スタッフに出す前に自分で確かめる
+//   ・検証用アカウント（app_metadata.test_seed）… 191-補。スタッフの立場で確かめる
+// どちらも**保存された機能フラグは書き換えない**（スタッフから見た状態は変わらない）。
+// 判定は必ずサーバー（/api/feature-flags）で行う。画面の値は表示のためだけに使う。
+// **新しい機能フラグは作らない**（203 §1）。
+
+/** プレビューしている理由（画面の帯の文言を分ける） */
+export type PreviewReason = "" | "admin" | "test_seed";
+
+/** 帯の見出し（203 §1・文言を変えないこと） */
+export const FEATURE_PREVIEW_TITLE = "準備中：スタッフには表示されていません";
+
+export const FEATURE_PREVIEW_DETAIL: Record<Exclude<PreviewReason, "">, string> = {
+  admin:
+    "院長だけが見ているプレビューです。スタッフに公開するときは、管理画面の「⚙ 機能」で この機能をONにしてください。",
+  test_seed:
+    "検証用アカウントだけが見ているプレビューです。一般のスタッフには「準備中」のままです。",
+};
+
 /**
- * 191-補: 検証用アカウント（app_metadata.test_seed）には、機能フラグがOFFの機能も表示する。
- * 実装済みの機能フラグ（IMPLEMENTED_FEATURES）だけをONに倒す。page系（ページ公開）は触らない。
- * 一般スタッフには適用しない（保存されたフラグのまま）。
+ * プレビューできる立場かを決める（203 §3-7 をここ1か所で確かめられるようにする）。
+ * **院長が先・次に検証用アカウント**。それ以外は空＝「準備中」のまま。
+ * 役割の読み取りはサーバーだけが行い（feature-preview-server.ts）、この関数は判定の規則だけを持つ。
  */
-export function withTestSeedOverride(flags: FeatureFlags, testSeed: boolean): FeatureFlags {
-  if (!testSeed) return flags;
+export function previewReasonFor(roles: { isAdmin: boolean; testSeed: boolean }): PreviewReason {
+  if (roles.isAdmin) return "admin";
+  if (roles.testSeed) return "test_seed";
+  return "";
+}
+
+/**
+ * 実装済みの機能フラグ（IMPLEMENTED_FEATURES）だけをONに倒す。
+ * page系（ページ公開・既定ON）は触らない。プレビューでない人には何もしない。
+ */
+export function withPreviewOverride(flags: FeatureFlags, preview: boolean): FeatureFlags {
+  if (!preview) return flags;
   const next = { ...flags };
   for (const id of IMPLEMENTED_FEATURES) next[id] = true;
   return next;
+}
+
+/**
+ * 「保存はOFFだが、プレビューで開けている」機能の一覧。
+ * 画面はこれに当たる機能だけに帯を出す（ONの機能に帯を出さない）。
+ */
+export function previewFeatureIds(stored: FeatureFlags, preview: boolean): FeatureId[] {
+  if (!preview) return [];
+  return Array.from(IMPLEMENTED_FEATURES).filter((id) => !stored[id]);
 }
 
 // 単一機能の有効判定

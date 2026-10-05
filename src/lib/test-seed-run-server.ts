@@ -9,7 +9,7 @@
 
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { GROWTH_TABLE, fetchCourses, fetchLearning, newGrowthId, recordGrowthLog } from "./staff-growth-server";
-import { normalizeCourse, normalizeCourseName, normalizeFeedback, normalizeGoal, normalizeLearning, type Course } from "./staff-growth";
+import { normalizeCourse, normalizeCourseName, normalizeFeedback, normalizeGoal, normalizeLearning, promiseStatusId, type Course, type PromiseStatusValue } from "./staff-growth";
 import { HIRING_BUCKET, deleteHiringDoc, ensureHiringBucket, fetchHiringDocs, fetchProspects, recordHiringLog, saveHiringDoc, saveProspect, deleteProspectRow } from "./hiring-docs-server";
 import { normalizeHiringDoc, normalizeProspect } from "./hiring-docs";
 import { fetchAllStaffContacts, saveStaffContactRow, deleteStaffContactRow, recordStaffContactLog } from "./staff-contacts-server";
@@ -21,6 +21,8 @@ import { surveyHistoryKey, entryFromSurvey } from "./survey-history";
 import type { NeedsSurvey } from "./needs-survey";
 import { saveKarteAssignment, loadDelegationSnapshot } from "./admin-delegation-server";
 import { emptySelfReviewData, SELF_REVIEW_CONFIG_KEY } from "./self-review";
+import { emptyPresurveyAnswer, loadPresurveyQuestions, visiblePresurveyQuestions } from "./one-on-one-presurvey";
+import { SEED203_JIRO_ANSWERS, SEED203_JIRO_PRESURVEY_AT, SEED203_JIRO_PRESURVEY_KEY, SEED203_JIRO_SCHEDULE, SEED203_LEGACY_PROMISE_IDS, SEED203_NOTES } from "./test-seed-203";
 import { fetchGates, saveGateCheck, saveMatrixReview, saveStaffGrade, seedGates } from "./growth-matrix-server";
 import { SEED_MARK, TEST_ACCOUNTS, TEST_PROSPECT_NAME, TEST_SEED_FLAG, isTestSeedUser, onlyTestIds, type TestAccountDef } from "./test-seed";
 import { clearTestSeedCache } from "./test-seed-server";
@@ -33,6 +35,12 @@ export type SeedResult = { accounts: SeedAccountStatus[]; created: Record<string
 export type PurgeResult = { deleted: Record<string, number>; foreignBlocked: string[] };
 
 const PROSPECT_ID = "prospect-seed191-saburo";
+/** private_store の種類の日本語名（削除した件数の表示用） */
+const PRIVATE_LABEL: Record<string, string> = {
+  self_review: "自己評価シート",
+  one_on_one: "1on1の記録",
+  one_on_one_presurvey: "1on1の事前アンケートの回答",
+};
 const H = (k: string) => `seed191-h-${k}`;
 const J = (k: string) => `seed191-j-${k}`;
 
@@ -219,18 +227,94 @@ export async function seedTestData(admin: Admin, by: string, directorId: string,
   await goal(H("goal-month"), "monthly", H("goal-half"), "今月: 処置の手順書を3つ読み合わせる（検証用）", "");
   await goal(H("goal-week"), "weekly", H("goal-month"), "今週: 先輩の処置を2回見学する（検証用）", "");
 
-  // 7. 1on1（院長との2回・約束つき）と取り組み状況
-  const oneOnOne = async (key: string, heldOn: string, theme: string, kizuki: string, nextStep: string) => {
-    await upsertPrivate(admin, directorId, "one_on_one", key, { mode: "quick", heldOn, participantIds: [hid], partnerName: TEST_ACCOUNTS[0].displayName, authorName: "院長", sections: { theme, kizuki, nextStep }, jitsuChecks: [], rwdepc: { w: "", d: "", e: "", p: "", c: "" }, createdAt: `${heldOn}T09:00:00.000Z`, updatedAt: `${heldOn}T09:00:00.000Z` });
+  // 7. 1on1の記録と、約束の取り組み状況・次回の予定・事前アンケートの回答（191＋指示書203 §2）
+  //
+  // 入れる値の正本は test-seed-203.ts（純粋データ）。ここは書き込むだけ。
+  //   ・記録は1on1ノートの「クイックメモ」の3欄（話したテーマ／気づき・学び／次の一歩）に入れる
+  //     ＝実在する欄に合わせる（203 §2）。RWDEPCの5欄はクイックメモでは画面に出ないので使わない
+  //   ・7つの実チェックはその回の内容と矛盾しないものを1〜2項目だけ（点数・人物評価の言葉は入れない）
+  //   ・既存の6/1・9/1の内容は変えない
+  const idOf = { hanako: hid, jiro: jid, director: directorId } as const;
+  const nameOfSeed = { hanako: TEST_ACCOUNTS[0].displayName, jiro: TEST_ACCOUNTS[1].displayName, director: "院長" } as const;
+
+  for (const n of SEED203_NOTES) {
+    const ownerId = idOf[n.author];
+    const partnerId = idOf[n.staff];
+    await upsertPrivate(admin, ownerId, "one_on_one", n.key, {
+      mode: "quick",
+      heldOn: n.heldOn,
+      participantIds: [partnerId],
+      partnerName: nameOfSeed[n.staff],
+      authorName: nameOfSeed[n.author],
+      sections: { ...n.sections },
+      jitsuChecks: [...n.jitsuChecks],
+      rwdepc: { w: "", d: "", e: "", p: "", c: "" },
+      createdAt: `${n.heldOn}T09:00:00.000Z`,
+      updatedAt: `${n.heldOn}T09:00:00.000Z`,
+    });
     bump("1on1");
-  };
-  const k1 = "20260601-seed01";
-  const k2 = "20260901-seed02";
-  await oneOnOne(k1, "2026-06-01", "入職2か月の振り返り（検証用）", "報連相のタイミングに迷いがある", "迷ったら5分以内に先輩に声をかける");
-  await oneOnOne(k2, "2026-09-01", "上期の振り返り（検証用）", "処置の準備が早くなった", "次の1on1までに処置手順書を1つ作る");
-  await upsertGrowth(admin, "promise", H("promise-1"), { userId: hid, oneOnOneKey: k1, ownerId: directorId, status: "done", note: "先輩に声をかけられるようになった（検証用）", updatedAt: now }, by);
-  await upsertGrowth(admin, "promise", H("promise-2"), { userId: hid, oneOnOneKey: k2, ownerId: directorId, status: "in_progress", note: "手順書を下書き中（検証用）", updatedAt: now }, by);
-  bump("1on1の約束の取り組み状況", 2);
+  }
+
+  // 約束の取り組み状況。
+  // 行idは**本人が画面から書いたときと同じ形**（promiseStatusId）にそろえる。
+  // 191の初版は seed191-h-promise-N で、本人が取り組み状況を書くとAPIが別idの行を作り、
+  // 同じ回に2行できてしまっていた。初版の行は片付ける（検証用の印が付いた行だけ）。
+  for (const legacyId of SEED203_LEGACY_PROMISE_IDS) {
+    const { error } = await admin.from(GROWTH_TABLE).delete().eq("id", legacyId).eq("record_type", "promise");
+    if (error) throw new Error(error.message);
+  }
+  for (const n of SEED203_NOTES) {
+    const userId = idOf[n.staff];
+    const ownerId = idOf[n.author];
+    const status: PromiseStatusValue = n.promise.status;
+    await upsertGrowth(admin, "promise", promiseStatusId(userId, ownerId, n.key), { userId, oneOnOneKey: n.key, ownerId, status, note: n.promise.note, updatedAt: now }, by);
+    bump("1on1の約束の取り組み状況");
+  }
+
+  // 203 §2-2 テスト次郎の次回1on1の予定（相手：院長）。179のテーブル（record_type="schedule"）に
+  // 検証用の印を付けて入れる＝一括削除の対象一覧に入る
+  await upsertGrowth(admin, "schedule", SEED203_JIRO_SCHEDULE.id, {
+    userId: jid,
+    date: SEED203_JIRO_SCHEDULE.date,
+    time: SEED203_JIRO_SCHEDULE.time,
+    partnerId: directorId,
+    partnerName: "院長",
+    partnerIsDirector: true,
+    createdById: directorId,
+    registeredOn: SEED203_JIRO_SCHEDULE.registeredOn,
+    createdAt: SEED203_JIRO_SCHEDULE.at,
+    updatedAt: SEED203_JIRO_SCHEDULE.at,
+  }, by);
+  bump("次回1on1の予定");
+
+  // 回答は**いまの質問定義**に合わせて作る（院長が質問文を直していればその文言で保存される）。
+  // 197の規則どおり、回答時点の質問文・役割・置き場所を一緒に保存する。
+  // 選択肢はその質問に実在するものだけ使う（院長が選択肢を変えていても壊れない）。
+  const presurveyQuestions = await loadPresurveyQuestions();
+  const presurveyAnswers = visiblePresurveyQuestions(presurveyQuestions)
+    .filter((q) => SEED203_JIRO_ANSWERS[q.id])
+    .map((q) => {
+      const v = SEED203_JIRO_ANSWERS[q.id];
+      return {
+        ...emptyPresurveyAnswer(q),
+        choice: v.choice && q.choices.includes(v.choice) ? v.choice : "",
+        text: v.text ?? "",
+      };
+    });
+  await upsertPrivate(admin, jid, "one_on_one_presurvey", SEED203_JIRO_PRESURVEY_KEY, {
+    heldOn: SEED203_JIRO_SCHEDULE.date,
+    scheduleId: SEED203_JIRO_SCHEDULE.id,
+    participantIds: [directorId],
+    partnerName: "院長",
+    authorName: TEST_ACCOUNTS[1].displayName,
+    answers: presurveyAnswers,
+    submittedAt: SEED203_JIRO_PRESURVEY_AT,
+    createdAt: SEED203_JIRO_PRESURVEY_AT,
+    updatedAt: SEED203_JIRO_PRESURVEY_AT,
+  });
+  bump("1on1の事前アンケートの回答");
+  // テスト花子の10/13の予定と、その未回答の事前アンケートは**作らない**（203 §2）。
+  // 院長が197の知らせ・回答を自分で試すため、未回答のままにしておく。
 
   // 8. フィードバック（ポジティブ2件・ギャップ1件）
   const fb = async (id: string, raw: Record<string, unknown>) => {
@@ -259,7 +343,7 @@ export async function seedTestData(admin: Admin, by: string, directorId: string,
     nextAxisReason: "まず基本処置を一人でできるようになりたい（検証用）",
     items: {
       "g1_g2:s:3": { status: "reached", evidence: [{ date: "2026-08-30", scene: "任された手順書3つを期限までに作りきった（検証用）", linkKind: "", linkId: "", linkLabel: "" }] },
-      "g1_g2:m:1": { status: "reached", evidence: [{ date: "2026-06-01", scene: "1on1で迷いを自分から報告した（検証用）", linkKind: "promise", linkId: k1, linkLabel: "1on1の約束: 迷ったら5分以内に先輩に声をかける" }] },
+      "g1_g2:m:1": { status: "reached", evidence: [{ date: "2026-06-01", scene: "1on1で迷いを自分から報告した（検証用）", linkKind: "promise", linkId: SEED203_NOTES[0].key, linkLabel: "1on1の約束: 迷ったら5分以内に先輩に声をかける" }] },
       "g1_g2:s:1": { status: "in_progress", evidence: [] },
       "g1_g2:s:2": { status: "in_progress", evidence: [] },
       "g1_g2:m:2": { status: "in_progress", evidence: [] },
@@ -387,6 +471,12 @@ async function countTargets(admin: Admin, testIds: Set<string>): Promise<Record<
   const { targets } = await collectTargets(admin, testIds);
   const byType: Record<string, number> = {};
   for (const g of targets.growth) byType[g.record_type] = (byType[g.record_type] ?? 0) + 1;
+  // 203 §3-8: 1on1の記録・事前アンケートの回答・自己評価を**種類ごと**に出す
+  // （private_store のまとめ数だけでは「回答が対象に入っているか」が分からない）
+  for (const r of targets.privateRows) {
+    const k = `private:${r.content_type}`;
+    byType[k] = (byType[k] ?? 0) + 1;
+  }
   return { ...byType, private_store: targets.privateRows.length, contacts: targets.contactIds.length, hiring_docs: targets.hiringDocs.length, prospects: targets.prospectIds.length };
 }
 
@@ -414,7 +504,7 @@ export async function purgeTestData(admin: Admin, by: string): Promise<PurgeResu
   for (const r of targets.privateRows) {
     const { error } = await admin.from("private_store").delete().eq("owner_id", r.owner_id).eq("content_type", r.content_type).eq("record_key", r.record_key);
     if (error) throw new Error(error.message);
-    add(`${r.content_type === "self_review" ? "自己評価シート" : "1on1"}`, 1);
+    add(PRIVATE_LABEL[r.content_type] ?? r.content_type, 1);
   }
   // 3. 連絡先
   for (const id of targets.contactIds) {
