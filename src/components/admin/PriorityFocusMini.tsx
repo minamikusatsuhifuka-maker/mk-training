@@ -56,7 +56,7 @@ export function PriorityFocusMini() {
       </div>
       {tasks.length === 0 ? (
         <p className="mt-1 text-[11px] text-amber-800">
-          四象限マトリクスでタスクに★を付けると、ここに最大{FOCUS_MAX}件まで出ます。
+          四象限マトリクスで行の★を押すと、ここに最大{FOCUS_MAX}件まで出ます。
         </p>
       ) : (
         <ul className="mt-1 space-y-0.5">
