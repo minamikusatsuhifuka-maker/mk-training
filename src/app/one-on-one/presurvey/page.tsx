@@ -1,13 +1,16 @@
 "use client";
 
-// 📝 1on1の事前アンケート（指示書197・197-補／機能ID one_on_one_presurvey）
-// - 本人が1on1の前に答える。並びは選択理論の面談の流れ（願望 → 行動 → 自己評価 → 計画・約束）。
+// 📝 1on1の事前アンケート（指示書197・197-補・200 → 204 v2で2部構成／機能ID one_on_one_presurvey）
+//
+// - 本人が1on1の前に答える。**第1部「働く目的と目標」／第2部「今回の1on1」**の2部構成。
+// - 第1部には前回の答え（＝育成カルテの目標）が入った状態で出る。1-2だけは毎回まっさらから。
 // - 200: 回答は **院長・担当幹部が登録した「次回1on1の予定」にだけ** ひもづける。
 //   本人が日付・相手を選ぶ欄は無い（予定の日時と担当者は表示だけ）。予定が無ければ回答欄を出さない。
-//   保存は /api/one-on-one/presurvey（日付と担当者は予定からサーバーが決める）。
-// - 回答を読めるのは本人・院長・その1on1の担当者（院長が指定した人）だけ（判定はサーバー側）。
+// - 204 §5: 回答を読めるのは**本人・院長・院長が指定した管理者**だけ（判定はサーバー側）。
+//   画面上部に、その時点の**実際の名前**を出す。
+// - 204 §4: 提出すると、第1部の変わった段だけカルテの目標が更新される。
+//   開いたあとに他の画面で目標が変わっていたら、上書きせず赤い帯で止める。
 // - 回答は評価に使わない（冒頭に常時表示）。集計・スコア・ランキングは作らない。
-// - 自動表示（本人の目標・前回の回答・前回の約束）は取れなければ静かに案内だけ出す。
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -25,26 +28,32 @@ import {
   PRESURVEY_INTRO,
   PRESURVEY_LEAD,
   PRESURVEY_NO_SCHEDULE,
-  DEFAULT_PRESURVEY_QUESTIONS,
+  PRESURVEY_PART1_NOTICE,
+  PRESURVEY_PARTS,
+  answerSummary,
+  defaultPresurveyQuestions,
   emptyPresurveyAnswer,
   hasAnyAnswer,
+  isKarteLinked,
+  isLegacyPresurvey,
   loadPresurveyQuestions,
   normalizePresurveyData,
+  presurveyAnswerViewerNotice,
+  presurveyDeadlineNotice,
+  presurveyKarteViewerNotice,
+  questionsOfPart,
   sortPresurveys,
   unansweredRequired,
   visiblePresurveyQuestions,
-  answerSummary,
   type PresurveyAnswer,
   type PresurveyQuestion,
 } from "@/lib/one-on-one-presurvey";
 import {
   PresurveyQuestionBlock,
-  type PresurveyGoalHint,
   type PresurveyPromiseHint,
 } from "@/components/PresurveyForm";
 import { normalizeOneOnOneData } from "@/lib/one-on-one";
-import { promiseTextOf, goalLevelLabel } from "@/lib/staff-growth";
-import { fetchGoalsApi } from "@/lib/staff-growth-client";
+import { promiseTextOf, goalLevelLabel, type GoalLevel } from "@/lib/staff-growth";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
   formatMonthDay,
@@ -56,6 +65,12 @@ import {
   invalidateMySchedules,
   useMySchedules,
 } from "@/lib/one-on-one-schedule-client";
+import {
+  annualPeriodNote,
+  halfPeriodNote,
+  formatJpDate,
+  type PresurveyPeriods,
+} from "@/lib/presurvey-periods";
 import { clearDraft, readDraft, writeDraft } from "@/lib/retro-drafts";
 import {
   loadProfilesIndex,
@@ -68,6 +83,16 @@ type LoadState = "loading" | "ready" | "unauthenticated" | "error";
 type PresurveyDraft = { answers: Record<string, PresurveyAnswer> };
 const draftKeyFor = (scheduleId: string) => `presurvey:${scheduleId}`;
 
+/** カルテの目標の、いまの値（サーバーから受け取る） */
+type KarteSlot = { level: GoalLevel; goalId: string; title: string; updatedAt: string };
+type KarteMap = Partial<Record<GoalLevel, KarteSlot>>;
+type PresurveyContext = {
+  karte: KarteMap;
+  karteTableMissing: boolean;
+  periods: PresurveyPeriods;
+  viewers: { karteManagerIds: string[]; answerViewerIds: string[] };
+};
+
 /** 予定の表示（例: 10月13日（火）13:00　院長と　締切 10月10日） */
 function scheduleSummary(s: ScheduleView): string {
   return `${formatScheduleLine(s)}　締切 ${formatMonthDay(presurveyDeadline(s))}`;
@@ -75,14 +100,13 @@ function scheduleSummary(s: ScheduleView): string {
 
 function PresurveyPageBody() {
   const [state, setState] = useState<LoadState>("loading");
-  const [questions, setQuestions] = useState<PresurveyQuestion[]>(
-    DEFAULT_PRESURVEY_QUESTIONS
+  const [questions, setQuestions] = useState<PresurveyQuestion[]>(() =>
+    defaultPresurveyQuestions()
   );
   const [records, setRecords] = useState<PrivateRecord[]>([]);
   const [oneOnOnes, setOneOnOnes] = useState<PrivateRecord[]>([]);
-  const [goals, setGoals] = useState<PresurveyGoalHint[] | null>(null);
-  const [goalsUnavailable, setGoalsUnavailable] = useState("");
   const [profiles, setProfiles] = useState<StaffProfileIndexEntry[]>([]);
+  const [ctx, setCtx] = useState<PresurveyContext | null>(null);
   const [myId, setMyId] = useState("");
   const [myName, setMyName] = useState("");
   const [error, setError] = useState("");
@@ -98,6 +122,21 @@ function PresurveyPageBody() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // 予定を選び直した直後は、保存済みの値を下書きとして書かない
   const skipDraftWrite = useRef(true);
+  /** 開いた時点のカルテの版（提出時に照合してもらう） */
+  const baseline = useRef<Partial<Record<GoalLevel, string>>>({});
+
+  const loadContext = useCallback(async (): Promise<PresurveyContext | null> => {
+    try {
+      const res = await fetch("/api/one-on-one/presurvey", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      if (!res.ok) return null;
+      return (await res.json()) as PresurveyContext;
+    } catch {
+      return null;
+    }
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -110,41 +149,21 @@ function PresurveyPageBody() {
         return;
       }
       setMyId(user.id);
-      const [idx, qs, mine, involved] = await Promise.all([
+      const [idx, qs, mine, involved, context] = await Promise.all([
         loadProfilesIndex().catch(() => []),
-        loadPresurveyQuestions().catch(() => DEFAULT_PRESURVEY_QUESTIONS),
+        loadPresurveyQuestions().catch(() => defaultPresurveyQuestions()),
         listMine("one_on_one_presurvey"),
         // 前回の約束を引くために、自分が関わる1on1ノートを読む（読めるのは112の範囲だけ）
         listInvolved("one_on_one").catch(() => []),
+        loadContext(),
       ]);
       setProfiles(idx);
       setMyName(idx.find((p) => p.userId === user.id)?.name?.trim() || "名前未設定");
       setQuestions(qs);
       setRecords(mine);
       setOneOnOnes(involved);
+      setCtx(context);
       setState("ready");
-
-      // 本人の目標（質問3の自動表示）。フラグOFF・テーブル未作成・未登録でも回答は続けられる
-      try {
-        const res = await fetchGoalsApi();
-        const active = res.goals
-          .filter((g) => g.status !== "done" && g.title.trim())
-          .slice(0, 5)
-          .map((g) => ({ level: goalLevelLabel(g.level), title: g.title.trim() }));
-        setGoals(active);
-        if (active.length === 0) {
-          setGoalsUnavailable(
-            res.tableMissing
-              ? "目標の記録はまだ使えません。下に書いてください。"
-              : "登録された目標は見つかりませんでした。下に書いてください。"
-          );
-        }
-      } catch {
-        setGoals([]);
-        setGoalsUnavailable(
-          "目標を自動で表示できませんでした。下に書いてください。"
-        );
-      }
     } catch (e) {
       if (e instanceof PrivateStoreError && e.kind === "unauthenticated") {
         setState("unauthenticated");
@@ -153,7 +172,7 @@ function PresurveyPageBody() {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
       setState("error");
     }
-  }, []);
+  }, [loadContext]);
 
   useEffect(() => {
     load();
@@ -178,37 +197,103 @@ function PresurveyPageBody() {
   );
   const editingRecord = selected ? recordFor(selected.id) : null;
 
-  /** 予定を選ぶ: 保存済みの回答 → その上に書きかけ（下書き）を重ねる */
+  /** 同じ質問の、この回より前の自分の回答 */
+  const previousAnswerFor = useCallback(
+    (questionId: string, before: string, excludeKey?: string): { text: string; heldOn: string } | null => {
+      const past = records
+        .map((r) => ({ key: r.recordKey, d: normalizePresurveyData(r.data) }))
+        .filter(({ key, d }) => key !== excludeKey && d.heldOn && (!before || d.heldOn < before))
+        .sort((a, b) => b.d.heldOn.localeCompare(a.d.heldOn));
+      for (const { d } of past) {
+        const a = d.answers.find((x) => x.questionId === questionId);
+        const text = a ? answerSummary(a).trim() : "";
+        if (text) return { text, heldOn: d.heldOn };
+      }
+      return null;
+    },
+    [records]
+  );
+
+  /**
+   * 同じ質問の、この回より前の自分の回答を**まるごと**引く。
+   * 1-7 のように「前回の答えが入る」問いは、記述だけでなく**選んだ選択肢も**引き継ぐ
+   *（選択肢を引き継がないと、選択が必須の問いが未回答のままになってしまう）。
+   */
+  const previousFullAnswerFor = useCallback(
+    (questionId: string, before: string, excludeKey?: string): PresurveyAnswer | null => {
+      const past = records
+        .map((r) => ({ key: r.recordKey, d: normalizePresurveyData(r.data) }))
+        .filter(({ key, d }) => key !== excludeKey && d.heldOn && (!before || d.heldOn < before))
+        .sort((a, b) => b.d.heldOn.localeCompare(a.d.heldOn));
+      for (const { d } of past) {
+        const a = d.answers.find((x) => x.questionId === questionId);
+        if (a && (a.text.trim() || a.choice || a.unchanged)) return a;
+      }
+      return null;
+    },
+    [records]
+  );
+
+  /**
+   * 予定を選ぶ: 初期値（カルテの値・前回の答え）→ 保存済みの回答 → 書きかけ（下書き）の順に重ねる。
+   * 204 §4: 第1部の初期値は**開いた時点のカルテの値**。そのときの版も覚えておく。
+   */
   const selectSchedule = useCallback(
     (id: string) => {
       const rec = recordFor(id);
-      const saved: Record<string, PresurveyAnswer> = {};
-      if (rec) for (const a of normalizePresurveyData(rec.data).answers) saved[a.questionId] = a;
+      const picked = upcoming.find((s) => s.id === id) ?? null;
+      const on = picked?.date ?? "";
+      const initial: Record<string, PresurveyAnswer> = {};
+      const base: Partial<Record<GoalLevel, string>> = {};
+      for (const q of visible) {
+        const a = emptyPresurveyAnswer(q);
+        if (isKarteLinked(q) && ctx) {
+          const slot = ctx.karte[q.karteLevel as GoalLevel];
+          a.text = slot?.title ?? "";
+          base[q.karteLevel as GoalLevel] = slot?.updatedAt ?? "";
+        } else if (q.prefill === "previous") {
+          const prev = previousFullAnswerFor(q.id, on, rec?.recordKey);
+          if (prev) {
+            a.text = prev.text;
+            // 選択肢は、いまもその質問にある選択肢だけ引き継ぐ（院長が選択肢を変えていても壊れない）
+            a.choice = prev.choice && q.choices.includes(prev.choice) ? prev.choice : "";
+            a.unchanged = prev.unchanged;
+          }
+        }
+        initial[q.id] = a;
+      }
+      baseline.current = base;
+      if (rec) {
+        for (const a of normalizePresurveyData(rec.data).answers) initial[a.questionId] = a;
+      }
       const draft = readDraft<PresurveyDraft>(draftKeyFor(id));
       skipDraftWrite.current = true;
       setScheduleId(id);
-      setAnswers(draft?.answers && typeof draft.answers === "object" ? draft.answers : saved);
+      setAnswers(
+        draft?.answers && typeof draft.answers === "object"
+          ? { ...initial, ...draft.answers }
+          : initial
+      );
       setDraftRestored(!!draft);
       setMessage("");
       setError("");
     },
-    [recordFor]
+    [recordFor, upcoming, visible, ctx, previousFullAnswerFor]
   );
 
   // 初回: ?schedule=<id>（ホームの知らせ・マイ成長記録から）→ なければ最初の未回答 → なければ最初の予定
   const initialPicked = useRef(false);
   useEffect(() => {
-    if (initialPicked.current || state !== "ready" || !schedules) return;
+    if (initialPicked.current || state !== "ready" || !schedules || !ctx) return;
     initialPicked.current = true;
     const param = new URLSearchParams(window.location.search).get("schedule");
     const pick =
       upcoming.find((s) => s.id === param) ?? upcoming.find((s) => !s.answered) ?? upcoming[0];
     if (pick) selectSchedule(pick.id);
-  }, [state, schedules, upcoming, selectSchedule]);
+  }, [state, schedules, ctx, upcoming, selectSchedule]);
 
   const answerOf = useCallback(
-    (q: PresurveyQuestion): PresurveyAnswer =>
-      answers[q.id] ?? emptyPresurveyAnswer(q),
+    (q: PresurveyQuestion): PresurveyAnswer => answers[q.id] ?? emptyPresurveyAnswer(q),
     [answers]
   );
 
@@ -218,27 +303,7 @@ function PresurveyPageBody() {
       [q.id]: { ...(prev[q.id] ?? emptyPresurveyAnswer(q)), ...patch },
     }));
 
-  /** 質問4（前回の回答を引き継ぐ）用: 同じ質問の、この回より前の自分の回答 */
-  const previousAnswerFor = useCallback(
-    (questionId: string): { text: string; heldOn: string } | null => {
-      const past = records
-        .map((r) => ({ key: r.recordKey, d: normalizePresurveyData(r.data) }))
-        .filter(
-          ({ key, d }) =>
-            key !== editingRecord?.recordKey && d.heldOn && (!heldOn || d.heldOn < heldOn)
-        )
-        .sort((a, b) => b.d.heldOn.localeCompare(a.d.heldOn));
-      for (const { d } of past) {
-        const a = d.answers.find((x) => x.questionId === questionId);
-        const text = a ? answerSummary(a).trim() : "";
-        if (text) return { text, heldOn: d.heldOn };
-      }
-      return null;
-    },
-    [records, editingRecord, heldOn]
-  );
-
-  /** 質問6（前回の約束）用: この回より前の1on1の約束のうち最も新しいもの */
+  /** 2-3（前回の約束）用: この回より前の1on1の約束のうち最も新しいもの */
   const previousPromise = useMemo((): PresurveyPromiseHint | null => {
     const past = oneOnOnes
       .map((r) => ({ r, d: normalizeOneOnOneData(r.data) }))
@@ -256,10 +321,7 @@ function PresurveyPageBody() {
     return null;
   }, [oneOnOnes, heldOn, myId, nameOf]);
 
-  const missing = useMemo(
-    () => unansweredRequired(questions, answers),
-    [questions, answers]
-  );
+  const missing = useMemo(() => unansweredRequired(questions, answers), [questions, answers]);
 
   // 197 D: 入力のたびに下書きへ（何も書いていなければ消す）。保存ボタンだけがサーバーへ送る
   useEffect(() => {
@@ -282,23 +344,33 @@ function PresurveyPageBody() {
     selectSchedule(scheduleId);
   };
 
+  /** 区切りの日付（1-4・1-5） */
+  const periodNoteFor = useCallback(
+    (q: PresurveyQuestion): string => {
+      if (!ctx) return "";
+      if (q.karteLevel === "annual") return annualPeriodNote(ctx.periods);
+      if (q.karteLevel === "half") return halfPeriodNote(ctx.periods);
+      return "";
+    },
+    [ctx]
+  );
+
   const save = async () => {
     if (saving || !selected) return;
     if (missing.length > 0) {
       setError(
-        `必須の質問がまだ残っています（${missing
-          .map((q) => `「${q.text}」`)
-          .join("・")}）`
+        `必須の質問がまだ残っています（${missing.map((q) => `「${q.text}」`).join("・")}）`
       );
       return;
     }
     const body = visible.map((q) => ({
       ...answerOf(q),
-      // 回答した時点の質問文・役割・置き場所を一緒に保存する（あとで質問を直しても崩れない）
+      // 回答した時点の質問文・役割・置き場所・部を一緒に保存する（あとで質問を直しても崩れない）
       question: q.text,
       role: q.role,
       slot: q.slot,
       kind: q.kind,
+      part: q.part,
     }));
     if (!hasAnyAnswer(body)) {
       setError("まだ何も書かれていません");
@@ -308,23 +380,50 @@ function PresurveyPageBody() {
     setError("");
     try {
       // 200: 日付と担当者は送らない（予定からサーバーが決める）
+      // 204 §4: 開いた時点のカルテの版を添える（食い違えば保存されない）
       const res = await fetch("/api/one-on-one/presurvey", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scheduleId: selected.id, answers: body, authorName: myName }),
+        body: JSON.stringify({
+          scheduleId: selected.id,
+          answers: body,
+          authorName: myName,
+          karteBaseline: baseline.current,
+        }),
       });
-      const j = (await res.json().catch(() => ({}))) as { record?: PrivateRecord; error?: string };
-      if (!res.ok || !j.record) throw new Error(j.error || "保存に失敗しました。もう一度お試しください。");
+      const j = (await res.json().catch(() => ({}))) as {
+        record?: PrivateRecord;
+        karte?: KarteMap;
+        updatedLevels?: GoalLevel[];
+        error?: string;
+        code?: string;
+      };
+      if (!res.ok || !j.record) {
+        throw new Error(j.error || "保存に失敗しました。もう一度お試しください。");
+      }
       const saved = j.record;
       clearDraft(draftKeyFor(selected.id));
       // 197 C: 回答したら知らせ・メニューの印をすぐ消す
       void invalidateMySchedules();
       setRecords((prev) => [saved, ...prev.filter((r) => r.recordKey !== saved.recordKey)]);
+      if (j.karte) {
+        setCtx((prev) => (prev ? { ...prev, karte: j.karte! } : prev));
+        const next: Partial<Record<GoalLevel, string>> = {};
+        for (const [lv, slot] of Object.entries(j.karte)) {
+          next[lv as GoalLevel] = (slot as KarteSlot | undefined)?.updatedAt ?? "";
+        }
+        baseline.current = next;
+      }
+      const updated = j.updatedLevels ?? [];
       setMessage(
-        editingRecord
-          ? "回答を更新しました。1on1の画面に反映されます。"
-          : "回答を保存しました。1on1の画面に反映されます。"
+        [
+          editingRecord ? "回答を更新しました。" : "回答を保存しました。",
+          "1on1の画面に反映されます。",
+          updated.length > 0
+            ? `育成カルテの目標も更新しました（${updated.map((l) => goalLevelLabel(l)).join("・")}）。`
+            : "育成カルテの目標は変わっていないので、そのままです。",
+        ].join("")
       );
       setDraftRestored(false);
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -402,12 +501,32 @@ function PresurveyPageBody() {
     );
   }
 
+  const karteNames = (ctx?.viewers.karteManagerIds ?? []).map((id) => nameOf(id, "担当者"));
+  const answerNames = (ctx?.viewers.answerViewerIds ?? []).map((id) => nameOf(id, "担当者"));
+
   return (
     <div className="space-y-6">
       {/* 197: 冒頭の常時表示（文言を変えないこと） */}
       <p className="text-sm text-gray-700 leading-relaxed bg-violet-50/60 border border-violet-100 rounded-xl px-4 py-3">
         {PRESURVEY_INTRO}
       </p>
+
+      {/* 204 §1: 画面上部の案内 */}
+      <div className="space-y-1.5 bg-white border border-gray-200 rounded-xl px-4 py-3" data-presurvey-notice>
+        {selected && (
+          <p className="text-sm font-medium text-gray-900" data-presurvey-deadline>
+            {presurveyDeadlineNotice(formatJpDate(presurveyDeadline(selected)))}
+          </p>
+        )}
+        <p className="text-xs text-gray-700">{PRESURVEY_PART1_NOTICE}</p>
+        <p className="text-[11px] text-gray-600" data-presurvey-karte-viewers>
+          {presurveyKarteViewerNotice(karteNames)}
+        </p>
+        <p className="text-[11px] text-gray-600" data-presurvey-answer-viewers>
+          {presurveyAnswerViewerNotice(answerNames)}
+        </p>
+      </div>
+
       <p className="text-xs text-gray-600 leading-relaxed">{PRESURVEY_LEAD}</p>
 
       {message && (
@@ -416,7 +535,9 @@ function PresurveyPageBody() {
         </p>
       )}
       {error && (
-        <p className="text-sm text-red-600 bg-red-50 rounded-xl p-3">{error}</p>
+        <p className="text-sm font-medium text-red-700 bg-red-50 border border-red-300 rounded-xl p-3" role="alert" data-presurvey-error>
+          {error}
+        </p>
       )}
 
       {/* 200: 予定が無ければ回答欄を出さない */}
@@ -465,10 +586,13 @@ function PresurveyPageBody() {
                   {editingRecord ? "回答を直しています：" : "回答する1on1："}
                   <span className="font-medium">{scheduleSummary(selected)}</span>
                 </p>
-                <p className="text-[11px] text-gray-500 mt-0.5">
-                  回答を読めるのは、あなたと院長、この1on1の担当者だけです。
-                </p>
               </div>
+
+              {ctx?.karteTableMissing && (
+                <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                  育成カルテの目標をまだ読み込めません。第1部は空欄から書いてください（提出はできます）。
+                </p>
+              )}
 
               {draftRestored && (
                 <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5" data-presurvey-draft>
@@ -479,22 +603,42 @@ function PresurveyPageBody() {
                 </p>
               )}
 
-              {visible.map((q, i) => (
-                <PresurveyQuestionBlock
-                  key={q.id}
-                  index={i + 1}
-                  question={q}
-                  answer={answerOf(q)}
-                  onChange={(patch) => patchAnswer(q, patch)}
-                  disabled={saving}
-                  goals={goals}
-                  goalsUnavailable={goalsUnavailable}
-                  previousAnswer={
-                    q.kind === "carry_over" ? previousAnswerFor(q.id) : null
-                  }
-                  previousPromise={q.kind === "promise_check" ? previousPromise : null}
-                />
-              ))}
+              {/* 204 §2・§3: 第1部／第2部に分けて出す */}
+              {PRESURVEY_PARTS.map((part) => {
+                const list = questionsOfPart(questions, part.value);
+                if (list.length === 0) return null;
+                return (
+                  <section key={part.value} className="space-y-3" data-presurvey-part={part.value}>
+                    <div className="border-l-4 border-violet-400 pl-3">
+                      <h2 className="text-base font-bold text-gray-900">{part.title}</h2>
+                      <p className="text-[11px] text-gray-600">{part.lead}</p>
+                    </div>
+                    {list.map((q, i) => (
+                      <PresurveyQuestionBlock
+                        key={q.id}
+                        number={`${part.value}-${i + 1}`}
+                        question={q}
+                        answer={answerOf(q)}
+                        onChange={(patch) => patchAnswer(q, patch)}
+                        disabled={saving}
+                        previousAnswer={
+                          q.kind === "carry_over"
+                            ? previousAnswerFor(q.id, heldOn, editingRecord?.recordKey)
+                            : null
+                        }
+                        referenceAnswer={
+                          q.prefill === "blank" && part.value === 1
+                            ? previousAnswerFor(q.id, heldOn, editingRecord?.recordKey)
+                            : null
+                        }
+                        previousPromise={q.kind === "promise_check" ? previousPromise : null}
+                        karteLabel={isKarteLinked(q) ? goalLevelLabel(q.karteLevel as GoalLevel) : ""}
+                        periodNote={periodNoteFor(q)}
+                      />
+                    ))}
+                  </section>
+                );
+              })}
 
               <div className="flex items-center justify-between gap-2 flex-wrap bg-white border border-gray-200 rounded-xl p-4">
                 <span className="text-xs text-gray-500">
@@ -504,6 +648,7 @@ function PresurveyPageBody() {
                   type="button"
                   onClick={save}
                   disabled={saving}
+                  data-presurvey-save
                   className="text-sm px-4 py-2 bg-violet-600 text-white rounded-full hover:bg-violet-700 disabled:opacity-50 min-h-[40px]"
                 >
                   {saving ? "保存中…" : editingRecord ? "💾 更新する" : "💾 保存する"}
@@ -518,9 +663,7 @@ function PresurveyPageBody() {
       <div className="space-y-3">
         <h2 className="text-sm font-medium text-gray-800">これまでの回答</h2>
         {sorted.length === 0 ? (
-          <p className="text-sm text-gray-500 py-6 text-center">
-            {PRESURVEY_EMPTY}
-          </p>
+          <p className="text-sm text-gray-500 py-6 text-center">{PRESURVEY_EMPTY}</p>
         ) : (
           sorted.map((record) => {
             const d = normalizePresurveyData(record.data);
@@ -540,6 +683,11 @@ function PresurveyPageBody() {
                     <span className="text-sm text-gray-800">
                       担当: <span className="font-medium">{partnerName === "院長" ? "院長" : `${partnerName}さん`}</span>
                     </span>
+                    {isLegacyPresurvey(d) && (
+                      <span className="text-[10px] bg-gray-100 text-gray-600 rounded-full px-2 py-0.5" data-presurvey-legacy>
+                        2部構成より前の形
+                      </span>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -553,9 +701,7 @@ function PresurveyPageBody() {
                 <ul className="space-y-1.5">
                   {shown.map((a) => (
                     <li key={a.questionId}>
-                      <p className="text-[11px] text-gray-500 leading-snug">
-                        {a.question}
-                      </p>
+                      <p className="text-[11px] text-gray-500 leading-snug">{a.question}</p>
                       <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
                         {answerSummary(a) || "（未回答）"}
                       </p>

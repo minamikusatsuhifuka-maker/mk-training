@@ -49,7 +49,7 @@ export function PresurveyAlertBanner() {
           key={a.scheduleId}
           href={`${PRESURVEY_HREF}?schedule=${encodeURIComponent(a.scheduleId)}`}
           className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-sm min-h-[44px] ${
-            a.stage === "deadline" ? "border-red-200 bg-red-50 text-red-800" : "border-amber-200 bg-amber-50 text-amber-900"
+            a.stage === "d0" ? "border-red-200 bg-red-50 text-red-800" : "border-amber-200 bg-amber-50 text-amber-900"
           }`}
           data-presurvey-alert={a.stage}
         >

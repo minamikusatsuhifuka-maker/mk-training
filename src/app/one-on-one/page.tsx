@@ -42,6 +42,7 @@ import { RwdepcForm, RwdepcGuide } from "@/components/RwdepcForm";
 import { PresurveyAnswerList } from "@/components/PresurveyAnswers";
 import {
   answersBySlot,
+  changedPart1QuestionIds,
   normalizePresurveyData,
   PRESURVEY_SLOT_TITLE,
   type PresurveyAnswer,
@@ -231,6 +232,10 @@ function OneOnOnePageBody() {
           ? pool.find(({ d }) => d.heldOn <= heldOnValue) ?? pool[0]
           : pool[0]);
       if (!fallback) return null;
+      // 204 §4: 同じ人の、この回より前の回答（第1部の「変わった項目」の印に使う）
+      const previous = pool
+        .filter(({ d }) => d.heldOn && d.heldOn < fallback.d.heldOn)
+        .sort((a, b) => b.d.heldOn.localeCompare(a.d.heldOn))[0];
       return {
         data: fallback.d,
         respondentName: nameOf(
@@ -238,6 +243,7 @@ function OneOnOnePageBody() {
           fallback.d.authorName || "本人"
         ),
         dateMismatch: !!heldOnValue && fallback.d.heldOn !== heldOnValue,
+        changedIds: Array.from(changedPart1QuestionIds(fallback.d, previous?.d ?? null)),
       };
     },
     [presurveys, myId, nameOf]
@@ -256,6 +262,7 @@ function OneOnOnePageBody() {
           respondentName={found.respondentName}
           heldOn={found.data.heldOn}
           dateMismatch={found.dateMismatch}
+          changedIds={found.changedIds}
         />
       );
       const all = [

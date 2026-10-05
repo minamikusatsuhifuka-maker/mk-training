@@ -1,25 +1,106 @@
-// 1on1の事前アンケートの知らせをメールで送る口（指示書197 C-2）— サーバー専用・**既定OFF**
+// 1on1の事前アンケートの知らせのメール（指示書197 C-2 → 204 §6-2）— サーバー専用・**既定OFF**
 //
-// スタッフ宛のメール送信はまだ整っていない（指示書178の独自SMTPが未設定）。
-// この便ではアプリ内の知らせだけを使い、メールは次の2つがそろったときだけ送る作りにしておく。
-//   1. 機能フラグ presurvey_alert_email が ON（管理画面「🚀 機能の表示設定」・既定OFF）
-//   2. 178 の送信設定（環境変数 STAFF_SMTP_URL）がある
-// 2 がそろうまでは常に「送らない」を返す（送信の実装は178で入れる。ここで外部に送ることはない）。
-// メールの本文に回答の中身は入れない（知らせの文だけ）。
+// 【送る条件（3つそろったときだけ）】
+//   1. 機能フラグ `one_on_one_presurvey` が ON（機能そのものがOFFの間は送らない・204 §6-1）
+//   2. 切り替え `presurvey_alert_email`（管理画面「⚙ 機能」の「メールでも知らせる」）が ON・**既定OFF**
+//   3. 送信の設定（RESEND_API_KEY）がある ＝ 指示書178の送信設定が済んでいる
+// どれか欠ければ「送らない」を理由つきで返す（黙って落ちない）。
+//
+// 【本文に入れないもの（204 §6-2）】
+//   回答の中身・目標・他の人の情報は入れない。**期限の日付と、事前アンケートへのリンクだけ**。
+//
+// 【検証用アカウントには送らない（204 §6-2）】
+//   判定は呼び出し側（presurvey-alert-server）で行う。ここは渡された宛先に送るだけ。
 
 import { serverFeatureEnabled } from "./staff-growth-server";
-import type { PresurveyAlert } from "./one-on-one-schedule";
+import { isMailConfigured, portalOrigin, sendPortalMail } from "./mail-send";
+import {
+  formatMonthDay,
+  presurveyAlertStageLabel,
+  type PresurveyAlert,
+} from "./one-on-one-schedule";
 
-export type PresurveyMailResult = { sent: false; reason: "flag_off" | "smtp_not_configured" };
+export type PresurveyMailSkip =
+  | "feature_off"
+  | "flag_off"
+  | "smtp_not_configured"
+  | "no_email";
 
+export type PresurveyMailResult =
+  | { sent: true; reason: "" }
+  | { sent: false; reason: PresurveyMailSkip | "failed"; detail?: string };
+
+/** 送れる状態かだけを確かめる（宛先ごとに毎回調べ直さないため） */
+export async function presurveyMailReady(): Promise<
+  { ready: true } | { ready: false; reason: PresurveyMailSkip }
+> {
+  if (!(await serverFeatureEnabled("one_on_one_presurvey"))) {
+    return { ready: false, reason: "feature_off" };
+  }
+  if (!(await serverFeatureEnabled("presurvey_alert_email"))) {
+    return { ready: false, reason: "flag_off" };
+  }
+  if (!isMailConfigured()) return { ready: false, reason: "smtp_not_configured" };
+  return { ready: true };
+}
+
+export function presurveyLink(scheduleId: string): string {
+  return `${portalOrigin()}/one-on-one/presurvey?schedule=${encodeURIComponent(scheduleId)}`;
+}
+
+/** 件名と本文（回答の中身は入れない） */
+export function buildPresurveyMail(alert: PresurveyAlert): { subject: string; text: string } {
+  const subject = `【南草津皮フ科】1on1の事前アンケートのお願い（${formatMonthDay(alert.deadline)}まで）`;
+  const text = [
+    alert.message,
+    "",
+    `1on1の日：${formatMonthDay(alert.date)}`,
+    `回答の締切：${formatMonthDay(alert.deadline)}（1on1の3日前）`,
+    "",
+    "回答はこちらから：",
+    presurveyLink(alert.scheduleId),
+    "",
+    "回答は評価には使いません。あなたの成長を支え、1on1の対話を深めるために使います。",
+  ].join("\n");
+  return { subject, text };
+}
+
+/** 1人に送る。送れる状態かは presurveyMailReady で先に確かめてから呼ぶ */
 export async function sendPresurveyReminderMail(
-  _to: { email: string; name: string },
-  _alert: PresurveyAlert
+  to: { email: string; name: string },
+  alert: PresurveyAlert
 ): Promise<PresurveyMailResult> {
-  void _to; // 178 で宛先・本文に使う
-  void _alert;
-  if (!(await serverFeatureEnabled("presurvey_alert_email"))) return { sent: false, reason: "flag_off" };
-  if (!process.env.STAFF_SMTP_URL) return { sent: false, reason: "smtp_not_configured" };
-  // 178 で送信処理を入れるまでは送らない
-  return { sent: false, reason: "smtp_not_configured" };
+  if (!to.email) return { sent: false, reason: "no_email" };
+  const { subject, text } = buildPresurveyMail(alert);
+  const r = await sendPortalMail(to.email, subject, text);
+  return r.ok ? { sent: true, reason: "" } : { sent: false, reason: "failed", detail: r.error };
+}
+
+/**
+ * 院長あての見本（204 §6-2）。文面と届き方の確認用。
+ * 「メールでも知らせる」がOFFでも、**送信の設定があれば送れる**（見本は院長宛てだけ）。
+ */
+export async function sendPresurveySampleMail(
+  to: string
+): Promise<PresurveyMailResult> {
+  if (!isMailConfigured()) return { sent: false, reason: "smtp_not_configured" };
+  if (!to) return { sent: false, reason: "no_email" };
+  const sample: PresurveyAlert = {
+    scheduleId: "sample",
+    stage: "d7",
+    date: "2026-10-20",
+    deadline: "2026-10-17",
+    message: "10月20日の1on1の事前アンケートをお願いします（10月17日まで）",
+  };
+  const { subject, text } = buildPresurveyMail(sample);
+  const r = await sendPortalMail(
+    to,
+    `[見本] ${subject}`,
+    [
+      `これは見本です（実際にスタッフへ送られる文面の確認用）。送る時点：${presurveyAlertStageLabel("d7")}`,
+      "",
+      text,
+    ].join("\n")
+  );
+  return r.ok ? { sent: true, reason: "" } : { sent: false, reason: "failed", detail: r.error };
 }

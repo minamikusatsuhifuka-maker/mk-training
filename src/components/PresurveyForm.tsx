@@ -1,17 +1,23 @@
 "use client";
 
-// 1on1の事前アンケートの入力欄（指示書197・197-補）
+// 1on1の事前アンケートの入力欄（指示書197・197-補 → 204 v2で2部構成）
 //
-// 並びは選択理論の面談の流れ（願望 → 行動 → 自己評価 → 計画・約束）。
-// 質問の文言・選択肢・注記は content_store の定義（既定は197-補の9問）をそのまま出す。
+// 質問の文言・選択肢・注記・ヒントは content_store の定義（既定は204 v2の2部構成）をそのまま出す。
+//
+// 【204で足したもの】
+// - 各問いの下に**コーポレートブックの一文**をヒントとして出す（出典を小さく添える）
+// - カルテと連動する問い（1-1・1-3〜1-6）には「カルテの目標と同じ欄」であることを出す。
+//   1-4（年）・1-5（半期）は区切りの日付も出す
+// - 1-2 は「3択＋場面を書く」で**どちらも必須**（kind: choice_scene）
+// - 前回の答えを参考に小さく出す（1-2のように空欄から答える問い）
 //
 // 【原則】
 // - 注記は「情報として伝える文」として置き、強く迫る言い回しにしない（強制しない）。
-// - 自動表示（本人の目標・前回の回答・前回の約束）が取れないときは、静かに案内だけ出して
-//   自由に書けるようにする（取れないことで回答できなくならないようにする）。
+// - 自動表示（前回の約束など）が取れないときは、静かに案内だけ出して自由に書けるようにする。
 
 import {
   isAnswered,
+  isKarteLinked,
   type PresurveyAnswer,
   type PresurveyQuestion,
 } from "@/lib/one-on-one-presurvey";
@@ -77,7 +83,7 @@ function AutoBox({
 }
 
 export function PresurveyQuestionBlock({
-  index,
+  number,
   question,
   answer,
   onChange,
@@ -85,70 +91,103 @@ export function PresurveyQuestionBlock({
   goals,
   goalsUnavailable,
   previousAnswer,
+  referenceAnswer,
   previousPromise,
+  karteLabel,
+  periodNote,
 }: {
-  index: number;
+  /** 画面に出す番号（例「1-4」） */
+  number: string;
   question: PresurveyQuestion;
   answer: PresurveyAnswer;
   onChange: (patch: Partial<PresurveyAnswer>) => void;
   disabled?: boolean;
-  /** 質問3: 本人の目標（自動表示）。null は未取得 */
+  /** 197の「目標の確認」で使う自動表示（既定では使わない） */
   goals?: PresurveyGoalHint[] | null;
-  /** 目標を自動表示できない事情（フラグOFF・未登録など） */
   goalsUnavailable?: string;
-  /** 質問4: 前回の自分の回答 */
+  /** 前回の自分の回答（197の carry_over 用・「コピーして書き換える」が出る） */
   previousAnswer?: { text: string; heldOn: string } | null;
-  /** 質問6: 前回の1on1の約束 */
+  /** 204: 前回の答えを**参考に**小さく出すだけ（空欄から答える問い。1-2） */
+  referenceAnswer?: { text: string; heldOn: string } | null;
+  /** 前回の1on1の約束 */
   previousPromise?: PresurveyPromiseHint | null;
+  /** 204: カルテと連動する問いの段のラベル（例「年間目標」） */
+  karteLabel?: string;
+  /** 204: 1-4・1-5 の区切りの日付 */
+  periodNote?: string;
 }) {
   const answered = isAnswered(question, answer);
   const q = question;
+  const linked = isKarteLinked(q);
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-2">
+    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-2" data-presurvey-q={q.id}>
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-medium text-gray-900 leading-relaxed">
-          <span className="text-violet-700 mr-1.5">{index}.</span>
+          <span className="text-violet-700 mr-1.5">{number}</span>
           {q.text}
         </p>
         <span
           className={`shrink-0 text-[10px] font-medium rounded-full px-2 py-0.5 ${
-            q.required
-              ? "bg-rose-100 text-rose-800"
-              : "bg-gray-100 text-gray-600"
+            q.required ? "bg-rose-100 text-rose-800" : "bg-gray-100 text-gray-600"
           }`}
         >
           {q.required ? "必須" : "任意"}
         </span>
       </div>
 
-      {q.role && (
-        <p className="text-[11px] text-gray-500">🧭 {q.role}</p>
+      {q.role && <p className="text-[11px] text-gray-500">🧭 {q.role}</p>}
+
+      {/* 204 §2-3: コーポレートブックのヒント（出典を小さく添える） */}
+      {q.bookHint && (
+        <p
+          className="text-xs text-teal-900 bg-teal-50 border border-teal-100 rounded-lg px-2.5 py-1.5 leading-relaxed"
+          data-presurvey-bookhint
+        >
+          💡 {q.bookHint}
+          {q.bookSource && (
+            <span className="block text-[10px] text-teal-700 mt-0.5">（{q.bookSource}）</span>
+          )}
+        </p>
       )}
 
-      {/* 補足表示（質問4の「もし制約がなかったら…」） */}
+      {/* 204 §4: カルテの目標と同じ欄であることを出す */}
+      {linked && (
+        <p className="text-[11px] text-violet-900 bg-violet-50 border border-violet-100 rounded-lg px-2.5 py-1.5" data-presurvey-karte>
+          🎯 育成カルテの「{karteLabel || "目標"}」と同じ欄です。提出すると、変わったときだけカルテの目標が更新されます。
+          {periodNote && <span className="block mt-0.5">{periodNote}</span>}
+        </p>
+      )}
+
+      {/* 添え書き（1-4〜1-6・2-5） */}
       {q.hint && (
         <p className="text-xs text-violet-800 bg-violet-50 border border-violet-100 rounded-lg px-2.5 py-1.5">
           {q.hint}
         </p>
       )}
 
-      {/* 常時表示の注記（質問5）。情報として伝える文 */}
+      {/* 常時表示の注記（1-7）。情報として伝える文 */}
       {q.note && (
         <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 leading-relaxed">
           {q.note}
         </p>
       )}
 
-      {/* 質問3: 本人の目標を自動表示 */}
+      {/* 204: 前回の答えを参考に小さく出す（1-2のように毎回まっさらから答える問い） */}
+      {referenceAnswer && referenceAnswer.text && (
+        <p className="text-[11px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 whitespace-pre-wrap leading-relaxed" data-presurvey-reference>
+          前回（{referenceAnswer.heldOn.replaceAll("-", "/")}）の答え：{referenceAnswer.text}
+        </p>
+      )}
+
+      {/* 197の「目標の確認」（既定では使わない） */}
       {q.kind === "goal_confirm" && (
         <AutoBox title="🎯 いま登録されているあなたの目標">
           {goals && goals.length > 0 ? (
             <ul className="space-y-0.5">
               {goals.map((g, i) => (
                 <li key={`${g.level}-${i}`} className="text-xs text-gray-800">
-                  ・{g.level && <span className="text-gray-500">[{g.level}]</span>}{" "}
-                  {g.title}
+                  ・{g.level && <span className="text-gray-500">[{g.level}]</span>} {g.title}
                 </li>
               ))}
             </ul>
@@ -160,19 +199,15 @@ export function PresurveyQuestionBlock({
         </AutoBox>
       )}
 
-      {/* 質問4: 前回の自分の回答 */}
+      {/* 197の「前回の回答を引き継ぐ」（既定では使わない） */}
       {q.kind === "carry_over" && previousAnswer && previousAnswer.text && (
-        <AutoBox
-          title={`🔁 前回の回答（${previousAnswer.heldOn.replaceAll("-", "/")}）`}
-        >
+        <AutoBox title={`🔁 前回の回答（${previousAnswer.heldOn.replaceAll("-", "/")}）`}>
           <p className="text-xs text-gray-800 whitespace-pre-wrap leading-relaxed">
             {previousAnswer.text}
           </p>
           <button
             type="button"
-            onClick={() =>
-              onChange({ text: previousAnswer.text, unchanged: false, choice: "" })
-            }
+            onClick={() => onChange({ text: previousAnswer.text, unchanged: false, choice: "" })}
             disabled={disabled}
             className="text-xs px-3 py-1.5 border border-gray-300 rounded-full bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 min-h-[36px]"
           >
@@ -181,7 +216,7 @@ export function PresurveyQuestionBlock({
         </AutoBox>
       )}
 
-      {/* 質問6: 前回の1on1の約束を自動表示 */}
+      {/* 2-3: 前回の1on1の約束を自動表示 */}
       {q.kind === "promise_check" && (
         <AutoBox title="🔗 前回の1on1の約束">
           {previousPromise && previousPromise.text ? (
@@ -224,7 +259,11 @@ export function PresurveyQuestionBlock({
           {q.followUpLabel && (
             <label className="text-xs text-gray-600 block">
               {q.followUpLabel}
-              {!q.required && <span className="ml-1 text-gray-400">（任意）</span>}
+              {q.kind === "choice_scene" ? (
+                <span className="ml-1 text-rose-700">（必須）</span>
+              ) : (
+                !q.required && <span className="ml-1 text-gray-400">（任意）</span>
+              )}
             </label>
           )}
           <textarea
@@ -232,6 +271,7 @@ export function PresurveyQuestionBlock({
             onChange={(e) => onChange({ text: e.target.value })}
             disabled={disabled}
             rows={3}
+            data-presurvey-input={q.id}
             className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-y"
           />
         </div>

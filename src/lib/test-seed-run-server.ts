@@ -21,8 +21,8 @@ import { surveyHistoryKey, entryFromSurvey } from "./survey-history";
 import type { NeedsSurvey } from "./needs-survey";
 import { saveKarteAssignment, loadDelegationSnapshot } from "./admin-delegation-server";
 import { emptySelfReviewData, SELF_REVIEW_CONFIG_KEY } from "./self-review";
-import { emptyPresurveyAnswer, loadPresurveyQuestions, visiblePresurveyQuestions } from "./one-on-one-presurvey";
-import { SEED203_JIRO_ANSWERS, SEED203_JIRO_PRESURVEY_AT, SEED203_JIRO_PRESURVEY_KEY, SEED203_JIRO_SCHEDULE, SEED203_LEGACY_PROMISE_IDS, SEED203_NOTES } from "./test-seed-203";
+import { emptyPresurveyAnswer, isKarteLinked, loadPresurveyQuestions, visiblePresurveyQuestions } from "./one-on-one-presurvey";
+import { SEED203_JIRO_ANSWERS, SEED203_JIRO_GOAL_QUESTION_IDS, SEED203_JIRO_PRESURVEY_AT, SEED203_JIRO_PRESURVEY_KEY, SEED203_JIRO_SCHEDULE, SEED203_LEGACY_PROMISE_IDS, SEED203_NOTES } from "./test-seed-203";
 import { fetchGates, saveGateCheck, saveMatrixReview, saveStaffGrade, seedGates } from "./growth-matrix-server";
 import { SEED_MARK, TEST_ACCOUNTS, TEST_PROSPECT_NAME, TEST_SEED_FLAG, isTestSeedUser, onlyTestIds, type TestAccountDef } from "./test-seed";
 import { clearTestSeedCache } from "./test-seed-server";
@@ -313,6 +313,45 @@ export async function seedTestData(admin: Admin, by: string, directorId: string,
     updatedAt: SEED203_JIRO_PRESURVEY_AT,
   });
   bump("1on1の事前アンケートの回答");
+
+  // 204 §7: 第1部はカルテの目標そのもの。テスト次郎のカルテの目標も同じ文章で作る（検証用の印つき）。
+  // 行idは固定なので、何度「作成」しても重複しない。
+  const jiroGoalLevels = new Map(
+    visiblePresurveyQuestions(presurveyQuestions)
+      .filter(isKarteLinked)
+      .map((q) => [q.id, q.karteLevel as string])
+  );
+  for (const qid of SEED203_JIRO_GOAL_QUESTION_IDS) {
+    const level = jiroGoalLevels.get(qid);
+    const title = SEED203_JIRO_ANSWERS[qid]?.text ?? "";
+    if (!level || !title) continue;
+    const g = normalizeGoal(J(`goal-${level}`), {
+      userId: jid,
+      level,
+      parentId: "",
+      title,
+      detail: "",
+      why: "",
+      jitsu: [],
+      axes: [],
+      achievedState: "",
+      status: "active",
+      dueDate: "",
+      support: "",
+      supportBy: "",
+      comments: [],
+      review: "",
+      agreedOn: "",
+      agreedBy: "",
+      agreedByName: "",
+      fromLearningId: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    if (!g) continue;
+    await upsertGrowth(admin, "goal", g.id, { ...g, id: undefined }, by);
+    bump("目標");
+  }
   // テスト花子の10/13の予定と、その未回答の事前アンケートは**作らない**（203 §2）。
   // 院長が197の知らせ・回答を自分で試すため、未回答のままにしておく。
 

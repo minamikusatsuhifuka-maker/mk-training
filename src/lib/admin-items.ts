@@ -98,6 +98,17 @@ export const ADMIN_ITEMS: readonly AdminItem[] = [
     reason: "1on1（個人の記録）の設問設計。院長のみ",
     contentKeys: ["one_on_one_presurvey_config"],
   },
+  // 204 §5: 事前アンケートの**回答の閲覧だけ**を幹部に任せられる（質問の編集は上の presurvey＝院長のみ）。
+  //   任せても見られるのは「担当に指定したスタッフの分だけ」（判定は presurvey-access-server）。
+  //   パスを /admin/presurvey とは別の区切りにしているのは、proxy が /admin/<第1区切り> で
+  //   項目を引くため（/admin/presurvey/... にすると質問の編集と同じ項目＝院長のみになってしまう）。
+  {
+    key: "presurvey-answers",
+    label: "📝 1on1の事前アンケートの回答",
+    href: "/admin/presurvey-answers",
+    delegable: true,
+    reason: "担当に指定したスタッフの回答の閲覧だけ（質問の編集・他のスタッフの回答は含まない）",
+  },
   { key: "staff-accounts", label: "👤 アカウント招待", href: "/admin/staff-accounts", delegable: false, reason: "アカウント・招待コード・仮パスワード（権限・アカウント）" },
   {
     key: "profile-fields",
@@ -159,6 +170,8 @@ export function adminItemKeyForPath(pathname: string): string | null {
  */
 const API_ITEM_MAP: Record<string, string> = {
   "value-keywords": "profile-fields",
+  // 204 §5: 回答の一覧・本文を返すAPI（院長＋委任された幹部）
+  "presurvey-answers": "presurvey-answers",
 };
 
 export function adminItemKeyForApiPath(pathname: string): string | null {

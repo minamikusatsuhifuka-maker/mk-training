@@ -52,10 +52,11 @@ export function useResolvedNav(): ResolvedCategory[] {
     let active = true;
     Promise.all([
       getContentObject<NavConfig>(NAV_CONFIG_KEY).catch(() => null),
-      fetchViewerFlags().then((v) => v.flags).catch(() => DEFAULT_FEATURE_FLAGS),
+      fetchViewerFlags().catch(() => ({ flags: DEFAULT_FEATURE_FLAGS, previewIds: [] as string[] })),
     ])
-      .then(([cfg, flags]) => {
-        if (active) setCategories(resolveNav(cfg, flags));
+      .then(([cfg, viewer]) => {
+        // 203: 院長・検証用アカウントには、準備中の項目もメニューに出す（印つき）
+        if (active) setCategories(resolveNav(cfg, viewer.flags, new Set(viewer.previewIds)));
       })
       .catch(() => {
         /* フォールバック維持 */

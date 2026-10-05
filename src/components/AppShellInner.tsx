@@ -24,6 +24,23 @@ import { StaffContactsNavLink } from "@/components/StaffContactsNavLink";
 import { DirectorRetrospectiveNavLink } from "@/components/DirectorRetrospectiveNavLink";
 import { StaffGrowthNavLink } from "@/components/StaffGrowthNavLink";
 import { useSidebarAccordion } from "@/lib/sidebar-accordion";
+/**
+ * 203（院長の返答）: 保存された設定では「準備中」で、院長・検証用アカウントだけが
+ * プレビューで開けている項目に付ける小さな印。スタッフにはそもそも項目が出ない。
+ */
+function PreviewMark({ on }: { on?: true }) {
+  if (!on) return null;
+  return (
+    <span
+      className="ml-1 shrink-0 rounded bg-amber-100 px-1 text-[10px] font-medium text-amber-800 align-middle"
+      data-nav-preview
+      title="準備中：スタッフには表示されていません"
+    >
+      準備中
+    </span>
+  );
+}
+
 
 export default function AppShellInner({
   children,
@@ -92,6 +109,7 @@ export default function AppShellInner({
                               className="rounded-md px-2 py-2 text-sm min-h-[44px] flex items-center gap-1 transition-colors text-foreground hover:bg-accent"
                             >
                               <span className="min-w-0 truncate">{item.label}</span>
+                              <PreviewMark on={item.preview} />
                               <span aria-hidden="true" className="shrink-0 text-[11px] text-muted-foreground">↗</span>
                               <span className="sr-only">（外部サイト・新しいタブで開きます）</span>
                             </a>
@@ -106,6 +124,7 @@ export default function AppShellInner({
                               }`}
                             >
                               {item.label}
+                              <PreviewMark on={item.preview} />
                               <PresurveyNavMark href={item.href} />
                             </Link>
                           )}

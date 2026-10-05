@@ -191,6 +191,11 @@ export type ResolvedItem = {
   href: string;
   label: string;
   external?: true;
+  /**
+   * 203（院長の返答）: その機能は保存された設定では「準備中」で、
+   * 院長・検証用アカウントだけがプレビューで開けている。メニューに小さく「準備中」と出す。
+   */
+  preview?: true;
 };
 export type ResolvedCategory = { id: string; label: string; items: ResolvedItem[] };
 
@@ -317,7 +322,10 @@ export function normalizeConfig(cfg: NavConfig | null | undefined): NavConfig {
   return { categories, items: normItems, links: normLinks };
 }
 
-function defaultResolved(flags?: FeatureFlags): ResolvedCategory[] {
+function defaultResolved(
+  flags?: FeatureFlags,
+  previewIds?: ReadonlySet<string>
+): ResolvedCategory[] {
   return MASTER_CATEGORIES.map((c) => ({
     id: c.id,
     label: c.label,
@@ -328,8 +336,14 @@ function defaultResolved(flags?: FeatureFlags): ResolvedCategory[] {
       href: it.href,
       label: it.label,
       ...(it.external ? { external: true as const } : {}),
+      ...(isPreviewItem(it, previewIds) ? { preview: true as const } : {}),
     })),
   }));
+}
+
+/** 203: 保存はOFFで、プレビューで開けている項目か（メニューに「準備中」と出す） */
+function isPreviewItem(m: MasterItem, previewIds?: ReadonlySet<string>): boolean {
+  return !!(previewIds && m.featureId && previewIds.has(m.featureId));
 }
 
 // 機能フラグでOFFのナビ項目か（指示書103）。
@@ -361,10 +375,12 @@ export function navLabelOverride(
 // flags を渡すと機能フラグOFFの項目を除外する（指示書103・省略時は全項目）。
 export function resolveNav(
   cfg: NavConfig | null | undefined,
-  flags?: FeatureFlags
+  flags?: FeatureFlags,
+  /** 203: 保存はOFFだがプレビューで開けている機能ID（院長・検証用アカウントのときだけ渡る） */
+  previewIds?: ReadonlySet<string>
 ): ResolvedCategory[] {
   try {
-    if (!isValidConfig(cfg)) return defaultResolved(flags);
+    if (!isValidConfig(cfg)) return defaultResolved(flags, previewIds);
 
     // 表示するカテゴリ（hidden除外、order順）
     const visibleCats = cfg.categories
@@ -398,6 +414,7 @@ export function resolveNav(
         // 上書き解決は navLabelOverride に一元化（指示書123）
         label: navLabelOverride(cfg, m.key) || m.label,
         ...(m.external ? { external: true as const } : {}),
+        ...(isPreviewItem(m, previewIds) ? { preview: true as const } : {}),
       };
 
       if (conf) {
@@ -470,10 +487,10 @@ export function resolveNav(
 
     // 何も表示できなくなる事故を防ぐ（安全網）
     const total = result.reduce((s, c) => s + c.items.length, 0);
-    if (total === 0) return defaultResolved(flags);
+    if (total === 0) return defaultResolved(flags, previewIds);
 
     return result;
   } catch {
-    return defaultResolved(flags);
+    return defaultResolved(flags, previewIds);
   }
 }

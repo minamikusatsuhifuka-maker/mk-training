@@ -13,10 +13,23 @@
 
 export const SCHEDULE_RECORD_TYPE = "schedule";
 
-/** 回答の締切 = 1on1の何日前か（B-1） */
+/** 回答の締切 = 1on1の何日前か（B-1・204でも変えない） */
 export const PRESURVEY_DEADLINE_DAYS = 3;
-/** 知らせを出す時点（何日前か）。大きい順 */
-export const PRESURVEY_ALERT_DAYS = [14, 7, 3] as const;
+
+/**
+ * 知らせを出す時点（204 §6-1）。**締切日を基準**に 7日前・3日前・前日・当日。
+ * 1on1の日から見ると 10日前・6日前・4日前・3日前。
+ * 197の「2週間前・1週間前・締切日」は廃止。
+ */
+export const PRESURVEY_ALERT_STAGES = [
+  { stage: "d7", beforeDeadline: 7, label: "締切の1週間前" },
+  { stage: "d3", beforeDeadline: 3, label: "締切の3日前" },
+  { stage: "d1", beforeDeadline: 1, label: "締切の前日" },
+  { stage: "d0", beforeDeadline: 0, label: "締切日" },
+] as const;
+
+/** 知らせを送る時刻（日本時間）。毎日この時刻に1回だけ動かす（204 §6-1） */
+export const PRESURVEY_ALERT_HOUR_JST = 8;
 
 export type OneOnOneSchedule = {
   id: string;
@@ -123,7 +136,26 @@ export function upcomingSchedules<T extends Pick<OneOnOneSchedule, "date" | "tim
     .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
 }
 
-export type PresurveyAlertStage = "2w" | "1w" | "deadline";
+export type PresurveyAlertStage = (typeof PRESURVEY_ALERT_STAGES)[number]["stage"];
+
+export function isPresurveyAlertStage(v: unknown): v is PresurveyAlertStage {
+  return PRESURVEY_ALERT_STAGES.some((s) => s.stage === v);
+}
+
+export function presurveyAlertStageLabel(stage: PresurveyAlertStage): string {
+  return PRESURVEY_ALERT_STAGES.find((s) => s.stage === stage)?.label ?? "";
+}
+
+/** その予定の、知らせを出す日（締切から数える・204 §6-1） */
+export function presurveyAlertDates(
+  s: Pick<OneOnOneSchedule, "date">
+): { stage: PresurveyAlertStage; on: string }[] {
+  const deadline = presurveyDeadline(s);
+  return PRESURVEY_ALERT_STAGES.map((x) => ({
+    stage: x.stage,
+    on: addDays(deadline, -x.beforeDeadline),
+  }));
+}
 
 export type PresurveyAlert = {
   scheduleId: string;
@@ -136,9 +168,11 @@ export type PresurveyAlert = {
 };
 
 /**
- * 本人に出す知らせ（C-1）。出さないときは null。
+ * 本人に出す知らせ（C-1 → 204 §6-1）。出さないときは null。
  * - 回答済み → null
- * - 今日が「いずれかの時点 ≦ 今日 ≦ 締切日」で、その時点が登録日以後 → 最も新しい時点の知らせ
+ * - 締切を過ぎたら本人への知らせは止める
+ * - 「知らせる日 ≦ 今日 ≦ 締切日」で、その日が予定の登録日以後 → **最も新しい時点だけ**
+ *   （送り損ねた日があっても、さかのぼって複数は出さない）
  */
 export function presurveyAlertFor(
   s: OneOnOneSchedule,
@@ -149,15 +183,14 @@ export function presurveyAlertFor(
   const deadline = presurveyDeadline(s);
   if (today > deadline) return null;
   let stage: PresurveyAlertStage | null = null;
-  for (const days of PRESURVEY_ALERT_DAYS) {
-    const point = addDays(s.date, -days);
-    if (point > today) continue; // まだその時点が来ていない
-    if (s.registeredOn && point < s.registeredOn) continue; // 登録より前の時点は出さない
-    stage = days === 14 ? "2w" : days === 7 ? "1w" : "deadline";
+  for (const { stage: st, on } of presurveyAlertDates(s)) {
+    if (on > today) continue; // まだその日が来ていない
+    if (s.registeredOn && on < s.registeredOn) continue; // 登録より前の日は出さない
+    stage = st;
   }
   if (!stage) return null;
   const message =
-    stage === "deadline"
+    stage === "d0"
       ? `本日が回答の締切です（${formatMonthDay(s.date)}の1on1の事前アンケート）`
       : `${formatMonthDay(s.date)}の1on1の事前アンケートをお願いします（${formatMonthDay(deadline)}まで）`;
   return { scheduleId: s.id, stage, date: s.date, deadline, message };

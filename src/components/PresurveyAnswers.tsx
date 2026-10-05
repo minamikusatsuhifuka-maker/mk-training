@@ -8,6 +8,8 @@
 //（回答したあとに置き場所を変えても、その回の見え方は変わらない）。
 //
 // 【原則】評価の材料ではなく、対話の材料。読み取り専用で出す（1on1画面から書き換えない）。
+//
+// 204 §4: 第1部（働く目的と目標）で**前回から変わった項目**には ✏️ を付ける。
 
 import {
   answerSummary,
@@ -20,10 +22,13 @@ export function PresurveyAnswerList({
   respondentName,
   heldOn,
   dateMismatch,
+  changedIds,
 }: {
   answers: PresurveyAnswer[];
   title: string;
   respondentName: string;
+  /** 204 §4: 前回から変わった第1部の質問id */
+  changedIds?: string[];
   /** 回答された1on1の予定日 */
   heldOn?: string;
   /** 予定日が1on1の実施日と違うとき（前の回の回答を出している） */
@@ -46,7 +51,14 @@ export function PresurveyAnswerList({
       <ul className="space-y-2">
         {answers.map((a) => (
           <li key={a.questionId}>
-            <p className="text-[11px] text-gray-600 leading-snug">{a.question}</p>
+            <p className="text-[11px] text-gray-600 leading-snug">
+              {changedIds?.includes(a.questionId) && (
+                <span className="mr-1 text-amber-700" data-presurvey-changed={a.questionId}>
+                  ✏️
+                </span>
+              )}
+              {a.question}
+            </p>
             <p className="text-xs text-gray-900 whitespace-pre-wrap leading-relaxed">
               {answerSummary(a)}
             </p>
