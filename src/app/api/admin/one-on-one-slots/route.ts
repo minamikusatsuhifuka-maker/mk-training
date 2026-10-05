@@ -178,11 +178,13 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const admin = createSupabaseAdminClient();
-    const [slots, bookings, people] = await Promise.all([
+    const [slots, bookings, people, users] = await Promise.all([
       fetchSlots(admin),
       fetchBookings(admin),
       loadPeople(admin),
+      admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
     ]);
+    const testIds = new Set((users.data?.users ?? []).filter(isTestSeedUser).map((u) => u.id));
     const nameOf = (id: string) => people.get(id)?.name ?? "名前未設定";
     const byId = new Map(slots.map((s) => [s.id, s]));
     const bookingOf = (slotId: string) => bookings.find((b) => b.slotId === slotId) ?? null;
@@ -193,7 +195,13 @@ export async function PATCH(req: NextRequest) {
       for (const s of target) {
         const b = bookingOf(s.id);
         if (!b) continue;
-        await cancelBooking(admin, { booking: b, staffName: nameOf(b.userId), by, kind: "released" });
+        await cancelBooking(admin, {
+          booking: b,
+          staffName: nameOf(b.userId),
+          by,
+          kind: "released",
+          seedMark: testIds.has(b.userId),
+        });
         released += 1;
       }
       return released;
@@ -267,6 +275,7 @@ export async function PATCH(req: NextRequest) {
         staffName: nameOf(userId),
         by,
         today,
+        seedMark: testIds.has(userId),
       });
       return NextResponse.json({ ok: true, booking: r.booking, moved: r.moved });
     }
@@ -275,7 +284,7 @@ export async function PATCH(req: NextRequest) {
       const id = typeof body.slotId === "string" ? body.slotId : "";
       const b = bookingOf(id);
       if (!b) return NextResponse.json({ error: "対象の予約が見つかりません" }, { status: 404 });
-      await cancelBooking(admin, { booking: b, staffName: nameOf(b.userId), by });
+      await cancelBooking(admin, { booking: b, staffName: nameOf(b.userId), by, seedMark: testIds.has(b.userId) });
       return NextResponse.json({ ok: true });
     }
 

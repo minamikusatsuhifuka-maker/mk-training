@@ -18,6 +18,7 @@ import {
   BOOKING_NONE_LEFT_MESSAGE,
   BOOKING_PLEASE_MESSAGE,
   BOOKING_CHANGE_DAYS,
+  rebookText,
   formatDateW,
   groupByDate,
 } from "@/lib/one-on-one-slots";
@@ -30,6 +31,8 @@ type MyBooking = { slotId: string; date: string; startTime: string; endTime: str
 type PeriodView = {
   id: string;
   label: string;
+  /** 205 §1-2: 院長が枠を消した・ブロックしたことで予約が外れた（取り直しのお願い） */
+  rebook: { date: string; startTime: string } | null;
   startDate: string;
   endDate: string;
   myBooking: MyBooking;
@@ -175,6 +178,16 @@ function BookingPageBody() {
               data-booking-period={p.id}
             >
               <h2 className="text-sm font-bold text-gray-900">🗓 {periodLabel(p)}</h2>
+
+              {p.rebook && (
+                <p
+                  className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900"
+                  role="alert"
+                  data-booking-rebook
+                >
+                  {rebookText(p.rebook)}
+                </p>
+              )}
 
               {b ? (
                 <div className="space-y-2 rounded-lg border border-teal-200 bg-teal-50/60 p-3" data-booking-mine>

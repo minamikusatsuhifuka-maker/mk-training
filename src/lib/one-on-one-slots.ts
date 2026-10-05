@@ -30,6 +30,8 @@ export const SLOT_PERIOD_TYPE = "slot_period";
 export const SLOT_TYPE = "slot";
 export const BOOKING_TYPE = "booking";
 export const BOOKING_NOTICE_TYPE = "booking_notice";
+/** 205 §1-2: 院長が枠を消した・ブロックしたことで予約が外れた人への「取り直しのお願い」 */
+export const BOOKING_REBOOK_TYPE = "booking_rebook";
 
 /** 既定の時間帯（205 §0-2） */
 export const DEFAULT_SLOT_FROM = "13:00";
@@ -131,6 +133,11 @@ export function bookingId(slot: string): string {
 /** 197の予定の行id。期間とスタッフで固定＝枠を変えても予定の行は同じ（事前アンケートが引き継がれる） */
 export function scheduleIdFor(periodId: string, userId: string): string {
   return `sch-${periodId}-${userId}`;
+}
+
+/** 取り直しのお願いの行id（期間とスタッフで1つ＝二重に出さない） */
+export function rebookId(periodId: string, userId: string): string {
+  return `rebook-${periodId}-${userId}`;
 }
 
 export function newNoticeId(now: number = Date.now()): string {
@@ -390,6 +397,38 @@ export function normalizeBookingNotice(id: string, raw: unknown): BookingNotice 
     startTime: isHm(g.startTime) ? g.startTime : "",
     at: str(g.at, 64),
   };
+}
+
+export type RebookRequest = {
+  id: string;
+  periodId: string;
+  userId: string;
+  /** 外れた予約の日時（本人に「いつの予約が外れたか」を伝えるため） */
+  date: string;
+  startTime: string;
+  at: string;
+};
+
+export function normalizeRebookRequest(id: string, raw: unknown): RebookRequest | null {
+  if (!id || !raw || typeof raw !== "object") return null;
+  const g = raw as Record<string, unknown>;
+  const userId = str(g.userId, 100);
+  const periodId = str(g.periodId, 100);
+  if (!userId || !periodId) return null;
+  return {
+    id,
+    periodId,
+    userId,
+    date: isYmd(g.date) ? g.date : "",
+    startTime: isHm(g.startTime) ? g.startTime : "",
+    at: str(g.at, 64),
+  };
+}
+
+/** 本人に出す「取り直しのお願い」の文（205 §1-2） */
+export function rebookText(r: Pick<RebookRequest, "date" | "startTime">): string {
+  const when = r.date ? `（${formatDateW(r.date)}${r.startTime ? ` ${r.startTime}` : ""}）` : "";
+  return `${BOOKING_REBOOK_MESSAGE}${when}`;
 }
 
 /** 院長への知らせの文（氏名・日時・種類だけ。早さ・回数は数えない・205 §5） */

@@ -31,6 +31,7 @@ import {
   cancelBooking,
   fetchBookings,
   fetchPeriods,
+  fetchRebookRequests,
   fetchSlots,
 } from "@/lib/one-on-one-slots-server";
 import {
@@ -78,11 +79,12 @@ export async function GET() {
     if (!enabled) return NextResponse.json({ enabled: false, today, periods: [] });
 
     const admin = createSupabaseAdminClient();
-    const [periods, allSlots, allBookings, scheduleRes] = await Promise.all([
+    const [periods, allSlots, allBookings, scheduleRes, rebooks] = await Promise.all([
       fetchPeriods(admin),
       fetchSlots(admin),
       fetchBookings(admin),
       fetchSchedules(admin),
+      fetchRebookRequests(admin, user.id),
     ]);
 
     // 同じ時刻に院長の予定がある枠は出さない（205 §3）。自分の予約ぶんの予定は除く
@@ -103,9 +105,12 @@ export async function GET() {
       const open: Slot[] = openSlotsForStaff(slots, bookings, today).filter(
         (s) => !directorBusy.has(`${s.date} ${s.startTime}`)
       );
+      const rebook = rebooks.find((r) => r.periodId === p.id) ?? null;
       return {
         id: p.id,
         label: p.label,
+        // 205 §1-2: 院長が枠を消した・ブロックしたことで予約が外れた
+        rebook: rebook ? { date: rebook.date, startTime: rebook.startTime } : null,
         startDate: p.startDate,
         endDate: p.endDate,
         // 自分の予約（他の人の予約は入れない）
@@ -199,6 +204,7 @@ export async function DELETE(req: NextRequest) {
       booking: mine,
       staffName: people.get(user.id)?.name ?? "名前未設定",
       by: user.email ?? user.id,
+      seedMark: isTestSeedUser(user),
     });
     return NextResponse.json({ ok: true });
   } catch (e) {

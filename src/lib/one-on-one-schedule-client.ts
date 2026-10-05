@@ -6,14 +6,18 @@
 import { useEffect, useState } from "react";
 import type { ScheduleView } from "./one-on-one-schedule";
 
+/** 205 §1-2: 枠の削除・ブロックで予約が外れた（取り直しのお願い） */
+export type RebookNotice = { periodId: string; date: string; startTime: string };
+
 export type MySchedulesResponse = {
   mine: ScheduleView[];
   partner: ScheduleView[];
   alertsEnabled: boolean;
+  rebooks: RebookNotice[];
   today: string;
 };
 
-const EMPTY: MySchedulesResponse = { mine: [], partner: [], alertsEnabled: false, today: "" };
+const EMPTY: MySchedulesResponse = { mine: [], partner: [], alertsEnabled: false, rebooks: [], today: "" };
 const TTL_MS = 30_000;
 
 let cache: { at: number; promise: Promise<MySchedulesResponse> } | null = null;
@@ -27,6 +31,7 @@ export function fetchMySchedules(force = false): Promise<MySchedulesResponse> {
       mine: Array.isArray(j.mine) ? j.mine : [],
       partner: Array.isArray(j.partner) ? j.partner : [],
       alertsEnabled: j.alertsEnabled === true,
+      rebooks: Array.isArray(j.rebooks) ? j.rebooks : [],
       today: typeof j.today === "string" ? j.today : "",
     }))
     .catch(() => EMPTY);

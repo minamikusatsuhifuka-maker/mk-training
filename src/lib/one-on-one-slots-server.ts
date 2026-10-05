@@ -33,6 +33,7 @@ import { PRESURVEY_CONTENT_TYPE } from "./presurvey-access-server";
 import { SEED_MARK } from "./test-seed";
 import {
   BOOKING_NOTICE_TYPE,
+  BOOKING_REBOOK_TYPE,
   BOOKING_TYPE,
   SLOT_PERIOD_TYPE,
   SLOT_TYPE,
@@ -40,15 +41,18 @@ import {
   newNoticeId,
   normalizeBooking,
   normalizeBookingNotice,
+  normalizeRebookRequest,
   normalizeSlot,
   normalizeSlotPeriod,
   planSlots,
+  rebookId,
   scheduleIdFor,
   slotId,
   type Booking,
   type BookingNotice,
   type BookingNoticeKind,
   type PeriodInput,
+  type RebookRequest,
   type Slot,
   type SlotPeriod,
 } from "./one-on-one-slots";
@@ -268,6 +272,43 @@ export async function clearNotices(admin: GrowthAdminClient): Promise<number> {
   return all.length;
 }
 
+// ─── 取り直しのお願い（205 §1-2） ───
+
+/** その人に出ている取り直しのお願い（他の人の分は返さない） */
+export async function fetchRebookRequests(
+  admin: GrowthAdminClient,
+  userId?: string
+): Promise<RebookRequest[]> {
+  let q = admin.from(GROWTH_TABLE).select("id, data").eq("record_type", BOOKING_REBOOK_TYPE);
+  if (userId) q = q.eq("data->>userId", userId);
+  const { data, error } = await q;
+  wrap(error);
+  return ((data ?? []) as Row[])
+    .map((r) => normalizeRebookRequest(String(r.id), r.data))
+    .filter((r): r is RebookRequest => r !== null);
+}
+
+async function askRebook(
+  admin: GrowthAdminClient,
+  b: Booking,
+  by: string,
+  seedMark: boolean
+): Promise<void> {
+  const data: Record<string, unknown> = {
+    periodId: b.periodId,
+    userId: b.userId,
+    date: b.date,
+    startTime: b.startTime,
+    at: new Date().toISOString(),
+  };
+  if (seedMark) data[SEED_MARK] = true;
+  await upsert(admin, BOOKING_REBOOK_TYPE, rebookId(b.periodId, b.userId), data, by);
+}
+
+async function clearRebook(admin: GrowthAdminClient, periodId: string, userId: string): Promise<void> {
+  await remove(admin, BOOKING_REBOOK_TYPE, rebookId(periodId, userId));
+}
+
 /** 197の予定を作る・直す（相手は院長・行idは期間とスタッフで固定） */
 async function upsertScheduleFor(
   admin: GrowthAdminClient,
@@ -415,6 +456,9 @@ export async function bookSlot(
   // 取り直しのときは事前アンケートの日付も直す（回答は消さない）
   await movePresurveyHeldOn(admin, userId, scheduleId, slot.date);
 
+  // 取り直しのお願いが出ていたら消す（予約し直せたので）
+  await clearRebook(admin, slot.periodId, userId);
+
   await addNotice(
     admin,
     mine.length > 0 ? "moved" : "booked",
@@ -429,11 +473,24 @@ export async function bookSlot(
 /** 予約を取り消す（枠が空く・予定も消す。事前アンケートの回答は残す） */
 export async function cancelBooking(
   admin: GrowthAdminClient,
-  args: { booking: Booking; staffName: string; by: string; kind?: BookingNoticeKind }
+  args: {
+    booking: Booking;
+    staffName: string;
+    by: string;
+    kind?: BookingNoticeKind;
+    /** 検証用アカウントの分は一括削除の対象にする（205 §6） */
+    seedMark?: boolean;
+  }
 ): Promise<void> {
   const { booking, by } = args;
   await remove(admin, BOOKING_TYPE, booking.id);
   if (booking.scheduleId) await remove(admin, "schedule", booking.scheduleId);
+  if (args.kind === "released") {
+    // 205 §1-2: 枠の削除・ブロックで外れたときは、本人に取り直しをお願いする
+    await askRebook(admin, booking, by, args.seedMark === true);
+  } else {
+    await clearRebook(admin, booking.periodId, booking.userId);
+  }
   await addNotice(
     admin,
     args.kind ?? "canceled",

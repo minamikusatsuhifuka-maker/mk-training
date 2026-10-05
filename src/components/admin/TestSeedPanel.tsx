@@ -28,6 +28,7 @@ const COUNT_LABEL: Record<string, string> = {
   slot: "1on1の枠",
   booking: "1on1の予約",
   booking_notice: "予約の動きの知らせ",
+  booking_rebook: "取り直しのお願い",
   presurvey_alert_sent: "知らせを送った記録",
   course: "講座",
   grade: "等級・キャリアライン",

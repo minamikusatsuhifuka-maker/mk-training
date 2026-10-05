@@ -19,6 +19,7 @@ import {
   type ScheduleView,
 } from "@/lib/one-on-one-schedule";
 import { activeAlerts, activeReminders, useMySchedules } from "@/lib/one-on-one-schedule-client";
+import { rebookText } from "@/lib/one-on-one-slots";
 
 const PRESURVEY_HREF = "/one-on-one/presurvey";
 
@@ -68,9 +69,22 @@ export function PresurveyAlertBanner() {
 export function ScheduleReminderBanner() {
   const data = useMySchedules();
   const reminders = activeReminders(data);
-  if (reminders.length === 0) return null;
+  const rebooks = data?.rebooks ?? [];
+  if (reminders.length === 0 && rebooks.length === 0) return null;
   return (
     <div className="space-y-1.5" data-schedule-reminder>
+      {/* 205 §1-2: 枠が無くなって予約が外れた人へ */}
+      {rebooks.map((r) => (
+        <Link
+          key={r.periodId}
+          href="/one-on-one/booking"
+          className="flex items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm font-medium text-amber-900"
+          data-schedule-rebook
+        >
+          <span className="min-w-0">🗓 {rebookText(r)}</span>
+          <span className="shrink-0 text-xs underline underline-offset-2">予約する →</span>
+        </Link>
+      ))}
       {reminders.map((r) => (
         <div
           key={r.scheduleId}

@@ -16,6 +16,7 @@ import { isTestSeedUser } from "@/lib/test-seed";
 import { jstTodayYmd } from "@/lib/library";
 import { serverFeatureEnabled, GrowthTableMissingError } from "@/lib/staff-growth-server";
 import { scheduleReminderFor } from "@/lib/one-on-one-schedule";
+import { fetchRebookRequests } from "@/lib/one-on-one-slots-server";
 import {
   createSupabaseAdminClient,
   fetchSchedules,
@@ -52,6 +53,10 @@ export async function GET() {
     const partnerOnly = partnerRes.schedules.filter((s) => s.userId !== user.id);
     const partnerViews = await withAnswerState(admin, partnerOnly, today);
     const people = partnerViews.length > 0 ? await loadPeople(admin) : new Map();
+    // 205 §1-2: 院長が枠を消した・ブロックしたことで予約が外れた人に、取り直しをお願いする
+    const rebooks = remindersEnabled
+      ? await fetchRebookRequests(admin, user.id).catch(() => [])
+      : [];
     return NextResponse.json({
       mine: mine.map((v) => ({
         ...v,
@@ -65,6 +70,7 @@ export async function GET() {
         staffName: people.get(v.userId)?.name ?? "名前未設定",
       })),
       alertsEnabled,
+      rebooks: rebooks.map((r) => ({ periodId: r.periodId, date: r.date, startTime: r.startTime })),
       today,
     });
   } catch (e) {
