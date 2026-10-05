@@ -18,6 +18,7 @@ import {
   formatMonthDay,
   presurveyAlertStageLabel,
   type PresurveyAlert,
+  type ScheduleReminder,
 } from "./one-on-one-schedule";
 
 export type PresurveyMailSkip =
@@ -63,6 +64,48 @@ export function buildPresurveyMail(alert: PresurveyAlert): { subject: string; te
     "回答は評価には使いません。あなたの成長を支え、1on1の対話を深めるために使います。",
   ].join("\n");
   return { subject, text };
+}
+
+/** 205 §4: 1on1の予定の知らせ（前日・当日）。メールの中身は日時とリンクだけ */
+export function buildScheduleReminderMail(r: ScheduleReminder): { subject: string; text: string } {
+  const subject = `【南草津皮フ科】${formatMonthDay(r.date)}の1on1のお知らせ`;
+  const text = [
+    r.message,
+    "",
+    `1on1の日：${formatMonthDay(r.date)}${r.time ? ` ${r.time}から` : ""}`,
+    "",
+    "事前アンケート・予定はこちらから：",
+    presurveyLink(r.scheduleId),
+  ].join("\n");
+  return { subject, text };
+}
+
+/** 205 §4: 予定の知らせを1人に送る */
+export async function sendScheduleReminderMail(
+  to: { email: string; name: string },
+  reminder: ScheduleReminder
+): Promise<PresurveyMailResult> {
+  if (!to.email) return { sent: false, reason: "no_email" };
+  const { subject, text } = buildScheduleReminderMail(reminder);
+  const r = await sendPortalMail(to.email, subject, text);
+  return r.ok ? { sent: true, reason: "" } : { sent: false, reason: "failed", detail: r.error };
+}
+
+/**
+ * 205 §4: 予定の知らせを送れる状態か。
+ * 事前アンケートとは別の機能フラグ（1on1の日程調整）で見る。
+ */
+export async function scheduleReminderMailReady(): Promise<
+  { ready: true } | { ready: false; reason: PresurveyMailSkip }
+> {
+  if (!(await serverFeatureEnabled("one_on_one_booking"))) {
+    return { ready: false, reason: "feature_off" };
+  }
+  if (!(await serverFeatureEnabled("presurvey_alert_email"))) {
+    return { ready: false, reason: "flag_off" };
+  }
+  if (!isMailConfigured()) return { ready: false, reason: "smtp_not_configured" };
+  return { ready: true };
 }
 
 /** 1人に送る。送れる状態かは presurveyMailReady で先に確かめてから呼ぶ */

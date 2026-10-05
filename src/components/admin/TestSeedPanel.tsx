@@ -23,6 +23,12 @@ const COUNT_LABEL: Record<string, string> = {
   feedback: "フィードバック",
   promise: "1on1の約束の取り組み状況",
   schedule: "次回1on1の予定",
+  // 205: 1on1の日程調整
+  slot_period: "1on1の日程の期間",
+  slot: "1on1の枠",
+  booking: "1on1の予約",
+  booking_notice: "予約の動きの知らせ",
+  presurvey_alert_sent: "知らせを送った記録",
   course: "講座",
   grade: "等級・キャリアライン",
   gate_check: "ゲートの確認",

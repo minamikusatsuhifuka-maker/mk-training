@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { PresurveyAlertBanner } from "@/components/OneOnOneSchedule";
+import { PresurveyAlertBanner, ScheduleReminderBanner } from "@/components/OneOnOneSchedule";
 import {
   loadPortalItems,
   savePortalItems,
@@ -1019,6 +1019,7 @@ export default function PortalHome() {
 
       {/* 197 C: 1on1の事前アンケートの未回答の知らせ（本人・2週間前/1週間前/締切日・回答すると消える） */}
       <section className="px-4 pt-4 empty:hidden">
+        <ScheduleReminderBanner />
         <PresurveyAlertBanner />
       </section>
 

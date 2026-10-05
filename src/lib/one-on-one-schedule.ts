@@ -196,6 +196,67 @@ export function presurveyAlertFor(
   return { scheduleId: s.id, stage, date: s.date, deadline, message };
 }
 
+// ─── 1on1の予定そのものの知らせ（指示書205 §4） ───
+//
+// 事前アンケートの知らせ（上）とは別に、**1on1の前日と当日**に予定を知らせる。
+// 提出していても出す（事前アンケートの提出とは関係ない）。
+// 1on1の日を変えたら日付から数え直すので、ここは毎回計算するだけでよい。
+
+export const SCHEDULE_REMINDER_STAGES = [
+  { stage: "meet_d1", beforeDate: 1, label: "1on1の前日" },
+  { stage: "meet_d0", beforeDate: 0, label: "1on1の当日" },
+] as const;
+
+export type ScheduleReminderStage = (typeof SCHEDULE_REMINDER_STAGES)[number]["stage"];
+
+export function isScheduleReminderStage(v: unknown): v is ScheduleReminderStage {
+  return SCHEDULE_REMINDER_STAGES.some((s) => s.stage === v);
+}
+
+export function scheduleReminderStageLabel(stage: ScheduleReminderStage): string {
+  return SCHEDULE_REMINDER_STAGES.find((s) => s.stage === stage)?.label ?? "";
+}
+
+export type ScheduleReminder = {
+  scheduleId: string;
+  stage: ScheduleReminderStage;
+  date: string;
+  time: string;
+  message: string;
+};
+
+/** その予定の、知らせを出す日（1on1の前日・当日） */
+export function scheduleReminderDates(
+  s: Pick<OneOnOneSchedule, "date">
+): { stage: ScheduleReminderStage; on: string }[] {
+  return SCHEDULE_REMINDER_STAGES.map((x) => ({ stage: x.stage, on: addDays(s.date, -x.beforeDate) }));
+}
+
+/**
+ * 本人に出す1on1の予定の知らせ（205 §4）。出さないときは null。
+ * - 1on1の日を過ぎたら出さない
+ * - 前日・当日のうち、**今日に当たる段だけ**（さかのぼって複数は出さない）
+ * - 予定の登録がその日より後なら出さない
+ * - **提出していても出す**
+ */
+export function scheduleReminderFor(
+  s: OneOnOneSchedule,
+  today: string
+): ScheduleReminder | null {
+  if (today > s.date) return null;
+  let stage: ScheduleReminderStage | null = null;
+  for (const { stage: st, on } of scheduleReminderDates(s)) {
+    if (on !== today) continue;
+    if (s.registeredOn && on < s.registeredOn) continue;
+    stage = st;
+  }
+  if (!stage) return null;
+  const when = stage === "meet_d1" ? "明日" : "今日";
+  const at = s.time ? `${s.time}から` : "";
+  const message = `${when}${at}1on1です（相手：${partnerLabel(s)}）`;
+  return { scheduleId: s.id, stage, date: s.date, time: s.time, message };
+}
+
 export type ScheduleAnswerState = "answered" | "waiting" | "overdue";
 
 /**
@@ -234,6 +295,8 @@ export type ScheduleView = OneOnOneSchedule & {
   state: ScheduleAnswerState;
   /** 本人向けの知らせ（院長・担当者向けの応答では null） */
   alert: PresurveyAlert | null;
+  /** 205: 1on1の予定そのものの知らせ（前日・当日。院長・担当者向けの応答では null） */
+  reminder?: ScheduleReminder | null;
   /** 担当者向け: スタッフの名前 */
   staffName?: string;
   /** カルテ向け: この人が変更・削除できるか */

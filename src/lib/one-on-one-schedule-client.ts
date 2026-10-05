@@ -62,3 +62,17 @@ export function activeAlerts(r: MySchedulesResponse | null): NonNullable<Schedul
   if (!r || !r.alertsEnabled) return [];
   return r.mine.map((s) => s.alert).filter((a): a is NonNullable<ScheduleView["alert"]> => !!a);
 }
+
+/**
+ * 205 §4: 本人に出ている「1on1の予定」の知らせ（前日・当日）。
+ * 事前アンケートの提出とは関係なく出る（提出していても出す）。
+ * 機能フラグ（1on1の日程調整）がOFFのときはサーバーが入れてこない。
+ */
+export function activeReminders(
+  r: MySchedulesResponse | null
+): NonNullable<NonNullable<ScheduleView["reminder"]>>[] {
+  if (!r) return [];
+  return r.mine
+    .map((s) => s.reminder)
+    .filter((x): x is NonNullable<NonNullable<ScheduleView["reminder"]>> => !!x);
+}

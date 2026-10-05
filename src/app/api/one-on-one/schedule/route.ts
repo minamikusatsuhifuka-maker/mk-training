@@ -15,6 +15,7 @@ import { isAdminUser } from "@/lib/admin-role";
 import { isTestSeedUser } from "@/lib/test-seed";
 import { jstTodayYmd } from "@/lib/library";
 import { serverFeatureEnabled, GrowthTableMissingError } from "@/lib/staff-growth-server";
+import { scheduleReminderFor } from "@/lib/one-on-one-schedule";
 import {
   createSupabaseAdminClient,
   fetchSchedules,
@@ -41,6 +42,8 @@ export async function GET() {
 
   try {
     const alertsEnabled = isAdmin || isTestSeedUser(user) || (await serverFeatureEnabled("one_on_one_presurvey"));
+    // 205 §4: 1on1の予定の知らせは「1on1の日程調整」がONのときだけ（院長・検証用は203のプレビューと同じ扱い）
+    const remindersEnabled = isAdmin || isTestSeedUser(user) || (await serverFeatureEnabled("one_on_one_booking"));
     const [mineRes, partnerRes] = await Promise.all([
       fetchSchedules(admin, { userId: user.id }),
       fetchSchedules(admin, isAdmin ? {} : { partnerId: user.id }),
@@ -50,10 +53,15 @@ export async function GET() {
     const partnerViews = await withAnswerState(admin, partnerOnly, today);
     const people = partnerViews.length > 0 ? await loadPeople(admin) : new Map();
     return NextResponse.json({
-      mine: mine.map((v) => ({ ...v, alert: alertsEnabled ? v.alert : null })),
+      mine: mine.map((v) => ({
+        ...v,
+        alert: alertsEnabled ? v.alert : null,
+        reminder: remindersEnabled ? scheduleReminderFor(v, today) : null,
+      })),
       partner: partnerViews.map((v) => ({
         ...v,
         alert: null,
+        reminder: null,
         staffName: people.get(v.userId)?.name ?? "名前未設定",
       })),
       alertsEnabled,

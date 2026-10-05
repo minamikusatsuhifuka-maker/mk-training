@@ -18,7 +18,7 @@ import {
   type ScheduleAnswerState,
   type ScheduleView,
 } from "@/lib/one-on-one-schedule";
-import { activeAlerts, useMySchedules } from "@/lib/one-on-one-schedule-client";
+import { activeAlerts, activeReminders, useMySchedules } from "@/lib/one-on-one-schedule-client";
 
 const PRESURVEY_HREF = "/one-on-one/presurvey";
 
@@ -56,6 +56,29 @@ export function PresurveyAlertBanner() {
           <span className="min-w-0">📝 {a.message}</span>
           <span className="shrink-0 text-xs underline underline-offset-2">回答する →</span>
         </Link>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 205 §4: ホーム上部の「1on1の予定」の知らせ（前日・当日）。
+ * 事前アンケートを提出していても出る。予約の変更・取り消しで自動的に数え直される。
+ */
+export function ScheduleReminderBanner() {
+  const data = useMySchedules();
+  const reminders = activeReminders(data);
+  if (reminders.length === 0) return null;
+  return (
+    <div className="space-y-1.5" data-schedule-reminder>
+      {reminders.map((r) => (
+        <div
+          key={r.scheduleId}
+          className="flex items-center justify-between gap-2 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2.5 text-sm text-teal-900"
+          data-schedule-reminder-stage={r.stage}
+        >
+          <span className="min-w-0">🗓 {r.message}</span>
+        </div>
       ))}
     </div>
   );

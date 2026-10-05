@@ -39,6 +39,10 @@ export const FEATURE_IDS = [
   //   197 C-2 で足したこのフラグをそのまま使う（新しいフラグは作らない）。
   //   送信の設定（RESEND_API_KEY）が無い間は、ONにしても送られない（理由を返すだけ）。
   "presurvey_alert_email",
+  // ── 1on1の日程調整（指示書205）──
+  // 院長が枠を作り、スタッフが自分で予約する（/one-on-one/booking）。**既定OFF**。
+  // OFFの間はスタッフに出さず、1on1の予定の知らせ（前日・当日）も送らない。
+  "one_on_one_booking",
 ] as const;
 export type FeatureId = (typeof FEATURE_IDS)[number];
 
@@ -99,6 +103,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   growth_record: false, // 179-C（記録する項目と目的をスタッフに説明してからON）
   one_on_one_presurvey: false, // 197（質問の内容と「評価に使わない」ことを説明してからON）
   presurvey_alert_email: false, // 197 C-2（178のメール設定が終わってから）
+  one_on_one_booking: false, // 205（枠の作り方とスタッフへの案内を説明してからON）
   page_members: true,
   page_philosophy: true,
   page_corporate_book: true,
@@ -145,6 +150,7 @@ export const FEATURE_META: FeatureMeta[] = [
   { id: "anniversary", label: "記念日のお祝い", description: "入職記念日・誕生日に本人のホームだけでお祝い（誕生日は本人が設定した場合のみ）", phase: 5 },
   { id: "growth_record", label: "マイ成長記録", description: "本人が自分の学びの記録・目標・1on1の約束を見て書けるページ（/my-growth）。記録する項目と目的を説明してからONにする", phase: 5 },
   { id: "one_on_one_presurvey", label: "1on1の事前アンケート", description: "本人が1on1の前に答える9問（/one-on-one/presurvey）。回答は1on1画面のRWDEPの各欄の隣に並ぶ。評価には使わないことを説明してからONにする", phase: 5 },
+  { id: "one_on_one_booking", label: "1on1の日程調整", description: "院長が実施期間・曜日・時間帯・刻みを決めて枠を作り、スタッフが空き枠を自分で予約する（/one-on-one/booking）。予約は「次回1on1の予定」として登録され、事前アンケートの期限もそこから決まる。スタッフが自分で予約・変更・取り消しできるのは実施日の4日前まで。ONにすると1on1の前日・当日の朝8時に予定の知らせも出る", phase: 5 },
   { id: "presurvey_alert_email", label: "事前アンケートの知らせをメールでも送る", description: "提出の知らせ（提出期限の7日前・3日前・前日・当日の朝8時）をアプリ内に加えてメールでも送る。本文は期限の日付と回答のリンクだけ（回答内容は入れない）。検証用アカウントには送らない。送信の設定（指示書178）が終わるまでは、ONにしても送られない", phase: 5 },
 ];
 
@@ -170,6 +176,7 @@ export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
   "anniversary", // 指示書146-E
   "growth_record", // 指示書179-C: マイ成長記録（/my-growth・学び／目標／1on1の約束）
   "one_on_one_presurvey", // 指示書197・197-補: 1on1の事前アンケート（/one-on-one/presurvey）
+  "one_on_one_booking", // 指示書205: 1on1の日程調整（/one-on-one/booking・/admin/one-on-one-slots）
 ]);
 
 // ページの公開設定の管理UI用メタ（指示書124・「📄 ページの公開設定」セクション）

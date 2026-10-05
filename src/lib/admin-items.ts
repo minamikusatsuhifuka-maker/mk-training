@@ -102,6 +102,14 @@ export const ADMIN_ITEMS: readonly AdminItem[] = [
   //   任せても見られるのは「担当に指定したスタッフの分だけ」（判定は presurvey-access-server）。
   //   パスを /admin/presurvey とは別の区切りにしているのは、proxy が /admin/<第1区切り> で
   //   項目を引くため（/admin/presurvey/... にすると質問の編集と同じ項目＝院長のみになってしまう）。
+  // 205: 1on1の日程調整。枠と予約の一覧（氏名つき）は院長のみ（183 B-2・個人の記録）
+  {
+    key: "one-on-one-slots",
+    label: "🗓 1on1の日程",
+    href: "/admin/one-on-one-slots",
+    delegable: false,
+    reason: "1on1の枠と予約（誰がいつ面談するか＝個人の記録）。院長のみ",
+  },
   {
     key: "presurvey-answers",
     label: "📝 1on1の事前アンケートの回答",
