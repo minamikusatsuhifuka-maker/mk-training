@@ -25,6 +25,7 @@ import { isAdminUser } from "@/lib/admin-role";
 import { isTestSeedUser } from "@/lib/test-seed";
 import { jstTodayYmd } from "@/lib/library";
 import {
+  AlreadyBookedError,
   DirectorBusyError,
   SlotTakenError,
   bookSlot,
@@ -55,6 +56,10 @@ function errorResponse(e: unknown): NextResponse {
   }
   if (e instanceof SlotTakenError || e instanceof DirectorBusyError) {
     return NextResponse.json({ error: e.message, code: "taken" }, { status: 409 });
+  }
+  // 205-補: 同じ人が2台の端末から同時に別の枠を押した。1件目は成立しているので画面を読み込み直す
+  if (e instanceof AlreadyBookedError) {
+    return NextResponse.json({ error: e.message, code: "already" }, { status: 409 });
   }
   return NextResponse.json(
     { error: e instanceof Error ? e.message : "処理に失敗しました" },

@@ -2,7 +2,7 @@
 //
 // 【送る条件（3つそろったときだけ）】
 //   1. 機能フラグ `one_on_one_presurvey` が ON（機能そのものがOFFの間は送らない・204 §6-1）
-//   2. 切り替え `presurvey_alert_email`（管理画面「⚙ 機能」の「メールでも知らせる」）が ON・**既定OFF**
+//   2. 切り替え `presurvey_alert_email`（管理画面「⚙ 機能」の「1on1の知らせ（事前アンケート・予定）をメールでも送る」・206 Aで改名）が ON・**既定OFF**
 //   3. 送信の設定（RESEND_API_KEY）がある ＝ 指示書178の送信設定が済んでいる
 // どれか欠ければ「送らない」を理由つきで返す（黙って落ちない）。
 //
@@ -61,7 +61,13 @@ export function buildPresurveyMail(alert: PresurveyAlert): { subject: string; te
     "回答はこちらから：",
     presurveyLink(alert.scheduleId),
     "",
-    "回答は評価には使いません。あなたの成長を支え、1on1の対話を深めるために使います。",
+    // 206 B: 後半を「スタッフへの約束」の言い回しに置き換えた。
+    //   旧: 「あなたの成長を支え、1on1の対話を深めるために使います。」
+    //        ＝コーポレートブックにない言い回しだったため（院長指示）。
+    //   なお画面側の PRESURVEY_INTRO（one-on-one-presurvey.ts）には旧文が残っている。
+    //   あちらは197で「文言を変えないこと」とされているので、206ではメールだけを変えた。
+    //   **揃えるかどうかは院長の判断**（揃えるなら PRESURVEY_INTRO をこの文にして、ここはそれを参照する）。
+    "回答は評価には使いません。当院は目標・目的を定める機会を提供しサポートします。",
   ].join("\n");
   return { subject, text };
 }
@@ -121,7 +127,7 @@ export async function sendPresurveyReminderMail(
 
 /**
  * 院長あての見本（204 §6-2）。文面と届き方の確認用。
- * 「メールでも知らせる」がOFFでも、**送信の設定があれば送れる**（見本は院長宛てだけ）。
+ * スイッチがOFFでも、**送信の設定があれば送れる**（見本は院長宛てだけ）。
  */
 export async function sendPresurveySampleMail(
   to: string

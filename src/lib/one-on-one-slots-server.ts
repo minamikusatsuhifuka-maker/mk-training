@@ -32,12 +32,14 @@ import { normalizePresurveyData } from "./one-on-one-presurvey";
 import { PRESURVEY_CONTENT_TYPE } from "./presurvey-access-server";
 import { SEED_MARK } from "./test-seed";
 import {
+  BOOKING_HOLD_TYPE,
   BOOKING_NOTICE_TYPE,
   BOOKING_REBOOK_TYPE,
   BOOKING_TYPE,
   SLOT_PERIOD_TYPE,
   SLOT_TYPE,
   bookingId,
+  holdId,
   newNoticeId,
   normalizeBooking,
   normalizeBookingNotice,
@@ -67,6 +69,17 @@ export class SlotTakenError extends Error {
   constructor() {
     super("この枠は先に予約されました。別の枠を選んでください");
     this.name = "SlotTakenError";
+  }
+}
+
+/**
+ * 205-補: 同じ人が2台の端末から同時に別の枠を予約した（2件目を止めた）。
+ * 1件目は成立しているので、画面を読み込み直せば自分の予約が見える。
+ */
+export class AlreadyBookedError extends Error {
+  constructor() {
+    super("すでに予約があります。画面を読み込み直してください");
+    this.name = "AlreadyBookedError";
   }
 }
 
@@ -110,6 +123,77 @@ async function upsert(
 async function remove(admin: GrowthAdminClient, recordType: string, id: string): Promise<void> {
   const { error } = await admin.from(GROWTH_TABLE).delete().eq("id", id).eq("record_type", recordType);
   wrap(error);
+}
+
+/** 主キーの重複（Postgres 23505）か。PostgRESTはcodeを返すが、文言でも拾えるようにしておく */
+function isDuplicateKey(error: { code?: string; message: string }): boolean {
+  return (error.code ?? "") === "23505" || /duplicate key|already exists/i.test(error.message);
+}
+
+// ─── 205-補: 「1人がその期間に持てる枠は1つ」の1行（hold） ───
+//
+// `booking-<枠id>` は**同じ枠**の二重予約を防ぐが、**同じ人が2台の端末から別の枠**を
+// 同時に押した場合は行idが別なので両方通ってしまう（どちらも「自分の前の予約を外す」ので
+// 消し合って0枠になることもある）。そこで期間とユーザーで1行の hold を置き、
+// **最初の予約だけ insert が通る**ようにして2件目をDBの一意制約で止める。**新しい表は作らない**。
+
+/** hold の中身。検証用の分は一括削除で拾えるように印を付ける（205 §6と同じ作法） */
+function holdData(
+  periodId: string,
+  userId: string,
+  slotIdValue: string,
+  now: string,
+  seedMark: boolean
+): Record<string, unknown> {
+  const data: Record<string, unknown> = { periodId, userId, slotId: slotIdValue, updatedAt: now };
+  if (seedMark) data[SEED_MARK] = true;
+  return data;
+}
+
+/** hold を insert する。既にあれば false（＝先に誰か／別の端末が取った） */
+async function insertHold(
+  admin: GrowthAdminClient,
+  periodId: string,
+  userId: string,
+  slotIdValue: string,
+  by: string,
+  seedMark = false
+): Promise<boolean> {
+  const now = new Date().toISOString();
+  const { error } = await admin.from(GROWTH_TABLE).insert({
+    id: holdId(periodId, userId),
+    record_type: BOOKING_HOLD_TYPE,
+    data: holdData(periodId, userId, slotIdValue, now, seedMark),
+    updated_by: by,
+    updated_at: now,
+  });
+  if (!error) return true;
+  if (isMissingTable(error.message)) throw new GrowthTableMissingError();
+  if (isDuplicateKey(error as { code?: string; message: string })) return false;
+  throw new Error(error.message);
+}
+
+/** hold の指す枠を書き換える（付け替え・取り直し） */
+async function writeHold(
+  admin: GrowthAdminClient,
+  periodId: string,
+  userId: string,
+  slotIdValue: string,
+  by: string,
+  seedMark = false
+): Promise<void> {
+  await upsert(
+    admin,
+    BOOKING_HOLD_TYPE,
+    holdId(periodId, userId),
+    holdData(periodId, userId, slotIdValue, new Date().toISOString(), seedMark),
+    by
+  );
+}
+
+/** hold を消す（取り消し・枠の削除やブロックで外れたとき） */
+async function clearHold(admin: GrowthAdminClient, periodId: string, userId: string): Promise<void> {
+  await remove(admin, BOOKING_HOLD_TYPE, holdId(periodId, userId));
 }
 
 // ─── 期間 ───
@@ -402,6 +486,26 @@ export async function bookSlot(
     throw new DirectorBusyError();
   }
 
+  // ─── 205-補: 同じ人が2台の端末から同時に別の枠を取るのを止める ───
+  //
+  // 先に「この期間に自分の予約があるか」を読む。
+  //  ・無い → hold を **insert**。2台目は主キーの重複で false が返る。
+  //    そのとき予約が実在していれば1台目が成立した＝2台目は AlreadyBookedError で止める。
+  //    予約が無いのに hold が残っていた場合は、取り消し・枠の削除・ブロックの後片付けが
+  //    残っただけなので**引き継いで続行する**（取り直しが止まらないようにする）。
+  //  ・ある  → 変更（付け替え）なので hold の指す枠を書き換えるだけ。今までどおり動く。
+  const myBefore = (await fetchBookings(admin, slot.periodId)).filter((b) => b.userId === userId);
+  if (myBefore.length === 0) {
+    const got = await insertHold(admin, slot.periodId, userId, slot.id, by, args.seedMark === true);
+    if (!got) {
+      const again = (await fetchBookings(admin, slot.periodId)).filter((b) => b.userId === userId);
+      if (again.length > 0) throw new AlreadyBookedError();
+      await writeHold(admin, slot.periodId, userId, slot.id, by, args.seedMark === true);
+    }
+  } else {
+    await writeHold(admin, slot.periodId, userId, slot.id, by, args.seedMark === true);
+  }
+
   const now = new Date().toISOString();
   const id = bookingId(slot.id);
   const data: Record<string, unknown> = {
@@ -427,10 +531,12 @@ export async function bookSlot(
     updated_at: now,
   });
   if (error) {
+    // 205-補: この呼び出しで hold を新しく取っていた場合は返す（枠が取れていないのに
+    //   「予約あり」の印だけ残ると、別の枠を選び直せなくなる）
+    if (myBefore.length === 0) await clearHold(admin, slot.periodId, userId);
     if (isMissingTable(error.message)) throw new GrowthTableMissingError();
     // 23505 = 主キーの重複＝先に予約されていた
-    const code = (error as { code?: string }).code ?? "";
-    if (code === "23505" || /duplicate key|already exists/i.test(error.message)) {
+    if (isDuplicateKey(error as { code?: string; message: string })) {
       throw new SlotTakenError();
     }
     throw new Error(error.message);
@@ -484,6 +590,8 @@ export async function cancelBooking(
 ): Promise<void> {
   const { booking, by } = args;
   await remove(admin, BOOKING_TYPE, booking.id);
+  // 205-補: 「この期間に1枠持っている」の印も外す（取り消し・枠の削除・ブロックの全経路がここを通る）
+  await clearHold(admin, booking.periodId, booking.userId);
   if (booking.scheduleId) await remove(admin, "schedule", booking.scheduleId);
   if (args.kind === "released") {
     // 205 §1-2: 枠の削除・ブロックで外れたときは、本人に取り直しをお願いする

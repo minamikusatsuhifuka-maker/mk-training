@@ -32,6 +32,13 @@ export const BOOKING_TYPE = "booking";
 export const BOOKING_NOTICE_TYPE = "booking_notice";
 /** 205 §1-2: 院長が枠を消した・ブロックしたことで予約が外れた人への「取り直しのお願い」 */
 export const BOOKING_REBOOK_TYPE = "booking_rebook";
+/**
+ * 205-補: 「この人はこの期間に1枠持っている」という1行（`hold-<期間id>-<ユーザーid>`）。
+ * `booking-<枠id>` は**同じ枠**の二重予約を防ぐが、**同じ人が別の枠を同時に取る**のは防げない
+ * （行idが別なので両方 insert が通る）。そこで期間とユーザーで1行に固定し、
+ * **最初の予約だけ insert が通る**ようにして2台目の端末を止める。詳しくは one-on-one-slots-server.ts。
+ */
+export const BOOKING_HOLD_TYPE = "booking_hold";
 
 /** 既定の時間帯（205 §0-2） */
 export const DEFAULT_SLOT_FROM = "13:00";
@@ -133,6 +140,14 @@ export function bookingId(slot: string): string {
 /** 197の予定の行id。期間とスタッフで固定＝枠を変えても予定の行は同じ（事前アンケートが引き継がれる） */
 export function scheduleIdFor(periodId: string, userId: string): string {
   return `sch-${periodId}-${userId}`;
+}
+
+/**
+ * 205-補: 1人がその期間に持てる枠は1つ、を表す行id。
+ * 期間とスタッフで1つ＝**2台目の端末からの最初の予約は主キーの重複で止まる**
+ */
+export function holdId(periodId: string, userId: string): string {
+  return `hold-${periodId}-${userId}`;
 }
 
 /** 取り直しのお願いの行id（期間とスタッフで1つ＝二重に出さない） */
@@ -380,6 +395,30 @@ export function normalizeBooking(id: string, raw: unknown): Booking | null {
     createdBy: str(g.createdBy, 100),
     createdAt,
     updatedAt: str(g.updatedAt, 64) || createdAt,
+  };
+}
+
+/** 205-補: 「この期間にこの人が持っている枠」の1行 */
+export type BookingHold = {
+  id: string;
+  periodId: string;
+  userId: string;
+  /** いま持っている枠（付け替えのたびに書き換える） */
+  slotId: string;
+  updatedAt: string;
+};
+
+export function normalizeBookingHold(id: string, raw: unknown): BookingHold | null {
+  if (!id || !raw || typeof raw !== "object") return null;
+  const g = raw as Record<string, unknown>;
+  const userId = str(g.userId, 100);
+  if (!userId) return null;
+  return {
+    id,
+    periodId: str(g.periodId, 100),
+    userId,
+    slotId: str(g.slotId, 200),
+    updatedAt: str(g.updatedAt, 64),
   };
 }
 

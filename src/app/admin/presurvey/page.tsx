@@ -7,7 +7,7 @@
 //   文言・ヒント・注記・添え書きは直せる（204 §7）
 // ・定義は content_store `one_on_one_presurvey_config`（書き込みは管理者のみ・サーバー側で強制）
 // ・削除は置かず非表示運用（過去の回答は回答時点の質問文を持っているので壊れない）
-// ・知らせ（提出期限の7日前・3日前・前日・当日の朝8時）と「メールでも知らせる」の案内もここに置く
+// ・知らせ（提出期限の7日前・3日前・前日・当日の朝8時）と「1on1の知らせ（事前アンケート・予定）をメールでも送る」の案内もここに置く
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -526,7 +526,7 @@ function AlertNote() {
         提出したら、その後は出ません。アプリ内は必ず出ます。
       </p>
       <p>
-        メールは管理画面「⚙ 機能」の<strong>「事前アンケートの知らせをメールでも送る」</strong>をONにしたときだけ送られます
+        メールは管理画面「⚙ 機能」の<strong>「1on1の知らせ（事前アンケート・予定）をメールでも送る」</strong>をONにしたときだけ送られます
         （既定はOFF）。<strong>検証用アカウントには送りません。</strong>
       </p>
       <div className="flex flex-wrap items-center gap-2">

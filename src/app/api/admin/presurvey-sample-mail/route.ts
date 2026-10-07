@@ -3,7 +3,7 @@
 //   POST → { sent } / { sent:false, reason }
 //
 // 文面と届き方の確認用。宛先は**ログインしている院長のメールアドレスだけ**（指定は受け取らない）。
-// 「メールでも知らせる」がOFFでも、送信の設定（RESEND_API_KEY）があれば見本は送れる。
+// ⚙機能のスイッチがOFFでも、送信の設定（RESEND_API_KEY）があれば見本は送れる。
 // 178の送信設定が済んでいなければ、理由（smtp_not_configured）を返す（送らない）。
 
 import { NextResponse } from "next/server";
