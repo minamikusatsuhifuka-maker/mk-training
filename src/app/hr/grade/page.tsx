@@ -1,7 +1,9 @@
 "use client";
 
 // 等級制度ページ（指示書116・[PAGE:grade] の転記のみ）
+// 209: 「等級とは何か」の下に、同心円の図（GradeCirclesFigure）を差し込む。
 
+import { Fragment } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import FeatureGate from "@/components/FeatureGate";
 import {
@@ -11,6 +13,7 @@ import {
   useScrollToHash,
 } from "@/components/HrPortalParts";
 import { HR_GRADE_SECTIONS } from "@/data/hr-portal";
+import { GradeCirclesFigure } from "@/components/GradeCirclesFigure";
 
 function GradeBody() {
   useScrollToHash();
@@ -18,7 +21,12 @@ function GradeBody() {
     <div className="space-y-4">
       <HrBackLink />
       {HR_GRADE_SECTIONS.map((s) => (
-        <HrSectionView key={s.id} section={s} />
+        <Fragment key={s.id}>
+          <HrSectionView section={s} />
+          {/* 209: 「等級とは何か」のすぐ下（「成長の5段階と2つの壁」の上）に図を置く。
+              並び順はデータ（HR_GRADE_SECTIONS）側を変えずに、ここで差し込む */}
+          {s.id === "what-is-grade" && <GradeCirclesFigure />}
+        </Fragment>
       ))}
       <HrPortalFooter />
     </div>
