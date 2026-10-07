@@ -10,6 +10,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import NavPageHeader from "@/components/NavPageHeader";
 import FeatureGate from "@/components/FeatureGate";
+import { STAFF_INFRA_MESSAGE } from "@/lib/infra-error";
 import { LibraryDocPicker } from "@/components/LibraryDocPicker";
 import { loadPortalObject } from "@/lib/portal-store";
 import {
@@ -48,6 +49,7 @@ function EventsPageBody() {
   const [error, setError] = useState("");
   // 写真の保管庫が未作成（165）。編集できる人にだけ出す＝直せる人にだけ伝える。
   const [photoBucketMissing, setPhotoBucketMissing] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false); // 212 C: 詳しい文を出す相手の判定（実体はサーバー）
 
   // 資料チップ表示用（タイトル解決・LibraryDocPicker と同じ anon 直読み）
   const [libraryDocs, setLibraryDocs] = useState<LibraryDoc[]>([]);
@@ -116,6 +118,7 @@ function EventsPageBody() {
       setEvents(res.events);
       setCanEdit(res.canEdit);
       setPhotoBucketMissing(res.photoBucketMissing === true);
+      setIsAdmin(res.isAdmin === true);
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
@@ -206,13 +209,24 @@ function EventsPageBody() {
         <p className="text-sm text-red-600 bg-red-50 rounded-xl p-3">{error}</p>
       )}
 
-      {/* 写真の保管庫が未作成（165）。アップロードする前に、直せる人にだけ理由を出す。 */}
+      {/* 写真の保管庫が未作成（165）。
+          212 C: **直せるのは院長だけ**なので、指示書の番号を含む詳しい文は院長にだけ出す。
+          それ以外の人には何が起きているかと、誰に伝えればよいかだけを伝える。 */}
       {photoBucketMissing && (
         <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3 leading-relaxed">
-          ⚠️ 写真の保管庫（Storageバケット <code>event-photos</code>）がまだ作られていません。
-          このままだと写真の追加に失敗します。Supabase の SQL Editor で、
-          指示書165で交付したSQL（165_event-photos_バケット作成.sql）を実行してください。
-          イベントの記録・編集・資料の紐づけは、この状態でも使えます。
+          {isAdmin ? (
+            <>
+              ⚠️ 写真の保管庫（Storageバケット <code>event-photos</code>）がまだ作られていません。
+              このままだと写真の追加に失敗します。Supabase の SQL Editor で、
+              指示書165で交付したSQL（165_event-photos_バケット作成.sql）を実行してください。
+              イベントの記録・編集・資料の紐づけは、この状態でも使えます。
+            </>
+          ) : (
+            <>
+              ⚠️ {STAFF_INFRA_MESSAGE}
+              写真の追加はできませんが、イベントの記録・編集・資料の紐づけは使えます。
+            </>
+          )}
         </p>
       )}
 

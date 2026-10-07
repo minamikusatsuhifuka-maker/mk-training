@@ -27,6 +27,7 @@ import { isAdminUser } from "./admin-role";
 import { serverGetContentRow } from "./content-store-server";
 import { FEATURE_FLAGS_KEY } from "./feature-flags";
 import { isTestSeedUser } from "./test-seed";
+import { InfraMissingError } from "./infra-error";
 import { isBucketNotFound, signBucketPaths } from "./storage-signed";
 import { loadKarteAssignments } from "./admin-delegation-server";
 import {
@@ -82,16 +83,20 @@ export class GrowthTableMissingError extends Error {
   }
 }
 
-/** 証跡バケット未作成（165と同じ: 何を作れば直るかを名指しする） */
-export class GrowthBucketMissingError extends Error {
+/**
+ * 証跡バケット未作成。
+ * 212 C: **スタッフには詳しい文を出さない**。message はスタッフ向けの1文で、
+ * 指示書の番号を含む文は detail（院長の画面とサーバーの記録だけ）。
+ */
+export class GrowthBucketMissingError extends InfraMissingError {
   constructor(detail?: string) {
     super(
       "証跡の保管庫（Storageバケット growth-evidence）がまだ作られていません。" +
         "Supabase の SQL Editor で、指示書179で交付したSQL" +
         "（179_スタッフ育成カルテ_テーブル作成.sql の②）を実行してください。" +
-        (detail ? `（詳細: ${detail}）` : "")
+        (detail ? `（詳細: ${detail}）` : ""),
+      "GrowthBucketMissingError"
     );
-    this.name = "GrowthBucketMissingError";
   }
 }
 

@@ -11,6 +11,7 @@ import {
   ServiceRoleMissingError,
 } from "./supabase-admin";
 import { getSessionUser } from "./staff-profiles-server";
+import { InfraMissingError } from "./infra-error";
 import { isAdminUser } from "./admin-role";
 import {
   SIGNED_URL_TTL,
@@ -42,15 +43,16 @@ export const EVENT_PHOTO_SIGN_TTL = SIGNED_URL_TTL;
  * 何を作れば直るのかが誰にも分からない状態だった。
  * 「実装済み」と「動く」は別である以上、足りていないものは名指しで言う。
  */
-export class EventPhotoBucketMissingError extends Error {
+export class EventPhotoBucketMissingError extends InfraMissingError {
   constructor(detail?: string) {
+    // 212 C: message はスタッフ向けの1文・詳しい文は detail（院長とサーバーの記録だけ）
     super(
       "写真の保管庫（Storageバケット event-photos）がまだ作られていません。" +
         "Supabase の SQL Editor で、指示書165で交付したSQL" +
         "（165_event-photos_バケット作成.sql）を実行してください。" +
-        (detail ? `（詳細: ${detail}）` : "")
+        (detail ? `（詳細: ${detail}）` : ""),
+      "EventPhotoBucketMissingError"
     );
-    this.name = "EventPhotoBucketMissingError";
   }
 }
 

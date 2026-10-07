@@ -9,7 +9,7 @@
 // ・同じ枠をほぼ同時に選んだときは、サーバーが1人だけ通す（2人目には理由を出して一覧を更新）
 // ・スマートフォンで押しやすい大きさ（44px以上）
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import NavPageHeader from "@/components/NavPageHeader";
 import FeatureGate from "@/components/FeatureGate";
@@ -38,6 +38,8 @@ type PeriodView = {
   myBooking: MyBooking;
   canChange: boolean;
   changeDeadline: string;
+  /** 212 A: その予約に対する事前アンケートが提出済みか */
+  presurveyAnswered: boolean;
   openSlots: OpenSlot[];
 };
 type Payload = { enabled: boolean; today: string; periods: PeriodView[] };
@@ -53,6 +55,15 @@ function BookingPageBody() {
   const [busy, setBusy] = useState("");
   /** 確認中の枠 */
   const [confirming, setConfirming] = useState<{ period: PeriodView; slot: OpenSlot } | null>(null);
+  /** 212 A: 予約・変更が済んだときの完了の枠（ページの上に大きく出す） */
+  const [done, setDone] = useState<{ moved: boolean; date: string; startTime: string; endTime: string } | null>(null);
+  const doneRef = useRef<HTMLDivElement | null>(null);
+
+  // 212 A: 完了の枠が出たら、そこまで自動で移る（スマートフォンでも最初に目に入るように）
+  useEffect(() => {
+    if (!done) return;
+    doneRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [done]);
 
   const load = useCallback(async () => {
     try {
@@ -93,12 +104,9 @@ function BookingPageBody() {
       setConfirming(null);
       await load();
       void invalidateMySchedules();
-      setMessage(
-        `${j.moved ? "予約を変更しました" : "予約しました"}。事前アンケートの期限は${formatJpDate(
-          presurveyDeadline({ date: slot.date })
-        )}です。`
-      );
-      if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+      // 212 A: 完了は小さな1行ではなく、ページの上の大きな枠で知らせる
+      setMessage("");
+      setDone({ moved: j.moved === true, date: slot.date, startTime: slot.startTime, endTime: slot.endTime });
     } catch (e) {
       setError(e instanceof Error ? e.message : "予約できませんでした");
     } finally {
@@ -126,6 +134,7 @@ function BookingPageBody() {
       }
       await load();
       void invalidateMySchedules();
+      setDone(null);
       setMessage("予約を取り消しました。");
     } catch (e) {
       setError(e instanceof Error ? e.message : "取り消せませんでした");
@@ -145,12 +154,38 @@ function BookingPageBody() {
         予約・変更・取り消しができるのは<strong>実施日の{BOOKING_CHANGE_DAYS}日前まで</strong>です。
       </p>
 
-      {message && (
-        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800" data-booking-message>
-          {message}{" "}
-          <Link href="/one-on-one/presurvey" className="underline underline-offset-2">
+      {/* 212 A: 予約・変更・取り直しが済んだときの完了の枠。
+          文言は画面にすでにある表記（「予約しました」「予約を変更しました」「相手：院長」
+          「事前アンケートの期限」「📝 事前アンケートに答える」）を使う。 */}
+      {done && (
+        <div
+          ref={doneRef}
+          className="scroll-mt-4 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-4 space-y-3"
+          role="status"
+          data-booking-done
+        >
+          <p className="text-lg font-bold text-emerald-900">
+            ✅ {done.moved ? "予約を変更しました" : "予約しました"}
+          </p>
+          <p className="text-base font-bold text-gray-900" data-booking-done-when>
+            {formatDateW(done.date)} {done.startTime}〜{done.endTime}　相手：院長
+          </p>
+          <p className="text-sm text-gray-800">
+            事前アンケートの期限：{formatJpDate(presurveyDeadline({ date: done.date }))}
+          </p>
+          <Link
+            href="/one-on-one/presurvey"
+            className="flex min-h-[52px] w-full items-center justify-center rounded-xl bg-teal-600 px-4 text-base font-bold text-white hover:bg-teal-700"
+            data-booking-presurvey-cta
+          >
             📝 事前アンケートに答える
           </Link>
+        </div>
+      )}
+
+      {message && (
+        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800" data-booking-message>
+          {message}
         </p>
       )}
       {error && (
@@ -201,6 +236,20 @@ function BookingPageBody() {
                   <p className="text-[11px] text-gray-600">
                     事前アンケートの期限は {formatJpDate(presurveyDeadline({ date: b.date }))} です。
                   </p>
+                  {/* 212 A: 未回答のあいだは答える導線を出し、提出済みならそう出す */}
+                  {p.presurveyAnswered ? (
+                    <p className="text-sm font-medium text-emerald-800" data-booking-presurvey-done>
+                      事前アンケート 回答済み ✓
+                    </p>
+                  ) : (
+                    <Link
+                      href="/one-on-one/presurvey"
+                      className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-teal-600 px-4 text-sm font-bold text-white hover:bg-teal-700"
+                      data-booking-presurvey-cta-card
+                    >
+                      📝 事前アンケートに答える
+                    </Link>
+                  )}
                   {p.canChange ? (
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-[11px] text-gray-600">

@@ -54,50 +54,109 @@ const TURNING_POINT = "G2→G3 ★ 質的転換点";
 const BOOK_2_4 =
   "「昇格」は階段を上るイメージで、上下関係を含みます。一方、「ネクストステージへの移行」は同心円が広がるイメージです。";
 
-/** 外側から描く＝内側の円が上に乗って、中心ほど淡い帯になる */
-function Circles({ cx, cy }: { cx: number; cy: number }) {
+/**
+ * 外側から描く＝内側の円が上に乗って、中心ほど淡い帯になる。
+ *
+ * 212 B: パソコンでは**輪郭の右側に切れ目**を作る（`gap` で角度を渡す）。
+ *   同心円では、内側の円から外へ引き出す線は必ず外側の円の輪郭を横切ってしまう
+ *   （209の実測で G1 の線は4本、G2 の線は3本の輪郭を横切っていた）。
+ *   輪郭をその角度だけ描かないことで、**どの線も交差しない**。
+ *   塗りは丸のままなので、同心円の見え方（中心ほど淡い帯）は変わらない。
+ */
+function Circles({ cx, cy, gap = 0 }: { cx: number; cy: number; gap?: number }) {
+  const ring = [...GRADES].reverse();
   return (
     <>
-      {[...GRADES].reverse().map((g) => (
-        <circle
-          key={g.id}
-          cx={cx}
-          cy={cy}
-          r={g.r}
+      {/* 塗り（外側から重ねる）。gap>0 のときは右側をその角度ぶん**切り欠く**＝
+          引き出し線が通る道が実際に空く（線が帯の上を横切って見えない） */}
+      {ring.map((g) => (
+        <path
+          key={`fill-${g.id}`}
+          d={gap > 0 ? `${arcPath(cx, cy, g.r, gap)} L ${cx} ${cy} Z` : `${arcPath(cx, cy, g.r, 0)} Z`}
           fill={g.fill}
-          stroke={g.stroke}
-          strokeWidth={g.dashed ? 2.5 : 1.5}
-          strokeDasharray={g.dashed ? "7 5" : undefined}
         />
       ))}
+      {/* 輪郭（gap>0 なら右側をその角度ぶん描かない） */}
+      {ring.map((g) =>
+        gap > 0 ? (
+          <path
+            key={`line-${g.id}`}
+            d={arcPath(cx, cy, g.r, gap)}
+            fill="none"
+            stroke={g.stroke}
+            strokeWidth={g.dashed ? 2.5 : 1.5}
+            strokeDasharray={g.dashed ? "7 5" : undefined}
+          />
+        ) : (
+          <circle
+            key={`line-${g.id}`}
+            cx={cx}
+            cy={cy}
+            r={g.r}
+            fill="none"
+            stroke={g.stroke}
+            strokeWidth={g.dashed ? 2.5 : 1.5}
+            strokeDasharray={g.dashed ? "7 5" : undefined}
+          />
+        )
+      )}
     </>
   );
 }
 
-/** パソコン用：図の右に、各円の等級と範囲を引き出し線で示す */
+/** 右側に ±gap 度の切れ目を空けた円弧（gap=0 なら丸のまま） */
+function arcPath(cx: number, cy: number, r: number, gap: number): string {
+  const a = (deg: number) => (deg * Math.PI) / 180;
+  if (gap <= 0) {
+    // 丸いっぱい（半円2つでつなぐ）
+    return `M ${cx + r} ${cy} A ${r} ${r} 0 1 1 ${cx - r} ${cy} A ${r} ${r} 0 1 1 ${cx + r} ${cy}`;
+  }
+  const sx = cx + r * Math.cos(a(-gap));
+  const sy = cy + r * Math.sin(a(-gap));
+  const ex = cx + r * Math.cos(a(gap));
+  const ey = cy + r * Math.sin(a(gap));
+  // large-arc=1・sweep=0 で、切れ目の無いほう（長いほう）を回る
+  return `M ${sx.toFixed(2)} ${sy.toFixed(2)} A ${r} ${r} 0 1 0 ${ex.toFixed(2)} ${ey.toFixed(2)}`;
+}
+
+/**
+ * パソコン用：図の右に、各円の等級と範囲を引き出し線で示す。
+ *
+ * 212 B: 線が何とも交差しないように、次の順で引く。
+ *   1. その円の輪郭の点から、**中心から見て放射状に**外へ出る（角度は円ごとに少しずつ変える）
+ *      … 通り道は輪郭の切れ目（±GAP_DEG度）の中なので、外側の輪郭を横切らない
+ *   2. いちばん外の円より外に出てから、一覧の行へまっすぐ向かう
+ *      … どちらの端も円の外にあるので、戻って円に入ることもない
+ *   角度の並び（上がG5…下がG1）と一覧の並びをそろえてあるので、線どうしも交差しない。
+ *
+ * 209では「一覧の行に向かう放射状の1本」で引いていたため、
+ * G1の線が4本・G2の線が3本の輪郭を横切っていた（実測）。
+ */
+const GAP_DEG = 17;
+/** 円ごとの引き出し角度（上がG5・下がG1。切れ目 ±GAP_DEG の内側に収める） */
+const LEAD_DEG: Record<string, number> = { G5: -13, G4: -6.5, G3: 0, G2: 6.5, G1: 13 };
+/** いちばん外の円（r=154）より外に出る距離 */
+const LEAD_OUT = 170;
+
 function WideFigure() {
-  // 一覧の行の高さ。引き出し線は**中心から見て放射状**に引く（同心円なので、これが最短で迷わない）
   const slot: Record<string, number> = { G5: 44, G4: 104, G3: 164, G2: 268, G1: 328 };
   const LABEL_X = 372;
+  const rad = (deg: number) => (deg * Math.PI) / 180;
   return (
     <svg viewBox="0 0 620 380" className="w-full h-auto" aria-hidden="true">
-      <Circles cx={CX} cy={CY} />
+      <Circles cx={CX} cy={CY} gap={GAP_DEG} />
       {GRADES.map((g) => {
         const y = slot[g.id];
-        const tx = LABEL_X - 16;
-        const dx = tx - CX;
-        const dy = y - CY;
-        const len = Math.hypot(dx, dy);
-        // その円の上で、一覧の行にいちばん近い点から引く
-        const sx = CX + (dx / len) * g.r;
-        const sy = CY + (dy / len) * g.r;
+        const t = rad(LEAD_DEG[g.id]);
+        const sx = CX + Math.cos(t) * g.r;
+        const sy = CY + Math.sin(t) * g.r;
+        const mx = CX + Math.cos(t) * LEAD_OUT;
+        const my = CY + Math.sin(t) * LEAD_OUT;
         return (
           <g key={g.id}>
-            <line
-              x1={sx}
-              y1={sy}
-              x2={LABEL_X - 10}
-              y2={y - 4}
+            <path
+              d={`M ${sx.toFixed(1)} ${sy.toFixed(1)} L ${mx.toFixed(1)} ${my.toFixed(1)} L ${LABEL_X - 10} ${y - 4}`}
+              fill="none"
               stroke="#475569"
               strokeWidth={1}
               strokeDasharray="3 3"

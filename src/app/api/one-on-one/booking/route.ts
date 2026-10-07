@@ -24,6 +24,8 @@ import { fetchSchedules, loadPeople } from "@/lib/one-on-one-schedule-server";
 import { isAdminUser } from "@/lib/admin-role";
 import { isTestSeedUser } from "@/lib/test-seed";
 import { jstTodayYmd } from "@/lib/library";
+import { PRESURVEY_CONTENT_TYPE } from "@/lib/presurvey-access-server";
+import { normalizePresurveyData } from "@/lib/one-on-one-presurvey";
 import {
   AlreadyBookedError,
   DirectorBusyError,
@@ -102,6 +104,23 @@ export async function GET() {
         .map((s) => `${s.date} ${s.time}`)
     );
 
+    // 212 A: 事前アンケートに答えたかを、予約ごとに返す
+    //   （予約の画面に「📝 事前アンケートに答える」を出すか「回答済み ✓」を出すかの判定）
+    const answeredScheduleIds = new Set<string>();
+    try {
+      const { data: rows } = await admin
+        .from("private_store")
+        .select("data")
+        .eq("owner_id", user.id)
+        .eq("content_type", PRESURVEY_CONTENT_TYPE);
+      for (const r of (rows ?? []) as { data: unknown }[]) {
+        const d = normalizePresurveyData(r.data);
+        if (d.scheduleId && d.submittedAt) answeredScheduleIds.add(d.scheduleId);
+      }
+    } catch {
+      /* 読めないときは「未回答」として扱う（答える導線は出したままにする） */
+    }
+
     const mine = periods.filter((p) => p.staffIds.includes(user.id));
     const out = mine.map((p) => {
       const slots = allSlots.filter((s) => s.periodId === p.id);
@@ -122,6 +141,8 @@ export async function GET() {
         myBooking,
         // 自分で動かせるか（4日前まで）
         canChange: myBooking ? canStaffChange(myBooking.date, today) : true,
+        // 212 A: その予約に対する事前アンケートが提出済みか
+        presurveyAnswered: myBooking ? answeredScheduleIds.has(myBooking.scheduleId) : false,
         changeDeadline: myBooking ? bookingChangeDeadline(myBooking.date) : "",
         openSlots: open.map((s) => ({
           id: s.id,
