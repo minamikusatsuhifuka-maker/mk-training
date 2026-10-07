@@ -19,6 +19,7 @@ import {
 } from "@/lib/one-on-one-presurvey";
 import { formatMonthDayW, SCHEDULE_ANSWER_LABEL, type ScheduleAnswerState } from "@/lib/one-on-one-schedule";
 import { formatJpDate } from "@/lib/presurvey-periods";
+import { PresurveyCompare } from "@/components/PresurveyCompare";
 
 type Row = {
   scheduleId: string;
@@ -31,6 +32,8 @@ type Row = {
   submitted: boolean;
   state: ScheduleAnswerState;
   recordKey: string;
+  /** 214 §3: このスタッフの回答が2件以上ある（「比べる」を出す） */
+  canCompare?: boolean;
 };
 
 type Detail = {
@@ -62,6 +65,8 @@ export default function PresurveyAnswersPage() {
   const [tableMissing, setTableMissing] = useState(false);
   const [error, setError] = useState("");
   const [open, setOpen] = useState<Detail | null>(null);
+  // 214 §2: 時期ごとの横並びの比較を開いているスタッフ
+  const [compare, setCompare] = useState<{ userId: string; staffName: string } | null>(null);
   const [busy, setBusy] = useState("");
 
   const load = useCallback(async () => {
@@ -94,6 +99,8 @@ export default function PresurveyAnswersPage() {
     if (!r.recordKey) return;
     setBusy(r.scheduleId);
     setError("");
+    // 214: 比較と1件の回答を同時に出すと縦に長くなるので、どちらか一方にする
+    setCompare(null);
     try {
       const res = await fetch(
         `/api/admin/presurvey-answers?userId=${encodeURIComponent(r.userId)}&recordKey=${encodeURIComponent(r.recordKey)}`,
@@ -120,7 +127,8 @@ export default function PresurveyAnswersPage() {
             : "あなたが担当に指定されているスタッフの分だけが出ます。"}
         </p>
         <p className="text-xs text-slate-500 mt-1">
-          回答は評価には使いません。合計・件数・順位・比較は出しません。
+          回答は評価には使いません。合計・件数・順位は出しません。
+          比べられるのは同じ人の、時期ごとの回答どうしだけです（ほかのスタッフとの比較・並べ替えはしません）。
           {!isAdmin && "（回答を開いた記録は院長に残ります）"}
         </p>
         {isAdmin && (
@@ -170,24 +178,58 @@ export default function PresurveyAnswersPage() {
                 <span className={`rounded border px-1.5 py-0.5 text-[10px] ${STATE_CLASS[r.state]}`}>
                   {SCHEDULE_ANSWER_LABEL[r.state]}
                 </span>
-                {r.submitted && r.recordKey ? (
-                  <button
-                    type="button"
-                    onClick={() => void openAnswer(r)}
-                    disabled={busy === r.scheduleId}
-                    data-presurvey-open={r.scheduleId}
-                    className="ml-auto rounded-full border border-teal-300 px-3 py-1 text-xs text-teal-800 hover:bg-teal-50 disabled:opacity-50"
-                  >
-                    {busy === r.scheduleId ? "開いています…" : "回答を開く"}
-                  </button>
-                ) : (
-                  <span className="ml-auto text-xs text-slate-400">未提出</span>
-                )}
+                <span className="ml-auto flex items-center gap-2">
+                  {/* 214 §3: 回答が2件以上あるスタッフの行に「比べる」を出す */}
+                  {r.canCompare && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpen(null);
+                        setCompare({ userId: r.userId, staffName: r.staffName });
+                      }}
+                      data-presurvey-compare-open={r.userId}
+                      className="rounded-full border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
+                    >
+                      ↔ 比べる
+                    </button>
+                  )}
+                  {r.submitted && r.recordKey ? (
+                    <button
+                      type="button"
+                      onClick={() => void openAnswer(r)}
+                      disabled={busy === r.scheduleId}
+                      data-presurvey-open={r.scheduleId}
+                      className="rounded-full border border-teal-300 px-3 py-1 text-xs text-teal-800 hover:bg-teal-50 disabled:opacity-50"
+                    >
+                      {busy === r.scheduleId ? "開いています…" : "回答を開く"}
+                    </button>
+                  ) : (
+                    <span className="text-xs text-slate-400">未提出</span>
+                  )}
+                </span>
               </li>
             ))}
           </ul>
         )}
       </div>
+
+      {compare && (
+        <div className="bg-white border-2 border-slate-200 rounded-2xl p-4 space-y-3" data-presurvey-compare-panel>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-base font-bold text-slate-800">
+              {compare.staffName}さんの回答を時期ごとに比べる
+            </h2>
+            <button
+              type="button"
+              onClick={() => setCompare(null)}
+              className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600"
+            >
+              閉じる
+            </button>
+          </div>
+          <PresurveyCompare userId={compare.userId} staffName={compare.staffName} />
+        </div>
+      )}
 
       {open && (
         <div className="bg-white border-2 border-teal-200 rounded-2xl p-4 space-y-3" data-presurvey-detail>

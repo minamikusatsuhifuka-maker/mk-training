@@ -44,21 +44,31 @@ export type PresurveyViewerScope = {
 };
 
 export async function presurveyViewerScope(user: User): Promise<PresurveyViewerScope> {
-  const isAdmin = isAdminUser(user);
+  return presurveyViewerScopeById(user.id, isAdminUser(user));
+}
+
+/**
+ * 214 §3: セッションの User オブジェクトを持たない場所（育成カルテの認可は userId と
+ * isAdmin だけを持つ）から同じ判定を使うための入口。中身は presurveyViewerScope と同じ。
+ */
+export async function presurveyViewerScopeById(
+  userId: string,
+  isAdmin: boolean
+): Promise<PresurveyViewerScope> {
   if (isAdmin) {
-    return { userId: user.id, isAdmin: true, delegated: true, assignedStaffIds: new Set() };
+    return { userId, isAdmin: true, delegated: true, assignedStaffIds: new Set() };
   }
   // 無効化されたアカウントは何も見られない（fail-close）
-  const active = await isActiveAccountId(user.id).catch(() => false);
+  const active = await isActiveAccountId(userId).catch(() => false);
   if (!active) {
-    return { userId: user.id, isAdmin: false, delegated: false, assignedStaffIds: new Set() };
+    return { userId, isAdmin: false, delegated: false, assignedStaffIds: new Set() };
   }
   const [items, assigned] = await Promise.all([
-    loadDelegatedItems(user.id).catch(() => [] as string[]),
-    loadKarteAssignments(user.id).catch(() => [] as string[]),
+    loadDelegatedItems(userId).catch(() => [] as string[]),
+    loadKarteAssignments(userId).catch(() => [] as string[]),
   ]);
   return {
-    userId: user.id,
+    userId,
     isAdmin: false,
     delegated: items.includes(PRESURVEY_VIEW_ITEM_KEY),
     assignedStaffIds: new Set(assigned),
@@ -74,6 +84,18 @@ export function canViewPresurvey(
   if (scope.isAdmin) return true;
   // 委任と担当の**両方**がそろって初めて読める。1on1の相手かどうかは見ない（200の判定は廃止）
   return scope.delegated && scope.assignedStaffIds.has(row.owner_id);
+}
+
+/**
+ * そのスタッフの回答を、この人が見られるか（214 §3）。
+ * 回答1件ずつの判定 canViewPresurvey と同じ規則を、スタッフ単位で使う。
+ * 育成カルテの「アンケート」タブを出すかどうかの判定にも使う。
+ */
+export function canViewPresurveyOf(staffUserId: string, scope: PresurveyViewerScope): boolean {
+  if (!staffUserId) return false;
+  if (staffUserId === scope.userId) return true;
+  if (scope.isAdmin) return true;
+  return scope.delegated && scope.assignedStaffIds.has(staffUserId);
 }
 
 /** その人が回答を見られるスタッフの userId（管理画面の一覧の絞り込みに使う） */

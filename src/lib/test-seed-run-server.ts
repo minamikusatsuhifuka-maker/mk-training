@@ -21,7 +21,19 @@ import { surveyHistoryKey, entryFromSurvey } from "./survey-history";
 import type { NeedsSurvey } from "./needs-survey";
 import { saveKarteAssignment, saveItemDelegation, loadDelegationSnapshot } from "./admin-delegation-server";
 import { emptySelfReviewData, SELF_REVIEW_CONFIG_KEY } from "./self-review";
-import { emptyPresurveyAnswer, isKarteLinked, loadPresurveyQuestions, visiblePresurveyQuestions } from "./one-on-one-presurvey";
+import { emptyPresurveyAnswer, isKarteLinked, loadPresurveyQuestions, visiblePresurveyQuestions, type PresurveyQuestion } from "./one-on-one-presurvey";
+import {
+  SEED214_HANAKO_LEGACY_ANSWERS,
+  SEED214_HANAKO_LEGACY_AT,
+  SEED214_HANAKO_LEGACY_HELD_ON,
+  SEED214_HANAKO_LEGACY_KEY,
+  SEED214_HANAKO_NEW_ANSWERS,
+  SEED214_HANAKO_NEW_AT,
+  SEED214_HANAKO_NEW_HELD_ON,
+  SEED214_HANAKO_NEW_KEY,
+  SEED214_LEGACY_QUESTION_IDS,
+  type Seed214Answer,
+} from "./test-seed-214";
 import { SEED203_JIRO_ANSWERS, SEED203_JIRO_GOAL_QUESTION_IDS, SEED203_JIRO_PRESURVEY_AT, SEED203_JIRO_PRESURVEY_KEY, SEED203_JIRO_SCHEDULE, SEED203_LEGACY_PROMISE_IDS, SEED203_NOTES } from "./test-seed-203";
 import { fetchGates, saveGateCheck, saveMatrixReview, saveStaffGrade, seedGates } from "./growth-matrix-server";
 import { SEED_MARK, TEST_ACCOUNTS, TEST_PROSPECT_NAME, TEST_SEED_FLAG, isTestSeedUser, onlyTestIds, type TestAccountDef } from "./test-seed";
@@ -311,6 +323,62 @@ export async function seedTestData(admin: Admin, by: string, directorId: string,
     submittedAt: SEED203_JIRO_PRESURVEY_AT,
     createdAt: SEED203_JIRO_PRESURVEY_AT,
     updatedAt: SEED203_JIRO_PRESURVEY_AT,
+  });
+  bump("1on1の事前アンケートの回答");
+
+  // 214 §4: テスト花子の過去の回答2件（旧形式1件・新形式1件）＝横並びの比較を試すため。
+  //   ・旧形式（2026-06-01）は197の9問。回答に「部」を入れない（twoParts:false）ので、
+  //     いまの質問には無い q3・q4 が「旧形式の問い」の行になる（204 §7: 読み替えない）
+  //   ・新形式（2026-09-22）の第1部は、上の 6. で作る花子のカルテの目標と同じ文章にそろえている
+  //   ・テスト花子の10/13の予定の回答は作らない（未回答のまま残す・203の決定）
+  const seedAnswers = (
+    ids: readonly string[],
+    values: Record<string, Seed214Answer>,
+    legacy: boolean
+  ) =>
+    ids
+      .map((id) => presurveyQuestions.find((q) => q.id === id))
+      .filter((q): q is PresurveyQuestion => !!q && !!values[q.id])
+      .map((q) => {
+        const v = values[q.id];
+        return {
+          ...emptyPresurveyAnswer(q),
+          part: legacy ? 0 : q.part,
+          choice: v.choice && q.choices.includes(v.choice) ? v.choice : "",
+          unchanged: v.unchanged === true,
+          text: v.text ?? "",
+        };
+      });
+
+  await upsertPrivate(admin, hid, "one_on_one_presurvey", SEED214_HANAKO_LEGACY_KEY, {
+    heldOn: SEED214_HANAKO_LEGACY_HELD_ON,
+    scheduleId: "",
+    participantIds: [directorId],
+    partnerName: "院長",
+    authorName: TEST_ACCOUNTS[0].displayName,
+    answers: seedAnswers(SEED214_LEGACY_QUESTION_IDS, SEED214_HANAKO_LEGACY_ANSWERS, true),
+    twoParts: false,
+    submittedAt: SEED214_HANAKO_LEGACY_AT,
+    createdAt: SEED214_HANAKO_LEGACY_AT,
+    updatedAt: SEED214_HANAKO_LEGACY_AT,
+  });
+  bump("1on1の事前アンケートの回答");
+
+  await upsertPrivate(admin, hid, "one_on_one_presurvey", SEED214_HANAKO_NEW_KEY, {
+    heldOn: SEED214_HANAKO_NEW_HELD_ON,
+    scheduleId: "",
+    participantIds: [jid],
+    partnerName: TEST_ACCOUNTS[1].displayName,
+    authorName: TEST_ACCOUNTS[0].displayName,
+    answers: seedAnswers(
+      visiblePresurveyQuestions(presurveyQuestions).map((q) => q.id),
+      SEED214_HANAKO_NEW_ANSWERS,
+      false
+    ),
+    twoParts: true,
+    submittedAt: SEED214_HANAKO_NEW_AT,
+    createdAt: SEED214_HANAKO_NEW_AT,
+    updatedAt: SEED214_HANAKO_NEW_AT,
   });
   bump("1on1の事前アンケートの回答");
 

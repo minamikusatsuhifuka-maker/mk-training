@@ -13,6 +13,7 @@ import { NextResponse } from "next/server";
 import { authorizeGrowth, canViewStaff, recordGrowthLog } from "@/lib/staff-growth-server";
 import { growthErrorResponse, hidden } from "@/lib/staff-growth-route";
 import { authorizeStaffContacts } from "@/lib/staff-contacts-server";
+import { canViewPresurveyOf, presurveyViewerScopeById } from "@/lib/presurvey-access-server";
 import {
   buildKarteDetail,
   buildKarteList,
@@ -59,7 +60,19 @@ export async function GET(req: Request) {
       } catch {
         contactAccess = false;
       }
-      return NextResponse.json({ ...detail, isAdmin: auth.isAdmin, contactAccess });
+      // 214 §3: 「アンケート」タブは、事前アンケートの回答を見られる人にだけ出す
+      //   （院長／委任「📝 1on1の事前アンケートの回答」＋担当指定の両方がそろった管理者）。
+      //   判定はここ＝サーバー側。false ならタブを描かず、APIも404になる。
+      let presurveyAccess = false;
+      try {
+        presurveyAccess = canViewPresurveyOf(
+          userId,
+          await presurveyViewerScopeById(auth.userId, auth.isAdmin)
+        );
+      } catch {
+        presurveyAccess = false;
+      }
+      return NextResponse.json({ ...detail, isAdmin: auth.isAdmin, contactAccess, presurveyAccess });
     }
     const q = (sp.get("q") ?? "").trim();
     if (q) {

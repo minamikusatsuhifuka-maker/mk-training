@@ -31,6 +31,7 @@ import { CurrentPositionCard } from "@/components/CurrentPositionCard";
 import { KarteScheduleCard } from "@/components/OneOnOneSchedule";
 import { GoalsStaged, weeklyLinksFromPromises } from "@/components/GoalsStaged";
 import { FeedbackPanel } from "@/components/FeedbackPanel";
+import { PresurveyCompare } from "@/components/PresurveyCompare";
 import { fetchGoalsApi, fetchPromisesApi, supportGoalApi, type PromiseItem } from "@/lib/staff-growth-client";
 import {
   createLearningApi,
@@ -74,6 +75,8 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState("");
   const [showAll, setShowAll] = useState(false);
+  // 214 §1: カルテ／アンケートのタブ。最初は「カルテ」（今のカルテの中身はそのまま）
+  const [tab, setTab] = useState<"karte" | "presurvey">("karte");
   // 185: 段階的な目標（閲覧＋機会・支援・コメント・合意）と1on1の約束
   const [goalsState, setGoalsState] = useState<{ goals: Goal[]; pace: GrowthPace; canSupport: boolean } | null>(null);
   const [promises, setPromises] = useState<PromiseItem[]>([]);
@@ -195,6 +198,8 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
   const { entry, latestPromise, recentLearning, timeline, today } = detail;
   const isAdmin = detail.isAdmin !== false; // 183: false＝担当の幹部（閲覧のみ）
   const isProspect = !!entry.prospect; // 187/188 6: アカウント作成前
+  // 214 §3: 「アンケート」タブを出すか（サーバーの判定をそのまま使う）。入職予定者には出さない
+  const presurveyAccess = detail.presurveyAccess === true && !isProspect;
   const PROSPECT_NOTE = "入職してアカウントを作成すると使えます。";
   const tenure = tenureLabel(entry.joinedOn, today);
   const shownTimeline = showAll ? timeline : timeline.slice(0, 30);
@@ -251,6 +256,46 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
         </p>
       )}
 
+      {/* 214 §1: タブ（「アンケート」は回答を見られる人にだけ出す＝判定はサーバー側） */}
+      {presurveyAccess && (
+        <div className="flex gap-1 border-b border-gray-200" role="tablist" aria-label="カルテの表示切替">
+          {([
+            { key: "karte", label: "カルテ" },
+            { key: "presurvey", label: "アンケート" },
+          ] as const).map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.key}
+              onClick={() => setTab(t.key)}
+              data-karte-tab={t.key}
+              className={`min-h-[36px] px-3 py-1.5 text-[13px] rounded-t-lg border border-b-0 ${
+                tab === t.key
+                  ? "border-gray-200 bg-white text-gray-900 font-medium"
+                  : "border-transparent bg-transparent text-gray-500 hover:text-gray-800"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* 214 §1: アンケート（最新の回答＋これまでの回答＋横並びの比較） */}
+      {tab === "presurvey" && presurveyAccess && (
+        <section className="space-y-2" data-karte-presurvey>
+          <h2 className="text-sm font-medium text-gray-900">📝 1on1の事前アンケート</h2>
+          <p className="text-[11px] text-gray-500">
+            回答は評価には使いません。読み取り専用です（ここから書き換えはできません）。
+            {!isAdmin && "（開いた記録は院長に残ります）"}
+          </p>
+          <PresurveyCompare userId={userId} staffName={entry.name} />
+        </section>
+      )}
+
+      {tab === "karte" && (
+        <>
       {/* 上部カード（A-4） */}
       {/* 190 D: 現在地（成長マトリクス）— 院長のみ（担当幹部には出さない）。入職予定者には出さない */}
       {isAdmin && !isProspect && <CurrentPositionCard userId={userId} mode="director" />}
@@ -461,6 +506,8 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
           }}
         />
       </section>
+        </>
+      )}
     </div>
   );
 }

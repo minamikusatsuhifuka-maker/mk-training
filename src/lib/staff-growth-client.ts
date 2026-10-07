@@ -330,6 +330,11 @@ export type KarteDetailResponse = KarteDetail & {
   isAdmin: boolean;
   /** 188: 連絡先を見る権限がある（院長・169で指名された人）。false なら「📇 連絡先」ボタン自体を出さない */
   contactAccess?: boolean;
+  /**
+   * 214 §3: 事前アンケートの回答を見られる（院長・委任＋担当がそろった管理者）。
+   * false なら「アンケート」タブ自体を出さない（APIも404）。
+   */
+  presurveyAccess?: boolean;
 };
 
 export async function fetchKarteDetailApi(userId: string): Promise<KarteDetailResponse> {

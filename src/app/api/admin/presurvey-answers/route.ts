@@ -1,6 +1,7 @@
 // 1on1の事前アンケートの回答を見る（指示書204 §5-2・§5-3）
 //   GET                              → { rows, isAdmin }（1on1の予定ごとの一覧）
 //   GET ?userId=&recordKey=          → { answer, previous }（回答の本文。開いた記録を残す）
+//   時期ごとの横並びの比較は /api/admin/presurvey-answers/compare（指示書214）
 //
 // 【見られる人（204 §5-1）】院長、または「📝 1on1の事前アンケートの回答」を委任されていて、
 //   かつそのスタッフを担当に指定されている人だけ。判定は presurvey-access-server。
@@ -153,6 +154,9 @@ export async function GET(req: Request) {
           submitted: answered,
           state: scheduleAnswerState(s, today, answered),
           recordKey: hit?.recordKey ?? "",
+          // 214 §3: このスタッフの回答が2件以上あるか（「比べる」を出すかどうかだけ）。
+          //   **件数は返さない**（204 §5-2の「合計・件数を出さない」をそのまま守る）
+          canCompare: mine.length >= 2,
         };
       })
       .sort((a, b) => b.date.localeCompare(a.date) || a.staffName.localeCompare(b.staffName));
