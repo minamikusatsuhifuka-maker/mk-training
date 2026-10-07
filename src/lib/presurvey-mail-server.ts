@@ -14,6 +14,7 @@
 
 import { serverFeatureEnabled } from "./staff-growth-server";
 import { isMailConfigured, portalOrigin, sendPortalMail } from "./mail-send";
+import { PRESURVEY_INTRO } from "./one-on-one-presurvey";
 import {
   formatMonthDay,
   presurveyAlertStageLabel,
@@ -61,13 +62,9 @@ export function buildPresurveyMail(alert: PresurveyAlert): { subject: string; te
     "回答はこちらから：",
     presurveyLink(alert.scheduleId),
     "",
-    // 206 B: 後半を「スタッフへの約束」の言い回しに置き換えた。
-    //   旧: 「あなたの成長を支え、1on1の対話を深めるために使います。」
-    //        ＝コーポレートブックにない言い回しだったため（院長指示）。
-    //   なお画面側の PRESURVEY_INTRO（one-on-one-presurvey.ts）には旧文が残っている。
-    //   あちらは197で「文言を変えないこと」とされているので、206ではメールだけを変えた。
-    //   **揃えるかどうかは院長の判断**（揃えるなら PRESURVEY_INTRO をこの文にして、ここはそれを参照する）。
-    "回答は評価には使いません。当院は目標・目的を定める機会を提供しサポートします。",
+    // 206-補 1: 画面の冒頭と**同じものを使う**（文の正本は one-on-one-presurvey.ts の PRESURVEY_INTRO）。
+    //   206では写しを置いていたため画面とずれていた。**ここに文を書き写さないこと**。
+    PRESURVEY_INTRO,
   ].join("\n");
   return { subject, text };
 }

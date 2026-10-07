@@ -506,7 +506,8 @@ function PresurveyPageBody() {
 
   return (
     <div className="space-y-6">
-      {/* 197: 冒頭の常時表示（文言を変えないこと） */}
+      {/* 197: 冒頭の常時表示。文の正本は PRESURVEY_INTRO（206-補 1でメールと共通化）。
+          206-補 2: 「評価には使いません」はこの1回だけ（204の締切案内からは外した） */}
       <p className="text-sm text-gray-700 leading-relaxed bg-violet-50/60 border border-violet-100 rounded-xl px-4 py-3">
         {PRESURVEY_INTRO}
       </p>
