@@ -8,9 +8,12 @@
 //   目次→画像番号の対応は lib/corporate-book.ts の CORPORATE_BOOK_TOC（画像実地確認済み）。
 // - 前後1ページを先読みして体感速度を確保。版管理表記は lib/corporate-book.ts の定数から。
 // - 直URLガードは PageAccessGate（page_corporate_book・公開型既定ON）が担当。
+// - 208: 右上の「⛶ 全画面」で CorporateBookReader（body直下へ portal）に切り替える。
+//   ページ番号は**このページが持つ** state をそのまま渡すので、終わると同じページに戻る。
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import NavPageHeader from "@/components/NavPageHeader";
+import { CorporateBookReader, enterFullscreenNow } from "@/components/CorporateBookReader";
 import {
   CORPORATE_BOOK_PAGE_COUNT,
   CORPORATE_BOOK_VERSION,
@@ -26,6 +29,7 @@ export default function CorporateBookPage() {
   const [pageInput, setPageInput] = useState("");
   const [editing, setEditing] = useState(false);
   const [tocOpen, setTocOpen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false); // 208
   const touchStartX = useRef<number | null>(null);
 
   const jumpTo = useCallback((n: number) => {
@@ -52,12 +56,13 @@ export default function CorporateBookPage() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
+      if (fullscreen) return; // 208: 全画面中は CorporateBookReader が受ける（二重送りを防ぐ）
       if (e.key === "ArrowLeft") go(-1);
       if (e.key === "ArrowRight") go(1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [go]);
+  }, [go, fullscreen]);
 
   // 前後1ページの先読み
   useEffect(() => {
@@ -214,12 +219,26 @@ export default function CorporateBookPage() {
 
       {/* ページ画像（タップで拡大トグル・スワイプでページ送り・ピンチも可） */}
       <div
-        className={`bg-white border border-gray-200 rounded-xl p-2 ${
+        className={`relative bg-white border border-gray-200 rounded-xl p-2 ${
           zoomed ? "overflow-auto" : "overflow-hidden"
         }`}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
+        {/* 208 §1: ブックの右上に置く。押した瞬間にブラウザの全画面を要求する必要がある */}
+        <button
+          type="button"
+          onClick={() => {
+            enterFullscreenNow();
+            setFullscreen(true);
+          }}
+          className="absolute top-3 right-3 z-10 text-sm px-3 py-2 min-h-[44px] rounded-full bg-black/55 text-white hover:bg-black/75"
+          title="全画面で読む（Escで終わります）"
+          aria-label="全画面で読む"
+          data-fullscreen-open
+        >
+          ⛶ 全画面
+        </button>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={pageSrc(page)}
@@ -239,6 +258,17 @@ export default function CorporateBookPage() {
       <p className="text-[11px] text-gray-400 text-center">
         {CORPORATE_BOOK_VERSION}。内容は毎年ブラッシュアップされます。
       </p>
+
+      {/* 208: 全画面。ページ番号は上の state をそのまま使う＝終わると同じページに戻る */}
+      {fullscreen && (
+        <CorporateBookReader
+          page={page}
+          total={CORPORATE_BOOK_PAGE_COUNT}
+          src={pageSrc}
+          onGo={go}
+          onClose={() => setFullscreen(false)}
+        />
+      )}
     </div>
   );
 }
