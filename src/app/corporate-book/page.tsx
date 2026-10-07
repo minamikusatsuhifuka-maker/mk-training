@@ -291,28 +291,34 @@ export default function CorporateBookPage() {
         >
           ⛶ 全画面
         </button>
-        {/* 213 §2: 見開きは左が小さい番号。ページのあいだに細い区切り（とじ目）を入れる */}
-        <div className={`flex items-start justify-center ${zoomed ? "" : "gap-0"}`}>
+        {/* 215 A: 見開きの2枚はすき間なく隣り合わせ（画像そのものを横並びの要素にする）。
+            とじ目は2枚の内側の境界線＝画像と同じ高さで、1pxずつの左右対称にする。 */}
+        <div className="flex items-start justify-center gap-0">
           {spreadPages(page, CORPORATE_BOOK_PAGE_COUNT)
             .slice(0, view === "spread" ? 2 : 1)
             .map((n, i) => {
               const n2 = view === "spread" ? n : page;
               return (
-                <div key={n2} className="flex min-w-0 flex-1 items-start">
-                  {i > 0 && <div className="w-px self-stretch bg-gray-300" aria-hidden="true" />}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={pageSrc(n2)}
-                    alt={`コーポレートデザインブック ${n2}ページ`}
-                    onClick={() => setZoomed((z) => !z)}
-                    className={`select-none mx-auto rounded ${
-                      zoomed
-                        ? "max-w-none w-[170%] cursor-zoom-out"
-                        : "w-full cursor-zoom-in"
-                    }`}
-                    draggable={false}
-                  />
-                </div>
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={n2}
+                  src={pageSrc(n2)}
+                  alt={`コーポレートデザインブック ${n2}ページ`}
+                  onClick={() => setZoomed((z) => !z)}
+                  data-book-page={n2}
+                  className={`select-none rounded box-border ${
+                    zoomed
+                      ? "max-w-none w-[170%] cursor-zoom-out"
+                      : `${view === "spread" ? "w-[50%]" : "w-full"} cursor-zoom-in`
+                  } ${
+                    view === "spread" && !zoomed
+                      ? i > 0
+                        ? "border-l border-gray-300"
+                        : "border-r border-gray-300"
+                      : ""
+                  }`}
+                  draggable={false}
+                />
               );
             })}
         </div>

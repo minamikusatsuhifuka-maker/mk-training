@@ -1,13 +1,23 @@
 // コーポレートブックの見開き表示（指示書213）— 画面とリーダーで共通に使う純関数
 //
-// 【並べ方（213 §2）】本と同じにする。
-//   表紙（1ページ目）は1枚だけ。そのあとは 2・3／4・5／… の組（左が小さい番号）。
-//   全53ページなので、最後は 52・53 の組になる。
+// 【並べ方（213 §2 → 215 A で左右をそろえ直した）】左とじの本と同じにする。
+//   **印刷されたページ番号で、偶数が左・奇数が右**（＝本を開いたときの見え方）。
+//
+//   画像の連番と印刷された番号の対応（画像で実地確認・215 A）:
+//     画像1＝表紙（番号なし）／画像2＝目次（番号なし＝本の1ページ目）／
+//     画像3＝印刷2 ／ 画像5＝印刷4 ／ 画像6＝印刷5 ／ 画像51＝印刷50 ／
+//     画像52＝奥付（番号なし）／画像53＝裏表紙（番号なし）。
+//     つまり **印刷番号 ＝ 画像番号 − 1**。
+//   よって「印刷が偶数」＝「画像が奇数」。組は [3,4] [5,6] … [51,52] となる。
+//
+//   表紙（画像1）は1枚だけ。目次（画像2）は本の1ページ目＝奇数なので**右のページ**にあたり、
+//   その左は表紙の裏（画像が無い）なので、これも1枚で出す。最後の裏表紙（画像53）も1枚。
+//   全53ページ＝[1] [2] [3,4] … [51,52] [53] の28組。
 //
 // 【位置を保つ（213 §3）】
 //   「いま何ページを読んでいるか」は**1つの数（page）だけ**で持ち、
 //   見開きのときは、その数が入る組を出す。こうすると 1ページ⇔見開きを
-//   切り替えても読んでいた位置が動かない（7ページ → 見開きでは 6–7）。
+//   切り替えても読んでいた位置が動かない（8ページ → 見開きでは 7–8）。
 //
 // クライアント・サーバーどちらからでも使える純関数のみ。
 
@@ -20,16 +30,17 @@ export function isBookView(v: unknown): v is BookView {
   return v === "single" || v === "spread";
 }
 
-/** その組の左ページ（＝組の代表）。1ページ目だけは単独 */
+/** その組の左ページ（＝組の代表）。表紙（1）と目次（2）はそれぞれ単独 */
 export function spreadStart(page: number): number {
-  if (page <= 1) return 1;
-  return page % 2 === 0 ? page : page - 1;
+  if (page <= 2) return Math.max(page, 1);
+  // 215 A: 印刷が偶数＝画像が奇数のページが左にくる
+  return page % 2 === 1 ? page : page - 1;
 }
 
-/** その組に出すページ。1ページ目は[1]、最後が奇数で余れば1枚だけ */
+/** その組に出すページ。表紙・目次は1枚、最後が余れば1枚だけ */
 export function spreadPages(page: number, total: number): number[] {
   const s = Math.min(Math.max(spreadStart(page), 1), total);
-  if (s === 1) return [1];
+  if (s <= 2) return [s];
   const right = s + 1;
   return right <= total ? [s, right] : [s];
 }
@@ -41,17 +52,19 @@ export function spreadPages(page: number, total: number): number[] {
 export function stepSpread(page: number, delta: number, total: number): number {
   const s = Math.min(Math.max(spreadStart(page), 1), total);
   if (delta > 0) {
-    const next = s === 1 ? 2 : s + 2;
+    // 表紙→目次→[3,4]→[5,6]… と進む
+    const next = s <= 2 ? s + 1 : s + 2;
     return next > total ? s : next;
   }
   if (delta < 0) {
-    if (s <= 2) return 1;
+    if (s <= 1) return 1;
+    if (s <= 3) return s - 1; // [3,4]→目次→表紙
     return s - 2;
   }
   return s;
 }
 
-/** ページ番号の表示（213 §2）。例: 「1 / 53」「6–7 / 53」 */
+/** ページ番号の表示（213 §2）。例: 「1 / 53」「5–6 / 53」 */
 export function spreadLabel(page: number, total: number): string {
   const ps = spreadPages(page, total);
   const head = ps.length === 2 ? `${ps[0]}–${ps[1]}` : `${ps[0]}`;

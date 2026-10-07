@@ -260,32 +260,36 @@ export function CorporateBookReader({
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
-        {/* 213 §2: 見開きは左が小さい番号。あいだに細い区切り（とじ目）を入れる */}
+        {/* 215 A: 見開きの2枚は**すき間なく隣り合わせ**、組として画面の中央に置く。
+            余った幅は組の外側（左右の端）に出す。
+            そのために、画像そのものを横並びの要素にする（包みの箱で半分ずつ分けると、
+            箱の中で画像が中央に寄って**あいだに帯ができる**＝213で起きていたこと）。
+            とじ目は2枚の**内側の境界線**にする（画像と同じ高さになる・1pxずつで左右対称＝
+            どちらの画像も同じ大きさになり、下の端がそろう）。 */}
         {spreadPages(page, total)
           .slice(0, view === "spread" ? 2 : 1)
           .map((n, i) => {
             const shown = view === "spread" ? n : page;
+            const size =
+              fit === "width"
+                ? view === "spread"
+                  ? "w-[50%] h-auto" // 2枚で幅いっぱい（とじ目の1pxは box-border で内側に収める）
+                  : "w-full h-auto"
+                : view === "spread"
+                  ? "max-h-full max-w-[50%] w-auto h-auto object-contain"
+                  : "max-h-full max-w-full w-auto h-auto object-contain";
             return (
-              // 見開きのときは**半分の幅**に収める（2枚で画面いっぱい・横にあふれさせない）
-              <div
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
                 key={shown}
-                className={`flex min-w-0 items-center justify-center ${
-                  fit === "width" ? "h-auto" : "h-full"
-                } ${view === "spread" ? "w-1/2" : "w-full"}`}
-              >
-                {i > 0 && <div className="w-px self-stretch bg-white/30" aria-hidden="true" />}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={src(shown)}
-                  alt={`コーポレートデザインブック ${shown}ページ`}
-                  draggable={false}
-                  className={
-                    fit === "width"
-                      ? "w-full h-auto select-none"
-                      : "max-h-full max-w-full w-auto h-auto object-contain select-none"
-                  }
-                />
-              </div>
+                src={src(shown)}
+                alt={`コーポレートデザインブック ${shown}ページ`}
+                draggable={false}
+                data-book-page={shown}
+                className={`select-none box-border ${size} ${
+                  view === "spread" ? (i > 0 ? "border-l border-white/30" : "border-r border-white/30") : ""
+                }`}
+              />
             );
           })}
       </div>

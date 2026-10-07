@@ -15,8 +15,9 @@
 //   ・図の下の一文 … コーポレートブック 2-4（指示書209 §2 に全文）
 //
 // 【作り】SVGをその場に書く（画像ファイル・外部読み込みなし）。
-//   パソコン＝図の右に引き出し線つきの一覧／スマートフォン＝図の下に色見本つきの一覧。
-//   **円の中には文字を置かない**（重なりを作らないため・209 §3）。
+//   パソコン＝図の右に色見本つきの一覧／スマートフォン＝図の下に色見本つきの一覧。
+//   215 B: 円は**欠けのない丸**（212の切れ目はやめた＝円のあいだが白く抜けて見えたため）。
+//   引き出し線もやめ、代わりに**各帯の中（右側・同じ高さ）に小さく G1〜G5** を置く。
 //   読み上げ用の本文は1つだけ持ち、スマートフォンでは見える一覧、パソコンでは
 //   `md:sr-only` で読み上げ専用にする（同じ内容を二重に読ませない）。
 //   色は中心ほど淡く外側ほど濃い**一方向の濃淡**にしてあるので、白黒で印刷しても順序が分かる。
@@ -34,18 +35,31 @@ type Grade = {
   r: number;
   fill: string;
   stroke: string;
+  /** 帯の中に置く「G1」〜「G5」の文字の色（塗りの上で読めるように選ぶ・215 B） */
+  idFill: string;
   /** G2→G3 の境目（点線で示す） */
   dashed?: boolean;
 };
 
 /** 内側（G1）から外側（G5）へ。描くときは外側から重ねる */
 const GRADES: Grade[] = [
-  { id: "G1", name: "G1 ルーキー", scope: "自分・同期", r: 34, fill: "#ecfdf5", stroke: "#34d399" },
-  { id: "G2", name: "G2 コア", scope: "チーム", r: 64, fill: "#bbf7d0", stroke: "#059669", dashed: true },
-  { id: "G3", name: "G3 リーダー ★", scope: "クリニック全体", r: 94, fill: "#5eead4", stroke: "#0d9488" },
-  { id: "G4", name: "G4 パートナー", scope: "部門・組織・採用候補者", r: 124, fill: "#2dd4bf", stroke: "#0f766e" },
-  { id: "G5", name: "G5 アンバサダー", scope: "業界・地域・社会・次世代", r: 154, fill: "#0d9488", stroke: "#134e4a" },
+  { id: "G1", name: "G1 ルーキー", scope: "自分・同期", r: 34, fill: "#ecfdf5", stroke: "#34d399", idFill: "#134e4a" },
+  { id: "G2", name: "G2 コア", scope: "チーム", r: 64, fill: "#bbf7d0", stroke: "#059669", idFill: "#134e4a", dashed: true },
+  { id: "G3", name: "G3 リーダー ★", scope: "クリニック全体", r: 94, fill: "#5eead4", stroke: "#0d9488", idFill: "#134e4a" },
+  { id: "G4", name: "G4 パートナー", scope: "部門・組織・採用候補者", r: 124, fill: "#2dd4bf", stroke: "#0f766e", idFill: "#134e4a" },
+  // いちばん濃い帯だけは白抜きにする（濃い地に濃い字を置かない）
+  { id: "G5", name: "G5 アンバサダー", scope: "業界・地域・社会・次世代", r: 154, fill: "#0d9488", stroke: "#134e4a", idFill: "#ffffff" },
 ];
+
+/** その等級の帯の内側の半径（G1は中心から）。帯の真ん中に文字を置くために使う */
+function innerR(i: number): number {
+  return i === 0 ? 0 : GRADES[i - 1].r;
+}
+
+/** 帯の真ん中（中心からの距離）。文字はここに置く＝どの帯でも同じ高さ（y＝中心）に並ぶ */
+function bandMid(i: number): number {
+  return (innerR(i) + GRADES[i].r) / 2;
+}
 
 const SKILL_ERA = "技能の時代";
 const BEING_ERA = "在り方の時代";
@@ -57,111 +71,82 @@ const BOOK_2_4 =
 /**
  * 外側から描く＝内側の円が上に乗って、中心ほど淡い帯になる。
  *
- * 212 B: パソコンでは**輪郭の右側に切れ目**を作る（`gap` で角度を渡す）。
- *   同心円では、内側の円から外へ引き出す線は必ず外側の円の輪郭を横切ってしまう
- *   （209の実測で G1 の線は4本、G2 の線は3本の輪郭を横切っていた）。
- *   輪郭をその角度だけ描かないことで、**どの線も交差しない**。
- *   塗りは丸のままなので、同心円の見え方（中心ほど淡い帯）は変わらない。
+ * 215 B: **欠けのない丸**に戻した。212では引き出し線の通り道として輪郭と塗りの右側を
+ *   17度切り欠いていたが、「円のあいだが白く抜けるのはよくない」（院長の確認）ため。
+ *   線そのものをやめたので、切り欠く必要がなくなった。
+ *   代わりに、各帯の中（右側・y＝中心の同じ高さ）に小さく「G1」〜「G5」を置く。
  */
-function Circles({ cx, cy, gap = 0 }: { cx: number; cy: number; gap?: number }) {
+function Circles({
+  cx,
+  cy,
+  idSize = 13,
+}: {
+  cx: number;
+  cy: number;
+  /** 帯の中の「G1」〜「G5」の文字の大きさ */
+  idSize?: number;
+}) {
   const ring = [...GRADES].reverse();
   return (
     <>
-      {/* 塗り（外側から重ねる）。gap>0 のときは右側をその角度ぶん**切り欠く**＝
-          引き出し線が通る道が実際に空く（線が帯の上を横切って見えない） */}
+      {/* 塗り（外側から重ねる） */}
       {ring.map((g) => (
-        <path
-          key={`fill-${g.id}`}
-          d={gap > 0 ? `${arcPath(cx, cy, g.r, gap)} L ${cx} ${cy} Z` : `${arcPath(cx, cy, g.r, 0)} Z`}
-          fill={g.fill}
+        <circle key={`fill-${g.id}`} cx={cx} cy={cy} r={g.r} fill={g.fill} />
+      ))}
+      {/* 輪郭（G2だけ点線＝G2とG3の境目） */}
+      {ring.map((g) => (
+        <circle
+          key={`line-${g.id}`}
+          cx={cx}
+          cy={cy}
+          r={g.r}
+          fill="none"
+          stroke={g.stroke}
+          strokeWidth={g.dashed ? 2.5 : 1.5}
+          strokeDasharray={g.dashed ? "7 5" : undefined}
         />
       ))}
-      {/* 輪郭（gap>0 なら右側をその角度ぶん描かない） */}
-      {ring.map((g) =>
-        gap > 0 ? (
-          <path
-            key={`line-${g.id}`}
-            d={arcPath(cx, cy, g.r, gap)}
-            fill="none"
-            stroke={g.stroke}
-            strokeWidth={g.dashed ? 2.5 : 1.5}
-            strokeDasharray={g.dashed ? "7 5" : undefined}
-          />
-        ) : (
-          <circle
-            key={`line-${g.id}`}
-            cx={cx}
-            cy={cy}
-            r={g.r}
-            fill="none"
-            stroke={g.stroke}
-            strokeWidth={g.dashed ? 2.5 : 1.5}
-            strokeDasharray={g.dashed ? "7 5" : undefined}
-          />
-        )
-      )}
+      {/* 帯の中の等級（215 B）。baseline の解釈に頼らず、文字の大きさから中心にそろえる */}
+      {GRADES.map((g, i) => (
+        <text
+          key={`id-${g.id}`}
+          x={cx + bandMid(i)}
+          y={cy + idSize * 0.35}
+          textAnchor="middle"
+          fontSize={idSize}
+          fontWeight={700}
+          fill={g.idFill}
+        >
+          {g.id}
+        </text>
+      ))}
     </>
   );
 }
 
-/** 右側に ±gap 度の切れ目を空けた円弧（gap=0 なら丸のまま） */
-function arcPath(cx: number, cy: number, r: number, gap: number): string {
-  const a = (deg: number) => (deg * Math.PI) / 180;
-  if (gap <= 0) {
-    // 丸いっぱい（半円2つでつなぐ）
-    return `M ${cx + r} ${cy} A ${r} ${r} 0 1 1 ${cx - r} ${cy} A ${r} ${r} 0 1 1 ${cx + r} ${cy}`;
-  }
-  const sx = cx + r * Math.cos(a(-gap));
-  const sy = cy + r * Math.sin(a(-gap));
-  const ex = cx + r * Math.cos(a(gap));
-  const ey = cy + r * Math.sin(a(gap));
-  // large-arc=1・sweep=0 で、切れ目の無いほう（長いほう）を回る
-  return `M ${sx.toFixed(2)} ${sy.toFixed(2)} A ${r} ${r} 0 1 0 ${ex.toFixed(2)} ${ey.toFixed(2)}`;
-}
-
 /**
- * パソコン用：図の右に、各円の等級と範囲を引き出し線で示す。
+ * パソコン用：図の右に、各円の等級と範囲を並べる。
  *
- * 212 B: 線が何とも交差しないように、次の順で引く。
- *   1. その円の輪郭の点から、**中心から見て放射状に**外へ出る（角度は円ごとに少しずつ変える）
- *      … 通り道は輪郭の切れ目（±GAP_DEG度）の中なので、外側の輪郭を横切らない
- *   2. いちばん外の円より外に出てから、一覧の行へまっすぐ向かう
- *      … どちらの端も円の外にあるので、戻って円に入ることもない
- *   角度の並び（上がG5…下がG1）と一覧の並びをそろえてあるので、線どうしも交差しない。
- *
- * 209では「一覧の行に向かう放射状の1本」で引いていたため、
- * G1の線が4本・G2の線が3本の輪郭を横切っていた（実測）。
+ * 215 B: **引き出し線はやめた**（212で線と輪郭の交差を避けるために円を切り欠いていたが、
+ *   その切れ目が「円のあいだの白い抜け」に見えた）。線の代わりに、
+ *   一覧の各行の頭に**その円と同じ色の見本**を付けて、どの円のことかを示す。
+ *   一覧の並び（上がG5…下がG1）は今までのまま。
  */
-const GAP_DEG = 17;
-/** 円ごとの引き出し角度（上がG5・下がG1。切れ目 ±GAP_DEG の内側に収める） */
-const LEAD_DEG: Record<string, number> = { G5: -13, G4: -6.5, G3: 0, G2: 6.5, G1: 13 };
-/** いちばん外の円（r=154）より外に出る距離 */
-const LEAD_OUT = 170;
+const SWATCH_X = 378;
+const SWATCH_R = 7;
+const LABEL_X = 396;
 
 function WideFigure() {
   const slot: Record<string, number> = { G5: 44, G4: 104, G3: 164, G2: 268, G1: 328 };
-  const LABEL_X = 372;
-  const rad = (deg: number) => (deg * Math.PI) / 180;
   return (
     <svg viewBox="0 0 620 380" className="w-full h-auto" aria-hidden="true">
-      <Circles cx={CX} cy={CY} gap={GAP_DEG} />
+      <Circles cx={CX} cy={CY} />
       {GRADES.map((g) => {
         const y = slot[g.id];
-        const t = rad(LEAD_DEG[g.id]);
-        const sx = CX + Math.cos(t) * g.r;
-        const sy = CY + Math.sin(t) * g.r;
-        const mx = CX + Math.cos(t) * LEAD_OUT;
-        const my = CY + Math.sin(t) * LEAD_OUT;
         return (
           <g key={g.id}>
-            <path
-              d={`M ${sx.toFixed(1)} ${sy.toFixed(1)} L ${mx.toFixed(1)} ${my.toFixed(1)} L ${LABEL_X - 10} ${y - 4}`}
-              fill="none"
-              stroke="#475569"
-              strokeWidth={1}
-              strokeDasharray="3 3"
-            />
-            <circle cx={sx} cy={sy} r={3.5} fill={g.stroke} />
+            {/* その円と同じ色の見本（塗りと輪郭をそのまま使う） */}
+            <circle cx={SWATCH_X} cy={y - 5} r={SWATCH_R} fill={g.fill} stroke={g.stroke} strokeWidth={1.5} />
             <text x={LABEL_X} y={y} fontSize={14} fontWeight={700} fill="#0f172a">
               {g.name}
             </text>
@@ -173,14 +158,22 @@ function WideFigure() {
       })}
 
       {/* 時代の分かれ目（色の系統の違い）と、G2→G3 の質的転換点 */}
-      <text x={LABEL_X} y={18} fontSize={11.5} fontWeight={700} fill="#0f766e">
+      <text x={SWATCH_X - SWATCH_R} y={18} fontSize={11.5} fontWeight={700} fill="#0f766e">
         {BEING_ERA}
       </text>
-      <line x1={LABEL_X} y1={200} x2={600} y2={200} stroke="#059669" strokeWidth={1.5} strokeDasharray="7 5" />
-      <text x={LABEL_X} y={218} fontSize={12} fontWeight={700} fill="#047857">
+      <line
+        x1={SWATCH_X - SWATCH_R}
+        y1={200}
+        x2={608}
+        y2={200}
+        stroke="#059669"
+        strokeWidth={1.5}
+        strokeDasharray="7 5"
+      />
+      <text x={SWATCH_X - SWATCH_R} y={218} fontSize={12} fontWeight={700} fill="#047857">
         {TURNING_POINT}
       </text>
-      <text x={LABEL_X} y={246} fontSize={11.5} fontWeight={700} fill="#047857">
+      <text x={SWATCH_X - SWATCH_R} y={246} fontSize={11.5} fontWeight={700} fill="#047857">
         {SKILL_ERA}
       </text>
     </svg>
@@ -191,7 +184,7 @@ function WideFigure() {
 function NarrowFigure() {
   return (
     <svg viewBox="0 0 350 350" className="w-full h-auto max-w-[320px] mx-auto" aria-hidden="true">
-      <Circles cx={175} cy={175} />
+      <Circles cx={175} cy={175} idSize={14} />
     </svg>
   );
 }
