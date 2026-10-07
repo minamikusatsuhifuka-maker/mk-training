@@ -46,6 +46,7 @@ import {
   planKarteGoalUpdates,
 } from "@/lib/presurvey-karte-server";
 import { loadDelegationSnapshot } from "@/lib/admin-delegation-server";
+import { resolveDisplayNames } from "@/lib/display-names-server";
 import { presurveyPeriods } from "@/lib/presurvey-periods";
 import { loadFiscalStartMonth } from "@/lib/presurvey-periods-server";
 
@@ -65,7 +66,11 @@ type Row = {
   updated_at: string;
 };
 
-/** 204 §1: この人の回答を見られる人（名前はクライアントが名簿から引く） */
+/**
+ * 204 §1: この人の回答を見られる人。
+ * 211 A: **名前もサーバーで解決して返す**。画面が名簿を引くと、検証用アカウントは
+ * 名簿から外されている（191 B）ため引けず「担当者さん」になっていた。
+ */
 async function viewersFor(userId: string): Promise<{ karteManagerIds: string[]; answerViewerIds: string[] }> {
   const snap = await loadDelegationSnapshot().catch(
     () => ({ items: {} as Record<string, string[]>, karte: {} as Record<string, string[]> })
@@ -99,11 +104,21 @@ export async function GET(req: Request) {
       viewersFor(user.id),
       loadFiscalStartMonth(),
     ]);
+    // 211 A: 自分の名前と「見られる人」の名前をサーバーで解決して渡す
+    const nameIds = [user.id, ...viewers.karteManagerIds, ...viewers.answerViewerIds];
+    const names = await resolveDisplayNames([...new Set(nameIds)]).catch(() => new Map<string, string>());
+    const named = (ids: string[]) => ids.map((id) => ({ userId: id, name: names.get(id) ?? "" }));
     return NextResponse.json({
       karte: slots,
       karteTableMissing: tableMissing,
       periods: presurveyPeriods(jstTodayYmd(), startMonth),
       viewers,
+      // 211 A: 名前はここで解決したものを使う（画面は名簿を引き直さない）
+      myName: names.get(user.id) ?? "",
+      viewerNames: {
+        karteManagers: named(viewers.karteManagerIds),
+        answerViewers: named(viewers.answerViewerIds),
+      },
     });
   } catch (e) {
     if (e instanceof GrowthTableMissingError) {

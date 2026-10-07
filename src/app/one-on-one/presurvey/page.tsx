@@ -26,7 +26,6 @@ import {
 import {
   PRESURVEY_EMPTY,
   PRESURVEY_INTRO,
-  PRESURVEY_LEAD,
   PRESURVEY_NO_SCHEDULE,
   PRESURVEY_PART1_NOTICE,
   PRESURVEY_PARTS,
@@ -91,6 +90,12 @@ type PresurveyContext = {
   karteTableMissing: boolean;
   periods: PresurveyPeriods;
   viewers: { karteManagerIds: string[]; answerViewerIds: string[] };
+  // 211 A: 名前はサーバーが解決して渡す（名簿を画面で引き直さない）
+  myName?: string;
+  viewerNames?: {
+    karteManagers: { userId: string; name: string }[];
+    answerViewers: { userId: string; name: string }[];
+  };
 };
 
 /** 予定の表示（例: 10月13日（火）13:00　院長と　締切 10月10日） */
@@ -158,7 +163,12 @@ function PresurveyPageBody() {
         loadContext(),
       ]);
       setProfiles(idx);
-      setMyName(idx.find((p) => p.userId === user.id)?.name?.trim() || "名前未設定");
+      // 211 A: サーバーが解決した名前を使う。名簿は 2-3「前回の約束」の控えに使うだけ
+      setMyName(
+        (context?.myName ?? "").trim() ||
+          idx.find((p) => p.userId === user.id)?.name?.trim() ||
+          ""
+      );
       setQuestions(qs);
       setRecords(mine);
       setOneOnOnes(involved);
@@ -501,8 +511,17 @@ function PresurveyPageBody() {
     );
   }
 
-  const karteNames = (ctx?.viewers.karteManagerIds ?? []).map((id) => nameOf(id, "担当者"));
-  const answerNames = (ctx?.viewers.answerViewerIds ?? []).map((id) => nameOf(id, "担当者"));
+  // 211 A: サーバーが解決した名前を使い、無いときだけ名簿を見る（最後の手段が「担当者」）
+  const viewerName = (v: { userId: string; name: string }) =>
+    v.name.trim() || nameOf(v.userId, "担当者");
+  const karteNames = (
+    ctx?.viewerNames?.karteManagers ??
+    (ctx?.viewers.karteManagerIds ?? []).map((userId) => ({ userId, name: "" }))
+  ).map(viewerName);
+  const answerNames = (
+    ctx?.viewerNames?.answerViewers ??
+    (ctx?.viewers.answerViewerIds ?? []).map((userId) => ({ userId, name: "" }))
+  ).map(viewerName);
 
   return (
     <div className="space-y-6">
@@ -528,7 +547,8 @@ function PresurveyPageBody() {
         </p>
       </div>
 
-      <p className="text-xs text-gray-600 leading-relaxed">{PRESURVEY_LEAD}</p>
+      {/* 211 C: 「次の1on1の前に答えておくと…」の段落は削除した。
+          前半はコーポレートブックにない言い回しで、後半は下の「見られる人」の案内と重なるため。 */}
 
       {message && (
         <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
@@ -643,7 +663,9 @@ function PresurveyPageBody() {
 
               <div className="flex items-center justify-between gap-2 flex-wrap bg-white border border-gray-200 rounded-xl p-4">
                 <span className="text-xs text-gray-500">
-                  {myName} として保存します（回答は評価に使いません）
+                  {/* 211 C: 「評価には使いません」は画面の冒頭（PRESURVEY_INTRO）に出ているので、
+                      ここでは繰り返さない（同じ画面に2回出ていた） */}
+                  {myName} として保存します
                 </span>
                 <button
                   type="button"

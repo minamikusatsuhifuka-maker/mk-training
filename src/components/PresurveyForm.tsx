@@ -136,7 +136,9 @@ export function PresurveyQuestionBlock({
         </span>
       </div>
 
-      {q.role && <p className="text-[11px] text-gray-500">🧭 {q.role}</p>}
+      {/* 211 B: 「🧭 …」はリードマネジメント上の役割＝**院長向けの設計メモ**なので、
+          スタッフの画面には出さない。院長・管理者の画面（質問の編集・回答の閲覧）には残る。
+          この部品はスタッフの回答画面からしか使われていない（/one-on-one/presurvey）。 */}
 
       {/* 204 §2-3: コーポレートブックのヒント（出典を小さく添える） */}
       {q.bookHint && (

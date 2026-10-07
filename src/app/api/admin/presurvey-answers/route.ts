@@ -36,8 +36,7 @@ import {
   presurveyViewerScope,
   viewableStaffIds,
 } from "@/lib/presurvey-access-server";
-import { serverGetContentRow } from "@/lib/content-store-server";
-import { STAFF_PROFILES_INDEX_KEY } from "@/lib/staff-profiles";
+import { resolveDisplayNames } from "@/lib/display-names-server";
 import { jstTodayYmd } from "@/lib/library";
 
 export const runtime = "nodejs";
@@ -47,18 +46,13 @@ const hidden = () => NextResponse.json({ error: "Not Found" }, { status: 404 });
 
 type Row = { owner_id: string; record_key: string; data: unknown; updated_at?: string };
 
-async function nameMap(): Promise<Map<string, string>> {
+// 211 A: 名前の解決は lib/display-names-server.ts（正本）に寄せた。
+//   ここには独自の名簿読みがあったが、名簿の行は `{ items: [...] }` の形なのに
+//   `Array.isArray(row.data)` で配列として読もうとしており **常に空** ＝
+//   回答一覧の名前が全員「名前未設定」になっていた。
+async function nameMap(ids: readonly string[]): Promise<Map<string, string>> {
   try {
-    const row = await serverGetContentRow(STAFF_PROFILES_INDEX_KEY);
-    const list = Array.isArray(row?.data) ? (row!.data as unknown[]) : [];
-    const m = new Map<string, string>();
-    for (const e of list) {
-      const o = (e && typeof e === "object" ? e : {}) as Record<string, unknown>;
-      const id = typeof o.userId === "string" ? o.userId : "";
-      const name = typeof o.name === "string" ? o.name.trim() : "";
-      if (id && name) m.set(id, name);
-    }
-    return m;
+    return await resolveDisplayNames(ids);
   } catch {
     return new Map();
   }
@@ -95,7 +89,7 @@ export async function GET(req: Request) {
         .map((r) => normalizePresurveyData(r.data))
         .filter((x) => x.heldOn && (!d.heldOn || x.heldOn < d.heldOn))
         .sort((a, b) => b.heldOn.localeCompare(a.heldOn))[0] as PresurveyData | undefined;
-      const names = await nameMap();
+      const names = await nameMap([userId]);
       if (!scope.isAdmin) {
         await recordGrowthLog(db, {
           by: auth.user.email ?? auth.user.id,
@@ -125,7 +119,8 @@ export async function GET(req: Request) {
 
     // ── 一覧（1on1の予定ごと） ──
     const { schedules, tableMissing } = await fetchSchedules(db);
-    const names = await nameMap();
+    // 一覧に出る全員ぶん（名簿に無い人はアカウントの表示名で埋まる）
+    const names = await nameMap([...new Set([...rows.map((r) => r.owner_id), ...schedules.map((s) => s.userId)])]);
     const today = jstTodayYmd();
     const byUser = new Map<string, { data: PresurveyData; recordKey: string }[]>();
     for (const r of rows) {

@@ -824,6 +824,12 @@ export function sortPresurveys<T extends { data: unknown; updatedAt?: string }>(
 
 export const PRESURVEY_TITLE = "📝 1on1の事前アンケート";
 
+/**
+ * @deprecated 211 C で画面から削除した（どこからも使っていない）。
+ * 前半「当日の対話がぐっと深まります」はコーポレートブックにない言い回しで、
+ * 後半「回答を読めるのは…」は画面の「見られる人」の案内と重なっていたため。
+ * 文面を戻す判断があったときのために、原文だけ残す。
+ */
 export const PRESURVEY_LEAD =
   "次の1on1の前に答えておくと、当日の対話がぐっと深まります。回答を読めるのは、院長と、院長が指定した担当の管理者だけです。";
 

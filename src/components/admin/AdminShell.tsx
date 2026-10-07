@@ -67,7 +67,11 @@ export function AdminShell({
           { label: "📋 書類進捗ボード", href: "/doc-tasks" },
           // 157: 設定はここから開く（実体は /doc-tasks/settings。
           //   /admin 配下だと未ログイン・非管理者に200が返り、ルートの存在が漏れるため）
-          { label: "⚙️ 書類進捗ボードの設定", href: "/doc-tasks/settings" },
+          // 211 D: **設定は院長のみ**（/doc-tasks/settings は管理者以外に404）。
+          //   ボードが見える人みんなに出していたため、押すと404になっていた。
+          ...(isAdmin
+            ? [{ label: "⚙️ 書類進捗ボードの設定", href: "/doc-tasks/settings" }]
+            : []),
         ]
       : []),
     ...(canSeeContacts
@@ -75,7 +79,10 @@ export function AdminShell({
           { label: "📇 スタッフ連絡先", href: "/staff-contacts" },
           // 169: 設定はここから開く（実体は /staff-contacts/settings。
           //   /admin 配下だとルートの存在が漏れるため・157と同じ理由）
-          { label: "⚙️ スタッフ連絡先の設定", href: "/staff-contacts/settings" },
+          // 211 D: 書類進捗の設定と**同じ作り**＝こちらも院長のみ（押すと404だった）
+          ...(isAdmin
+            ? [{ label: "⚙️ スタッフ連絡先の設定", href: "/staff-contacts/settings" }]
+            : []),
         ]
       : []),
     ...(canSeeRetro
