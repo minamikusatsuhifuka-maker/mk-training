@@ -8,6 +8,7 @@ import {
   HR_GRADE_SECTIONS,
   HR_EVALUATION_SECTIONS,
   HR_SALARY_SECTIONS,
+  visibleTable,
   HR_TRANSITIONS,
   HR_PROMOTION_INTRO,
   HR_PROMOTION_NOTES,
@@ -43,7 +44,9 @@ function stripBold(s: string): string {
 function blockText(b: HrBlock): string {
   if (b.type === "p") return b.text;
   if (b.type === "list") return b.items.join("／");
-  return [b.headers.join(" "), ...b.rows.map((r) => r.join(" "))].join("　");
+  // 210: 画面に出さない列は検索の対象にもしない（画面と検索で見えるものを合わせる）
+  const t = visibleTable(b.headers, b.rows);
+  return [t.headers.join(" "), ...t.rows.map((r) => r.join(" "))].join("　");
 }
 
 function makeEntry(

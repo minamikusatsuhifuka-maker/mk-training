@@ -11,6 +11,7 @@ import {
   HR_GRADE_SECTIONS,
   HR_EVALUATION_SECTIONS,
   HR_SALARY_SECTIONS,
+  visibleTable,
   HR_TRANSITIONS,
   HR_PROMOTION_INTRO,
   HR_PROMOTION_NOTES,
@@ -54,10 +55,12 @@ function clean(s: string): string {
 function blockToText(b: HrBlock): string {
   if (b.type === "p") return clean(b.text);
   if (b.type === "list") return b.items.map((i) => `- ${clean(i)}`).join("\n");
-  return b.rows
+  // 210: 画面に出さない列はAIにも渡さない（チャットで答えに出てしまわないように）
+  const t = visibleTable(b.headers, b.rows);
+  return t.rows
     .map((r) =>
       r
-        .map((c, j) => (b.headers[j] ? `${b.headers[j]}=${clean(c)}` : clean(c)))
+        .map((c, j) => (t.headers[j] ? `${t.headers[j]}=${clean(c)}` : clean(c)))
         .filter((c) => !/=$/.test(c))
         .join("｜")
     )

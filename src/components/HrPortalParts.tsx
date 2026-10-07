@@ -10,6 +10,7 @@ import { useEffect } from "react";
 import {
   HR_COMMON_NOTICE,
   HR_SOURCE_NOTE,
+  visibleTable,
   type HrBlock,
   type HrSection,
 } from "@/data/hr-portal";
@@ -96,7 +97,11 @@ export function HrBlocksView({ blocks }: { blocks: HrBlock[] }) {
             </ul>
           );
         }
-        return <HrTableView key={i} headers={b.headers} rows={b.rows} />;
+        // 210: 表示しない列（前等級との差）をここで落とす。データは hr-portal.ts に残っている
+        {
+          const t = visibleTable(b.headers, b.rows);
+          return <HrTableView key={i} headers={t.headers} rows={t.rows} />;
+        }
       })}
     </div>
   );

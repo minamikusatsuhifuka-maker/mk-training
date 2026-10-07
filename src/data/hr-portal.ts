@@ -22,6 +22,34 @@ export type HrBlock =
 
 export type HrSection = { id: string; title: string; blocks: HrBlock[] };
 
+// ─── 表示しない列（指示書210） ───
+//
+// **データは消さない。** 値は上の表にそのまま残し、描くときだけ落とす。
+// ここから名前を外せば、画面・検索・人事チャットのすべてで元どおり表示に戻る。
+//
+// 対象: 月給レンジ表（看護師ライン／マルチタスク医療事務ライン）の「前等級との差」。
+// 列名で判定するので、同じ列名の表が増えても同じように落ちる。
+export const HR_HIDDEN_TABLE_HEADERS: readonly string[] = ["前等級との差"];
+
+/**
+ * 表から「表示しない列」を抜いた見出しと行を返す（純関数）。
+ * 画面・印刷（HrBlocksView）、ポータル内検索（hr-search）、
+ * 人事チャットの知識（hr-chat-knowledge）が**すべてこれを通す**。
+ */
+export function visibleTable(
+  headers: readonly string[],
+  rows: readonly string[][]
+): { headers: string[]; rows: string[][] } {
+  const keep = headers
+    .map((h, i) => (HR_HIDDEN_TABLE_HEADERS.includes(h) ? -1 : i))
+    .filter((i) => i >= 0);
+  if (keep.length === headers.length) return { headers: [...headers], rows: rows.map((r) => [...r]) };
+  return {
+    headers: keep.map((i) => headers[i]),
+    rows: rows.map((r) => keep.map((i) => r[i] ?? "")),
+  };
+}
+
 // ─── [PAGE:grade] 等級制度ページ ───
 
 export const HR_GRADE_SECTIONS: HrSection[] = [
