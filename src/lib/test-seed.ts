@@ -35,6 +35,26 @@ export function isTestSeedEmail(email: string): boolean {
   return TEST_ACCOUNTS.some((a) => a.email === email.toLowerCase());
 }
 
+/**
+ * 207-1: 育成カルテの担当指定で「検証用」と「実在」が混ざっていないかを調べる（純関数）。
+ *
+ * - 🧪 検証用の幹部に指定できる担当は 🧪 検証用のスタッフだけ
+ * - 実在の幹部に 🧪 検証用のスタッフは指定できない
+ * - **名簿に無いidは、検証用の幹部に対しては混在として扱う**
+ *   （検証用かどうか確かめられないものを、検証用の枠に入れない）
+ *
+ * 戻り値は「組み合わせが合わないid」。空配列なら保存してよい。
+ * 判定の正本はここ1か所で、APIがこれを呼ぶ（画面の絞り込みは案内のため）。
+ */
+export function mixedSeedAssignment(
+  managerId: string,
+  staffIds: readonly string[],
+  isTestById: ReadonlyMap<string, boolean>
+): string[] {
+  const managerIsTest = isTestById.get(managerId) === true;
+  return staffIds.filter((id) => (isTestById.get(id) === true) !== managerIsTest);
+}
+
 /** 検証用アカウント以外の userId が混ざっていないか（削除の対象一覧の検査） */
 export function onlyTestIds(ids: Iterable<string>, testIds: ReadonlySet<string>): { ok: true } | { ok: false; foreign: string[] } {
   const foreign = Array.from(new Set(Array.from(ids).filter((id) => id && !testIds.has(id))));

@@ -30,6 +30,9 @@ const COUNT_LABEL: Record<string, string> = {
   booking_notice: "予約の動きの知らせ",
   booking_rebook: "取り直しのお願い",
   booking_hold: "予約の持ち分（1期間1枠の印）",
+  // 207-4: 委任と担当の指定も対象一覧に出す
+  karte_assignment: "育成カルテの担当の指定",
+  item_delegation: "管理画面の委任",
   presurvey_alert_sent: "知らせを送った記録",
   course: "講座",
   grade: "等級・キャリアライン",

@@ -41,9 +41,15 @@ export function DelegationPanel() {
   }, [load]);
 
   /** 幹部の候補＝管理者でない有効なアカウント */
-  // 191 B: 検証用アカウントは項目の委任先候補に出さない
-  const staff = useMemo(() => roster.filter((r) => !r.isAdmin && !r.retired && !r.testSeed), [roster]);
+  // 207: 検証用アカウント（🧪）も候補に出す。**院長だけが見るこの画面に限る**
+  //   （191 B の「一般スタッフの画面には出さない」は変えていない）。
+  //   検証用の幹部に指定できる担当は検証用のスタッフだけで、組み合わせの判定は
+  //   画面とサーバー（/api/admin/delegation）の両方で行う。
+  const staff = useMemo(() => roster.filter((r) => !r.isAdmin && !r.retired), [roster]);
+  const isTest = (id: string) => !!roster.find((r) => r.userId === id)?.testSeed;
   const nameOf = (id: string) => roster.find((r) => r.userId === id)?.name ?? "（不明）";
+  /** 207-3: 検証用は名前に🧪を付けて実在の幹部と見分ける */
+  const labelOf = (r: Roster[number]) => `${r.name}${r.testSeed ? "（🧪 検証用）" : ""}`;
 
   const save = async (body: { items?: Record<string, string[]>; karte?: Record<string, string[]> }) => {
     setBusy(true);
@@ -57,8 +63,15 @@ export function DelegationPanel() {
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string; items?: Record<string, string[]>; karte?: Record<string, string[]> };
       if (!res.ok) throw new Error(j.error ?? "保存に失敗しました");
+      // 207: 組み合わせが合わずサーバーが断った場合は 200 で理由が返る。
+      //   画面の表示はサーバーの結果で上書きするので、押した見た目だけが残ることはない
       if (j.items) setItems((prev) => prev.map((it) => ({ ...it, userIds: j.items?.[it.key] ?? it.userIds })));
       if (j.karte) setKarte(j.karte);
+      if (j.error) {
+        setError(j.error);
+        setMsg("");
+        return;
+      }
       setMsg("💾 保存しました（すぐに反映されます）");
     } catch (e) {
       setError(e instanceof Error ? e.message : "保存に失敗しました");
@@ -107,7 +120,7 @@ export function DelegationPanel() {
             <option value="">選んでください</option>
             {staff.map((s) => (
               <option key={s.userId} value={s.userId}>
-                {s.name}
+                {labelOf(s)}
                 {(karte[s.userId]?.length ?? 0) > 0 ? `（担当 ${karte[s.userId].length}人）` : ""}
               </option>
             ))}
@@ -116,6 +129,12 @@ export function DelegationPanel() {
         {manager && (
           <div className="space-y-1">
             <p className="text-[11px] text-slate-600">{nameOf(manager)} さんが見られるスタッフ（チェック＝担当）</p>
+            {/* 207-1: 組み合わせの決まりを画面にも書く（判定はサーバーが正） */}
+            <p className="text-[11px] text-violet-700" data-karte-pairing>
+              {isTest(manager)
+                ? "🧪 検証用の幹部には、🧪 検証用のスタッフだけを指定できます。"
+                : "実在の幹部に🧪 検証用のスタッフは指定できません。"}
+            </p>
             <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1">
               {roster
                 .filter((r) => r.userId !== manager && !r.isAdmin)
@@ -188,7 +207,7 @@ export function DelegationPanel() {
                           }`}
                         >
                           {on ? "✓ " : ""}
-                          {s.name}
+                          {labelOf(s)}
                         </button>
                       );
                     })}

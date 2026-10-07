@@ -19,7 +19,7 @@ import { STAFF_PROFILES_INDEX_KEY, staffProfileKey, emptyProfile } from "./staff
 import { saveSurveyHistory } from "./survey-history-server";
 import { surveyHistoryKey, entryFromSurvey } from "./survey-history";
 import type { NeedsSurvey } from "./needs-survey";
-import { saveKarteAssignment, loadDelegationSnapshot } from "./admin-delegation-server";
+import { saveKarteAssignment, saveItemDelegation, loadDelegationSnapshot } from "./admin-delegation-server";
 import { emptySelfReviewData, SELF_REVIEW_CONFIG_KEY } from "./self-review";
 import { emptyPresurveyAnswer, isKarteLinked, loadPresurveyQuestions, visiblePresurveyQuestions } from "./one-on-one-presurvey";
 import { SEED203_JIRO_ANSWERS, SEED203_JIRO_GOAL_QUESTION_IDS, SEED203_JIRO_PRESURVEY_AT, SEED203_JIRO_PRESURVEY_KEY, SEED203_JIRO_SCHEDULE, SEED203_LEGACY_PROMISE_IDS, SEED203_NOTES } from "./test-seed-203";
@@ -448,6 +448,8 @@ type Targets = {
   contentKeys: string[];
   seedCourseIds: string[];
   karteManagers: string[];
+  /** 207: 検証用アカウントが指名されている管理画面の項目（委任） */
+  itemDelegations: string[];
 };
 
 async function collectTargets(admin: Admin, testIds: Set<string>): Promise<{ targets: Targets; foreign: string[] }> {
@@ -502,7 +504,9 @@ async function collectTargets(admin: Admin, testIds: Set<string>): Promise<{ tar
   // 担当幹部の指定
   const snap = await loadDelegationSnapshot();
   const karteManagers = Object.keys(snap.karte).filter((m) => testIds.has(m) || (snap.karte[m] ?? []).some((s) => testIds.has(s)));
-  return { targets: { testIds, growth, privateRows, contactIds, hiringDocs: docs, prospectIds, contentKeys, seedCourseIds, karteManagers }, foreign };
+  // 207-4: 管理画面の委任（検証用アカウントが指名されている項目）も対象にする
+  const itemDelegations = Object.keys(snap.items).filter((k) => (snap.items[k] ?? []).some((u) => testIds.has(u)));
+  return { targets: { testIds, growth, privateRows, contactIds, hiringDocs: docs, prospectIds, contentKeys, seedCourseIds, karteManagers, itemDelegations }, foreign };
 }
 
 async function countTargets(admin: Admin, testIds: Set<string>): Promise<Record<string, number>> {
@@ -516,7 +520,16 @@ async function countTargets(admin: Admin, testIds: Set<string>): Promise<Record<
     const k = `private:${r.content_type}`;
     byType[k] = (byType[k] ?? 0) + 1;
   }
-  return { ...byType, private_store: targets.privateRows.length, contacts: targets.contactIds.length, hiring_docs: targets.hiringDocs.length, prospects: targets.prospectIds.length };
+  return {
+    ...byType,
+    private_store: targets.privateRows.length,
+    contacts: targets.contactIds.length,
+    hiring_docs: targets.hiringDocs.length,
+    prospects: targets.prospectIds.length,
+    // 207-4: 委任と担当の指定も対象一覧に出す（消えることが院長に見えるように）
+    karte_assignment: targets.karteManagers.length,
+    item_delegation: targets.itemDelegations.length,
+  };
 }
 
 // ─── 一括削除 ───
@@ -579,6 +592,13 @@ export async function purgeTestData(admin: Admin, by: string): Promise<PurgeResu
     const rest = testIds.has(m) ? [] : (snap.karte[m] ?? []).filter((s) => !testIds.has(s));
     await saveKarteAssignment(m, rest, by);
     add("担当幹部の指定", 1);
+  }
+  // 6-2. 管理画面の委任（207-4）。検証用アカウントのidだけを外す（実在の幹部の指名は残す）
+  for (const key of targets.itemDelegations) {
+    const rest = (snap.items[key] ?? []).filter((u) => !testIds.has(u));
+    const ok = await saveItemDelegation(key, rest, by);
+    if (!ok) throw new Error(`管理画面の委任（${key}）の削除に失敗しました`);
+    add("管理画面の委任", 1);
   }
   // 7. 検証用に作った講座（他の学びの記録が参照していなければ）
   if (targets.seedCourseIds.length > 0) {

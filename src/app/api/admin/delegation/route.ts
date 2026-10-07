@@ -18,6 +18,7 @@ import {
 import { ADMIN_ITEMS, findAdminItem } from "@/lib/admin-items";
 import { loadProfilesIndexServer } from "@/lib/staff-growth-roster-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { mixedSeedAssignment } from "@/lib/test-seed";
 import { authorizeGrowth, recordGrowthLog } from "@/lib/staff-growth-server";
 
 export const runtime = "nodejs";
@@ -91,6 +92,8 @@ export async function PUT(req: Request) {
   const before = await loadDelegationSnapshot();
   const changes: { field: string; before: string; after: string }[] = [];
   const rejected: string[] = [];
+  /** 207: 検証用と実在が混ざっていて保存しなかった幹部 */
+  const rejectedKarte: string[] = [];
 
   if (body.items && typeof body.items === "object") {
     for (const [key, raw] of Object.entries(body.items as Record<string, unknown>)) {
@@ -110,9 +113,19 @@ export async function PUT(req: Request) {
   }
 
   if (body.karte && typeof body.karte === "object") {
+    // 207-1/207-5: 検証用と実在の組み合わせは**ここで**断る（画面の絞り込みだけに頼らない）。
+    //   ・🧪 検証用の幹部には 🧪 検証用のスタッフだけ
+    //   ・実在の幹部に 🧪 検証用のスタッフは付けられない
+    //   名簿に無いidは、検証用の幹部に対しては通さない（確かめられないものは許可しない）。
+    const testOf = new Map((await loadRoster()).map((r) => [r.userId, r.testSeed === true]));
     for (const [managerId, raw] of Object.entries(body.karte as Record<string, unknown>)) {
       if (!managerId) continue;
       const ids = idList(raw).filter((id) => id !== managerId);
+      const mixed = mixedSeedAssignment(managerId, ids, testOf);
+      if (mixed.length > 0) {
+        rejectedKarte.push(managerId);
+        continue;
+      }
       const ok = await saveKarteAssignment(managerId, ids, by);
       if (!ok) return NextResponse.json({ error: "担当スタッフの保存に失敗しました" }, { status: 500 });
       const prev = before.karte[managerId] ?? [];
@@ -131,5 +144,14 @@ export async function PUT(req: Request) {
   }
 
   const after = await loadDelegationSnapshot();
-  return NextResponse.json({ ok: true, items: after.items, karte: after.karte, rejected });
+  return NextResponse.json({
+    ok: true,
+    items: after.items,
+    karte: after.karte,
+    rejected,
+    rejectedKarte,
+    ...(rejectedKarte.length > 0
+      ? { error: "🧪 検証用の幹部には 🧪 検証用のスタッフだけを指定できます（実在のスタッフとは組み合わせられません）" }
+      : {}),
+  });
 }
