@@ -27,6 +27,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { spreadLabel, spreadPages, stepSpread } from "@/lib/corporate-book-spread";
+import { useBookView } from "@/lib/corporate-book-view-client";
 
 /** 操作ボタンを薄くするまでの時間（ミリ秒・208 §3「数秒触らないと薄くする」） */
 const IDLE_MS = 3000;
@@ -107,6 +109,8 @@ export function CorporateBookReader({
       : "page"
   );
   const [idle, setIdle] = useState(false);
+  // 213: 全画面でも 1ページ／見開き を切り替えられる（通常の画面と同じ設定を使う）
+  const [view, setView] = useBookView();
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touch = useRef<{ x: number; y: number } | null>(null);
   const scroller = useRef<HTMLDivElement | null>(null);
@@ -228,6 +232,10 @@ export function CorporateBookReader({
     }
   };
 
+  // 213: 端の判定も見開き単位にする（最後の組で「次へ」を押せないように）
+  const atStart = view === "spread" ? stepSpread(page, -1, total) === page : page === 1;
+  const atEnd = view === "spread" ? stepSpread(page, 1, total) === page : page === total;
+
   const faded = idle ? "opacity-20" : "opacity-100";
   const chip =
     "pointer-events-auto rounded-full bg-black/55 text-white text-sm px-3 py-2 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-black/75 disabled:opacity-30";
@@ -252,17 +260,34 @@ export function CorporateBookReader({
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={src(page)}
-          alt={`コーポレートデザインブック ${page}ページ`}
-          draggable={false}
-          className={
-            fit === "width"
-              ? "w-full h-auto select-none"
-              : "max-h-full max-w-full w-auto h-auto object-contain select-none"
-          }
-        />
+        {/* 213 §2: 見開きは左が小さい番号。あいだに細い区切り（とじ目）を入れる */}
+        {spreadPages(page, total)
+          .slice(0, view === "spread" ? 2 : 1)
+          .map((n, i) => {
+            const shown = view === "spread" ? n : page;
+            return (
+              // 見開きのときは**半分の幅**に収める（2枚で画面いっぱい・横にあふれさせない）
+              <div
+                key={shown}
+                className={`flex min-w-0 items-center justify-center ${
+                  fit === "width" ? "h-auto" : "h-full"
+                } ${view === "spread" ? "w-1/2" : "w-full"}`}
+              >
+                {i > 0 && <div className="w-px self-stretch bg-white/30" aria-hidden="true" />}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={src(shown)}
+                  alt={`コーポレートデザインブック ${shown}ページ`}
+                  draggable={false}
+                  className={
+                    fit === "width"
+                      ? "w-full h-auto select-none"
+                      : "max-h-full max-w-full w-auto h-auto object-contain select-none"
+                  }
+                />
+              </div>
+            );
+          })}
       </div>
 
       {/* 操作のボタン類は端に小さく置く（208 §3） */}
@@ -283,6 +308,19 @@ export function CorporateBookReader({
           </button>
           <button
             type="button"
+            onClick={() => {
+              wake();
+              setView(view === "spread" ? "single" : "spread");
+            }}
+            className={chip}
+            title={view === "spread" ? "1ページで読む" : "見開きで読む"}
+            aria-label={view === "spread" ? "1ページで読む" : "見開きで読む"}
+            data-book-view-toggle
+          >
+            {view === "spread" ? "▭ 1ページ" : "▥ 見開き"}
+          </button>
+          <button
+            type="button"
             onClick={() => close(false)}
             className={chip}
             title="全画面を終わる（Escでも終われます）"
@@ -300,14 +338,14 @@ export function CorporateBookReader({
               wake();
               onGo(-1);
             }}
-            disabled={page === 1}
+            disabled={atStart}
             className={chip}
             aria-label="前のページへ"
           >
             ←
           </button>
           <span className="pointer-events-none rounded-full bg-black/55 text-white text-xs tabular-nums px-3 py-2" data-fullscreen-pageno>
-            {page} / {total}
+            {view === "spread" ? spreadLabel(page, total) : `${page} / ${total}`}
           </span>
           <button
             type="button"
@@ -315,7 +353,7 @@ export function CorporateBookReader({
               wake();
               onGo(1);
             }}
-            disabled={page === total}
+            disabled={atEnd}
             className={chip}
             aria-label="次のページへ"
           >

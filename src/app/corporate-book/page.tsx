@@ -15,6 +15,14 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import NavPageHeader from "@/components/NavPageHeader";
 import { CorporateBookReader, enterFullscreenNow } from "@/components/CorporateBookReader";
 import {
+  preloadPages,
+  spreadLabel,
+  spreadPages,
+  stepSpread,
+  type BookView,
+} from "@/lib/corporate-book-spread";
+import { useBookView } from "@/lib/corporate-book-view-client";
+import {
   CORPORATE_BOOK_PAGE_COUNT,
   CORPORATE_BOOK_VERSION,
   CORPORATE_BOOK_API,
@@ -30,19 +38,36 @@ export default function CorporateBookPage() {
   const [editing, setEditing] = useState(false);
   const [tocOpen, setTocOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false); // 208
+  // 213 §1: 1ページ／見開き。最初は画面の形で決め、選んだらその端末に覚えておく
+  //   （覚える先と画面の形はReactの外にあるので useBookView にまとめてある）
+  const [view, setView] = useBookView();
   const touchStartX = useRef<number | null>(null);
+
+  const changeView = useCallback(
+    (next: BookView) => {
+      setView(next);
+      setZoomed(false);
+    },
+    [setView]
+  );
 
   const jumpTo = useCallback((n: number) => {
     setPage(Math.min(CORPORATE_BOOK_PAGE_COUNT, Math.max(1, n)));
     setZoomed(false);
   }, []);
 
-  const go = useCallback((delta: number) => {
-    setPage((p) =>
-      Math.min(CORPORATE_BOOK_PAGE_COUNT, Math.max(1, p + delta))
-    );
-    setZoomed(false);
-  }, []);
+  // 213 §3: 見開きのときは**組単位**で進む・戻る
+  const go = useCallback(
+    (delta: number) => {
+      setPage((p) =>
+        view === "spread"
+          ? stepSpread(p, delta, CORPORATE_BOOK_PAGE_COUNT)
+          : Math.min(CORPORATE_BOOK_PAGE_COUNT, Math.max(1, p + delta))
+      );
+      setZoomed(false);
+    },
+    [view]
+  );
 
   // ページ番号入力の確定（無効値=範囲外・数字以外は無視して現在ページ維持）
   const commitPageInput = useCallback(() => {
@@ -64,15 +89,13 @@ export default function CorporateBookPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [go, fullscreen]);
 
-  // 前後1ページの先読み
+  // 前後の先読み（213 §3: 見開きのときは前後の**組**を読み込む）
   useEffect(() => {
-    [page - 1, page + 1]
-      .filter((n) => n >= 1 && n <= CORPORATE_BOOK_PAGE_COUNT)
-      .forEach((n) => {
-        const img = new Image();
-        img.src = pageSrc(n);
-      });
-  }, [page]);
+    preloadPages(page, CORPORATE_BOOK_PAGE_COUNT, view).forEach((n) => {
+      const img = new Image();
+      img.src = pageSrc(n);
+    });
+  }, [page, view]);
 
   // スワイプでページ送り（横方向のみ・50px以上）
   const onTouchStart = (e: React.TouchEvent) => {
@@ -85,6 +108,11 @@ export default function CorporateBookPage() {
     if (Math.abs(dx) < 50) return;
     go(dx < 0 ? 1 : -1);
   };
+
+  // 213: 端の判定も見開き単位にする
+  const atStart = view === "spread" ? stepSpread(page, -1, CORPORATE_BOOK_PAGE_COUNT) === page : page === 1;
+  const atEnd =
+    view === "spread" ? stepSpread(page, 1, CORPORATE_BOOK_PAGE_COUNT) === page : page === CORPORATE_BOOK_PAGE_COUNT;
 
   const pager = (
     <div className="flex items-center justify-center gap-2 flex-wrap">
@@ -100,7 +128,7 @@ export default function CorporateBookPage() {
       <button
         type="button"
         onClick={() => go(-1)}
-        disabled={page === 1}
+        disabled={atStart}
         className="text-sm px-4 py-2 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
       >
         ← 前へ
@@ -132,13 +160,13 @@ export default function CorporateBookPage() {
           title="タップしてページ番号を入力"
           className="text-sm text-gray-600 tabular-nums min-w-[64px] text-center px-2 py-1.5 rounded-lg border border-dashed border-gray-300 hover:border-teal-300 hover:text-teal-700"
         >
-          {page} / {CORPORATE_BOOK_PAGE_COUNT}
+          {view === "spread" ? spreadLabel(page, CORPORATE_BOOK_PAGE_COUNT) : `${page} / ${CORPORATE_BOOK_PAGE_COUNT}`}
         </button>
       )}
       <button
         type="button"
         onClick={() => go(1)}
-        disabled={page === CORPORATE_BOOK_PAGE_COUNT}
+        disabled={atEnd}
         className="text-sm px-4 py-2 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
       >
         次へ →
@@ -152,6 +180,28 @@ export default function CorporateBookPage() {
       >
         ⏭
       </button>
+    </div>
+  );
+
+  /** 213 §1: 1ページ／見開きの切り替え */
+  const viewSwitch = (
+    <div className="flex rounded-full border border-gray-200 overflow-hidden text-sm w-fit mx-auto bg-white" data-book-view-switch>
+      {([
+        { v: "single" as BookView, label: "1ページ" },
+        { v: "spread" as BookView, label: "見開き" },
+      ]).map((t) => (
+        <button
+          key={t.v}
+          type="button"
+          onClick={() => changeView(t.v)}
+          aria-pressed={view === t.v}
+          className={`px-4 py-2 min-h-[44px] ${
+            view === t.v ? "bg-teal-600 text-white" : "text-gray-700 hover:bg-gray-50"
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
     </div>
   );
 
@@ -215,6 +265,8 @@ export default function CorporateBookPage() {
 
       {toc}
 
+      {viewSwitch}
+
       {pager}
 
       {/* ページ画像（タップで拡大トグル・スワイプでページ送り・ピンチも可） */}
@@ -239,18 +291,31 @@ export default function CorporateBookPage() {
         >
           ⛶ 全画面
         </button>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={pageSrc(page)}
-          alt={`コーポレートデザインブック ${page}ページ`}
-          onClick={() => setZoomed((z) => !z)}
-          className={`select-none mx-auto rounded ${
-            zoomed
-              ? "max-w-none w-[170%] cursor-zoom-out"
-              : "w-full cursor-zoom-in"
-          }`}
-          draggable={false}
-        />
+        {/* 213 §2: 見開きは左が小さい番号。ページのあいだに細い区切り（とじ目）を入れる */}
+        <div className={`flex items-start justify-center ${zoomed ? "" : "gap-0"}`}>
+          {spreadPages(page, CORPORATE_BOOK_PAGE_COUNT)
+            .slice(0, view === "spread" ? 2 : 1)
+            .map((n, i) => {
+              const n2 = view === "spread" ? n : page;
+              return (
+                <div key={n2} className="flex min-w-0 flex-1 items-start">
+                  {i > 0 && <div className="w-px self-stretch bg-gray-300" aria-hidden="true" />}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={pageSrc(n2)}
+                    alt={`コーポレートデザインブック ${n2}ページ`}
+                    onClick={() => setZoomed((z) => !z)}
+                    className={`select-none mx-auto rounded ${
+                      zoomed
+                        ? "max-w-none w-[170%] cursor-zoom-out"
+                        : "w-full cursor-zoom-in"
+                    }`}
+                    draggable={false}
+                  />
+                </div>
+              );
+            })}
+        </div>
       </div>
 
       {pager}
