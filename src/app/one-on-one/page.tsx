@@ -13,12 +13,10 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 // 221: 書き起こしの取り込み（AIのまとめ＋記録欄の下書き）
 import { TranscriptImportDialog } from "@/components/TranscriptImportDialog";
 import { RwdepcInfo } from "@/components/RwdepcInfo";
+import { OneOnOneSummaryView } from "@/components/OneOnOneSummaryView";
 import {
-  SUMMARY_LABELS,
   TRANSCRIPT_ENTRY_LABEL,
-  TRANSCRIPT_SUMMARY_NOTE,
   emptyTranscriptSummary,
-  isEmptySummary,
 } from "@/lib/one-on-one-transcript";
 import Link from "next/link";
 import NavPageHeader from "@/components/NavPageHeader";
@@ -676,35 +674,8 @@ function OneOnOnePageBody() {
                 key={record.recordKey}
                 className="bg-white border border-gray-200 rounded-xl p-4 space-y-2"
               >
-                {/* 221 §4: 書き起こしから作ったまとめ（見られる人は記録と同じ） */}
-                {!isEmptySummary(summary) && (
-                  <div className="rounded-lg border border-violet-200 bg-violet-50/40 p-2 space-y-1" data-one-on-one-summary>
-                    <p className="text-[11px] font-medium text-violet-900">📝 まとめ</p>
-                    {summary.flow && (
-                      <p className="text-[12px] text-gray-900 whitespace-pre-wrap">{summary.flow}</p>
-                    )}
-                    {summary.quotes.length > 0 && (
-                      <ul className="space-y-0.5">
-                        {summary.quotes.map((q, i) => (
-                          <li key={i} className="text-[12px] text-gray-800">「{q}」</li>
-                        ))}
-                      </ul>
-                    )}
-                    {summary.decided && (
-                      <p className="text-[12px] text-gray-900">
-                        <span className="text-[11px] text-gray-500 mr-1">{SUMMARY_LABELS.decided}:</span>
-                        {summary.decided}
-                      </p>
-                    )}
-                    {summary.support && (
-                      <p className="text-[12px] text-gray-900">
-                        <span className="text-[11px] text-gray-500 mr-1">{SUMMARY_LABELS.support}:</span>
-                        {summary.support}
-                      </p>
-                    )}
-                    <p className="text-[10px] text-gray-500">{TRANSCRIPT_SUMMARY_NOTE}</p>
-                  </div>
-                )}
+                {/* 221 §4・224: 書き起こしから作ったまとめ（見られる人は記録と同じ） */}
+                <OneOnOneSummaryView summary={summary} />
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] font-medium bg-violet-100 text-violet-800 rounded-full px-2 py-0.5">

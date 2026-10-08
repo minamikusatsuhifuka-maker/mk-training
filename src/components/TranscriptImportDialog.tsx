@@ -12,7 +12,7 @@
 // 【保存の口】既存の1on1ノートと同じ（private_store の content_type "one_on_one"）。
 //   見られる人・約束のつながりは今までどおり。
 
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { upsertRecord, PrivateStoreError } from "@/lib/private-store-client";
 import {
   emptyOneOnOneData,
@@ -39,6 +39,55 @@ import {
 } from "@/lib/one-on-one-transcript";
 
 type StaffOption = { userId: string; name: string };
+
+/**
+ * 224: 文の長さに合わせて高さが伸びる入力欄。
+ * 「本人の言葉」は長い引用が入るので、1行の入力欄だと途中で切れて、
+ * 保存の前に全文を確かめられなかった。折り返して全部見えるようにする。
+ * （高さは状態に入れず、要素のスタイルを直に書き換える）
+ */
+function fitHeight(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = "auto";
+  const cs = getComputedStyle(el);
+  // scrollHeight は枠線を含まない。border-box（Tailwindの既定）のままだと枠線の分だけ足りず、
+  // 最後の行が2pxだけ隠れる
+  const extra =
+    cs.boxSizing === "border-box"
+      ? (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0)
+      : -((parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0));
+  el.style.height = `${el.scrollHeight + extra}px`;
+}
+
+function AutoGrowTextarea({
+  value,
+  onChange,
+  className,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  className: string;
+  ariaLabel: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    fitHeight(ref.current);
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      value={value}
+      onChange={(e) => {
+        fitHeight(e.currentTarget);
+        onChange(e.target.value);
+      }}
+      className={`${className} resize-none overflow-hidden`}
+      aria-label={ariaLabel}
+    />
+  );
+}
 
 export function TranscriptImportDialog({
   staff,
@@ -319,17 +368,18 @@ export function TranscriptImportDialog({
                 <p className="text-[11px] text-gray-500">（ありません）</p>
               ) : (
                 summary.quotes.map((q, i) => (
-                  <input
+                  // 224: 長い引用も折り返して全文が見える（文の長さに合わせて高さが伸びる）
+                  <AutoGrowTextarea
                     key={i}
                     value={q}
-                    onChange={(e) => {
+                    onChange={(v) => {
                       markEdited("quotes");
                       const next = [...summary.quotes];
-                      next[i] = e.target.value;
+                      next[i] = v;
                       setSummary({ ...summary, quotes: next });
                     }}
                     className={`${areaClass} mt-1`}
-                    aria-label={`${SUMMARY_LABELS.quotes}${i + 1}`}
+                    ariaLabel={`${SUMMARY_LABELS.quotes}${i + 1}`}
                   />
                 ))
               )}
