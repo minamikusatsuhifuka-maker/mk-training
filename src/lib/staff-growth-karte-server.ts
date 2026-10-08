@@ -271,7 +271,7 @@ async function toSurveyView(admin: GrowthAdminClient, shared: NeedsSurvey): Prom
     imageUrl,
     isPdf: isPdfAsset(shared.imageUrl),
   };
-  // 「詳細も公開」の人だけ details（欲求の値だけ）が残っている
+  // 「詳細（詳細15項目の欲求値）も公開」の人だけ details（欲求の値だけ）が残っている
   if (shared.details) {
     const details: Record<string, number> = {};
     for (const [key, d] of Object.entries(shared.details)) {
@@ -423,7 +423,7 @@ async function loadSources(
   //
   // 【182】履歴（survey_history:<userId>・サーバー専用キー）も、本人の**現在の公開設定**をそのまま
   // 適用して読む（B-3: 非公開にすれば過去の結果もすべて見えない）。詳細15項目の「欲求」は
-  // 「詳細も公開」の人だけ（redactSurveyForViewer が判定＝渡す前に絞る）。
+  // 「詳細（詳細15項目の欲求値）も公開」の人だけ（redactSurveyForViewer が判定＝渡す前に絞る）。
   const surveyByUser = new Map<string, SurveyView[]>();
   try {
     const rows = await serverGetContentRowsByPrefix("staff_profile:");

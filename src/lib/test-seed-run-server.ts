@@ -170,7 +170,7 @@ export async function seedTestData(admin: Admin, by: string, directorId: string,
   const hid = h.user.id;
   const jid = j.user.id;
 
-  // 2. プロフィール（index には載せない）＋サーベイ（2回分・詳細も公開）
+  // 2. プロフィール（index には載せない）＋サーベイ（2回分・詳細（詳細15項目の欲求値）も公開）
   const hp = { ...emptyProfile(hid, TEST_ACCOUNTS[0].displayName), role: TEST_ACCOUNTS[0].roleId, bio: "検証用の架空プロフィールです。", needsSurvey: SURVEY_2, updatedAt: now, [SEED_MARK]: true };
   const jp = { ...emptyProfile(jid, TEST_ACCOUNTS[1].displayName), role: TEST_ACCOUNTS[1].roleId, bio: "検証用の架空プロフィールです。", updatedAt: now, [SEED_MARK]: true };
   if (!(await serverPutContentRow(staffProfileKey(hid), "staff", hp, by))) throw new Error("プロフィールを保存できませんでした");

@@ -155,7 +155,7 @@ export const SURVEY_VISIBILITY_OPTIONS: {
   },
   {
     value: "public_details",
-    label: "🌐 詳細も公開",
+    label: "🌐 詳細（詳細15項目の欲求値）も公開",
     desc: "レーダーチャート・結果画像に加えて、詳細15項目の「欲求」の値も、ログイン中のスタッフと管理者に見えます。",
   },
 ];

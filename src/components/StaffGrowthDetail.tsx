@@ -793,7 +793,7 @@ function SurveyBlock({ view }: { view: SurveyView }) {
                   );
                 })}
               </ul>
-              {/* 詳細15項目（「詳細も公開」の人だけ）: 欲求ごとに色分けしたチップを横に並べて折り返す */}
+              {/* 詳細15項目（「詳細（詳細15項目の欲求値）も公開」の人だけ）: 欲求ごとに色分けしたチップを横に並べて折り返す */}
               {view.details && (
                 <ul className="flex flex-wrap gap-1" aria-label="詳細15項目" data-survey-detail-chips>
                   {NEEDS_GROUPS.flatMap((group) =>

@@ -929,9 +929,9 @@ export type SurveyView = {
   isPdf: boolean;
   /** 前回の記録があるときだけ: 項目ごとの差（増減の数値のみ・良し悪しの判定はしない） */
   diff?: Partial<Record<NeedKey, number>>;
-  /** 182: 「詳細も公開」の人だけ: 詳細15項目の「欲求」（項目key → 値）。注力・現況は含めない */
+  /** 182: 「詳細（詳細15項目の欲求値）も公開」の人だけ: 詳細15項目の「欲求」（項目key → 値）。注力・現況は含めない */
   details?: Record<string, number>;
-  /** 182: 詳細の前回との差（「詳細も公開」の人だけ・数値のみ） */
+  /** 182: 詳細の前回との差（「詳細（詳細15項目の欲求値）も公開」の人だけ・数値のみ） */
   detailsDiff?: Record<string, number>;
   /** 何回目の記録か（古い順・1始まり） */
   seq?: number;
@@ -972,7 +972,7 @@ export function attachSurveyDiffs(
       const b = cur.values[k];
       if (typeof a === "number" && typeof b === "number") diff[k] = b - a;
     }
-    // 182 B-5: 詳細の差は両方に詳細があるときだけ（「詳細も公開」の人しか details を持たない）
+    // 182 B-5: 詳細の差は両方に詳細があるときだけ（「詳細（詳細15項目の欲求値）も公開」の人しか details を持たない）
     let detailsDiff: Record<string, number> | undefined;
     if (cur.details && prev.details) {
       detailsDiff = {};
