@@ -18,6 +18,7 @@ import {
   type ScheduleAnswerState,
   type ScheduleView,
 } from "@/lib/one-on-one-schedule";
+import { RwdepcInfo } from "@/components/RwdepcInfo";
 import { activeAlerts, activeReminders, useMySchedules } from "@/lib/one-on-one-schedule-client";
 import { rebookText } from "@/lib/one-on-one-slots";
 
@@ -117,8 +118,14 @@ export function MyNextOneOnOne() {
   const next = data.mine[0];
   return (
     <section className="rounded-xl border border-teal-200 bg-white p-3 space-y-1.5" data-my-next-1on1>
-      <p className="text-sm text-gray-900">
-        🗓 次回1on1：<span className="font-medium">{formatScheduleLine(next)}</span>
+      {/* 223-補: 見出しの横に「RWDEPC ⓘ」（成長記録の帯と同じ部品・同じ表） */}
+      <p className="text-sm text-gray-900 flex flex-wrap items-center gap-x-2">
+        <span>
+          🗓 次回1on1：<span className="font-medium">{formatScheduleLine(next)}</span>
+        </span>
+        <span className="text-[11px] text-gray-500">
+          <RwdepcInfo className="text-[11px]" />
+        </span>
       </p>
       {data.alertsEnabled && (
         <p className="text-[12px] flex flex-wrap items-center gap-2">

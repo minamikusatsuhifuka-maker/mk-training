@@ -39,6 +39,7 @@ import { transitionLabel } from "@/lib/growth-matrix";
 import { formatMonthDayW } from "@/lib/one-on-one-schedule";
 // 221: 書き起こしの取り込みと、録音・書き起こしの同意の印
 import { TranscriptImportDialog } from "@/components/TranscriptImportDialog";
+import { RwdepcInfo } from "@/components/RwdepcInfo";
 import { TranscriptConsentPanel } from "@/components/TranscriptConsentPanel";
 import { TRANSCRIPT_ENTRY_LABEL } from "@/lib/one-on-one-transcript";
 import { fetchGoalsApi, fetchPromisesApi, supportGoalApi, type PromiseItem } from "@/lib/staff-growth-client";
@@ -345,7 +346,13 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
         {!isProspect && (
           <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div className="rounded-lg border border-gray-200 p-2" data-head-schedule>
-              <p className="text-[11px] font-medium text-gray-700">🗓 次回1on1</p>
+              {/* 223-補: 見出しの横に「RWDEPC ⓘ」（予定が無いときも出す） */}
+              <p className="text-[11px] font-medium text-gray-700 flex flex-wrap items-center gap-1">
+                🗓 次回1on1
+                <span className="font-normal text-gray-500">
+                  <RwdepcInfo className="text-[11px]" />
+                </span>
+              </p>
               {nextSchedule ? (
                 <p className="text-[12px] text-gray-900">
                   {formatMonthDayW(nextSchedule.date)}
