@@ -64,12 +64,9 @@ export function stepSpread(page: number, delta: number, total: number): number {
   return s;
 }
 
-/** ページ番号の表示（213 §2）。例: 「1 / 53」「5–6 / 53」 */
-export function spreadLabel(page: number, total: number): string {
-  const ps = spreadPages(page, total);
-  const head = ps.length === 2 ? `${ps[0]}–${ps[1]}` : `${ps[0]}`;
-  return `${head} / ${total}`;
-}
+// 216: 画面に出す番号は**紙面に印刷された番号**になったので、
+//   ここにあった spreadLabel（画像の連番で「6–7 / 53」と出す関数）は廃止した。
+//   いまの表示は lib/corporate-book.ts の bookPagesLabelWithTotal(spreadPages(...))。
 
 /** 先読みしておくページ（前後の組ぶん・213 §3） */
 export function preloadPages(page: number, total: number, view: BookView): number[] {

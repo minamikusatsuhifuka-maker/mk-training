@@ -16,7 +16,6 @@ import NavPageHeader from "@/components/NavPageHeader";
 import { CorporateBookReader, enterFullscreenNow } from "@/components/CorporateBookReader";
 import {
   preloadPages,
-  spreadLabel,
   spreadPages,
   stepSpread,
   type BookView,
@@ -27,6 +26,12 @@ import {
   CORPORATE_BOOK_VERSION,
   CORPORATE_BOOK_API,
   CORPORATE_BOOK_TOC,
+  CORPORATE_BOOK_LAST_PRINTED,
+  bookPageAlt,
+  bookPageLabel,
+  bookPagesLabelWithTotal,
+  imageOfPrintedPage,
+  printedPageOf,
 } from "@/lib/corporate-book";
 
 const pageSrc = (n: number) => `${CORPORATE_BOOK_API}?page=${n}`;
@@ -35,7 +40,10 @@ export default function CorporateBookPage() {
   const [page, setPage] = useState(1);
   const [zoomed, setZoomed] = useState(false);
   const [pageInput, setPageInput] = useState("");
-  const [editing, setEditing] = useState(false);
+  // 216: ページ送りは画面の上と下の2か所にある。どちらで入力しているかを持つ
+  //   （両方に入力欄を出すと、**2つ目の autoFocus が1つ目の blur を呼んで即座に閉じ**、
+  //    番号を入力できなかった。131-補3から入っていた不具合）
+  const [editing, setEditing] = useState<"" | "top" | "bottom">("");
   const [tocOpen, setTocOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false); // 208
   // 213 §1: 1ページ／見開き。最初は画面の形で決め、選んだらその端末に覚えておく
@@ -69,12 +77,13 @@ export default function CorporateBookPage() {
     [view]
   );
 
-  // ページ番号入力の確定（無効値=範囲外・数字以外は無視して現在ページ維持）
+  // ページ番号入力の確定（216: **紙面に印刷された番号**で受ける。
+  //   無効値＝範囲外・数字以外は無視して現在ページ維持）
   const commitPageInput = useCallback(() => {
-    setEditing(false);
-    const n = Number(pageInput.trim());
-    if (!Number.isInteger(n) || n < 1 || n > CORPORATE_BOOK_PAGE_COUNT) return;
-    jumpTo(n);
+    setEditing("");
+    const image = imageOfPrintedPage(Number(pageInput.trim()));
+    if (image === null) return;
+    jumpTo(image);
   }, [pageInput, jumpTo]);
 
   // キーボード ←→ でページ送り（ページ番号の入力中は無効）
@@ -114,7 +123,7 @@ export default function CorporateBookPage() {
   const atEnd =
     view === "spread" ? stepSpread(page, 1, CORPORATE_BOOK_PAGE_COUNT) === page : page === CORPORATE_BOOK_PAGE_COUNT;
 
-  const pager = (
+  const renderPager = (slot: "top" | "bottom") => (
     <div className="flex items-center justify-center gap-2 flex-wrap">
       <button
         type="button"
@@ -133,34 +142,37 @@ export default function CorporateBookPage() {
       >
         ← 前へ
       </button>
-      {editing ? (
+      {editing === slot ? (
         <input
           type="number"
           inputMode="numeric"
           min={1}
-          max={CORPORATE_BOOK_PAGE_COUNT}
+          max={CORPORATE_BOOK_LAST_PRINTED}
           value={pageInput}
           autoFocus
           onChange={(e) => setPageInput(e.target.value)}
           onBlur={commitPageInput}
           onKeyDown={(e) => {
             if (e.key === "Enter") commitPageInput();
-            if (e.key === "Escape") setEditing(false);
+            if (e.key === "Escape") setEditing("");
           }}
           className="text-sm text-center tabular-nums w-16 px-1 py-1.5 rounded-lg border border-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-200"
-          aria-label={`表示するページ番号（1〜${CORPORATE_BOOK_PAGE_COUNT}）`}
+          aria-label={`表示するページ番号（紙面の番号・1〜${CORPORATE_BOOK_LAST_PRINTED}）`}
         />
       ) : (
         <button
           type="button"
           onClick={() => {
-            setPageInput(String(page));
-            setEditing(true);
+            // 216: 入力も紙面の番号。番号のないページ（表紙など）は空から
+            setPageInput(String(printedPageOf(page) ?? ""));
+            setEditing(slot);
           }}
-          title="タップしてページ番号を入力"
+          title="タップしてページ番号を入力（紙面の番号）"
           className="text-sm text-gray-600 tabular-nums min-w-[64px] text-center px-2 py-1.5 rounded-lg border border-dashed border-gray-300 hover:border-teal-300 hover:text-teal-700"
         >
-          {view === "spread" ? spreadLabel(page, CORPORATE_BOOK_PAGE_COUNT) : `${page} / ${CORPORATE_BOOK_PAGE_COUNT}`}
+          {bookPagesLabelWithTotal(
+            view === "spread" ? spreadPages(page, CORPORATE_BOOK_PAGE_COUNT) : [page]
+          )}
         </button>
       )}
       <button
@@ -241,7 +253,7 @@ export default function CorporateBookPage() {
               >
                 <span>{item.label}</span>
                 <span className="text-xs text-gray-400 tabular-nums shrink-0">
-                  p.{item.page}
+                  p.{bookPageLabel(item.page)}
                 </span>
               </button>
             );
@@ -256,7 +268,7 @@ export default function CorporateBookPage() {
       <NavPageHeader
         navKey="/corporate-book"
         title="📕 コーポレートブック"
-        description={`Corporate Design Book（${CORPORATE_BOOK_VERSION}・全${CORPORATE_BOOK_PAGE_COUNT}ページ）`}
+        description={`Corporate Design Book（${CORPORATE_BOOK_VERSION}・全${CORPORATE_BOOK_LAST_PRINTED}ページ）`}
       />
 
       <p className="text-sm text-gray-600 leading-relaxed bg-teal-50/60 border border-teal-100 rounded-xl px-4 py-3">
@@ -267,7 +279,7 @@ export default function CorporateBookPage() {
 
       {viewSwitch}
 
-      {pager}
+      {renderPager("top")}
 
       {/* ページ画像（タップで拡大トグル・スワイプでページ送り・ピンチも可） */}
       <div
@@ -303,7 +315,7 @@ export default function CorporateBookPage() {
                 <img
                   key={n2}
                   src={pageSrc(n2)}
-                  alt={`コーポレートデザインブック ${n2}ページ`}
+                  alt={bookPageAlt(n2)}
                   onClick={() => setZoomed((z) => !z)}
                   data-book-page={n2}
                   className={`select-none rounded box-border ${
@@ -324,7 +336,7 @@ export default function CorporateBookPage() {
         </div>
       </div>
 
-      {pager}
+      {renderPager("bottom")}
 
       <p className="text-[11px] text-gray-400 text-center">
         {CORPORATE_BOOK_VERSION}。内容は毎年ブラッシュアップされます。

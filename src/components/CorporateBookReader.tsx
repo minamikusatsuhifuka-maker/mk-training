@@ -27,7 +27,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { spreadLabel, spreadPages, stepSpread } from "@/lib/corporate-book-spread";
+import { spreadPages, stepSpread } from "@/lib/corporate-book-spread";
+import { bookPageAlt, bookPagesLabelWithTotal } from "@/lib/corporate-book";
 import { useBookView } from "@/lib/corporate-book-view-client";
 
 /** 操作ボタンを薄くするまでの時間（ミリ秒・208 §3「数秒触らないと薄くする」） */
@@ -283,7 +284,7 @@ export function CorporateBookReader({
               <img
                 key={shown}
                 src={src(shown)}
-                alt={`コーポレートデザインブック ${shown}ページ`}
+                alt={bookPageAlt(shown)}
                 draggable={false}
                 data-book-page={shown}
                 className={`select-none box-border ${size} ${
@@ -349,7 +350,7 @@ export function CorporateBookReader({
             ←
           </button>
           <span className="pointer-events-none rounded-full bg-black/55 text-white text-xs tabular-nums px-3 py-2" data-fullscreen-pageno>
-            {view === "spread" ? spreadLabel(page, total) : `${page} / ${total}`}
+            {bookPagesLabelWithTotal(view === "spread" ? spreadPages(page, total) : [page])}
           </span>
           <button
             type="button"
