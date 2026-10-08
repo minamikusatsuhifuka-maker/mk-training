@@ -1,8 +1,10 @@
 "use client";
 
-// RWDEPC対話モードの入力欄（指示書153）
-// R は入力欄にせず、冒頭の「場づくりリマインダー」として常時表示する。
-// 入力するのは W→D→E→P→C の5つ。1画面スクロール構成にした
+// RWDEPC対話モードの入力欄（指示書153・223）
+// 223: R（人間関係の構築）も入力欄にした。入力するのは R→W→D→E→P→C の6つ。
+//      話す前の「場づくりリマインダー」（153）は、そのまま冒頭に残す。
+//      見出しの「RWDEPC」には ⓘ を付け、文字・英語・日本語の表を出す（223 §1-3）。
+// 1画面スクロール構成にした
 // （段階ウィザードだと前後の文脈が見えず、対話しながら行き来しづらいため）。
 //
 // 【原則】スコア・評価的な集計は表示しない（152と同じ）。
@@ -11,11 +13,13 @@
 import { useState } from "react";
 import {
   RWDEPC_E_GUARD,
+  RWDEPC_R_NOTE,
   RWDEPC_REMINDERS,
   RWDEPC_STEPS,
   type RwdepcData,
   type RwdepcStepKey,
 } from "@/lib/rwdepc";
+import { RwdepcInfo } from "@/components/RwdepcInfo";
 
 /** ヒントに出す問いかけの数（💡で全部に切り替えられる） */
 const HINT_PREVIEW = 3;
@@ -24,7 +28,7 @@ export function RwdepcReminders() {
   return (
     <div className="p-3 bg-violet-50 border border-violet-200 rounded-xl">
       <p className="text-xs font-medium text-violet-900 mb-1">
-        R｜場づくり（話す前に）
+        場づくり（話す前に）
       </p>
       <ul className="space-y-0.5">
         {RWDEPC_REMINDERS.map((line) => (
@@ -75,6 +79,12 @@ export function RwdepcForm({
 
   return (
     <div className="space-y-3">
+      {/* 223 §1-3: 記録欄の見出しの「RWDEPC」にカーソルを合わせると表が出る */}
+      <p className="text-sm font-medium text-gray-900" data-rwdepc-heading>
+        🔄 <RwdepcInfo className="text-sm" />
+        <span className="ml-1 text-xs font-normal text-gray-600">の記録欄</span>
+      </p>
+
       <RwdepcReminders />
 
       {/* 197-補 2.: 最初の話題と承認の材料は画面の上部に置く */}
@@ -113,6 +123,7 @@ export function RwdepcForm({
       {RWDEPC_STEPS.map((step) => {
         const isW = step.key === "w";
         const isE = step.key === "e";
+        const isR = step.key === "r";
         // 197-補 2.: この欄の隣に置く事前アンケートの回答
         const presurvey = presurveySlots?.[step.key];
         const hintOpen = openHint === step.key;
@@ -128,14 +139,23 @@ export function RwdepcForm({
                 </span>
                 ｜{step.label}
               </label>
-              <button
-                type="button"
-                onClick={() => setOpenHint(hintOpen ? null : step.key)}
-                className="text-xs px-2 py-1 border border-gray-200 rounded-full text-gray-600 hover:bg-gray-50 min-h-[32px]"
-              >
-                💡 問いかけ例
-              </button>
+              {step.questions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setOpenHint(hintOpen ? null : step.key)}
+                  className="text-xs px-2 py-1 border border-gray-200 rounded-full text-gray-600 hover:bg-gray-50 min-h-[32px]"
+                >
+                  💡 問いかけ例
+                </button>
+              )}
             </div>
+
+            {/* 223 §2: R欄に書く中身 */}
+            {isR && (
+              <p className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-2">
+                {RWDEPC_R_NOTE}
+              </p>
+            )}
 
             {/* ② E欄のガード（常時表示） */}
             {isE && (
@@ -219,6 +239,38 @@ export function RwdepcForm({
         );
       })}
     </div>
+  );
+}
+
+/**
+ * 保存した記録の本文（RWDEPC）。
+ * 223 §2: R欄が無い過去の記録は「—」で出す（データは書き換えない）。
+ * たたんでいるときは R と W だけ出す。
+ */
+export function RwdepcRecordBody({
+  value,
+  expanded,
+}: {
+  value: RwdepcData;
+  expanded: boolean;
+}) {
+  const steps = expanded ? RWDEPC_STEPS : RWDEPC_STEPS.slice(0, 2);
+  return (
+    <>
+      {steps.map((step) =>
+        value[step.key] || step.key === "r" ? (
+          <div key={step.key} data-rwdepc-view={step.key}>
+            <p className="text-xs text-gray-500">
+              <span className="text-violet-700 font-medium">{step.mark}</span>
+              ｜{step.label}
+            </p>
+            <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+              {value[step.key] || "—"}
+            </p>
+          </div>
+        ) : null
+      )}
+    </>
   );
 }
 

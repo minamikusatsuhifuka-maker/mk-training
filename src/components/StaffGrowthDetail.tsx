@@ -582,7 +582,8 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
             transcriptOpen ? (
               <TranscriptImportDialog
                 staff={{ userId, name: entry.name }}
-                defaultHeldOn={nextSchedule?.date}
+                /* 223 §4: 先の予定を初期値にしない。予約日の一覧を渡して画面側で決める */
+                scheduleDates={(schedules ?? []).map((x) => x.date)}
                 myName={detail.viewerName ?? ""}
                 sampleAllowed={entry.testSeed === true}
                 onClose={() => setTranscriptOpen(false)}

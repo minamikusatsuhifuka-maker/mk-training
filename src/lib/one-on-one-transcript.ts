@@ -10,7 +10,9 @@
 //   7つの実・現在地への書き込み／健康・家族・お金などの個人的な事情／患者さんや他のスタッフの名前。
 //   除いたときは、確認画面に注意の一文だけを出す（中身は出さない）。
 //
-// 依存なし（"@/" を使わない）＝ node --experimental-strip-types で直接確かめられる。
+// 依存は lib/rwdepc.ts（RWDEPCの表の正本・223 §1-1）だけ。AIへの指示文の欄の名前も表から取る。
+
+import { RWDEPC_TABLE } from "./rwdepc";
 
 /** 貼り付け・ファイルから取り込める上限（221 §2-2。1on1は10〜15分の想定） */
 export const TRANSCRIPT_MAX_CHARS = 40000;
@@ -137,14 +139,15 @@ export const SUMMARY_LABELS = {
 export type TranscriptDraft = {
   mode: "quick" | "rwdepc";
   sections: { theme: string; kizuki: string; nextStep: string };
-  rwdepc: { w: string; d: string; e: string; p: string; c: string };
+  /** 223: R（人間関係の構築）を先頭に足した */
+  rwdepc: { r: string; w: string; d: string; e: string; p: string; c: string };
 };
 
 export function emptyTranscriptDraft(mode: "quick" | "rwdepc"): TranscriptDraft {
   return {
     mode,
     sections: { theme: "", kizuki: "", nextStep: "" },
-    rwdepc: { w: "", d: "", e: "", p: "", c: "" },
+    rwdepc: { r: "", w: "", d: "", e: "", p: "", c: "" },
   };
 }
 
@@ -162,6 +165,7 @@ export function normalizeTranscriptDraft(raw: unknown, mode: "quick" | "rwdepc")
       nextStep: str(sec.nextStep),
     },
     rwdepc: {
+      r: str(rw.r),
       w: str(rw.w),
       d: str(rw.d),
       e: str(rw.e),
@@ -217,7 +221,8 @@ export const TRANSCRIPT_SYSTEM_PROMPT = [
   "4. 健康・家族・お金など個人的な事情は、まとめにも記録欄にも書かない。触れる必要があるときは「個人的な事情についての話があった」とだけ書く。",
   "5. 患者さんや他のスタッフの名前は書かない。「患者さん」「先輩」などの一般名で書く。",
   "6. 4と5に当たる内容を除いたときは、flagged を true にする（何を除いたかは書かない）。",
-  "7. 本人の目標・フィードバック・7つの実・現在地・等級については書かない。",
+  "7. 本人の目標（目標タブ）・フィードバック・7つの実・現在地・等級の**記録には書き込まない**（それらの下書きは作らない）。これは1on1の記録欄を空にする理由にはならない。"
+    + "本人が語ったことは、1on1の記録欄（R〜C）にそのまま書く。本人の言葉に等級の名前（G2など）や年数（3年後など）が出てきても、言い換えずそのまま書く。",
   "",
   "【まとめ（summary）】",
   "- flow: 話の流れを3〜5行。箇条書きではなく、行ごとに1文。",
@@ -227,11 +232,15 @@ export const TRANSCRIPT_SYSTEM_PROMPT = [
   "",
   "【記録欄の下書き（draft）】",
   "- クイックメモ（quick）のとき: sections.theme（話したテーマ）／sections.kizuki（気づき・学び）／sections.nextStep（次の一歩）。",
-  "- RWDEPC のとき: rwdepc.w（願望）／d（現在の行動）／e（自己評価＝本人の言葉だけ）／p（計画）／c（実行の約束）。",
+  `- RWDEPC のとき: 次の6つの欄を埋める（${RWDEPC_TABLE.map((t) => `${t.mark}=${t.en}=${t.ja}`).join("／")}）。`,
+  "  - rwdepc.r: 関係づくりのやりとり。記録者が伝えたねぎらい・感謝、本人が話してくれた近況やうれしかったこと。記録者による本人の仕事ぶりの評価は入れない。",
+  "  - rwdepc.w: 本人が語った願望（なりたい姿・求めていること）を、本人の言葉に沿って書く。記録者の期待は入れない。本人が願望を語っていれば、必ず書く（空にしない）。",
+  "  - rwdepc.d: 本人が今していること。rwdepc.p: 決めた計画。rwdepc.c: 次回までの約束。",
+  "  - rwdepc.e: 本人が自分について言った言葉だけ（上の3のとおり）。",
   "- 選ばれていない形式の欄は、すべて空文字にする。",
   "",
   "【出力】次のJSONだけを返す。コードフェンス・前後の説明は付けない。",
-  '{"summary":{"flow":"","quotes":[],"decided":"","support":""},"draft":{"sections":{"theme":"","kizuki":"","nextStep":""},"rwdepc":{"w":"","d":"","e":"","p":"","c":""}},"flagged":false}',
+  '{"summary":{"flow":"","quotes":[],"decided":"","support":""},"draft":{"sections":{"theme":"","kizuki":"","nextStep":""},"rwdepc":{"r":"","w":"","d":"","e":"","p":"","c":""}},"flagged":false}',
 ].join("\n");
 
 /** 書き起こしに添える指示（形式を伝える） */
@@ -243,23 +252,54 @@ export function transcriptUserPrompt(mode: "quick" | "rwdepc"): string {
   return `${form}\n次は1on1の書き起こしです。これだけを材料にしてください。\n\n`;
 }
 
+// ─── 実施日の初期値（223 §4） ───
+
+/**
+ * 取り込み画面の実施日の初期値。
+ * ① 今日に1on1の予約があれば今日 → ② なければ今日より前でいちばん近い予約日 → ③ それもなければ今日。
+ * **先の日付は初期値にしない**（取り込みは1on1のあとに行うため）。選ぶことはできる。
+ */
+export function transcriptDefaultHeldOn(
+  scheduleDates: readonly string[],
+  today: string,
+  /** 画面で既に選ばれていた日（先の日付なら使わない） */
+  preferred?: string
+): string {
+  const ymd = (v: unknown) =>
+    typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "";
+  const base = ymd(today);
+  const pref = ymd(preferred);
+  if (pref && (!base || pref <= base)) return pref;
+  if (!base) return "";
+  // 今日の予約があれば今日（＝今日以前でいちばん新しい予約日）
+  const past = scheduleDates.map(ymd).filter((d) => d && d <= base).sort();
+  return past[past.length - 1] || base;
+}
+
 // ─── 検証用の架空の書き起こし（221 §7） ───
 
 /**
  * 検証用アカウントのときだけ画面に出す見本。
  * **わざと**患者さんの名前・健康の話・家族の話を含めてある（除かれることを確かめるため）。
+ * 223: R（関係づくりのやりとり）と、等級の名前を含む願望も入れてある
+ * （R欄が埋まること・W欄が空にならないことを確かめるため）。
  */
 export const SAMPLE_TRANSCRIPT = [
   "（検証用の架空の書き起こしです。実在の人物とは関係ありません）",
   "",
-  "院長: 今日はありがとう。この1か月どうでしたか。",
+  "院長: 今日はありがとう。事前アンケートを早めに出してくれて助かりました。",
+  "花子: よかったです。ありがとうございます。",
+  "院長: この1か月どうでしたか。",
   "花子: 処置の準備は一人でできるようになりました。チェック表を作ってから、準備の抜けがなくなって自信がつきました。",
+  "院長: それは大きな前進ですね。よくがんばりました。",
+  "花子: 先輩から「準備が丁寧になった」と言ってもらえたのが、うれしかったです。",
   "院長: いいですね。うまくいった場面は。",
   "花子: 先週、山田さん（患者さん）の処置で、先輩に聞かずに準備を終えられました。",
   "院長: 困っていることは。",
   "花子: 光線治療の操作がまだ不安です。自分ではまだ半人前だと思っています。",
   "院長: なるほど。どうなりたいですか。",
   "花子: 半年後には、光線治療も一人で任せてもらえるようになりたいです。",
+  "花子: 3年後には、G2として、外来を一人で回せるようになっていたいです。患者さんに「この人なら安心」って思ってもらえる看護師になりたいです。",
   "院長: そのために何をしますか。",
   "花子: 先輩の操作を週1回見学して、手順を自分の言葉でまとめます。今月中にまとめます。",
   "院長: わかりました。見学の時間はこちらで調整します。火曜の午後に枠を作りますね。",

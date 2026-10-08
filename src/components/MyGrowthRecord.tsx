@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 // 221 §1: 自分の「1on1の録音・書き起こし」の同意の印を出す
+import { RwdepcInfo } from "@/components/RwdepcInfo";
 import { TranscriptConsentPanel } from "@/components/TranscriptConsentPanel";
 // 220 §3: 「スタッフの成長記録」と同じタブの並びにそろえる
 import { GrowthTabsBar, useRememberedTab } from "@/components/GrowthTabsBar";
@@ -580,7 +581,13 @@ function PromiseCard({
     <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
       <p className="text-[11px] text-gray-500">
         📅 {p.heldOn.replaceAll("-", "/")} ・ {p.partnerName}さんと
-        {p.mode === "rwdepc" ? "（RWDEPC・実行の約束）" : "（次の一歩）"}
+        {p.mode === "rwdepc" ? (
+          <span className="inline-flex items-center">
+            （<RwdepcInfo className="text-[11px]" />・実行の約束）
+          </span>
+        ) : (
+          "（次の一歩）"
+        )}
         {p.status && (
           <span className="ml-2 px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200 text-[10px]">
             {promiseStatusLabel(p.status)}

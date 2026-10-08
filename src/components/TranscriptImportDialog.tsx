@@ -20,7 +20,9 @@ import {
   type OneOnOneData,
   type OneOnOneMode,
 } from "@/lib/one-on-one";
-import { RWDEPC_E_GUARD, RWDEPC_STEPS } from "@/lib/rwdepc";
+import { RWDEPC_E_GUARD, RWDEPC_R_NOTE, RWDEPC_STEPS } from "@/lib/rwdepc";
+import { RwdepcInfo } from "@/components/RwdepcInfo";
+import { jstTodayYmd } from "@/lib/library";
 import { SEED_MARK } from "@/lib/test-seed";
 import {
   SAMPLE_TRANSCRIPT,
@@ -31,6 +33,7 @@ import {
   TRANSCRIPT_MAX_CHARS,
   TRANSCRIPT_NOTICE,
   TRANSCRIPT_NO_KEEP_NOTICE,
+  transcriptDefaultHeldOn,
   type TranscriptDraft,
   type TranscriptSummary,
 } from "@/lib/one-on-one-transcript";
@@ -41,6 +44,7 @@ export function TranscriptImportDialog({
   staff,
   staffOptions,
   defaultHeldOn,
+  scheduleDates,
   myName,
   sampleAllowed = false,
   onClose,
@@ -50,8 +54,12 @@ export function TranscriptImportDialog({
   staff?: StaffOption;
   /** 1on1ノートから開いたとき＝選ばせる */
   staffOptions?: StaffOption[];
-  /** 直近の1on1の予定（実施日の初期値） */
+  /**
+   * 画面で既に選ばれていた実施日（先の日付は使わない・223 §4）
+   */
   defaultHeldOn?: string;
+  /** そのスタッフの1on1の予約日（実施日の初期値を決めるのに使う・223 §4） */
+  scheduleDates?: readonly string[];
   myName: string;
   /** 検証用アカウントのときだけ「見本を入れる」を出す */
   sampleAllowed?: boolean;
@@ -59,7 +67,10 @@ export function TranscriptImportDialog({
   onSaved: () => void;
 }) {
   const [staffId, setStaffId] = useState(staff?.userId ?? "");
-  const [heldOn, setHeldOn] = useState(defaultHeldOn ?? "");
+  // 223 §4: ① 今日の予約があれば今日 → ② 今日より前でいちばん近い予約日 → ③ 今日。先の日付は初期値にしない
+  const [heldOn, setHeldOn] = useState(() =>
+    transcriptDefaultHeldOn(scheduleDates ?? [], jstTodayYmd(), defaultHeldOn)
+  );
   const [mode, setMode] = useState<OneOnOneMode>("rwdepc");
   const [text, setText] = useState("");
   const [fileName, setFileName] = useState("");
@@ -123,7 +134,7 @@ export function TranscriptImportDialog({
         new Set([
           "flow", "quotes", "decided", "support",
           "theme", "kizuki", "nextStep",
-          "w", "d", "e", "p", "c",
+          "r", "w", "d", "e", "p", "c",
         ])
       );
       // 221 §5: 送り終わった原文はここで捨てる（画面にも残さない）
@@ -223,7 +234,11 @@ export function TranscriptImportDialog({
               />
             </label>
             <label className="text-[12px] text-gray-800">
-              記録の形式
+              <span className="inline-flex items-center gap-1">
+                記録の形式
+                {/* 223 §1-3: 選択肢の横に ⓘ */}
+                <RwdepcInfo withWord={false} />
+              </span>
               <select
                 value={mode}
                 onChange={(e) => setMode(e.target.value === "quick" ? "quick" : "rwdepc")}
@@ -330,8 +345,14 @@ export function TranscriptImportDialog({
           </section>
 
           <section className="rounded-lg border border-gray-200 p-2 space-y-2" data-transcript-draft>
-            <h3 className="text-[12px] font-medium text-gray-900">
-              {mode === "rwdepc" ? "🗣 RWDEPCの記録欄" : "📋 クイックメモの記録欄"}
+            <h3 className="text-[12px] font-medium text-gray-900" data-rwdepc-heading>
+              {mode === "rwdepc" ? (
+                <>
+                  🗣 <RwdepcInfo className="text-[12px]" />の記録欄
+                </>
+              ) : (
+                "📋 クイックメモの記録欄"
+              )}
             </h3>
             {mode === "quick" ? (
               ([
@@ -354,6 +375,9 @@ export function TranscriptImportDialog({
               RWDEPC_STEPS.map((step) => (
                 <label key={step.key} className="block text-[11px] text-gray-700">
                   {step.mark}｜{step.label}{mark(step.key)}
+                  {step.key === "r" && (
+                    <span className="block text-[10px] text-gray-600">{RWDEPC_R_NOTE}</span>
+                  )}
                   {step.key === "e" && (
                     <span className="block text-[10px] text-amber-800">{RWDEPC_E_GUARD}</span>
                   )}

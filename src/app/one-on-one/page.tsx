@@ -12,6 +12,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 // 221: 書き起こしの取り込み（AIのまとめ＋記録欄の下書き）
 import { TranscriptImportDialog } from "@/components/TranscriptImportDialog";
+import { RwdepcInfo } from "@/components/RwdepcInfo";
 import {
   SUMMARY_LABELS,
   TRANSCRIPT_ENTRY_LABEL,
@@ -46,7 +47,7 @@ import {
   JitsuChecklist,
   JitsuCheckSummary,
 } from "@/components/JitsuChecklist";
-import { RwdepcForm, RwdepcGuide } from "@/components/RwdepcForm";
+import { RwdepcForm, RwdepcGuide, RwdepcRecordBody } from "@/components/RwdepcForm";
 import { PresurveyAnswerList } from "@/components/PresurveyAnswers";
 import {
   answersBySlot,
@@ -57,7 +58,6 @@ import {
 } from "@/lib/one-on-one-presurvey";
 import {
   EMPTY_RWDEPC,
-  RWDEPC_STEPS,
   hasRwdepcBody,
   type RwdepcData,
 } from "@/lib/rwdepc";
@@ -519,6 +519,11 @@ function OneOnOnePageBody() {
         <p className="text-xs text-gray-500">{PARTNER_NOTE}</p>
 
         {/* 153: 記録の形式を選ぶ（既存の自由形式＝クイックメモとして温存） */}
+        {/* 223 §1-3: 選択肢の横に ⓘ（RWDEPCの表を出す） */}
+        <p className="text-xs text-gray-600 flex items-center gap-1" data-mode-label>
+          記録の形式
+          <RwdepcInfo withWord={false} />
+        </p>
         <div className="flex items-center gap-2">
           {(
             [
@@ -707,7 +712,7 @@ function OneOnOnePageBody() {
                     </span>
                     {d.mode === "rwdepc" && (
                       <span className="text-[10px] font-medium bg-teal-100 text-teal-800 rounded-full px-2 py-0.5">
-                        🔄 RWDEPC
+                        🔄 <RwdepcInfo className="text-[10px]" />
                       </span>
                     )}
                     <span className="text-sm text-gray-800">
@@ -858,23 +863,8 @@ function OneOnOnePageBody() {
                     {hasBody && (
                     <div className="space-y-2">
                       {d.mode === "rwdepc"
-                        ? (isExpanded
-                            ? RWDEPC_STEPS
-                            : RWDEPC_STEPS.slice(0, 1)
-                          ).map((step) =>
-                            d.rwdepc[step.key] ? (
-                              <div key={step.key}>
-                                <p className="text-xs text-gray-500">
-                                  <span className="text-violet-700 font-medium">
-                                    {step.mark}
-                                  </span>
-                                  ｜{step.label}
-                                </p>
-                                <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
-                                  {d.rwdepc[step.key]}
-                                </p>
-                              </div>
-                            ) : null
+                        ? (
+                            <RwdepcRecordBody value={d.rwdepc} expanded={isExpanded} />
                           )
                         : (isExpanded
                             ? ONE_ON_ONE_SECTIONS

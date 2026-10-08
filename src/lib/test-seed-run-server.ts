@@ -260,7 +260,7 @@ export async function seedTestData(admin: Admin, by: string, directorId: string,
       authorName: nameOfSeed[n.author],
       sections: { ...n.sections },
       jitsuChecks: [...n.jitsuChecks],
-      rwdepc: { w: "", d: "", e: "", p: "", c: "" },
+      rwdepc: { r: "", w: "", d: "", e: "", p: "", c: "" },
       createdAt: `${n.heldOn}T09:00:00.000Z`,
       updatedAt: `${n.heldOn}T09:00:00.000Z`,
     });

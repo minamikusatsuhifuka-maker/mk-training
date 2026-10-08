@@ -527,7 +527,12 @@ function buildTimeline(src: Sources, person: RosterPerson): TimelineItem[] {
     const promise = promiseTextOf(d);
     const bodyParts = [
       d.mode === "rwdepc"
-        ? [d.rwdepc.w && `W: ${d.rwdepc.w}`, d.rwdepc.p && `P: ${d.rwdepc.p}`]
+        ? [
+            // 223: R（人間関係の構築）も年表・印刷に出す
+            d.rwdepc.r && `R: ${d.rwdepc.r}`,
+            d.rwdepc.w && `W: ${d.rwdepc.w}`,
+            d.rwdepc.p && `P: ${d.rwdepc.p}`,
+          ]
         : [d.sections.theme && `テーマ: ${d.sections.theme}`, d.sections.kizuki && `気づき: ${d.sections.kizuki}`],
       promise && `約束: ${promise}`,
     ]
