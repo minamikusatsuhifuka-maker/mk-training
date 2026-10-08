@@ -133,7 +133,7 @@ export function KartePrintView({ userId, backHref }: { userId?: string; backHref
     if (!sections) return;
     setBusy(true);
     try {
-      setData(await fetchData(sections, true)); // D: 他人のカルテならここで記録される
+      setData(await fetchData(sections, true)); // D: 他人の成長記録ならここで記録される
       setTimeout(() => window.print(), 100);
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
@@ -198,7 +198,7 @@ export function KartePrintView({ userId, backHref }: { userId?: string; backHref
           <tr>
             <td>
               <div className="flex items-center justify-between gap-2 border-b border-gray-400 pb-0.5 mb-2 text-[10px] text-gray-700" data-print-head>
-                <span className="font-bold text-gray-900">{entry.name}{entry.roleLabel ? `（${entry.roleLabel}）` : ""} — 育成カルテ</span>
+                <span className="font-bold text-gray-900">{entry.name}{entry.roleLabel ? `（${entry.roleLabel}）` : ""} — 成長記録</span>
                 <span>印刷 {printedAt} ／ 印刷した人: {data.viewerName}</span>
                 <span className="font-bold text-red-700">{PRINT_CONFIDENTIAL}</span>
               </div>

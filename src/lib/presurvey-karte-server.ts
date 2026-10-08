@@ -46,7 +46,7 @@ export type KarteGoalMap = Partial<Record<GoalLevel, KarteGoalSlot>>;
 /** 版の食い違い（204 §4） */
 export class KarteGoalConflictError extends Error {
   constructor() {
-    super("カルテの目標が更新されています。読み込み直してください");
+    super("成長記録の目標が更新されています。読み込み直してください");
     this.name = "KarteGoalConflictError";
   }
 }

@@ -1,5 +1,8 @@
 "use client";
 import Link from "next/link";
+// 220 §3: 「スタッフの成長記録」と同じタブの並びにそろえる
+import { GrowthTabsBar, useRememberedTab } from "@/components/GrowthTabsBar";
+import { GROWTH_TABS, GROWTH_TAB_STORAGE_KEY, resolveGrowthTab, visibleGrowthTabs, type GrowthTabKey } from "@/lib/growth-tabs";
 
 // 本人ページ「マイ成長記録」（指示書179 C）
 // 表示するのは 自分の学びの記録（B）／自分の目標／1on1の約束 の3つだけ。
@@ -19,6 +22,7 @@ import {
   type GrowthPace,
   type LearningRecord,
   type PromiseStatusValue,
+  formatDates,
 } from "@/lib/staff-growth";
 import {
   createGoalApi,
@@ -55,16 +59,16 @@ import {
   type GoalInput,
 } from "@/lib/staff-growth-client";
 
-type Tab = "learning" | "goals" | "promises" | "feedback" | "position";
+// 220 §3: タブの種類は lib/growth-tabs.ts に一本化（院長が見る画面と同じ並び）
 
 export function MyGrowthRecord() {
-  const [tab, setTab] = useState<Tab>("learning");
+  const [rememberedTab, setTab] = useRememberedTab(GROWTH_TAB_STORAGE_KEY.my, GROWTH_TABS);
   // 197 A: 現在地の受講日から「学びの記録」へ移る（別タブなので切り替える）
   useEffect(() => {
     const open = () => setTab("learning");
     window.addEventListener(OPEN_LEARNING_EVENT, open);
     return () => window.removeEventListener(OPEN_LEARNING_EVENT, open);
-  }, []);
+  }, [setTab]);
   const [records, setRecords] = useState<LearningRecord[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [myRequests, setMyRequests] = useState<CourseRequest[]>([]);
@@ -293,6 +297,15 @@ export function MyGrowthRecord() {
     );
   }
 
+  // 220 §3: 院長が見る画面と同じ並び。本人には「基本情報」は無い
+  const baseTabs = visibleGrowthTabs({ basic: false });
+  const tabs = baseTabs.map((t) =>
+    t.key === "feedback" && unseenCount > 0 ? { ...t, label: `${t.label}（新着 ${unseenCount}）` } : t
+  );
+  const tab: GrowthTabKey = resolveGrowthTab(rememberedTab, tabs);
+  const purposeGoal = goals.find((g) => g.level === "purpose");
+  const monthlyGoal = goals.find((g) => g.level === "monthly");
+
   return (
     <div className="max-w-3xl mx-auto space-y-3">
       <p className="text-[11px] text-gray-600 leading-relaxed">
@@ -303,30 +316,7 @@ export function MyGrowthRecord() {
       {/* 197 B-2: 次回1on1（院長・担当幹部が登録した予定）と事前アンケートへの導線 */}
       <MyNextOneOnOne />
 
-      <div className="flex gap-1 border-b border-gray-200">
-        {(
-          [
-            ["learning", "📚 学びの記録"],
-            ["goals", "🎯 目標"],
-            ["promises", "🤝 1on1の約束"],
-            ["feedback", unseenCount > 0 ? `🌟 もらった承認・FB（新着 ${unseenCount}）` : "🌟 もらった承認・FB"],
-            ["position", "🧭 現在地"],
-          ] as const
-        ).map(([k, label]) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => setTab(k)}
-            className={`px-3 py-2 text-sm min-h-[44px] border-b-2 -mb-px ${
-              tab === k
-                ? "border-teal-600 text-teal-800 font-medium"
-                : "border-transparent text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <GrowthTabsBar tabs={tabs} current={tab} onChange={setTab} label="マイ成長記録の表示切替" />
       {/* 195: 印刷用の表示（自分の記録だけ） */}
       <div className="flex justify-end">
         <Link href="/my-growth/print" className="text-xs px-3 py-1.5 border border-gray-300 text-gray-700 rounded-full hover:bg-gray-50 min-h-[32px] inline-flex items-center" data-print-link>
@@ -343,6 +333,68 @@ export function MyGrowthRecord() {
 
       {!loaded ? (
         <p className="text-xs text-gray-500">読み込み中…</p>
+      ) : tab === "overview" ? (
+        // 220 §2-3: 各タブの最新1件だけを小さなカードで並べる
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" data-tab-panel="overview">
+          <MyCard title="🎯 目標" onMore={() => setTab("goals")}>
+            {purposeGoal || monthlyGoal ? (
+              <>
+                <p className="text-[12px] text-gray-900 line-clamp-2">目的: {purposeGoal?.title || "未記入"}</p>
+                <p className="text-[12px] text-gray-900 line-clamp-2">今月: {monthlyGoal?.title || "未記入"}</p>
+              </>
+            ) : (
+              <p className="text-[11px] text-gray-500">まだ目標が書かれていません。</p>
+            )}
+          </MyCard>
+          <MyCard title="🤝 1on1" onMore={() => setTab("one_on_one")}>
+            {promises.length === 0 ? (
+              <p className="text-[11px] text-gray-500">まだ約束がありません。</p>
+            ) : (
+              <>
+                <p className="text-[11px] text-gray-500">{promises[0].heldOn.replaceAll("-", "/")}</p>
+                <p className="text-[12px] text-gray-900 line-clamp-2">{promises[0].text}</p>
+              </>
+            )}
+          </MyCard>
+          <MyCard title="🌟 フィードバック" onMore={() => setTab("feedback")}>
+            {feedbackAll.length === 0 ? (
+              <p className="text-[11px] text-gray-500">まだ記録がありません。</p>
+            ) : (
+              <p className="text-[12px] text-gray-900">
+                <span className="text-[11px] text-gray-500 mr-1">{feedbackAll[0].date.replaceAll("-", "/")}</span>
+                {feedbackAll[0].type === "gap" ? "ギャップフィードバック" : "ポジティブフィードバック"}
+                {unseenCount > 0 && <span className="ml-1 text-[11px] text-amber-800">（新着 {unseenCount}）</span>}
+              </p>
+            )}
+          </MyCard>
+          <MyCard title="📚 学び" onMore={() => setTab("learning")}>
+            {records.length === 0 ? (
+              <p className="text-[11px] text-gray-500">まだ学びの記録がありません。</p>
+            ) : (
+              <p className="text-[12px] text-gray-900 line-clamp-2">
+                <span className="text-[11px] text-gray-500 mr-1">{formatDates(records[0].dates)}</span>
+                {courses.find((c) => c.id === records[0].courseId)?.name ?? "（講座不明）"}
+              </p>
+            )}
+          </MyCard>
+          <MyCard title="🧭 現在地" onMore={() => setTab("position")}>
+            <p className="text-[11px] text-gray-600">成長マトリクスの位置と、必須の学びの進み具合を見られます。</p>
+          </MyCard>
+          <MyCard title="📝 アンケート" onMore={() => setTab("presurvey")}>
+            <p className="text-[11px] text-gray-600">次の1on1の事前アンケートに答えられます。</p>
+          </MyCard>
+        </div>
+      ) : tab === "presurvey" ? (
+        // 本人に見せる範囲は今までのまま（回答そのものは1on1の事前アンケートの画面で見る・220 §3）
+        <section className="space-y-2" data-tab-panel="presurvey">
+          <p className="text-[11px] text-gray-600 leading-relaxed">
+            1on1の事前アンケートは、次の1on1の予定が登録されると答えられます。
+            第1部（働く目的と目標）は、この画面の「🎯 目標」と同じものです。
+          </p>
+          <Link href="/one-on-one/presurvey" className="inline-flex items-center px-4 py-2 bg-teal-600 text-white rounded-full text-sm hover:bg-teal-700 min-h-[44px]">
+            📝 事前アンケートの画面へ
+          </Link>
+        </section>
       ) : tab === "learning" ? (
         <section className="space-y-3">
           {editing === "new" ? (
@@ -424,6 +476,7 @@ export function MyGrowthRecord() {
           <FeedbackPanel mode="owner" onLoaded={(list) => setFeedbackAll(list)} />
         </section>
       ) : (
+        // 🤝 1on1（1on1の約束と取り組み状況）
         <PromisesSection
           promises={promises}
           busy={busy}
@@ -562,6 +615,29 @@ function PromiseCard({
       >
         💾 取り組み状況を保存
       </button>
+    </div>
+  );
+}
+
+/** 220 §2-3: 概要タブの小さなカード（「すべて見る →」でそのタブへ） */
+function MyCard({
+  title,
+  onMore,
+  children,
+}: {
+  title: string;
+  onMore: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-1" data-overview-card={title}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[12px] font-medium text-gray-900">{title}</p>
+        <button type="button" onClick={onMore} className="text-[11px] text-teal-800 underline underline-offset-2 shrink-0 min-h-[28px]">
+          すべて見る →
+        </button>
+      </div>
+      {children}
     </div>
   );
 }

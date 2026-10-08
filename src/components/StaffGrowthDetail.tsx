@@ -32,6 +32,11 @@ import { KarteScheduleCard } from "@/components/OneOnOneSchedule";
 import { GoalsStaged, weeklyLinksFromPromises } from "@/components/GoalsStaged";
 import { FeedbackPanel } from "@/components/FeedbackPanel";
 import { PresurveyCompare } from "@/components/PresurveyCompare";
+// 220: タブの帯・開いていたタブの記憶
+import { GrowthTabsBar, useRememberedTab } from "@/components/GrowthTabsBar";
+import { GROWTH_TABS, GROWTH_TAB_STORAGE_KEY, resolveGrowthTab, visibleGrowthTabs } from "@/lib/growth-tabs";
+import { transitionLabel } from "@/lib/growth-matrix";
+import { formatMonthDayW } from "@/lib/one-on-one-schedule";
 import { fetchGoalsApi, fetchPromisesApi, supportGoalApi, type PromiseItem } from "@/lib/staff-growth-client";
 import {
   createLearningApi,
@@ -50,6 +55,68 @@ import {
   learningFormFrom,
 } from "@/components/LearningRecordForm";
 import { LearningRecordList } from "@/components/LearningRecordList";
+
+// 220 §2-1: 帯と概要に出すぶんだけの軽い読み込み（読めない人には出さない＝null のまま）
+type ScheduleBrief = { date: string; time: string; answered: boolean };
+type PositionBrief = {
+  grade: string;
+  careerLine: string;
+  agreed: { s: string; m: string } | null;
+  transitionLabel: string;
+  nextGate: string;
+};
+
+async function fetchScheduleBrief(userId: string): Promise<ScheduleBrief[] | null> {
+  try {
+    const res = await fetch(`/api/growth/schedule?user=${encodeURIComponent(userId)}`, {
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+    if (!res.ok) return null;
+    const j = (await res.json()) as { schedules?: { date?: string; time?: string; answered?: boolean }[] };
+    return (j.schedules ?? []).map((x) => ({
+      date: typeof x.date === "string" ? x.date : "",
+      time: typeof x.time === "string" ? x.time : "",
+      answered: x.answered === true,
+    }));
+  } catch {
+    return null;
+  }
+}
+
+async function fetchPositionBrief(userId: string): Promise<PositionBrief | null> {
+  try {
+    const res = await fetch(`/api/growth/position?user=${encodeURIComponent(userId)}`, {
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+    if (!res.ok) return null; // 院長以外は404（＝帯にも概要にも出さない）
+    const j = (await res.json()) as {
+      grade?: { grade?: string; careerLine?: string };
+      review?: { agreed?: { s?: string; m?: string }[] };
+      transition?: string | null;
+      gates?: { ok?: boolean; gate?: { label?: string } }[];
+    };
+    const agreed = j.review?.agreed?.[0];
+    const gate = (j.gates ?? []).find((g) => g.ok !== true);
+    return {
+      grade: j.grade?.grade ?? "",
+      careerLine: j.grade?.careerLine ?? "",
+      agreed: agreed?.s && agreed?.m ? { s: agreed.s, m: agreed.m } : null,
+      transitionLabel: j.transition ? transitionLabel(j.transition as Parameters<typeof transitionLabel>[0]) : "",
+      nextGate: gate?.gate?.label ?? "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** 次の1on1（今日以降でいちばん近い回）。無ければ直近の過去の回 */
+function pickSchedule(list: ScheduleBrief[] | null, today: string): ScheduleBrief | null {
+  if (!list || list.length === 0) return null;
+  const sorted = [...list].sort((a, b) => a.date.localeCompare(b.date));
+  return sorted.find((s) => s.date >= today) ?? sorted[sorted.length - 1];
+}
 
 const KIND_TONE: Record<TimelineKind, string> = {
   joined: "bg-slate-100 text-slate-700",
@@ -75,11 +142,14 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState("");
   const [showAll, setShowAll] = useState(false);
-  // 214 §1: カルテ／アンケートのタブ。最初は「カルテ」（今のカルテの中身はそのまま）
-  const [tab, setTab] = useState<"karte" | "presurvey">("karte");
+  // 220 §2-1: 上の帯に出す「次回1on1」「等級・キャリアライン」
+  const [schedules, setSchedules] = useState<ScheduleBrief[] | null>(null);
+  const [position, setPosition] = useState<PositionBrief | null>(null);
   // 185: 段階的な目標（閲覧＋機会・支援・コメント・合意）と1on1の約束
   const [goalsState, setGoalsState] = useState<{ goals: Goal[]; pace: GrowthPace; canSupport: boolean } | null>(null);
   const [promises, setPromises] = useState<PromiseItem[]>([]);
+  // 220 §2-2: 開いていたタブをその端末で覚える（見られないタブのときは概要に戻す）
+  const [rememberedTab, setTab] = useRememberedTab(GROWTH_TAB_STORAGE_KEY.staff, GROWTH_TABS);
 
   const load = useCallback(async () => {
     setError("");
@@ -102,6 +172,9 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
         } catch {
           setGoalsState(null);
         }
+        // 220 §2-1: 帯と概要に出すぶんだけ軽く読む。読めない人（幹部など）には出さない
+        void fetchScheduleBrief(userId).then(setSchedules);
+        void fetchPositionBrief(userId).then(setPosition);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
@@ -204,11 +277,30 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
   const tenure = tenureLabel(entry.joinedOn, today);
   const shownTimeline = showAll ? timeline : timeline.slice(0, 30);
 
+  // 220 §2-2: 見られるタブだけを出す（現在地・基本情報は院長のみ／アンケートはサーバーの判定）
+  const showPosition = isAdmin && !isProspect;
+  const tabs = visibleGrowthTabs({
+    position: showPosition,
+    presurvey: presurveyAccess,
+    basic: isAdmin,
+  });
+  const tab = resolveGrowthTab(rememberedTab, tabs);
+
+  // 220 §2-3: 概要のカードに出す「最新の1件」
+  const goals = goalsState?.goals ?? [];
+  const purposeGoal = goals.find((g) => g.level === "purpose");
+  const monthlyGoal = goals.find((g) => g.level === "monthly");
+  const oneOnOneItems = timeline.filter((it) => it.kind === "one_on_one");
+  const latestOneOnOne = oneOnOneItems[0];
+  const latestFeedback = timeline.find((it) => it.kind === "feedback");
+  const nextGate = position?.nextGate ?? "";
+  const nextSchedule = pickSchedule(schedules, today);
+
   return (
     <div className="max-w-3xl mx-auto p-3 sm:p-4 space-y-3">
       <div className="flex items-center justify-between gap-2">
         <Link href="/staff-growth" className="text-xs text-teal-800 underline underline-offset-2">
-          ← スタッフ育成カルテ 一覧
+          ← スタッフの成長記録 一覧
         </Link>
         {/* 195: 印刷用の表示（項目を選んで印刷） */}
         <Link href={`/staff-growth/${encodeURIComponent(userId)}/print`} className="text-xs px-3 py-1.5 border border-gray-300 text-gray-700 rounded-full hover:bg-gray-50 min-h-[32px] inline-flex items-center" data-print-link>
@@ -239,7 +331,43 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
               : "入職日 未登録（スタッフ連絡先に入職日を登録すると表示されます）"
             : "閲覧のみ（担当スタッフ）"}
           {" ・ "}学びの記録 {entry.learningCount}件
+          {position?.grade && <>{" ・ "}等級 {position.grade}</>}
+          {position?.careerLine && <>{" ・ "}{position.careerLine}</>}
         </p>
+
+        {/* 220 §2-1: いつも見える「次回1on1」と「最新の約束」 */}
+        {!isProspect && (
+          <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="rounded-lg border border-gray-200 p-2" data-head-schedule>
+              <p className="text-[11px] font-medium text-gray-700">🗓 次回1on1</p>
+              {nextSchedule ? (
+                <p className="text-[12px] text-gray-900">
+                  {formatMonthDayW(nextSchedule.date)}
+                  {nextSchedule.time && ` ${nextSchedule.time}`}
+                  <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${nextSchedule.answered ? "bg-teal-50 text-teal-800" : "bg-amber-50 text-amber-800"}`}>
+                    事前アンケート {nextSchedule.answered ? "提出済み" : "未提出"}
+                  </span>
+                </p>
+              ) : (
+                <p className="text-[11px] text-gray-500">{schedules === null ? "—" : "予定はまだありません"}</p>
+              )}
+            </div>
+            <div className="rounded-lg border border-gray-200 p-2" data-head-promise>
+              <p className="text-[11px] font-medium text-gray-700">🤝 最新の約束</p>
+              {latestPromise ? (
+                <>
+                  <p className="text-[12px] text-gray-900 line-clamp-2 whitespace-pre-wrap">{latestPromise.text}</p>
+                  <p className="text-[10px] text-gray-500">
+                    {latestPromise.date.replaceAll("-", "/")} ・ {latestPromise.partnerName}さんと
+                    {latestPromise.status && ` ・ 本人: ${promiseStatusLabel(latestPromise.status)}`}
+                  </p>
+                </>
+              ) : (
+                <p className="text-[11px] text-gray-500">約束が書かれた1on1はまだありません。</p>
+              )}
+            </div>
+          </div>
+        )}
       </header>
 
       {error && (
@@ -256,139 +384,86 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
         </p>
       )}
 
-      {/* 214 §1: タブ（「アンケート」は回答を見られる人にだけ出す＝判定はサーバー側） */}
-      {presurveyAccess && (
-        <div className="flex gap-1 border-b border-gray-200" role="tablist" aria-label="カルテの表示切替">
-          {([
-            { key: "karte", label: "カルテ" },
-            { key: "presurvey", label: "アンケート" },
-          ] as const).map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              role="tab"
-              aria-selected={tab === t.key}
-              onClick={() => setTab(t.key)}
-              data-karte-tab={t.key}
-              className={`min-h-[36px] px-3 py-1.5 text-[13px] rounded-t-lg border border-b-0 ${
-                tab === t.key
-                  ? "border-gray-200 bg-white text-gray-900 font-medium"
-                  : "border-transparent bg-transparent text-gray-500 hover:text-gray-800"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* 220 §2-2: タブ。見られないタブは出さない（判定はサーバー側の結果をそのまま使う） */}
+      <GrowthTabsBar tabs={tabs} current={tab} onChange={setTab} />
 
-      {/* 214 §1: アンケート（最新の回答＋これまでの回答＋横並びの比較） */}
-      {tab === "presurvey" && presurveyAccess && (
-        <section className="space-y-2" data-karte-presurvey>
-          <h2 className="text-sm font-medium text-gray-900">📝 1on1の事前アンケート</h2>
-          <p className="text-[11px] text-gray-500">
-            回答は評価には使いません。読み取り専用です（ここから書き換えはできません）。
-            {!isAdmin && "（開いた記録は院長に残ります）"}
-          </p>
-          <PresurveyCompare userId={userId} staffName={entry.name} />
-        </section>
-      )}
+      {/* 220 §2-3: 概要（最初に開く）。各タブの最新1件だけを小さなカードで並べる */}
+      {tab === "overview" && (
+        <div className="space-y-3" data-tab-panel="overview">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <OverviewCard title="🎯 目標" onMore={() => setTab("goals")}>
+              {isProspect ? (
+                <p className="text-[11px] text-gray-500">{PROSPECT_NOTE}</p>
+              ) : purposeGoal || monthlyGoal ? (
+                <>
+                  <p className="text-[12px] text-gray-900 line-clamp-2">目的: {purposeGoal?.title || "未記入"}</p>
+                  <p className="text-[12px] text-gray-900 line-clamp-2">今月: {monthlyGoal?.title || "未記入"}</p>
+                </>
+              ) : (
+                <p className="text-[11px] text-gray-500">まだ目標が書かれていません。</p>
+              )}
+            </OverviewCard>
 
-      {tab === "karte" && (
-        <>
-      {/* 上部カード（A-4） */}
-      {/* 190 D: 現在地（成長マトリクス）— 院長のみ（担当幹部には出さない）。入職予定者には出さない */}
-      {isAdmin && !isProspect && <CurrentPositionCard userId={userId} mode="director" />}
+            <OverviewCard title="🤝 1on1" onMore={() => setTab("one_on_one")}>
+              {latestOneOnOne ? (
+                <>
+                  <p className="text-[11px] text-gray-500">{latestOneOnOne.date.replaceAll("-", "/")}</p>
+                  <p className="text-[12px] text-gray-900 line-clamp-2">{latestOneOnOne.title}</p>
+                </>
+              ) : (
+                <p className="text-[11px] text-gray-500">まだ1on1の記録がありません。</p>
+              )}
+            </OverviewCard>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        <Card title="🤝 最新の1on1の約束" href={isProspect ? "" : "/one-on-one"}>
-          {isProspect ? (
-            <p className="text-[11px] text-gray-500" data-prospect-note>{PROSPECT_NOTE}</p>
-          ) : latestPromise ? (
-            <>
-              <p className="text-[11px] text-gray-500">
-                {latestPromise.date.replaceAll("-", "/")} ・ {latestPromise.partnerName}さんと
-              </p>
-              <p className="text-[12px] text-gray-900 whitespace-pre-wrap line-clamp-4">
-                {latestPromise.text}
-              </p>
-              {latestPromise.status && (
-                <p className="text-[11px] text-teal-800 mt-1">
-                  本人の取り組み状況: {promiseStatusLabel(latestPromise.status)}
-                  {latestPromise.note.trim() ? ` ・ ${latestPromise.note}` : ""}
+            <OverviewCard title="🌟 フィードバック" onMore={() => setTab("feedback")}>
+              {latestFeedback ? (
+                <p className="text-[12px] text-gray-900 line-clamp-2">
+                  <span className="text-[11px] text-gray-500 mr-1">{latestFeedback.date.replaceAll("-", "/")}</span>
+                  {latestFeedback.title}
+                </p>
+              ) : (
+                <p className="text-[11px] text-gray-500">まだ記録がありません。</p>
+              )}
+            </OverviewCard>
+
+            <OverviewCard title="📚 学び" onMore={() => setTab("learning")}>
+              {recentLearning.length === 0 ? (
+                <p className="text-[11px] text-gray-500">まだ学びの記録がありません。</p>
+              ) : (
+                <p className="text-[12px] text-gray-900 line-clamp-2">
+                  <span className="text-[11px] text-gray-500 mr-1">{formatDates(recentLearning[0].dates)}</span>
+                  {courses.find((c) => c.id === recentLearning[0].courseId)?.name ?? "（講座不明）"}
                 </p>
               )}
-            </>
-          ) : (
-            <p className="text-[11px] text-gray-500">約束が書かれた1on1はまだありません。</p>
-          )}
-        </Card>
-        <Card title="📚 最近の学び" href="#learning">
-          {recentLearning.length === 0 ? (
-            <p className="text-[11px] text-gray-500">まだ学びの記録がありません。</p>
-          ) : (
-            <ul className="space-y-1">
-              {recentLearning.map((r) => (
-                <li key={r.id} className="text-[12px] text-gray-900">
-                  <span className="text-[11px] text-gray-500 mr-1">{formatDates(r.dates)}</span>
-                  {courses.find((c) => c.id === r.courseId)?.name ?? "（講座不明）"}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-        {/* 197 B-2: 院長・担当幹部が登録。本人に予定と事前アンケートが届く。C-3: 締切後の未回答を表示 */}
-        <Card title="🗓 次回1on1の予定" href="">
-          {isProspect ? (
-            <p className="text-[11px] text-gray-500">{PROSPECT_NOTE}</p>
-          ) : (
-            <KarteScheduleCard userId={userId} />
-          )}
-        </Card>
-      </div>
+              {nextGate && <p className="text-[11px] text-amber-800">次に受ける講座: {nextGate}</p>}
+            </OverviewCard>
 
-      {/* 185: 段階的な目標（本人が書く。院長・担当幹部は機会・支援・コメント・合意だけ） */}
-      <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2" data-goals-section>
-        <h2 className="text-sm font-medium text-gray-900">🎯 本人の目標（目的 → 3年後 → 年間 → 半期 → 月 → 週）</h2>
-        <p className="text-[10px] text-gray-500">目標の内容は本人だけが書けます。ここでは「クリニックが提供する機会・支援」の記入、コメント、年間・半期の合意を記録できます。</p>
-        {isProspect ? (
-          <p className="text-[11px] text-gray-500" data-prospect-note>{PROSPECT_NOTE}</p>
-        ) : goalsState ? (
-          <GoalsStaged
-            mode="supporter"
-            goals={goalsState.goals}
-            pace={goalsState.pace}
-            weeklyLinks={weeklyLinksFromPromises(promises)}
-            busy={busy}
-            draftPrefix={`growth:goal-view:${userId}`}
-            onSupport={async (input) => {
-              setBusy(true);
-              try {
-                const { goal } = await supportGoalApi(input);
-                setGoalsState((st) => (st ? { ...st, goals: st.goals.map((g) => (g.id === goal.id ? goal : g)) } : st));
-                flash("💾 保存しました（本人にも見えます）");
-                return null;
-              } catch (e) {
-                return e instanceof Error ? e.message : "保存に失敗しました";
-              } finally {
-                setBusy(false);
-              }
-            }}
-          />
-        ) : (
-          <p className="text-[11px] text-gray-500">目標を読み込めませんでした。</p>
-        )}
-      </section>
+            {showPosition && (
+              <OverviewCard title="🧭 現在地" onMore={() => setTab("position")}>
+                <p className="text-[12px] text-gray-900">
+                  合意した位置: <strong>{position?.agreed ? `${position.agreed.s} × ${position.agreed.m}` : "未記録"}</strong>
+                </p>
+                <p className="text-[11px] text-gray-600">
+                  次の移行: {position?.transitionLabel || "—"}
+                </p>
+              </OverviewCard>
+            )}
 
-      {/* 185: フィードバックの記録（院長=全件／担当幹部=自分の記録だけ。本人にも見える） */}
-      <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
-        <h2 className="text-sm font-medium text-gray-900">🌟 フィードバックの記録</h2>
-        {isProspect ? (
-          <p className="text-[11px] text-gray-500" data-prospect-note>{PROSPECT_NOTE}（本人に見せる記録のため、本人のアカウントができてから）</p>
-        ) : (
-          <FeedbackPanel mode="recorder" userId={userId} staffName={entry.name} />
-        )}
-      </section>
+            {presurveyAccess && (
+              <OverviewCard title="📝 アンケート" onMore={() => setTab("presurvey")}>
+                {nextSchedule ? (
+                  <>
+                    <p className="text-[11px] text-gray-500">1on1 {nextSchedule.date.replaceAll("-", "/")}</p>
+                    <p className={`text-[12px] ${nextSchedule.answered ? "text-teal-800" : "text-amber-800"}`}>
+                      {nextSchedule.answered ? "提出済み" : "未提出"}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-gray-500">次の1on1の予定がありません。</p>
+                )}
+              </OverviewCard>
+            )}
+          </div>
 
       {/* 成長年表（A-4） */}
       <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
@@ -438,11 +513,111 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
         )}
       </section>
 
-      {/* 184: 採用資料・経歴・入職時の想い（院長のみ。幹部モードでは描画しない＝APIも404） */}
-      {isAdmin && <HiringDocsPanel userId={userId} staffName={entry.name} />}
-      {/* 188 4: 適性検査（スカウター）— 院長のみ・委任対象外 */}
-      {isAdmin && <ScouterCard userId={userId} />}
+        </div>
+      )}
 
+      {tab === "goals" && (
+        <div data-tab-panel="goals">
+      {/* 185: 段階的な目標（本人が書く。院長・担当幹部は機会・支援・コメント・合意だけ） */}
+      <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2" data-goals-section>
+        <h2 className="text-sm font-medium text-gray-900">🎯 本人の目標（目的 → 3年後 → 年間 → 半期 → 月 → 週）</h2>
+        <p className="text-[10px] text-gray-500">目標の内容は本人だけが書けます。ここでは「クリニックが提供する機会・支援」の記入、コメント、年間・半期の合意を記録できます。</p>
+        {isProspect ? (
+          <p className="text-[11px] text-gray-500" data-prospect-note>{PROSPECT_NOTE}</p>
+        ) : goalsState ? (
+          <GoalsStaged
+            mode="supporter"
+            goals={goalsState.goals}
+            pace={goalsState.pace}
+            weeklyLinks={weeklyLinksFromPromises(promises)}
+            busy={busy}
+            draftPrefix={`growth:goal-view:${userId}`}
+            onSupport={async (input) => {
+              setBusy(true);
+              try {
+                const { goal } = await supportGoalApi(input);
+                setGoalsState((st) => (st ? { ...st, goals: st.goals.map((g) => (g.id === goal.id ? goal : g)) } : st));
+                flash("💾 保存しました（本人にも見えます）");
+                return null;
+              } catch (e) {
+                return e instanceof Error ? e.message : "保存に失敗しました";
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+        ) : (
+          <p className="text-[11px] text-gray-500">目標を読み込めませんでした。</p>
+        )}
+      </section>
+
+        </div>
+      )}
+
+      {/* 220 §2-2: 1on1（221の書き起こしの取り込みはこのタブに入る） */}
+      {tab === "one_on_one" && (
+        <div className="space-y-3" data-tab-panel="one_on_one">
+          <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-sm font-medium text-gray-900">🗓 次回1on1の予定</h2>
+              <Link href="/one-on-one" className="text-[11px] text-teal-800 underline underline-offset-2">
+                1on1の画面へ
+              </Link>
+            </div>
+            {isProspect ? (
+              <p className="text-[11px] text-gray-500" data-prospect-note>{PROSPECT_NOTE}</p>
+            ) : (
+              <KarteScheduleCard userId={userId} />
+            )}
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
+            <h2 className="text-sm font-medium text-gray-900">🤝 1on1の記録</h2>
+            {oneOnOneItems.length === 0 ? (
+              <p className="text-[11px] text-gray-500">まだ1on1の記録がありません。</p>
+            ) : (
+              <ol className="space-y-2">
+                {oneOnOneItems.map((it, i) => (
+                  <li key={`${it.date}-${i}`} className="flex gap-2">
+                    <span className="shrink-0 w-[5.5em] text-[11px] text-gray-500 pt-0.5">
+                      {it.date ? it.date.replaceAll("-", "/") : "日付なし"}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12px] text-gray-900">
+                        {it.title}
+                        <Link href={it.href} className="ml-1.5 text-[11px] text-teal-800 underline underline-offset-2">
+                          元の画面へ
+                        </Link>
+                      </p>
+                      {it.body && (
+                        <p className="text-[11px] text-gray-700 whitespace-pre-wrap line-clamp-6">{it.body}</p>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        </div>
+      )}
+
+      {tab === "feedback" && (
+        <div data-tab-panel="feedback">
+      {/* 185: フィードバックの記録（院長=全件／担当幹部=自分の記録だけ。本人にも見える） */}
+      <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
+        <h2 className="text-sm font-medium text-gray-900">🌟 フィードバックの記録</h2>
+        {isProspect ? (
+          <p className="text-[11px] text-gray-500" data-prospect-note>{PROSPECT_NOTE}（本人に見せる記録のため、本人のアカウントができてから）</p>
+        ) : (
+          <FeedbackPanel mode="recorder" userId={userId} staffName={entry.name} />
+        )}
+      </section>
+
+        </div>
+      )}
+
+      {tab === "learning" && (
+        <div data-tab-panel="learning">
       {/* 学びの記録（管理者は追加・編集できる・B-4） */}
       <section id="learning" className="space-y-2">
         <h2 className="text-sm font-medium text-gray-900">📚 学びの記録（全件）</h2>
@@ -506,7 +681,37 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
           }}
         />
       </section>
-        </>
+        </div>
+      )}
+
+      {/* 190 D: 現在地（成長マトリクス）— 院長のみ（担当幹部には出さない）。入職予定者には出さない */}
+      {tab === "position" && showPosition && (
+        <div data-tab-panel="position">
+          <CurrentPositionCard userId={userId} mode="director" />
+        </div>
+      )}
+
+      {/* 214 §1: アンケート（最新の回答＋これまでの回答＋横並びの比較） */}
+      {tab === "presurvey" && presurveyAccess && (
+        <section className="space-y-2" data-tab-panel="presurvey" data-karte-presurvey>
+          <h2 className="text-sm font-medium text-gray-900">📝 1on1の事前アンケート</h2>
+          <p className="text-[11px] text-gray-500">
+            回答は評価には使いません。読み取り専用です（ここから書き換えはできません）。
+            {!isAdmin && "（開いた記録は院長に残ります）"}
+          </p>
+          <PresurveyCompare userId={userId} staffName={entry.name} />
+        </section>
+      )}
+
+      {/* 184/188: 採用資料・経歴・入職時の想い・適性検査（院長のみ） */}
+      {tab === "basic" && isAdmin && (
+        <div className="space-y-3" data-tab-panel="basic">
+      {/* 184: 採用資料・経歴・入職時の想い（院長のみ。幹部モードでは描画しない＝APIも404） */}
+      {isAdmin && <HiringDocsPanel userId={userId} staffName={entry.name} />}
+      {/* 188 4: 適性検査（スカウター）— 院長のみ・委任対象外 */}
+      {isAdmin && <ScouterCard userId={userId} />}
+
+        </div>
       )}
     </div>
   );
@@ -599,25 +804,27 @@ function SurveyBlock({ view }: { view: SurveyView }) {
   );
 }
 
-function Card({
+/** 220 §2-3: 概要タブの小さなカード。「すべて見る →」でそのタブへ移る */
+function OverviewCard({
   title,
-  href,
+  onMore,
   children,
 }: {
   title: string;
-  /** 空＝リンクを出さない（188 6: 入職予定者には記録画面へのボタンを出さない） */
-  href: string;
+  onMore: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-1">
+    <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-1" data-overview-card={title}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-[12px] font-medium text-gray-900">{title}</p>
-        {href && (
-          <Link href={href} className="text-[10px] text-teal-800 underline underline-offset-2 shrink-0">
-            元の画面へ
-          </Link>
-        )}
+        <button
+          type="button"
+          onClick={onMore}
+          className="text-[11px] text-teal-800 underline underline-offset-2 shrink-0 min-h-[28px]"
+        >
+          すべて見る →
+        </button>
       </div>
       {children}
     </div>

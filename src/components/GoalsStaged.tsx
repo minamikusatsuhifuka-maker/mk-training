@@ -6,6 +6,8 @@
 // 下書きは176-補の仕組み（sessionStorage）。判定はサーバー（/api/growth/goals, /goals/support）でも強制される。
 
 import { useMemo, useState } from "react";
+// 220 §2-4/§2-5: 入力欄はふだん隠し、長い文はたたむ
+import { OpenOnDemand } from "@/components/GrowthTabsBar";
 import {
   GOAL_AXES,
   GOAL_LEVELS,
@@ -219,6 +221,7 @@ function GoalCard({
 }) {
   const [supportDraft, setSupportDraft] = useState(g.support);
   const [comment, setComment] = useState("");
+  const [chainOpen, setChainOpen] = useState(false);
   const [err, setErr] = useState("");
   const supporter = mode === "supporter";
   return (
@@ -235,9 +238,18 @@ function GoalCard({
           ))}
       </p>
       {(parentName || chain.length > 0) && (
-        <p className="text-[10px] text-gray-500">
+        // 220 §2-5: 長くなるので1行に省略し、押すと全文を出す
+        <button
+          type="button"
+          onClick={() => setChainOpen((v) => !v)}
+          aria-expanded={chainOpen}
+          className={`block w-full text-left text-[10px] text-gray-500 ${chainOpen ? "" : "truncate"}`}
+          data-goal-chain
+          data-open={chainOpen ? "1" : "0"}
+          title={chainOpen ? "たたむ" : "全文を見る"}
+        >
           ↑ つながり: {chain.map((c) => `${goalLevelLabel(c.level)}「${c.title}」`).join(" ← ") || parentName}
-        </p>
+        </button>
       )}
       {g.why && <p className="text-[11px] text-gray-700">なぜ: {g.why}</p>}
       {(g.jitsu.length > 0 || g.axes.length > 0) && (
@@ -257,15 +269,17 @@ function GoalCard({
       {/* 機会・支援・コメント（院長・担当幹部が書く。本人は読むだけ） */}
       <div className="rounded-md border border-violet-100 bg-violet-50/40 p-1.5 space-y-1" data-goal-support>
         <p className="text-[10px] font-medium text-violet-900">🏥 クリニックが提供する機会・支援{g.supportBy ? `（${g.supportBy}）` : ""}</p>
-        {supporter ? (
-          <div className="space-y-1">
-            <textarea value={supportDraft} onChange={(e) => setSupportDraft(e.target.value)} rows={2} placeholder="研修・任せる業務・伴走 など" className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-[12px] bg-white" aria-label="機会・支援" />
-            <button type="button" disabled={busy || supportDraft === g.support} onClick={async () => setErr((await onSupport?.({ id: g.id, support: supportDraft })) ?? "")} className="px-3 py-1.5 border border-violet-300 text-violet-800 rounded-full text-[11px] hover:bg-violet-50 disabled:opacity-40 min-h-[36px]">
-              💾 機会・支援を保存
-            </button>
-          </div>
-        ) : (
-          <p className="text-[11px] text-gray-800 whitespace-pre-wrap">{g.support || "（まだ記入がありません）"}</p>
+        {/* 220 §2-4: 書いてあるものはそのまま読める。入力欄は押したときだけ開く */}
+        <p className="text-[11px] text-gray-800 whitespace-pre-wrap">{g.support || "（まだ記入がありません）"}</p>
+        {supporter && (
+          <OpenOnDemand openLabel={g.support ? "✏️ 機会・支援を書き直す" : "✏️ 機会・支援を書く"} testId="goal-support">
+            <div className="space-y-1">
+              <textarea value={supportDraft} onChange={(e) => setSupportDraft(e.target.value)} rows={2} placeholder="研修・任せる業務・伴走 など" className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-[12px] bg-white" aria-label="機会・支援" />
+              <button type="button" disabled={busy || supportDraft === g.support} onClick={async () => setErr((await onSupport?.({ id: g.id, support: supportDraft })) ?? "")} className="px-3 py-1.5 border border-violet-300 text-violet-800 rounded-full text-[11px] hover:bg-violet-50 disabled:opacity-40 min-h-[36px]">
+                💾 機会・支援を保存
+              </button>
+            </div>
+          </OpenOnDemand>
         )}
         {g.comments.length > 0 && (
           <ul className="space-y-0.5">
@@ -277,12 +291,14 @@ function GoalCard({
           </ul>
         )}
         {supporter && (
+          <OpenOnDemand openLabel="💬 コメントする" testId="goal-comment">
           <div className="flex gap-1.5">
             <input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="コメント" className="flex-1 rounded-md border border-gray-200 px-2 py-1.5 text-[12px] bg-white min-h-[36px]" aria-label="コメント" />
             <button type="button" disabled={busy || !comment.trim()} onClick={async () => { const e = await onSupport?.({ id: g.id, comment }); setErr(e ?? ""); if (!e) setComment(""); }} className="px-3 py-1.5 border border-violet-300 text-violet-800 rounded-full text-[11px] hover:bg-violet-50 disabled:opacity-40 min-h-[36px]">
               送る
             </button>
           </div>
+          </OpenOnDemand>
         )}
         {supporter && levelNeedsAgreement(g.level) && (
           <button type="button" disabled={busy} onClick={async () => setErr((await onSupport?.({ id: g.id, agree: !g.agreedOn })) ?? "")} className="px-3 py-1.5 border border-emerald-300 text-emerald-800 rounded-full text-[11px] hover:bg-emerald-50 disabled:opacity-40 min-h-[36px]">

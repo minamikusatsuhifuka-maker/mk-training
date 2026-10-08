@@ -6,6 +6,8 @@
 //   画面に到達の数・割合・点数は出さない。位置・等級で比較・並べ替え・絞り込みをしない。
 
 import { useCallback, useEffect, useState } from "react";
+// 220 §2-4/§2-5: 入力欄はふだん隠し、長い表はたたむ
+import { Collapsible, OpenOnDemand } from "@/components/GrowthTabsBar";
 import Link from "next/link";
 import { GrowthMatrixFigure, type MatrixMarker } from "@/components/GrowthMatrixFigure";
 import { GateDates, GrowthRequirementsTable } from "@/components/GrowthRequirementsTable";
@@ -54,7 +56,7 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export function GateStatusList({ gates, transition, tableMissing }: { gates: GateResult[]; transition: TransitionKey | null; tableMissing?: boolean }) {
   if (!transition) return <p className="text-[11px] text-gray-500">次の移行が決まると、必須の学びの○×が出ます（等級の設定、または自己評価シートで移行を選ぶ）。</p>;
-  if (tableMissing) return <p className="text-[11px] text-gray-500">育成カルテのテーブルがまだ作られていません。</p>;
+  if (tableMissing) return <p className="text-[11px] text-gray-500">成長記録のテーブルがまだ作られていません。</p>;
   if (gates.length === 0) return <p className="text-[11px] text-gray-500">{transitionLabel(transition)} の必須の学びはまだ登録されていません（🗂 講座マスタ・設定 → ゲート）。</p>;
   return (
     <ul className="space-y-1" data-gate-list>
@@ -187,7 +189,8 @@ export function CurrentPositionCard({ userId, mode }: { userId?: string; mode: "
       {/* 院長: 合意した位置の記録 */}
       {isDirector && (
         <div className="rounded-lg border border-teal-200 bg-white p-2 space-y-1.5" data-agree-form>
-          <p className="text-[12px] font-medium text-gray-800">合意した位置を記録（半期面談・年次対話）</p>
+          {/* 220 §2-4: ふだんは隠し、押したときだけ開く */}
+          <OpenOnDemand openLabel="＋ 合意した位置を記録する（半期面談・年次対話）" testId="agree-form">
           <div className="flex flex-wrap gap-2 text-[12px]">
             <select value={agree.s} onChange={(e) => setAgree((a) => ({ ...a, s: e.target.value as SLevel | "" }))} className="border border-gray-200 rounded-lg px-2 py-1" aria-label="合意した横軸">
               <option value="">S?</option>
@@ -207,16 +210,22 @@ export function CurrentPositionCard({ userId, mode }: { userId?: string; mode: "
               💾 記録
             </button>
           </div>
+          </OpenOnDemand>
         </div>
       )}
 
-      {/* ゲート */}
-      <div className="rounded-lg border border-gray-200 bg-white p-2 space-y-1.5" data-position-gates>
-        <p className="text-[12px] font-medium text-gray-800">必須の学び（ゲート）{data.transition ? `— ${transitionLabel(data.transition)}` : ""}</p>
+      {/* ゲート（220 §2-5: 長いので最初はたたむ） */}
+      <Collapsible
+        title={`必須の学び（ゲート）${data.transition ? `— ${transitionLabel(data.transition)}` : ""}`}
+        note={`${data.gates.filter((g) => g.ok).length}/${data.gates.length} 達成`}
+        testId="gates"
+      >
+      <div className="space-y-1.5" data-position-gates>
         <GateStatusList gates={data.gates} transition={data.transition} tableMissing={data.gatesTableMissing} />
         {isDirector && data.gates.some((g) => g.gate.kind === "license" || g.gate.kind === "director") && (
           <div className="space-y-1.5 pt-1 border-t border-gray-100" data-gate-check-form>
-            <p className="text-[11px] text-gray-700">資格・院長の確認（確認日と根拠を記入して○）</p>
+            {/* 220 §2-4: ふだんは隠し、押したときだけ開く */}
+            <OpenOnDemand openLabel="✏️ 資格・院長の確認を記録する" testId="gate-check">
             {data.gates.filter((g) => g.gate.kind === "license" || g.gate.kind === "director").map((g) => {
               const st = gateCheck[g.gate.id] ?? { checkedOn: g.check?.checkedOn ?? "", note: g.check?.note ?? "" };
               return (
@@ -233,12 +242,15 @@ export function CurrentPositionCard({ userId, mode }: { userId?: string; mode: "
                 </div>
               );
             })}
+            </OpenOnDemand>
           </div>
         )}
       </div>
+      </Collapsible>
 
       {/* 193 B-2: 等級ごとの要件表（本人の次の移行を強調して開く。項目の横に本人の到達／途上と院長の確認） */}
-      <div className="rounded-lg border border-gray-200 bg-white p-2" data-position-requirements>
+      <Collapsible title="等級ごとの要件表" note="長い表です" testId="requirements">
+      <div data-position-requirements>
         <GrowthRequirementsTable
           mode="card"
           highlight={data.transition}
@@ -253,6 +265,7 @@ export function CurrentPositionCard({ userId, mode }: { userId?: string; mode: "
           }}
         />
       </div>
+      </Collapsible>
 
       {/* 到達状態と根拠 */}
       <div className="rounded-lg border border-gray-200 bg-white p-2 space-y-1.5" data-position-items>

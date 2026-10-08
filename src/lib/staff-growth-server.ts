@@ -77,7 +77,7 @@ export type GrowthAdminClient = ReturnType<typeof createSupabaseAdminClient>;
 export class GrowthTableMissingError extends Error {
   constructor() {
     super(
-      "学びの記録のテーブルがまだ作られていません。交付済みのSQL（179_スタッフ育成カルテ_テーブル作成.sql）を実行してください。"
+      "成長記録のテーブルがまだ作られていません。交付済みのSQL（179_スタッフ育成カルテ_テーブル作成.sql）を実行してください。"
     );
     this.name = "GrowthTableMissingError";
   }

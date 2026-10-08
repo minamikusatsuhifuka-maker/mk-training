@@ -232,7 +232,7 @@ export function KarteScheduleCard({ userId }: { userId: string }) {
   };
 
   if (!data) return <p className="text-[11px] text-gray-500">{error || "読み込み中…"}</p>;
-  if (data.tableMissing) return <p className="text-[11px] text-gray-500">育成カルテのテーブルがまだ作られていません。</p>;
+  if (data.tableMissing) return <p className="text-[11px] text-gray-500">成長記録のテーブルがまだ作られていません。</p>;
 
   return (
     <div className="space-y-1.5" data-karte-schedule>

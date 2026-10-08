@@ -431,8 +431,8 @@ function PresurveyPageBody() {
           editingRecord ? "回答を更新しました。" : "回答を保存しました。",
           "1on1の画面に反映されます。",
           updated.length > 0
-            ? `育成カルテの目標も更新しました（${updated.map((l) => goalLevelLabel(l)).join("・")}）。`
-            : "育成カルテの目標は変わっていないので、そのままです。",
+            ? `成長記録の目標も更新しました（${updated.map((l) => goalLevelLabel(l)).join("・")}）。`
+            : "成長記録の目標は変わっていないので、そのままです。",
         ].join("")
       );
       setDraftRestored(false);
@@ -611,7 +611,7 @@ function PresurveyPageBody() {
 
               {ctx?.karteTableMissing && (
                 <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
-                  育成カルテの目標をまだ読み込めません。第1部は空欄から書いてください（提出はできます）。
+                  成長記録の目標をまだ読み込めません。第1部は空欄から書いてください（提出はできます）。
                 </p>
               )}
 

@@ -90,7 +90,7 @@ export function AdminShell({
       : []),
     ...(canSeeGrowth
       ? [
-          { label: "📗 スタッフ育成カルテ", href: "/staff-growth" },
+          { label: "📗 スタッフの成長記録", href: "/staff-growth" },
           // 179: 講座マスタ・設定はここから開く（/admin 配下だとルートの存在が漏れるため・157と同じ理由）。
           // 183: 講座マスタ（AI下書きの設定を含む）は院長のみ
           ...(isAdmin ? [{ label: "🗂 講座マスタ・AI下書き設定", href: "/staff-growth/courses" }] : []),

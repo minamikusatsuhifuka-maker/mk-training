@@ -99,7 +99,7 @@ export function DelegationPanel() {
       <header>
         <h1 className="text-xl font-bold text-slate-800">🔑 委任の設定</h1>
         <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-          幹部スタッフに「担当スタッフの育成カルテの閲覧」と「管理画面の一部」を任せる設定です。
+          幹部スタッフに「担当スタッフの成長記録の閲覧」と「管理画面の一部」を任せる設定です。
           <strong>既定は誰も指定されていません。</strong>変更はすぐに反映され、アカウントを無効化すると即座に見られなくなります。
           この画面と設定のAPIは院長だけが使えます（幹部は自分や他人の権限を変えられません）。
         </p>
@@ -109,10 +109,10 @@ export function DelegationPanel() {
 
       {/* A: カルテの担当スタッフ */}
       <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-3" data-section="karte">
-        <h2 className="text-sm font-semibold text-slate-800">📗 育成カルテ：幹部ごとの担当スタッフ</h2>
+        <h2 className="text-sm font-semibold text-slate-800">📗 成長記録：幹部ごとの担当スタッフ</h2>
         <p className="text-[11px] text-slate-600 leading-relaxed">
-          幹部が見られるのは担当スタッフのカルテだけで、内容は「学びの記録・自分の目標・1on1の約束と取り組み状況・本人が公開したサーベイ」に限られます（閲覧のみ）。
-          院長メモ・評価・適性検査・履歴書・家族構成・連絡先・振り返り記録は出ません。幹部自身のカルテは対象外です。
+          幹部が見られるのは担当スタッフの成長記録だけで、内容は「学びの記録・自分の目標・1on1の約束と取り組み状況・本人が公開したサーベイ」に限られます（閲覧のみ）。
+          院長メモ・評価・適性検査・履歴書・家族構成・連絡先・振り返り記録は出ません。幹部自身の成長記録は対象外です。
         </p>
         <label className="block text-xs text-slate-700">
           幹部

@@ -151,7 +151,7 @@ export default function PresurveyAdminPage() {
         </h1>
         <p className="text-sm text-slate-600 mt-1 leading-relaxed">
           スタッフが1on1の前に答える質問です。<strong>第1部「働く目的と目標」</strong>は毎回、前回の答え
-          （＝育成カルテの目標）が入った状態で見直します。<strong>第2部「今回の1on1」</strong>はその回のことを書きます。
+          （＝成長記録の目標）が入った状態で見直します。<strong>第2部「今回の1on1」</strong>はその回のことを書きます。
           回答は1on1画面のRWDEPの各欄の隣に出ます（置き場所は各質問の「出す場所」で決まります）。
         </p>
         <p className="text-xs text-slate-500 mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
@@ -244,8 +244,8 @@ export default function PresurveyAdminPage() {
                                 className="text-[11px] text-teal-900 bg-white border border-teal-200 rounded-lg px-2.5 py-1.5 ml-10"
                                 data-presurvey-locked
                               >
-                                🔗 育成カルテの「{goalLevelLabel(q.karteLevel || "purpose")}」と同じものです。
-                                提出すると、変わったときだけカルテの目標が更新されます。
+                                🔗 成長記録の「{goalLevelLabel(q.karteLevel || "purpose")}」と同じものです。
+                                提出すると、変わったときだけ成長記録の目標が更新されます。
                                 <strong>この質問は削除・答え方の変更ができません</strong>（文言とヒントは直せます）。
                               </p>
                             )}
@@ -472,7 +472,7 @@ function PresurveyAccessNote() {
   return (
     <div className="text-xs text-slate-600 mt-2 bg-white border border-slate-200 rounded-lg px-3 py-2 space-y-1" data-presurvey-access>
       <p>
-        回答は、<strong>育成カルテで登録した「次回1on1の予定」</strong>からだけ答えられます（スタッフは日付や相手を選べません）。
+        回答は、<strong>成長記録で登録した「次回1on1の予定」</strong>からだけ答えられます（スタッフは日付や相手を選べません）。
         読めるのは<strong>本人・院長・院長が指定した管理者</strong>だけです。指定した管理者は
         「📝 1on1の事前アンケートの回答」の委任と、そのスタッフの担当指定の<strong>両方</strong>がそろって初めて読めます
         （<strong>1on1の相手であっても、指定されていなければ読めません</strong>）。
