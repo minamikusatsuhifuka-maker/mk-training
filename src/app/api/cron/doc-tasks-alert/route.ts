@@ -15,6 +15,9 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { fetchAllDocTasks, loadDocTasksConfig } from "@/lib/doc-tasks-server";
 import { dispatchDailyAlertMail } from "@/lib/doc-tasks-mail";
+// 219: 実行のたびに結果を1行だけ残す（院長が管理画面でいつでも確かめられるように）
+import { recordCronRun } from "@/lib/cron-status-server";
+import { docTasksRunRecord, failedRunRecord } from "@/lib/cron-status";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -32,18 +35,25 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const at = new Date().toISOString();
+  let admin: ReturnType<typeof createSupabaseAdminClient> | null = null;
   try {
-    const admin = createSupabaseAdminClient();
+    admin = createSupabaseAdminClient();
     const { config, tableMissing } = await loadDocTasksConfig(admin);
     if (tableMissing) {
       // テーブル未作成（SQL未実行）でもcronを失敗にしない
-      return NextResponse.json({ status: "skipped", reason: "table_missing" });
+      const outcome = { status: "skipped" as const, reason: "table_missing" };
+      await recordCronRun(admin, docTasksRunRecord(outcome, at));
+      return NextResponse.json(outcome);
     }
     const { tasks } = await fetchAllDocTasks(admin);
     const outcome = await dispatchDailyAlertMail(admin, config, tasks);
+    // 219 §1: 記録に失敗しても定時処理は止めない（recordCronRun は例外を投げない）
+    await recordCronRun(admin, docTasksRunRecord(outcome, at));
     return NextResponse.json(outcome);
   } catch (e) {
     // cron自体は落とさず、理由を返す（Vercelのログに残る）
+    if (admin) await recordCronRun(admin, failedRunRecord("doc-tasks-alert", at, e));
     return NextResponse.json(
       {
         status: "failed",

@@ -9,6 +9,8 @@ import { contraindications } from "@/data/contraindications";
 import { EXPERT_ROLES } from "@/data/expertRoles";
 // 201: 院長の「★ いま注力すること」3件。院長でなければ何も出ない（部品側で fail-close）
 import { PriorityFocusMini } from "@/components/admin/PriorityFocusMini";
+// 219: 毎朝8時の定時処理の前回の結果。こちらも院長のみ（部品側で fail-close）
+import { CronStatusCard } from "@/components/admin/CronStatusCard";
 
 const stats = [
   { label: "疾患", count: diseases.length, unit: "件", href: "/admin/diseases" },
@@ -26,6 +28,8 @@ export default function AdminDashboard() {
       </div>
 
       <PriorityFocusMini />
+
+      <CronStatusCard />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {stats.map((s) => (
