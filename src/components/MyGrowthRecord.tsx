@@ -1,5 +1,7 @@
 "use client";
 import Link from "next/link";
+// 221 §1: 自分の「1on1の録音・書き起こし」の同意の印を出す
+import { TranscriptConsentPanel } from "@/components/TranscriptConsentPanel";
 // 220 §3: 「スタッフの成長記録」と同じタブの並びにそろえる
 import { GrowthTabsBar, useRememberedTab } from "@/components/GrowthTabsBar";
 import { GROWTH_TABS, GROWTH_TAB_STORAGE_KEY, resolveGrowthTab, visibleGrowthTabs, type GrowthTabKey } from "@/lib/growth-tabs";
@@ -477,6 +479,8 @@ export function MyGrowthRecord() {
         </section>
       ) : (
         // 🤝 1on1（1on1の約束と取り組み状況）
+        <div className="space-y-2" data-tab-panel="one_on_one">
+        <TranscriptConsentPanel selfView />
         <PromisesSection
           promises={promises}
           busy={busy}
@@ -505,6 +509,7 @@ export function MyGrowthRecord() {
             }
           }}
         />
+        </div>
       )}
     </div>
   );

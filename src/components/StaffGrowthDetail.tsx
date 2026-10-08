@@ -37,6 +37,10 @@ import { GrowthTabsBar, useRememberedTab } from "@/components/GrowthTabsBar";
 import { GROWTH_TABS, GROWTH_TAB_STORAGE_KEY, resolveGrowthTab, visibleGrowthTabs } from "@/lib/growth-tabs";
 import { transitionLabel } from "@/lib/growth-matrix";
 import { formatMonthDayW } from "@/lib/one-on-one-schedule";
+// 221: 書き起こしの取り込みと、録音・書き起こしの同意の印
+import { TranscriptImportDialog } from "@/components/TranscriptImportDialog";
+import { TranscriptConsentPanel } from "@/components/TranscriptConsentPanel";
+import { TRANSCRIPT_ENTRY_LABEL } from "@/lib/one-on-one-transcript";
 import { fetchGoalsApi, fetchPromisesApi, supportGoalApi, type PromiseItem } from "@/lib/staff-growth-client";
 import {
   createLearningApi,
@@ -150,6 +154,8 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
   const [promises, setPromises] = useState<PromiseItem[]>([]);
   // 220 §2-2: 開いていたタブをその端末で覚える（見られないタブのときは概要に戻す）
   const [rememberedTab, setTab] = useRememberedTab(GROWTH_TAB_STORAGE_KEY.staff, GROWTH_TABS);
+  // 221: 書き起こしの取り込みを開いているか
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   const load = useCallback(async () => {
     setError("");
@@ -571,6 +577,29 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
             )}
           </section>
 
+          {/* 221 §2: 書き起こしから記録する（院長・担当の幹部だけ。同意の印が無ければAPIが断る） */}
+          {!isProspect && (
+            transcriptOpen ? (
+              <TranscriptImportDialog
+                staff={{ userId, name: entry.name }}
+                defaultHeldOn={nextSchedule?.date}
+                myName={detail.viewerName ?? ""}
+                sampleAllowed={entry.testSeed === true}
+                onClose={() => setTranscriptOpen(false)}
+                onSaved={() => void load()}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setTranscriptOpen(true)}
+                className="px-4 py-2 border border-violet-300 text-violet-800 rounded-full text-sm hover:bg-violet-50 min-h-[44px]"
+                data-transcript-open
+              >
+                {TRANSCRIPT_ENTRY_LABEL}
+              </button>
+            )
+          )}
+
           <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
             <h2 className="text-sm font-medium text-gray-900">🤝 1on1の記録</h2>
             {oneOnOneItems.length === 0 ? (
@@ -706,6 +735,8 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
       {/* 184/188: 採用資料・経歴・入職時の想い・適性検査（院長のみ） */}
       {tab === "basic" && isAdmin && (
         <div className="space-y-3" data-tab-panel="basic">
+          {/* 221 §1: 1on1の録音・書き起こしの同意の印（院長だけが付け外しできる） */}
+          {!isProspect && <TranscriptConsentPanel userId={userId} staffName={entry.name} canEdit />}
       {/* 184: 採用資料・経歴・入職時の想い（院長のみ。幹部モードでは描画しない＝APIも404） */}
       {isAdmin && <HiringDocsPanel userId={userId} staffName={entry.name} />}
       {/* 188 4: 適性検査（スカウター）— 院長のみ・委任対象外 */}

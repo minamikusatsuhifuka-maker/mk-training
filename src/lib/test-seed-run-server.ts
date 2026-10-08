@@ -382,6 +382,17 @@ export async function seedTestData(admin: Admin, by: string, directorId: string,
   });
   bump("1on1の事前アンケートの回答");
 
+  // 221 §7: テスト花子に「1on1の録音・書き起こし：同意あり」の印を付ける
+  //   （印が無いと書き起こしを取り込めない。院長が /staff-growth の「基本情報」で外せる）
+  await upsertGrowth(
+    admin,
+    "transcript_consent",
+    `tcons-${hid}`,
+    { userId: hid, on: "2026-10-08", by, updatedAt: now },
+    by
+  );
+  bump("1on1の録音・書き起こしの同意の印");
+
   // 204 §7: 第1部はカルテの目標そのもの。テスト次郎のカルテの目標も同じ文章で作る（検証用の印つき）。
   // 行idは固定なので、何度「作成」しても重複しない。
   const jiroGoalLevels = new Map(

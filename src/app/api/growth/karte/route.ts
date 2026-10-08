@@ -72,7 +72,14 @@ export async function GET(req: Request) {
       } catch {
         presurveyAccess = false;
       }
-      return NextResponse.json({ ...detail, isAdmin: auth.isAdmin, contactAccess, presurveyAccess });
+      // 221: 書き起こしから記録するとき、記録者の表示名を使う（記録の authorName）
+      return NextResponse.json({
+        ...detail,
+        isAdmin: auth.isAdmin,
+        contactAccess,
+        presurveyAccess,
+        viewerName: auth.userName,
+      });
     }
     const q = (sp.get("q") ?? "").trim();
     if (q) {

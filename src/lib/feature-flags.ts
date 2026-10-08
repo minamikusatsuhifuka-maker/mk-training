@@ -21,6 +21,8 @@ export const FEATURE_IDS = [
   "benkyokai",
   "self_review",
   "one_on_one",
+  // 221: 1on1の書き起こしの取り込み（AI）。既定OFF・院長と検証用アカウントはプレビューで使える
+  "one_on_one_transcript",
   "onboarding",
   "calendar",
   "hr_portal", // 人事制度ポータル（指示書116・Phase 5）
@@ -91,6 +93,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   benkyokai: false,
   self_review: false,
   one_on_one: false,
+  one_on_one_transcript: false, // 221（既定OFF）
   onboarding: false,
   calendar: false,
   hr_portal: false, // 初期OFF（院長検証→ONでスタッフ公開・指示書116）
@@ -139,6 +142,7 @@ export const FEATURE_META: FeatureMeta[] = [
   { id: "benkyokai", label: "勉強会アーカイブ", description: "月1勉強会の資料と学びの蓄積", phase: 2 },
   { id: "self_review", label: "自己評価シート", description: "半期面談・年次対話の入口", phase: 3 },
   { id: "one_on_one", label: "1on1ノート", description: "伴走の対話を記録する場", phase: 3 },
+  { id: "one_on_one_transcript", label: "1on1の書き起こしの取り込み（AI）", description: "1on1の書き起こしを貼り付け（またはファイルで取り込み）、AIがまとめと記録欄の下書きを作る。書き起こしの原文は保存しない。使えるのは院長と、担当スタッフの1on1を記録する幹部だけ（スタッフごとの同意の印が要る）", phase: 5 },
   { id: "onboarding", label: "オンボーディング", description: "新しい仲間の最初の道しるべ", phase: 4 },
   { id: "calendar", label: "院内カレンダー", description: "勉強会・イベントの予定共有", phase: 4 },
   { id: "hr_portal", label: "人事制度ポータル", description: "等級・評価・給与・ステージ移行の閲覧とFAQ・検索", phase: 5 },
@@ -168,6 +172,7 @@ export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
   "benkyokai", // 指示書109: 勉強会アーカイブ（/benkyokai・資料は資料庫参照 libraryRefs）
   "self_review", // 指示書111: 自己評価シート（/self-review・private_store 基盤・提出後ロック）
   "one_on_one", // 指示書112: 1on1ノート（/one-on-one・本人＋ペア＋管理者のみ・サーバー側判定）
+  "one_on_one_transcript", // 指示書221: 書き起こしの取り込み（AI・原文は残さない・同意の印が要る）
   "onboarding", // 指示書113: オンボーディングチェックリスト（/onboarding・テンプレ公開＋進捗private）
   "calendar", // 指示書114: 院内カレンダー（/calendar・Google Calendar REST直叩き）— これで10機能すべて実装済み
   "hr_portal", // 指示書116: 人事制度ポータル（/hr 配下6ページ・静的コンテンツ＋検索）

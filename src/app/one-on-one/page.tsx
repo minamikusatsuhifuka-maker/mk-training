@@ -10,6 +10,15 @@
 //   （願望=3・4・5 → 行動=6 → 自己評価=7 → 計画=8 → 支援=9／1・2は画面の上部）。
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+// 221: 書き起こしの取り込み（AIのまとめ＋記録欄の下書き）
+import { TranscriptImportDialog } from "@/components/TranscriptImportDialog";
+import {
+  SUMMARY_LABELS,
+  TRANSCRIPT_ENTRY_LABEL,
+  TRANSCRIPT_SUMMARY_NOTE,
+  emptyTranscriptSummary,
+  isEmptySummary,
+} from "@/lib/one-on-one-transcript";
 import Link from "next/link";
 import NavPageHeader from "@/components/NavPageHeader";
 import { PartnerPresurveyStatus } from "@/components/OneOnOneSchedule";
@@ -22,7 +31,6 @@ import {
   type PrivateRecord,
 } from "@/lib/private-store-client";
 import {
-  emptyOneOnOneData,
   normalizeOneOnOneData,
   normalizeHeldOnYmd,
   genOneOnOneKey,
@@ -93,6 +101,8 @@ function OneOnOnePageBody() {
     null
   );
   const [submitting, setSubmitting] = useState(false);
+  // 221: 書き起こしの取り込みを開いているか
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   // 編集（記録者本人のみ）
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -312,6 +322,7 @@ function OneOnOnePageBody() {
         sections: { ...sectionsDraft },
         jitsuChecks: jitsuDraft,
         rwdepc: rwdepcDraft,
+        summary: emptyTranscriptSummary(), // 221: 手で書いた回にはまとめが無い
         createdAt: now,
         updatedAt: now,
       };
@@ -603,8 +614,29 @@ function OneOnOnePageBody() {
           >
             {submitting ? "記録中…" : "🤝 記録する"}
           </button>
+          {/* 221 §2: 書き起こしから記録する（院長・担当の幹部だけがAPIを通る。使えない人には押しても404） */}
+          <button
+            type="button"
+            onClick={() => setTranscriptOpen((v) => !v)}
+            className="text-sm px-4 py-2 border border-violet-300 text-violet-800 rounded-full hover:bg-violet-50 min-h-[40px]"
+            data-transcript-open
+          >
+            {TRANSCRIPT_ENTRY_LABEL}
+          </button>
         </div>
       </div>
+
+      {transcriptOpen && (
+        <TranscriptImportDialog
+          staffOptions={profiles
+            .filter((pr) => pr.userId !== myId)
+            .map((pr) => ({ userId: pr.userId, name: nameOf(pr.userId, "名前未設定") }))}
+          defaultHeldOn={heldOnDraft || undefined}
+          myName={myName}
+          onClose={() => setTranscriptOpen(false)}
+          onSaved={() => void load()}
+        />
+      )}
 
       {error && (
         <p className="text-sm text-red-600 bg-red-50 rounded-xl p-3">{error}</p>
@@ -633,11 +665,41 @@ function OneOnOnePageBody() {
               d.mode === "rwdepc"
                 ? hasRwdepcBody(d.rwdepc)
                 : !!(d.sections.theme || d.sections.kizuki || d.sections.nextStep);
+            const summary = d.summary;
             return (
               <div
                 key={record.recordKey}
                 className="bg-white border border-gray-200 rounded-xl p-4 space-y-2"
               >
+                {/* 221 §4: 書き起こしから作ったまとめ（見られる人は記録と同じ） */}
+                {!isEmptySummary(summary) && (
+                  <div className="rounded-lg border border-violet-200 bg-violet-50/40 p-2 space-y-1" data-one-on-one-summary>
+                    <p className="text-[11px] font-medium text-violet-900">📝 まとめ</p>
+                    {summary.flow && (
+                      <p className="text-[12px] text-gray-900 whitespace-pre-wrap">{summary.flow}</p>
+                    )}
+                    {summary.quotes.length > 0 && (
+                      <ul className="space-y-0.5">
+                        {summary.quotes.map((q, i) => (
+                          <li key={i} className="text-[12px] text-gray-800">「{q}」</li>
+                        ))}
+                      </ul>
+                    )}
+                    {summary.decided && (
+                      <p className="text-[12px] text-gray-900">
+                        <span className="text-[11px] text-gray-500 mr-1">{SUMMARY_LABELS.decided}:</span>
+                        {summary.decided}
+                      </p>
+                    )}
+                    {summary.support && (
+                      <p className="text-[12px] text-gray-900">
+                        <span className="text-[11px] text-gray-500 mr-1">{SUMMARY_LABELS.support}:</span>
+                        {summary.support}
+                      </p>
+                    )}
+                    <p className="text-[10px] text-gray-500">{TRANSCRIPT_SUMMARY_NOTE}</p>
+                  </div>
+                )}
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] font-medium bg-violet-100 text-violet-800 rounded-full px-2 py-0.5">

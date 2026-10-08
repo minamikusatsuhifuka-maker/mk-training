@@ -9,6 +9,12 @@
 import { jstTodayYmd } from "./library";
 import { normalizeJitsuChecks } from "./jitsu-checklist";
 import { EMPTY_RWDEPC, normalizeRwdepc, type RwdepcData } from "./rwdepc";
+// 221: 書き起こしから作った「まとめ」。記録の一部として一緒に保存する
+import {
+  emptyTranscriptSummary,
+  normalizeTranscriptSummary,
+  type TranscriptSummary,
+} from "./one-on-one-transcript";
 
 /** 153: 記録の形式。既存データは mode を持たないので "quick"（自由形式）に倒す */
 export type OneOnOneMode = "quick" | "rwdepc";
@@ -38,6 +44,12 @@ export type OneOnOneData = {
   jitsuChecks: string[];
   /** 153: RWDEPC対話モードの5欄（W→D→E→P→C）。quickモードでは空のまま */
   rwdepc: RwdepcData;
+  /**
+   * 221: 書き起こしをAIで整理した「まとめ」。記録者が確かめてから保存する。
+   * **書き起こしの原文は入れない**（221 §5）。手で書いた回では空のまま。
+   * 見られる人は記録そのものと同じ（本人・ペア相手・管理者）。
+   */
+  summary: TranscriptSummary;
   createdAt: string;
   updatedAt: string;
 };
@@ -61,6 +73,7 @@ export function emptyOneOnOneData(): OneOnOneData {
     sections: { theme: "", kizuki: "", nextStep: "" },
     jitsuChecks: [],
     rwdepc: { ...EMPTY_RWDEPC },
+    summary: emptyTranscriptSummary(),
     createdAt: "",
     updatedAt: "",
   };
@@ -91,6 +104,8 @@ export function normalizeOneOnOneData(raw: unknown): OneOnOneData {
     },
     jitsuChecks: normalizeJitsuChecks(g.jitsuChecks),
     rwdepc: normalizeRwdepc(g.rwdepc),
+    // 221: 古い記録には無い＝空のまま
+    summary: normalizeTranscriptSummary(g.summary),
     createdAt,
     updatedAt: str(g.updatedAt) || createdAt,
   };

@@ -335,6 +335,8 @@ export type KarteDetailResponse = KarteDetail & {
    * false なら「アンケート」タブ自体を出さない（APIも404）。
    */
   presurveyAccess?: boolean;
+  /** 221: いま見ている人の表示名（書き起こしから記録するときの記録者名） */
+  viewerName?: string;
 };
 
 export async function fetchKarteDetailApi(userId: string): Promise<KarteDetailResponse> {
