@@ -6,6 +6,7 @@
 // 過去のチェックが外れないようにするため）。自由記述欄はこれとは別枠でそのまま残る。
 
 import { useMemo, useState } from "react";
+import { SAI_TOKU_BI } from "@/lib/sai-toku-bi";
 import {
   STRENGTH_CATEGORIES,
   STRENGTH_ITEM_BY_ID,
@@ -139,6 +140,10 @@ export function StrengthChecklist({
       </div>
 
       <p className="text-xs text-gray-600">{current.title}</p>
+      {/* 218: 才・徳・美の説明（文言の正本は lib/sai-toku-bi.ts） */}
+      <p className="text-[11px] text-gray-500 leading-relaxed" data-strength-description>
+        {SAI_TOKU_BI[tab]}
+      </p>
 
       {/* キーワード絞り込み（150項目は多いので） */}
       <div className="flex items-center gap-2">
