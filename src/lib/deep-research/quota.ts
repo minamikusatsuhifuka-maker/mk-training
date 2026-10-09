@@ -3,7 +3,8 @@
 // 【決まり（226 §0-2・§3）】
 //   ・院長（管理者）は上限なし。委任された幹部は **1人あたり月◯回まで**（初期値30）
 //   ・上限の数は院長が /admin/delegation で変えられる
-//   ・数えるのは **AIを呼ぶ操作**（リサーチの実行、まとめ・クイズなどの生成それぞれで1回）
+//   ・数えるのは **リサーチの実行だけ**（226への返答での院長の決定）。
+//     まとめ・クイズなどの生成は数えない（AIは呼ぶが、回数は減らない）
 //   ・毎月1日（日本時間）に0に戻る＝「その月に何回呼んだか」を月ごとに持つだけ
 //   ・判定はサーバー（実行のAPI）で行う。画面の表示は目安
 
@@ -14,6 +15,15 @@ export const DEEP_RESEARCH_LIMIT_MIN = 0;
 export const DEEP_RESEARCH_LIMIT_MAX = 1000;
 /** 回数を残しておく月数（これより古い月は保存のたびに捨てる） */
 export const DEEP_RESEARCH_USAGE_KEEP_MONTHS = 6;
+
+/**
+ * 数え方の版（226への返答）。
+ * 版1 … AIを呼ぶ操作すべてを数えていた（リサーチの実行＋まとめ・クイズなどの生成）
+ * 版2 … **リサーチの実行だけ**を数える（院長の決定）
+ * 版が違う記録は、数え方が変わっているので**数え直す（0から）**。
+ * 版1の記録からリサーチの実行だけを取り出すことはできない（種類を残していないため）。
+ */
+export const DEEP_RESEARCH_USAGE_VERSION = 2;
 
 /** 日本時間の「その月」（"YYYY-MM"）。回数はこの単位で数える */
 export function jstMonthKey(now: Date = new Date()): string {
@@ -32,18 +42,25 @@ export function normalizeLimit(raw: unknown): number {
 }
 
 export type DeepResearchUsage = {
+  /** 数え方の版（違えば数え直す） */
+  version: number;
   /** "YYYY-MM" → { userId: 回数 } */
   months: Record<string, Record<string, number>>;
 };
 
 export function emptyUsage(): DeepResearchUsage {
-  return { months: {} };
+  return { version: DEEP_RESEARCH_USAGE_VERSION, months: {} };
 }
 
-/** 保存されたものを整える（知らない形・負の数は捨てる） */
+/**
+ * 保存されたものを整える（知らない形・負の数は捨てる）。
+ * 数え方の版が違う記録は、**まるごと捨てて0から数え直す**（226への返答）。
+ */
 export function normalizeUsage(raw: unknown): DeepResearchUsage {
   const out = emptyUsage();
-  const src = (raw as { months?: unknown } | null)?.months;
+  const obj = raw as { months?: unknown; version?: unknown } | null;
+  if (!obj || obj.version !== DEEP_RESEARCH_USAGE_VERSION) return out;
+  const src = obj.months;
   if (!src || typeof src !== "object") return out;
   for (const [month, perUser] of Object.entries(src as Record<string, unknown>)) {
     if (!/^\d{4}-\d{2}$/.test(month) || !perUser || typeof perUser !== "object") continue;
@@ -76,7 +93,7 @@ export function addUse(
   for (const m of keep) months[m] = { ...(usage.months[m] ?? {}) };
   months[month] = { ...(months[month] ?? {}) };
   months[month][userId] = (months[month][userId] ?? 0) + 1;
-  return { months };
+  return { version: DEEP_RESEARCH_USAGE_VERSION, months };
 }
 
 export type QuotaState = {
@@ -102,7 +119,7 @@ export function quotaState(opts: {
   return { unlimited: false, limit: opts.limit, used: opts.used, remaining, exhausted: remaining <= 0 };
 }
 
-/** 画面に出す残りの文（226 §3「例：今月あと12回」） */
+/** 画面に出す残りの文（226 §3「例：今月あと12回」）。数えるのはリサーチの実行だけ */
 export function remainingLabel(s: QuotaState): string {
   if (s.unlimited) return "回数の上限はありません";
   return `今月あと${s.remaining}回`;

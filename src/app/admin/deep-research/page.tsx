@@ -432,7 +432,7 @@ export default function DeepResearchPage() {
         </div>
         {quota && !quota.unlimited && (
           <p className="text-[11px] text-slate-500" data-dr-quota-note>
-            リサーチの実行と、まとめ・クイズなどの生成それぞれで1回かぞえます（毎月1日に戻ります）。
+            かぞえるのは「🔍 リサーチ実行」だけです（まとめ・クイズなどの生成では減りません）。毎月1日に戻ります。
           </p>
         )}
       </div>
