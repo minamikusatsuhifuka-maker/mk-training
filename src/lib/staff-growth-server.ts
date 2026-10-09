@@ -77,7 +77,7 @@ export type GrowthAdminClient = ReturnType<typeof createSupabaseAdminClient>;
 export class GrowthTableMissingError extends Error {
   constructor() {
     super(
-      "成長記録のテーブルがまだ作られていません。交付済みのSQL（179_スタッフ育成カルテ_テーブル作成.sql）を実行してください。"
+      "可能性ノートのテーブルがまだ作られていません。交付済みのSQL（179_スタッフ育成カルテ_テーブル作成.sql）を実行してください。"
     );
     this.name = "GrowthTableMissingError";
   }
@@ -152,7 +152,7 @@ export type GrowthAuth =
       userEmail: string;
       userName: string;
       isAdmin: boolean;
-      /** 自分の記録（マイ成長記録）を扱えるか＝管理者 or フラグ growth_record がON */
+      /** 自分の記録（わたしの可能性ノート）を扱えるか＝管理者 or フラグ growth_record がON */
       selfAllowed: boolean;
       /**
        * 183: 幹部として担当を指定されたスタッフの userId（自分は含まない）。

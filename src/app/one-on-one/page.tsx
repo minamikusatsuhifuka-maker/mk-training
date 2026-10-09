@@ -13,6 +13,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 // 221: 書き起こしの取り込み（AIのまとめ＋記録欄の下書き）
 import { TranscriptImportDialog } from "@/components/TranscriptImportDialog";
 import { RwdepcInfo } from "@/components/RwdepcInfo";
+import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 import { OneOnOneSummaryView } from "@/components/OneOnOneSummaryView";
 import {
   TRANSCRIPT_ENTRY_LABEL,
@@ -554,16 +555,15 @@ function OneOnOnePageBody() {
               <label className="text-sm font-medium text-gray-800 block">
                 {sec.label}
               </label>
-              <textarea
+              {/* 225 §3: 文の長さに合わせて伸ばす（今の3行ぶんを下限にする） */}
+              <AutoGrowTextarea
                 value={sectionsDraft[sec.key]}
-                onChange={(e) =>
-                  setSectionsDraft((prev) => ({
-                    ...prev,
-                    [sec.key]: e.target.value,
-                  }))
+                onChange={(v) =>
+                  setSectionsDraft((prev) => ({ ...prev, [sec.key]: v }))
                 }
-                rows={3}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-y"
+                minRows={3}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                ariaLabel={sec.label}
               />
             </div>
           ))
@@ -748,16 +748,15 @@ function OneOnOnePageBody() {
                           <label className="text-sm font-medium text-gray-800 block">
                             {sec.label}
                           </label>
-                          <textarea
+                          {/* 225 §3: 文の長さに合わせて伸ばす */}
+                          <AutoGrowTextarea
                             value={editSections[sec.key]}
-                            onChange={(e) =>
-                              setEditSections((prev) => ({
-                                ...prev,
-                                [sec.key]: e.target.value,
-                              }))
+                            onChange={(v) =>
+                              setEditSections((prev) => ({ ...prev, [sec.key]: v }))
                             }
-                            rows={3}
-                            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-y"
+                            minRows={3}
+                            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                            ariaLabel={sec.label}
                           />
                         </div>
                       ))

@@ -156,7 +156,7 @@ export function PresurveyQuestionBlock({
       {/* 204 §4: カルテの目標と同じ欄であることを出す */}
       {linked && (
         <p className="text-[11px] text-violet-900 bg-violet-50 border border-violet-100 rounded-lg px-2.5 py-1.5" data-presurvey-karte>
-          🎯 成長記録の「{karteLabel || "目標"}」と同じ欄です。提出すると、変わったときだけ成長記録の目標が更新されます。
+          🎯 可能性ノートの「{karteLabel || "目標"}」と同じ欄です。提出すると、変わったときだけ可能性ノートの目標が更新されます。
           {periodNote && <span className="block mt-0.5">{periodNote}</span>}
         </p>
       )}

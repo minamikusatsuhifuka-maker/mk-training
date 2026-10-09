@@ -1,9 +1,9 @@
 // 1on1の書き起こしの取り込み（指示書221）— サーバー専用
 //
-// 【置き場所】新しい表もSQLも足さない。成長記録の表 clinic_staff_growth に
+// 【置き場所】新しい表もSQLも足さない。可能性ノートの表 clinic_staff_growth に
 //   ・同意の印   record_type = "transcript_consent"（id: tcons-<userId>・スタッフごとに1行）
 //   ・1日の回数  record_type = "transcript_quota"（id: tq-<userId>-<YYYYMMDD>・人ごと日ごとに1行）
-//   どちらも成長記録系のAPIが record_type で絞って読むため、既存のどのAPIからも出てこない。
+//   どちらも可能性ノート系のAPIが record_type で絞って読むため、既存のどのAPIからも出てこない。
 //
 // 【使える人（221 §0-4・§4）】院長、または**担当スタッフの1on1で自分が記録者になる幹部**だけ。
 //   同意の印がないスタッフは、院長でも取り込めない（221 §1）。判定はここ（サーバー）で行う。

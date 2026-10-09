@@ -1,6 +1,6 @@
 "use client";
 
-// 成長記録のタブの帯と、画面を見やすくするための小さな部品（指示書220）
+// 可能性ノートのタブの帯と、画面を見やすくするための小さな部品（指示書220）
 //
 // ・タブはスマートフォンで**横にスクロール**できる（220 §2-2）
 // ・開いていたタブは**その端末で覚える**（213と同じ理由で useSyncExternalStore。
@@ -79,7 +79,7 @@ export function GrowthTabsBar({
   tabs,
   current,
   onChange,
-  label = "成長記録の表示切替",
+  label = "可能性ノートの表示切替",
 }: {
   tabs: readonly GrowthTab[];
   current: GrowthTabKey;

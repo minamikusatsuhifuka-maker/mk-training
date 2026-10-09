@@ -65,7 +65,7 @@ export function GateMasterPanel() {
         </button>
       </div>
       <p className="text-[10px] text-gray-600 leading-relaxed">
-        種類: 受講＝紐づけた講座の学びの記録が1件以上で○／年あたり回数＝直近1年の受講回数で○×／資格＝紐づけた講座の記録または院長の確認で○／院長の確認＝成長記録の現在地で確認日と根拠を記入して○。
+        種類: 受講＝紐づけた講座の学びの記録が1件以上で○／年あたり回数＝直近1年の受講回数で○×／資格＝紐づけた講座の記録または院長の確認で○／院長の確認＝可能性ノートの現在地で確認日と根拠を記入して○。
         講座は 180 の講座マスタから紐づけます（1つのゲートに複数可）。判定は○×だけで、割合や点数にはしません。
       </p>
       {error && <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">{error}</p>}

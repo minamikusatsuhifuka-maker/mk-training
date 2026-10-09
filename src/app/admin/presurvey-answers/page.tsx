@@ -147,7 +147,7 @@ export default function PresurveyAnswersPage() {
       )}
       {tableMissing && (
         <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-          次回1on1の予定の記録がまだ使えません（成長記録のテーブルが未作成）。
+          次回1on1の予定の記録がまだ使えません（可能性ノートのテーブルが未作成）。
         </p>
       )}
 

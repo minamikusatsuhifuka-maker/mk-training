@@ -862,9 +862,9 @@ function joinViewers(names: string[]): string {
 
 /** 204 §1: 第1部の目的・目標を見られる人（カルテの担当） */
 export function presurveyKarteViewerNotice(karteManagerNames: string[]): string {
-  return `第1部の「目的」と「3年後〜1か月後」は、成長記録の「目標」になります。見られる人：${joinViewers(
+  return `第1部の「目的」と「3年後〜1か月後」は、可能性ノートの「目標」になります。見られる人：${joinViewers(
     karteManagerNames
-  )}（成長記録の担当）`;
+  )}（可能性ノートの担当）`;
 }
 
 /** 204 §1: それ以外の回答を見られる人（院長が指定した管理者） */

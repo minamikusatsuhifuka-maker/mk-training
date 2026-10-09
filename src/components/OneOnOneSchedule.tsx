@@ -2,8 +2,8 @@
 
 // 次回1on1の予定と事前アンケートの知らせ（指示書197 B-2・C）
 //   PresurveyAlertBanner  … ホーム上部の知らせ（本人・未回答・機能フラグONのときだけ）
-//   PresurveyNavMark      … メニューの印（マイ成長記録・事前アンケート）
-//   MyNextOneOnOne        … マイ成長記録の「次回1on1：10月20日（火）15:00　院長と」
+//   PresurveyNavMark      … メニューの印（わたしの可能性ノート・事前アンケート）
+//   MyNextOneOnOne        … わたしの可能性ノートの「次回1on1：10月20日（火）15:00　院長と」
 //   KarteScheduleCard     … 育成カルテの「次回1on1の予定」（院長・担当幹部が登録）
 //   PartnerPresurveyStatus… 1on1画面の「担当する1on1の事前アンケート」（締切後は「未回答」・C-3）
 // 回答の本文はどこにも出さない（「答えたか」だけ）。回答は評価に使わない。
@@ -111,14 +111,14 @@ export function PresurveyNavMark({ href }: { href: string }) {
   );
 }
 
-/** マイ成長記録（B-2）: 次回1on1と、事前アンケートへの導線 */
+/** わたしの可能性ノート（B-2）: 次回1on1と、事前アンケートへの導線 */
 export function MyNextOneOnOne() {
   const data = useMySchedules();
   if (!data || data.mine.length === 0) return null;
   const next = data.mine[0];
   return (
     <section className="rounded-xl border border-teal-200 bg-white p-3 space-y-1.5" data-my-next-1on1>
-      {/* 223-補: 見出しの横に「RWDEPC ⓘ」（成長記録の帯と同じ部品・同じ表） */}
+      {/* 223-補: 見出しの横に「RWDEPC ⓘ」（可能性ノートの帯と同じ部品・同じ表） */}
       <p className="text-sm text-gray-900 flex flex-wrap items-center gap-x-2">
         <span>
           🗓 次回1on1：<span className="font-medium">{formatScheduleLine(next)}</span>
@@ -239,7 +239,7 @@ export function KarteScheduleCard({ userId }: { userId: string }) {
   };
 
   if (!data) return <p className="text-[11px] text-gray-500">{error || "読み込み中…"}</p>;
-  if (data.tableMissing) return <p className="text-[11px] text-gray-500">成長記録のテーブルがまだ作られていません。</p>;
+  if (data.tableMissing) return <p className="text-[11px] text-gray-500">可能性ノートのテーブルがまだ作られていません。</p>;
 
   return (
     <div className="space-y-1.5" data-karte-schedule>
@@ -281,7 +281,7 @@ export function KarteScheduleCard({ userId }: { userId: string }) {
               ))}
             </select>
           </div>
-          <p className="text-[10px] text-gray-500">登録すると、本人のマイ成長記録に予定が出て、事前アンケート（締切は3日前）が届きます。</p>
+          <p className="text-[10px] text-gray-500">登録すると、本人のわたしの可能性ノートに予定が出て、事前アンケート（締切は3日前）が届きます。</p>
           <div className="flex gap-2">
             <button type="button" disabled={busy || !form.date || !form.partnerId} onClick={() => void save()} className="px-3 py-1.5 bg-teal-600 text-white rounded-full text-[12px] hover:bg-teal-700 disabled:opacity-40 min-h-[36px]">
               {busy ? "保存中…" : form.id ? "変更を保存" : "予定を登録"}

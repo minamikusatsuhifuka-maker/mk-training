@@ -34,7 +34,7 @@ export const FEATURE_IDS = [
   "seasonal_skin", // 146-D: 季節の装飾
   "anniversary", // 146-E: 入職記念日・誕生日のお祝い
   // ── スタッフ育成カルテ 第1便（指示書179）──
-  "growth_record", // 179-C: 本人ページ「マイ成長記録」（学び・目標・1on1の約束）。既定OFF＝説明後に院長がON
+  "growth_record", // 179-C: 本人ページ「わたしの可能性ノート」（学び・目標・1on1の約束）。既定OFF＝説明後に院長がON
   // ── 1on1の事前アンケート（指示書197・197-補）──
   "one_on_one_presurvey", // 197: 本人が1on1の前に答える9問（/one-on-one/presurvey）。既定OFF＝説明後に院長がON
   // 204 §6-2: 知らせをメールでも送る切り替え（画面表記は206 Aで改名）。**既定OFF**。
@@ -152,7 +152,7 @@ export const FEATURE_META: FeatureMeta[] = [
   { id: "monthly_digest", label: "分かち愛マンスリーダイジェスト", description: "前月のありがとう・気づき・良いこと共有を1枚に（実投稿の抜粋のみ）", phase: 5 },
   { id: "seasonal_skin", label: "季節の装飾", description: "月ごとのささやかな飾り（桜・あじさい・紅葉・雪など）", phase: 5 },
   { id: "anniversary", label: "記念日のお祝い", description: "入職記念日・誕生日に本人のホームだけでお祝い（誕生日は本人が設定した場合のみ）", phase: 5 },
-  { id: "growth_record", label: "マイ成長記録", description: "本人が自分の学びの記録・目標・1on1の約束を見て書けるページ（/my-growth）。記録する項目と目的を説明してからONにする", phase: 5 },
+  { id: "growth_record", label: "わたしの可能性ノート", description: "本人が自分の学びの記録・目標・1on1の約束を見て書けるページ（/my-growth）。記録する項目と目的を説明してからONにする", phase: 5 },
   { id: "one_on_one_presurvey", label: "1on1の事前アンケート", description: "本人が1on1の前に答える9問（/one-on-one/presurvey）。回答は1on1画面のRWDEPの各欄の隣に並ぶ。評価には使わないことを説明してからONにする", phase: 5 },
   { id: "one_on_one_booking", label: "1on1の日程調整", description: "院長が実施期間・曜日・時間帯・刻みを決めて枠を作り、スタッフが空き枠を自分で予約する（/one-on-one/booking）。予約は「次回1on1の予定」として登録され、事前アンケートの期限もそこから決まる。スタッフが自分で予約・変更・取り消しできるのは実施日の4日前まで。ONにすると1on1の前日・当日の朝8時に予定の知らせも出る", phase: 5 },
   // 206 A: 名前を中身に合わせた。このスイッチ1つで204と205の両方のメールが決まるため、
@@ -182,7 +182,7 @@ export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
   "monthly_digest", // 指示書146-C
   "seasonal_skin", // 指示書146-D
   "anniversary", // 指示書146-E
-  "growth_record", // 指示書179-C: マイ成長記録（/my-growth・学び／目標／1on1の約束）
+  "growth_record", // 指示書179-C: わたしの可能性ノート（/my-growth・学び／目標／1on1の約束）
   "one_on_one_presurvey", // 指示書197・197-補: 1on1の事前アンケート（/one-on-one/presurvey）
   "one_on_one_booking", // 指示書205: 1on1の日程調整（/one-on-one/booking・/admin/one-on-one-slots）
 ]);

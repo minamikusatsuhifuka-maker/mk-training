@@ -132,7 +132,7 @@ export function StaffGrowthKarte() {
     <div className="max-w-4xl mx-auto p-3 sm:p-4 space-y-3">
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">📗 スタッフの成長記録</h1>
+          <h1 className="text-lg font-bold text-gray-900">🌱 可能性ノート</h1>
           {isAdmin ? (
             <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">
               1on1・学びの記録・メンバーノート・自己評価・公開されたサーベイ・権限委譲を、人ごとに時系列で見る画面です。
@@ -141,7 +141,7 @@ export function StaffGrowthKarte() {
             </p>
           ) : (
             <p className="text-[11px] text-gray-600 mt-1 leading-relaxed" data-delegate-note>
-              院長から担当を指定されたスタッフの成長記録を<strong>閲覧</strong>できます（追加・編集はできません）。
+              院長から担当を指定されたスタッフの可能性ノートを<strong>閲覧</strong>できます（追加・編集はできません）。
               見られるのは「学びの記録・本人の目標・1on1の約束と取り組み状況・本人が公開したサーベイ」だけです。
               閲覧は記録されます。
             </p>
@@ -338,7 +338,7 @@ export function StaffGrowthKarte() {
                           type="button"
                           disabled={busy}
                           onClick={() => {
-                            if (!confirm(`${e.name} さんを アカウント「${pr.candidate!.name}」に紐づけます。連絡先・採用資料・経歴がそのスタッフの成長記録に移ります。よろしいですか？`)) return;
+                            if (!confirm(`${e.name} さんを アカウント「${pr.candidate!.name}」に紐づけます。連絡先・採用資料・経歴がそのスタッフの可能性ノートに移ります。よろしいですか？`)) return;
                             void runProspect(async () => {
                               await prospectApi({ method: "PATCH", body: JSON.stringify({ id: e.userId, action: "link", userId: pr.candidate!.userId }) });
                               return "🔗 アカウントに紐づけました";

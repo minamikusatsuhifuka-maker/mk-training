@@ -20,6 +20,7 @@ import {
   type RwdepcStepKey,
 } from "@/lib/rwdepc";
 import { RwdepcInfo } from "@/components/RwdepcInfo";
+import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 
 /** ヒントに出す問いかけの数（💡で全部に切り替えられる） */
 const HINT_PREVIEW = 3;
@@ -226,12 +227,14 @@ export function RwdepcForm({
                   : undefined
               }
             >
-              <textarea
+              {/* 225 §3: 手入力の記録欄も、文の長さに合わせて伸ばす（今の3行ぶんを下限にする） */}
+              <AutoGrowTextarea
                 value={value[step.key]}
-                onChange={(e) => set(step.key, e.target.value)}
+                onChange={(v) => set(step.key, v)}
                 disabled={disabled}
-                rows={3}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-y"
+                minRows={3}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                ariaLabel={`${step.mark} ${step.label}`}
               />
               {presurvey}
             </div>

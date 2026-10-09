@@ -11,7 +11,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const HREF = "/staff-growth";
-const LABEL = "📗 スタッフの成長記録";
+const LABEL = "🌱 可能性ノート";
 
 export function StaffGrowthNavLink({
   variant,

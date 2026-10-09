@@ -3,11 +3,11 @@ import Link from "next/link";
 // 221 §1: 自分の「1on1の録音・書き起こし」の同意の印を出す
 import { RwdepcInfo } from "@/components/RwdepcInfo";
 import { TranscriptConsentPanel } from "@/components/TranscriptConsentPanel";
-// 220 §3: 「スタッフの成長記録」と同じタブの並びにそろえる
+// 220 §3: 「可能性ノート」と同じタブの並びにそろえる
 import { GrowthTabsBar, useRememberedTab } from "@/components/GrowthTabsBar";
 import { GROWTH_TABS, GROWTH_TAB_STORAGE_KEY, resolveGrowthTab, visibleGrowthTabs, type GrowthTabKey } from "@/lib/growth-tabs";
 
-// 本人ページ「マイ成長記録」（指示書179 C）
+// 本人ページ「わたしの可能性ノート」（指示書179 C）
 // 表示するのは 自分の学びの記録（B）／自分の目標／1on1の約束 の3つだけ。
 // 院長メモ・適性検査・履歴書・家族構成は**この画面に存在しない**（APIも返さない）。
 // 機能フラグ growth_record（既定OFF）で守られている（ページ側 FeatureGate ＋ API側 authorizeGrowth）。
@@ -289,7 +289,7 @@ export function MyGrowthRecord() {
     return (
       <div className="max-w-2xl mx-auto p-4">
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
-          <p className="text-sm font-medium text-gray-900">🌱 マイ成長記録の準備がまだ終わっていません</p>
+          <p className="text-sm font-medium text-gray-900">🌱 わたしの可能性ノートの準備がまだ終わっていません</p>
           <p className="text-xs text-gray-700 mt-2 leading-relaxed">
             データの保存先がまだ作られていません。院長にお伝えください
             （管理者向け: <code className="mx-1">~/Downloads/179_スタッフ育成カルテ_テーブル作成.sql</code>
@@ -319,7 +319,7 @@ export function MyGrowthRecord() {
       {/* 197 B-2: 次回1on1（院長・担当幹部が登録した予定）と事前アンケートへの導線 */}
       <MyNextOneOnOne />
 
-      <GrowthTabsBar tabs={tabs} current={tab} onChange={setTab} label="マイ成長記録の表示切替" />
+      <GrowthTabsBar tabs={tabs} current={tab} onChange={setTab} label="わたしの可能性ノートの表示切替" />
       {/* 195: 印刷用の表示（自分の記録だけ） */}
       <div className="flex justify-end">
         <Link href="/my-growth/print" className="text-xs px-3 py-1.5 border border-gray-300 text-gray-700 rounded-full hover:bg-gray-50 min-h-[32px] inline-flex items-center" data-print-link>

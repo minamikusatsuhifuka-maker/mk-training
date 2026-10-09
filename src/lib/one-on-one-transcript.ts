@@ -24,7 +24,7 @@ export const TRANSCRIPT_DAILY_LIMIT = 30;
 export const TRANSCRIPT_ACCEPT = ".txt,.md,.docx,.pdf";
 export const TRANSCRIPT_FILE_MAX_BYTES = 10 * 1024 * 1024;
 
-/** 画面の入口の名前（1on1ノートと成長記録の「1on1」タブで同じ） */
+/** 画面の入口の名前（1on1ノートと可能性ノートの「1on1」タブで同じ） */
 export const TRANSCRIPT_ENTRY_LABEL = "📄 書き起こしから記録する";
 
 /** 貼り付け欄の上に常時出す注意（221 §2-2・文言を変えないこと） */

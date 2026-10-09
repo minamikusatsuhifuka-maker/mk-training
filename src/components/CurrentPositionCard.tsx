@@ -1,5 +1,5 @@
 "use client";
-// 🧭 現在地（指示書190 D）— **本人（マイ成長記録）と院長（育成カルテ）のみ**。183の担当幹部には出さない
+// 🧭 現在地（指示書190 D）— **本人（わたしの可能性ノート）と院長（育成カルテ）のみ**。183の担当幹部には出さない
 //   等級・キャリアライン（院長が設定）／マトリクス上の位置（合意した位置と本人の自己評価を並べる）／
 //   次の移行のゲート○×（B）／到達状態の各項目と根拠（C）／図の上に本人の点
 //   院長: 項目ごとに「確認」「対話で確かめる」、合意した位置を面談の日付とともに記録
@@ -56,7 +56,7 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export function GateStatusList({ gates, transition, tableMissing }: { gates: GateResult[]; transition: TransitionKey | null; tableMissing?: boolean }) {
   if (!transition) return <p className="text-[11px] text-gray-500">次の移行が決まると、必須の学びの○×が出ます（等級の設定、または自己評価シートで移行を選ぶ）。</p>;
-  if (tableMissing) return <p className="text-[11px] text-gray-500">成長記録のテーブルがまだ作られていません。</p>;
+  if (tableMissing) return <p className="text-[11px] text-gray-500">可能性ノートのテーブルがまだ作られていません。</p>;
   if (gates.length === 0) return <p className="text-[11px] text-gray-500">{transitionLabel(transition)} の必須の学びはまだ登録されていません（🗂 講座マスタ・設定 → ゲート）。</p>;
   return (
     <ul className="space-y-1" data-gate-list>

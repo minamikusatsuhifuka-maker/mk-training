@@ -48,7 +48,7 @@ export async function GET(req: Request) {
         await recordGrowthLog(auth.admin, {
           by: auth.userEmail || auth.userId,
           action: "閲覧",
-          kind: "成長記録",
+          kind: "可能性ノート",
           target: detail.entry.name,
           changes: [],
         });

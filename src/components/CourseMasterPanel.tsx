@@ -268,7 +268,7 @@ export function CourseMasterPanel() {
   return (
     <div className="max-w-3xl mx-auto p-3 sm:p-4 space-y-3">
       <Link href="/staff-growth" className="text-xs text-teal-800 underline underline-offset-2">
-        ← スタッフの成長記録 一覧
+        ← 可能性ノート 一覧
       </Link>
       <header>
         <h1 className="text-lg font-bold text-gray-900">🗂 講座マスタ・設定</h1>

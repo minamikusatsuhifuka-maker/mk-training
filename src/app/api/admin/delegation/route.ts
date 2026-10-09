@@ -130,7 +130,7 @@ export async function PUT(req: Request) {
       if (!ok) return NextResponse.json({ error: "担当スタッフの保存に失敗しました" }, { status: 500 });
       const prev = before.karte[managerId] ?? [];
       if ([...prev].sort().join() !== [...ids].sort().join()) {
-        changes.push({ field: "成長記録の担当スタッフ（幹部1人分）", before: `${prev.length}人`, after: `${ids.length}人` });
+        changes.push({ field: "可能性ノートの担当スタッフ（幹部1人分）", before: `${prev.length}人`, after: `${ids.length}人` });
       }
     }
   }

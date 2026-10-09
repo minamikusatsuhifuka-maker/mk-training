@@ -1,5 +1,5 @@
 "use client";
-// 育成カルテ・マイ成長記録の印刷用表示（指示書195）
+// 育成カルテ・わたしの可能性ノートの印刷用表示（指示書195）
 //   ・サイドメニュー・ボタン・入力欄を出さない（画面上の操作は .no-print＝印刷には出ない）。値は文字として表示
 //   ・カード・表の途中でページを切らない（break-inside: avoid）。見出しだけがページ末に残らない（break-after: avoid）
 //   ・A4縦。図はページ幅。各ページ上部に氏名・印刷日時・印刷した人・「取扱注意（院内限り）」（position: fixed は印刷で各ページに出る）
@@ -133,7 +133,7 @@ export function KartePrintView({ userId, backHref }: { userId?: string; backHref
     if (!sections) return;
     setBusy(true);
     try {
-      setData(await fetchData(sections, true)); // D: 他人の成長記録ならここで記録される
+      setData(await fetchData(sections, true)); // D: 他人の可能性ノートならここで記録される
       setTimeout(() => window.print(), 100);
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
@@ -198,7 +198,7 @@ export function KartePrintView({ userId, backHref }: { userId?: string; backHref
           <tr>
             <td>
               <div className="flex items-center justify-between gap-2 border-b border-gray-400 pb-0.5 mb-2 text-[10px] text-gray-700" data-print-head>
-                <span className="font-bold text-gray-900">{entry.name}{entry.roleLabel ? `（${entry.roleLabel}）` : ""} — 成長記録</span>
+                <span className="font-bold text-gray-900">{entry.name}{entry.roleLabel ? `（${entry.roleLabel}）` : ""} — 可能性ノート</span>
                 <span>印刷 {printedAt} ／ 印刷した人: {data.viewerName}</span>
                 <span className="font-bold text-red-700">{PRINT_CONFIDENTIAL}</span>
               </div>

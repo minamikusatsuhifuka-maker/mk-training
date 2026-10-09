@@ -18,7 +18,7 @@ export function renderBold(text: string): React.ReactNode {
 export type ItemMark = { self?: ItemSelf["status"]; review?: ItemReview };
 export type GateMark = { ok: boolean; dates?: GateDatePart[] };
 
-/** 学びの記録を開く合図（マイ成長記録は別タブにあるので、受け手がタブを切り替える） */
+/** 学びの記録を開く合図（わたしの可能性ノートは別タブにあるので、受け手がタブを切り替える） */
 export const OPEN_LEARNING_EVENT = "mk-open-learning";
 
 function openLearning(e: React.MouseEvent, id: string) {

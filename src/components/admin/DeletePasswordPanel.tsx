@@ -62,7 +62,7 @@ export function DeletePasswordPanel() {
     <div className="max-w-xl space-y-3" data-delete-password-panel>
       <h1 className="text-lg font-bold text-gray-900">🗑 削除用パスワードの設定（院長のみ）</h1>
       <p className="text-[11px] text-gray-600 leading-relaxed">
-        成長記録の「📜 経歴・入職時の想い」を<strong>まとめて削除</strong>するときに入力するパスワードです。設定・変更には院長のログインパスワードの再入力が要ります。
+        可能性ノートの「📜 経歴・入職時の想い」を<strong>まとめて削除</strong>するときに入力するパスワードです。設定・変更には院長のログインパスワードの再入力が要ります。
         パスワードはハッシュ化して保存し、画面に表示したりログに残したりしません。忘れた場合は、ログインパスワードを再入力して新しく設定し直してください（元のパスワードは表示できません）。
       </p>
       {status && (

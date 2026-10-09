@@ -38,7 +38,7 @@ export function MatrixSelfSection({ value, onChange, locked, today }: { value: M
   const [goalMsg, setGoalMsg] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // 既存の記録（紐づけ候補）。マイ成長記録のフラグがOFFなら取れない＝自由記述だけ
+  // 既存の記録（紐づけ候補）。わたしの可能性ノートのフラグがOFFなら取れない＝自由記述だけ
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -90,7 +90,7 @@ export function MatrixSelfSection({ value, onChange, locked, today }: { value: M
         detail: value.nextAxisReason,
         why: `成長マトリクスの自己評価（${value.s || "S?"} × ${value.m || "M?"}）から`,
       });
-      setGoalMsg("🎯 年間目標に追加しました（マイ成長記録の「目標」で確認できます）");
+      setGoalMsg("🎯 年間目標に追加しました（わたしの可能性ノートの「目標」で確認できます）");
     } catch (e) {
       setGoalMsg(e instanceof Error ? `年間目標に追加できませんでした: ${e.message}` : "年間目標に追加できませんでした");
     } finally {
