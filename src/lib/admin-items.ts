@@ -102,13 +102,16 @@ export const ADMIN_ITEMS: readonly AdminItem[] = [
   //   任せても見られるのは「担当に指定したスタッフの分だけ」（判定は presurvey-access-server）。
   //   パスを /admin/presurvey とは別の区切りにしているのは、proxy が /admin/<第1区切り> で
   //   項目を引くため（/admin/presurvey/... にすると質問の編集と同じ項目＝院長のみになってしまう）。
-  // 205: 1on1の日程調整。枠と予約の一覧（氏名つき）は院長のみ（183 B-2・個人の記録）
+  // 205: 1on1の日程調整。226 §0-1 の院長の決定で**委任できる**ようにした。
+  //   任された人は院長の代わりに院長の1on1の日程を管理する（期間・枠づくり・休みのブロック・予約の確認）。
+  //   幹部自身の枠は作らない（この画面が扱うのは院長の日程だけ）。
+  //   事前アンケートの**回答**は別項目（presurvey-answers）なので、この委任だけでは見られない。
   {
     key: "one-on-one-slots",
     label: "🗓 1on1の日程",
     href: "/admin/one-on-one-slots",
-    delegable: false,
-    reason: "1on1の枠と予約（誰がいつ面談するか＝個人の記録）。院長のみ",
+    delegable: true,
+    reason: "1on1の枠と予約（誰がいつ面談するか＝個人の記録）。",
   },
   {
     key: "presurvey-answers",
@@ -128,7 +131,9 @@ export const ADMIN_ITEMS: readonly AdminItem[] = [
   },
   { key: "biologics", label: "💉 生物学的製剤管理", href: "/admin/biologics", delegable: true, reason: "研修コンテンツ", contentPrefixes: ["biologics_"] },
   { key: "expert", label: "⭐ エキスパート要件管理", href: "/admin/expert", delegable: true, reason: "研修コンテンツ", contentKeys: ["expert_roles"] },
-  { key: "deep-research", label: "🔬 ディープリサーチ", href: "/admin/deep-research", delegable: false, reason: "AIの利用（課金）" },
+  // 226 §0-2: 院長の決定で**委任できる**ようにした。任された人は1人あたり月◯回まで（初期値30・院長が変えられる）。
+  //   回数の判定はサーバー（lib/deep-research/quota-server.ts）。画面に出す説明の数字は設定の値を使う。
+  { key: "deep-research", label: "🔬 ディープリサーチ", href: "/admin/deep-research", delegable: true, reason: "AIの利用（課金）。" },
   { key: "changelog", label: "📝 更新履歴", href: "/admin/changelog", delegable: true, reason: "閲覧のみ" },
   { key: "settings", label: "⚙️ AI設定", href: "/admin/settings", delegable: false, reason: "AIのプロバイダ・モデル設定（AI／課金）" },
   { key: "delegation", label: "🔑 委任の設定", href: "/admin/delegation", delegable: false, reason: "権限・指名の設定そのもの" },
@@ -180,6 +185,9 @@ const API_ITEM_MAP: Record<string, string> = {
   "value-keywords": "profile-fields",
   // 204 §5: 回答の一覧・本文を返すAPI（院長＋委任された幹部）
   "presurvey-answers": "presurvey-answers",
+  // 226: 1on1の日程・ディープリサーチ（配下のサブルートもこの1行で判定される）
+  "one-on-one-slots": "one-on-one-slots",
+  "deep-research": "deep-research",
 };
 
 export function adminItemKeyForApiPath(pathname: string): string | null {

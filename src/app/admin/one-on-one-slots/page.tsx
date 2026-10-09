@@ -24,6 +24,7 @@ import {
   WEEKDAY_LABELS,
   bookingNoticeText,
   canStaffChange,
+  slotChangeLine,
   formatDateW,
   groupByDate,
   planSummaryText,
@@ -36,6 +37,7 @@ import {
   type BookingNotice,
   type PeriodInput,
   type Slot,
+  type SlotChange,
   type SlotPeriod,
   type SlotStep,
 } from "@/lib/one-on-one-slots";
@@ -46,9 +48,25 @@ type Payload = {
   slots: Slot[];
   bookings: Booking[];
   notices: BookingNotice[];
+  /** 226 §2: 誰がいつ日程を変えたか（新しい順） */
+  changes: SlotChange[];
   staff: StaffRow[];
   today: string;
+  /** 226 §2: 開いているのが院長か（委任された幹部なら false） */
+  isAdmin: boolean;
 };
+
+/** 226 §2: 変更の記録を画面に出す件数 */
+const SLOT_CHANGES_SHOWN = 20;
+
+/** 変更の記録の日時（日本時間・「10/09 13:05」） */
+function formatChangedAt(iso: string): string {
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return "";
+  const jst = new Date(t.getTime() + 9 * 60 * 60 * 1000);
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  return `${p2(jst.getUTCMonth() + 1)}/${p2(jst.getUTCDate())} ${p2(jst.getUTCHours())}:${p2(jst.getUTCMinutes())}`;
+}
 
 const EMPTY_FORM = (): PeriodInput => ({
   startDate: "",
@@ -87,8 +105,10 @@ export default function OneOnOneSlotsPage() {
         slots: j.slots ?? [],
         bookings: j.bookings ?? [],
         notices: j.notices ?? [],
+        changes: j.changes ?? [],
         staff: j.staff ?? [],
         today: j.today ?? "",
+        isAdmin: j.isAdmin !== false,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込めませんでした");
@@ -348,6 +368,23 @@ export default function OneOnOneSlotsPage() {
             {data.notices.map((n) => (
               <li key={n.id} data-slot-notice={n.kind}>
                 {bookingNoticeText(n)}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* 226 §2: 日程の変更の記録（誰がいつ変えたか）。委任した相手の操作もここに出る */}
+      {data.changes.length > 0 && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-4" data-slot-changes>
+          <h2 className="text-sm font-bold text-slate-800">日程の変更の記録</h2>
+          <p className="mt-1 text-[11px] text-slate-600">
+            誰がいつ日程を変えたかの記録です（新しい順・{SLOT_CHANGES_SHOWN}件まで）。
+          </p>
+          <ul className="mt-1.5 space-y-0.5 text-xs text-slate-800">
+            {data.changes.slice(0, SLOT_CHANGES_SHOWN).map((c) => (
+              <li key={c.id} data-slot-change={c.action}>
+                <span className="text-slate-500">{formatChangedAt(c.at)}</span>　{slotChangeLine(c)}
               </li>
             ))}
           </ul>

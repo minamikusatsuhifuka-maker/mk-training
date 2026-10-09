@@ -36,6 +36,7 @@ import {
   BOOKING_NOTICE_TYPE,
   BOOKING_REBOOK_TYPE,
   BOOKING_TYPE,
+  SLOT_CHANGE_TYPE,
   SLOT_PERIOD_TYPE,
   SLOT_TYPE,
   bookingId,
@@ -45,7 +46,9 @@ import {
   normalizeBookingNotice,
   normalizeRebookRequest,
   normalizeSlot,
+  normalizeSlotChange,
   normalizeSlotPeriod,
+  newSlotChangeId,
   planSlots,
   rebookId,
   scheduleIdFor,
@@ -56,6 +59,8 @@ import {
   type PeriodInput,
   type RebookRequest,
   type Slot,
+  type SlotChange,
+  type SlotChangeAction,
   type SlotPeriod,
 } from "./one-on-one-slots";
 
@@ -347,6 +352,43 @@ export async function fetchNotices(admin: GrowthAdminClient): Promise<BookingNot
   return (await selectType(admin, BOOKING_NOTICE_TYPE))
     .map((r) => normalizeBookingNotice(String(r.id), r.data))
     .filter((n): n is BookingNotice => n !== null)
+    .sort((a, b) => b.at.localeCompare(a.at));
+}
+
+// ─── 変更の記録（226 §2） ───
+
+/** 残しておく件数（知らせと同じく積み上げない） */
+const SLOT_CHANGE_MAX = 100;
+
+/**
+ * 日程を変えたことを記録する（226 §2）。
+ * 記録そのものが失敗しても、本体の操作は止めない（院長の業務を止めないため）。
+ */
+export async function recordSlotChange(
+  admin: GrowthAdminClient,
+  entry: {
+    action: SlotChangeAction;
+    byName: string;
+    byId: string;
+    byIsDirector: boolean;
+    detail: string;
+  }
+): Promise<void> {
+  try {
+    const at = new Date().toISOString();
+    await upsert(admin, SLOT_CHANGE_TYPE, newSlotChangeId(), { ...entry, at }, entry.byId);
+    const all = await fetchSlotChanges(admin);
+    for (const old of all.slice(SLOT_CHANGE_MAX)) await remove(admin, SLOT_CHANGE_TYPE, old.id);
+  } catch {
+    /* 記録できなくても操作は通す */
+  }
+}
+
+/** 新しい順 */
+export async function fetchSlotChanges(admin: GrowthAdminClient): Promise<SlotChange[]> {
+  return (await selectType(admin, SLOT_CHANGE_TYPE))
+    .map((r) => normalizeSlotChange(String(r.id), r.data))
+    .filter((c): c is SlotChange => c !== null)
     .sort((a, b) => b.at.localeCompare(a.at));
 }
 

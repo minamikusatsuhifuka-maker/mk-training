@@ -4,13 +4,13 @@
  */
 import { NextResponse } from "next/server";
 import { saveResearch } from "@/lib/deep-research/store";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminItem } from "@/lib/admin-delegation-server";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   // 管理者のみ（指示書39）
-  const auth = await requireAdmin();
+  const auth = await requireAdminItem("deep-research");
   if (auth.response) return auth.response;
   try {
     const body = await request.json();
@@ -23,12 +23,21 @@ export async function POST(request: Request) {
       );
     }
 
+    // 226 §3: 作った人を記録する（一覧で分かるようにする）
+    const meta = auth.user.user_metadata as Record<string, unknown> | null;
+    const createdByName =
+      (typeof meta?.display_name === "string" && meta.display_name.trim()) ||
+      auth.user.email ||
+      "名前未設定";
+
     const result = await saveResearch({
       topic,
       mode: mode || null,
       model: model || null,
       content,
       sources: Array.isArray(sources) ? sources : [],
+      createdByName,
+      createdById: auth.user.id,
     });
 
     return NextResponse.json({ result });

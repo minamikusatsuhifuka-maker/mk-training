@@ -15,6 +15,17 @@ import {
   type DerivedMaterial,
 } from "@/lib/deep-research/types";
 import type { ResearchIndexItem } from "@/lib/deep-research/store";
+import { exhaustedMessage } from "@/lib/deep-research/quota";
+
+/** 226 §3: /api/admin/deep-research/quota の応答 */
+type QuotaView = {
+  unlimited: boolean;
+  limit: number;
+  used: number;
+  remaining: number | null;
+  exhausted: boolean;
+  label: string;
+};
 import { MarkdownView } from "@/components/deep-research/MarkdownView";
 import { LearningMaterials } from "@/components/deep-research/LearningMaterials";
 import { ResearchActions } from "@/components/deep-research/ResearchActions";
@@ -57,6 +68,24 @@ export default function DeepResearchPage() {
   // 保存
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
+
+  // 226 §3: 今月の残り回数（院長は上限なし）
+  const [quota, setQuota] = useState<QuotaView | null>(null);
+  const loadQuota = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/deep-research/quota", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      if (!res.ok) return;
+      setQuota((await res.json()) as QuotaView);
+    } catch {
+      /* 取れなくても実行はできる（判定はサーバー） */
+    }
+  }, []);
+  useEffect(() => {
+    void loadQuota();
+  }, [loadQuota]);
 
   // 履歴
   const [history, setHistory] = useState<ResearchIndexItem[]>([]);
@@ -179,6 +208,8 @@ export default function DeepResearchPage() {
 
       if (!res.ok || !res.body) {
         const json = await res.json().catch(() => ({}));
+        // 226 §3: 上限に達していたらサーバーが 429 で断る。残りを取り直して画面にも出す
+        if (res.status === 429) void loadQuota();
         throw new Error(json.error || "リサーチの開始に失敗しました");
       }
 
@@ -377,8 +408,11 @@ export default function DeepResearchPage() {
           />
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button onClick={runResearch} disabled={running || !topic.trim()}>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            onClick={runResearch}
+            disabled={running || !topic.trim() || quota?.exhausted === true}
+          >
             {running ? "リサーチ中…" : "🔍 リサーチ実行"}
           </Button>
           {running && (
@@ -386,7 +420,21 @@ export default function DeepResearchPage() {
               {STAGE_LABELS[stage] || "処理中…"}（{elapsed}秒）
             </span>
           )}
+          {/* 226 §3: 今月の残り回数。上限に達したら実行できない（止めるのはサーバー） */}
+          {quota && !quota.unlimited && (
+            <span
+              className={`text-sm ${quota.exhausted ? "font-medium text-red-700" : "text-slate-600"}`}
+              data-dr-quota
+            >
+              {quota.exhausted ? exhaustedMessage(quota.limit) : quota.label}
+            </span>
+          )}
         </div>
+        {quota && !quota.unlimited && (
+          <p className="text-[11px] text-slate-500" data-dr-quota-note>
+            リサーチの実行と、まとめ・クイズなどの生成それぞれで1回かぞえます（毎月1日に戻ります）。
+          </p>
+        )}
       </div>
 
       {error && (
@@ -471,6 +519,8 @@ export default function DeepResearchPage() {
                     <div className="text-sm font-medium text-slate-800">{h.topic}</div>
                     <div className="text-xs text-slate-600 mt-0.5">
                       {new Date(h.createdAt).toLocaleString("ja-JP")}
+                      {/* 226 §3: 作った人（古い記録には入っていない） */}
+                      {h.createdByName ? ` ・ ${h.createdByName}` : ""}
                       {h.mode ? ` ・ ${h.mode}` : ""}
                       {h.model ? ` ・ ${h.model}` : ""}
                     </div>

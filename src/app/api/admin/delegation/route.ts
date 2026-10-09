@@ -1,6 +1,9 @@
 // 委任の設定API（指示書183）— **院長（app_metadata.role === "admin"）のみ**
-//   GET → { items: [{ key, label, href, delegable, reason, userIds }], karte: { 幹部userId: [担当staffId] }, roster }
-//   PUT { items?: { [itemKey]: userIds[] }, karte?: { [managerId]: staffIds[] } } → 保存（送られた分だけ）
+//   GET → { items: [...], karte: {...}, roster, deepResearchLimit }
+//   PUT { items?, karte?, deepResearchLimit? } → 保存（送られた分だけ）
+//
+// 226 §3: ディープリサーチの月の上限（初期値30）も**院長だけ**がここで変える。
+//   保存先はサーバー専用キー deep_research_config（/api/content-store からは触れない）。
 //
 // 【自己昇格の防止（183 B-4）】
 // このルートは requireAdmin（app_metadata.role）だけを通す。requireAdminItem は使わない＝
@@ -16,6 +19,11 @@ import {
   saveKarteAssignment,
 } from "@/lib/admin-delegation-server";
 import { ADMIN_ITEMS, findAdminItem } from "@/lib/admin-items";
+import {
+  loadDeepResearchLimit,
+  saveDeepResearchLimit,
+} from "@/lib/deep-research/quota-server";
+import { deepResearchDelegationReason, normalizeLimit } from "@/lib/deep-research/quota";
 import { loadProfilesIndexServer } from "@/lib/staff-growth-roster-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { mixedSeedAssignment } from "@/lib/test-seed";
@@ -58,18 +66,27 @@ async function loadRoster(): Promise<Roster> {
 export async function GET() {
   const auth = await requireAdmin();
   if (auth.response) return auth.response;
-  const [snap, roster] = await Promise.all([loadDelegationSnapshot(), loadRoster()]);
+  const [snap, roster, deepResearchLimit] = await Promise.all([
+    loadDelegationSnapshot(),
+    loadRoster(),
+    loadDeepResearchLimit(),
+  ]);
   return NextResponse.json({
     items: ADMIN_ITEMS.map((i) => ({
       key: i.key,
       label: i.label,
       href: i.href,
       delegable: i.delegable,
-      reason: i.reason,
+      // 226 §1: ディープリサーチの説明に、設定してある上限の数字を出す
+      reason:
+        i.key === "deep-research"
+          ? deepResearchDelegationReason(deepResearchLimit)
+          : i.reason,
       userIds: snap.items[i.key] ?? [],
     })),
     karte: snap.karte,
     roster,
+    deepResearchLimit,
   });
 }
 
@@ -82,9 +99,13 @@ function idList(v: unknown): string[] {
 export async function PUT(req: Request) {
   const auth = await requireAdmin();
   if (auth.response) return auth.response;
-  let body: { items?: unknown; karte?: unknown };
+  let body: { items?: unknown; karte?: unknown; deepResearchLimit?: unknown };
   try {
-    body = (await req.json()) as { items?: unknown; karte?: unknown };
+    body = (await req.json()) as {
+      items?: unknown;
+      karte?: unknown;
+      deepResearchLimit?: unknown;
+    };
   } catch {
     return NextResponse.json({ error: "不正なリクエストです" }, { status: 400 });
   }
@@ -135,6 +156,20 @@ export async function PUT(req: Request) {
     }
   }
 
+  // 226 §3: ディープリサーチの月の上限（院長だけが変えられる）
+  if (body.deepResearchLimit !== undefined) {
+    const prev = await loadDeepResearchLimit();
+    const next = normalizeLimit(body.deepResearchLimit);
+    if (next !== prev) {
+      await saveDeepResearchLimit(next);
+      changes.push({
+        field: "ディープリサーチの月の上限（任された幹部1人あたり）",
+        before: `${prev}回`,
+        after: `${next}回`,
+      });
+    }
+  }
+
   // 操作ログ（本文＝誰を指名したかは残さず、件数だけ）。テーブル未作成なら記録できない（サーバーログのみ）
   if (changes.length > 0) {
     const g = await authorizeGrowth();
@@ -143,11 +178,15 @@ export async function PUT(req: Request) {
     }
   }
 
-  const after = await loadDelegationSnapshot();
+  const [after, deepResearchLimit] = await Promise.all([
+    loadDelegationSnapshot(),
+    loadDeepResearchLimit(),
+  ]);
   return NextResponse.json({
     ok: true,
     items: after.items,
     karte: after.karte,
+    deepResearchLimit,
     rejected,
     rejectedKarte,
     ...(rejectedKarte.length > 0

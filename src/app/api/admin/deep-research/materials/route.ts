@@ -17,7 +17,7 @@ import {
   DERIVED_MATERIAL_META,
   type DerivedMaterialType,
 } from "@/lib/deep-research/types";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminItem } from "@/lib/admin-delegation-server";
 
 export const runtime = "nodejs";
 
@@ -28,7 +28,7 @@ function isMaterialType(v: unknown): v is DerivedMaterialType {
 
 export async function POST(request: Request) {
   // 管理者のみ（指示書39）
-  const auth = await requireAdmin();
+  const auth = await requireAdminItem("deep-research");
   if (auth.response) return auth.response;
   try {
     const body = await request.json();
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   // 管理者のみ（指示書39）
-  const auth = await requireAdmin();
+  const auth = await requireAdminItem("deep-research");
   if (auth.response) return auth.response;
   try {
     const { searchParams } = new URL(request.url);
@@ -93,7 +93,7 @@ export async function GET(request: Request) {
 
 export async function DELETE(request: Request) {
   // 管理者のみ（指示書39）
-  const auth = await requireAdmin();
+  const auth = await requireAdminItem("deep-research");
   if (auth.response) return auth.response;
   try {
     const { searchParams } = new URL(request.url);

@@ -3,9 +3,18 @@
 // 委任の設定（指示書183）— 院長だけが開ける画面（/admin/delegation）
 // - A: 幹部ごとに担当スタッフを複数指定（既定は誰も指定されていない）
 // - B: 管理画面の項目ごとに開ける幹部を指名。委任できない項目は 🔒 で理由を表示し、操作できない
+// - 226: 「🗓 1on1の日程」と「🔬 ディープリサーチ」も委任できる。
+//   ディープリサーチだけ、任された1人あたりの**月の上限**をここで決める（初期値30・院長は上限なし）
 // 保存は /api/admin/delegation（院長のみ・requireAdmin）。幹部はこの画面にもAPIにも到達できない。
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  DEEP_RESEARCH_DEFAULT_LIMIT,
+  DEEP_RESEARCH_LIMIT_MAX,
+  DEEP_RESEARCH_LIMIT_MIN,
+  deepResearchDelegationReason,
+  normalizeLimit,
+} from "@/lib/deep-research/quota";
 
 type Item = { key: string; label: string; href: string; delegable: boolean; reason: string; userIds: string[] };
 type Roster = { userId: string; name: string; isAdmin: boolean; retired: boolean; testSeed?: boolean }[];
@@ -19,16 +28,28 @@ export function DelegationPanel() {
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
   const [manager, setManager] = useState("");
+  // 226 §3: ディープリサーチの月の上限（任された幹部1人あたり）
+  const [drLimit, setDrLimit] = useState(DEEP_RESEARCH_DEFAULT_LIMIT);
+  const [drInput, setDrInput] = useState(String(DEEP_RESEARCH_DEFAULT_LIMIT));
 
   const load = useCallback(async () => {
     setError("");
     try {
       const res = await fetch("/api/admin/delegation", { cache: "no-store", credentials: "same-origin" });
       if (!res.ok) throw new Error("設定を取得できませんでした");
-      const j = (await res.json()) as { items: Item[]; karte: Record<string, string[]>; roster: Roster };
+      const j = (await res.json()) as {
+        items: Item[];
+        karte: Record<string, string[]>;
+        roster: Roster;
+        deepResearchLimit?: number;
+      };
       setItems(j.items);
       setKarte(j.karte);
       setRoster(j.roster);
+      if (typeof j.deepResearchLimit === "number") {
+        setDrLimit(j.deepResearchLimit);
+        setDrInput(String(j.deepResearchLimit));
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
     } finally {
@@ -51,7 +72,11 @@ export function DelegationPanel() {
   /** 207-3: 検証用は名前に🧪を付けて実在の幹部と見分ける */
   const labelOf = (r: Roster[number]) => `${r.name}${r.testSeed ? "（🧪 検証用）" : ""}`;
 
-  const save = async (body: { items?: Record<string, string[]>; karte?: Record<string, string[]> }) => {
+  const save = async (body: {
+    items?: Record<string, string[]>;
+    karte?: Record<string, string[]>;
+    deepResearchLimit?: number;
+  }) => {
     setBusy(true);
     setError("");
     try {
@@ -61,12 +86,29 @@ export function DelegationPanel() {
         credentials: "same-origin",
         body: JSON.stringify(body),
       });
-      const j = (await res.json().catch(() => ({}))) as { error?: string; items?: Record<string, string[]>; karte?: Record<string, string[]> };
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        items?: Record<string, string[]>;
+        karte?: Record<string, string[]>;
+        deepResearchLimit?: number;
+      };
       if (!res.ok) throw new Error(j.error ?? "保存に失敗しました");
       // 207: 組み合わせが合わずサーバーが断った場合は 200 で理由が返る。
       //   画面の表示はサーバーの結果で上書きするので、押した見た目だけが残ることはない
       if (j.items) setItems((prev) => prev.map((it) => ({ ...it, userIds: j.items?.[it.key] ?? it.userIds })));
       if (j.karte) setKarte(j.karte);
+      if (typeof j.deepResearchLimit === "number") {
+        setDrLimit(j.deepResearchLimit);
+        setDrInput(String(j.deepResearchLimit));
+        // 226 §1: 項目の説明に出る数字も、保存した値にそろえる
+        setItems((prev) =>
+          prev.map((it) =>
+            it.key === "deep-research"
+              ? { ...it, reason: deepResearchDelegationReason(j.deepResearchLimit as number) }
+              : it
+          )
+        );
+      }
       if (j.error) {
         setError(j.error);
         setMsg("");
@@ -215,6 +257,37 @@ export function DelegationPanel() {
                 )
               ) : (
                 <p className="text-[11px] text-slate-500 mt-1">院長のみ（委任できません）</p>
+              )}
+              {/* 226 §3: ディープリサーチだけ、任された1人あたりの月の上限を決める */}
+              {it.key === "deep-research" && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2" data-dr-limit>
+                  <label className="text-[11px] text-slate-700">
+                    任された人1人あたりの月の上限
+                    <input
+                      type="number"
+                      min={DEEP_RESEARCH_LIMIT_MIN}
+                      max={DEEP_RESEARCH_LIMIT_MAX}
+                      value={drInput}
+                      disabled={busy}
+                      onChange={(e) => setDrInput(e.target.value)}
+                      className="ml-2 w-24 rounded-md border border-slate-300 px-2 py-1 text-sm min-h-[36px]"
+                      aria-label="ディープリサーチの月の上限"
+                    />
+                    <span className="ml-1 text-[11px] text-slate-600">回／月</span>
+                  </label>
+                  <button
+                    type="button"
+                    disabled={busy || normalizeLimit(drInput) === drLimit}
+                    onClick={() => void save({ deepResearchLimit: normalizeLimit(drInput) })}
+                    data-dr-limit-save
+                    className="rounded-full border border-teal-500 bg-teal-600 px-3 py-1.5 text-xs text-white min-h-[36px] disabled:opacity-40"
+                  >
+                    上限を保存
+                  </button>
+                  <span className="text-[11px] text-slate-500">
+                    院長は上限なし。0 にすると、任された人は使えません。毎月1日（日本時間）に戻ります。
+                  </span>
+                </div>
               )}
             </li>
           ))}

@@ -81,6 +81,11 @@ const SERVER_ONLY_KEYS = new Set<string>([
   "value_keywords_log",
   // 196: クリニックの歩み CSV 取り込みの操作ログ（/api/admin/clinic-metrics-import 経由のみ）
   "clinic_metrics_import_log",
+  // 226 §3: ディープリサーチの回数の上限と、月ごとの回数。
+  //   任された幹部が自分の上限・回数を書き換えられないよう、サーバー専用にする
+  //   （読み書きは lib/deep-research/quota-server.ts と、それを使う管理者APIだけ）。
+  "deep_research_config",
+  "deep_research_usage",
 ]);
 
 // 前方一致のサーバー専用キー（指示書182）。

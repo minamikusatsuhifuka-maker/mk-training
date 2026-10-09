@@ -45,6 +45,9 @@ export type ResearchIndexItem = {
   mode: string | null;
   model: string | null;
   createdAt: string;
+  /** 226 §3: 作った人（表示名）。古い記録には無いので省略可 */
+  createdByName?: string;
+  createdById?: string;
 };
 
 /** インデックス（メタ配列）を取得 */
@@ -81,6 +84,9 @@ export async function saveResearch(input: {
   model: string | null;
   content: string;
   sources: ResearchSource[];
+  /** 226 §3: 作った人（任された幹部も使えるようになったので一覧で分かるようにする） */
+  createdByName?: string;
+  createdById?: string;
 }): Promise<ResearchResult> {
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
@@ -105,6 +111,8 @@ export async function saveResearch(input: {
     mode: input.mode,
     model: input.model,
     createdAt,
+    ...(input.createdByName ? { createdByName: input.createdByName } : {}),
+    ...(input.createdById ? { createdById: input.createdById } : {}),
   };
   const items = await loadResearchIndex();
   items.unshift(indexItem);

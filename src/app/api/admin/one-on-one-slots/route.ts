@@ -1,18 +1,22 @@
-// 1on1の日程調整（指示書205 §1）— **院長のみ**（requireAdmin）
+// 1on1の日程調整（指示書205 §1）— 院長、または「🗓 1on1の日程」を委任された幹部（226 §2）
 //
 //   GET    → { periods, slots, bookings, notices, staff, today }
 //   POST   → 期間を作る／枠を足す  body: { action: "create" | "extend", period, periodId? }
 //   PATCH  → ブロック・解除・削除・元に戻す・代わりに予約・取り消し
 //   DELETE → 院長への知らせを消す（既読にする）
 //
-// 枠と予約の一覧（氏名つき）は**院長のみ**（205 §5）。非管理者には proxy が実在しないAPIと同じ応答を返し、
-// ここでも requireAdmin で止める。
+// 226 §2: 任された人は**院長の代わりに院長の1on1の日程を管理**する（期間・枠づくり・休みのブロック・予約の確認）。
+// 幹部自身の枠は作らない（この画面が扱うのは院長の日程だけ）。
+// 事前アンケートの**回答**はこのAPIでは返さない（別項目 presurvey-answers の委任が要る・204の決まりのまま）。
+// 委任されていない人には proxy が実在しないAPIと同じ応答を返し、ここでも requireAdminItem で止める。
+//
+// 226 §2: 期間・枠・ブロック・代理予約・取り消しは、**誰がいつ変えたか**を変更の記録（slot_change）に残す。
 //
 // 置き場所は既存の clinic_staff_growth（RLS全拒否・service-role のみ）。**交付するSQLは無い**。
 // 同じ枠の二重予約は予約の行id（`booking-<枠id>`）＋insert の一意制約で防ぐ（one-on-one-slots-server）。
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminItem } from "@/lib/admin-delegation-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { GrowthTableMissingError } from "@/lib/staff-growth-server";
 import { loadPeople } from "@/lib/one-on-one-schedule-server";
@@ -31,6 +35,8 @@ import {
   fetchNotices,
   fetchPeriods,
   fetchSlots,
+  fetchSlotChanges,
+  recordSlotChange,
   restoreSlot,
   savePeriod,
   setSlotBlocked,
@@ -93,15 +99,16 @@ function readPeriodInput(raw: unknown): PeriodInput | null {
 }
 
 export async function GET() {
-  const auth = await requireAdmin();
+  const auth = await requireAdminItem("one-on-one-slots");
   if (auth.response) return auth.response;
   try {
     const admin = createSupabaseAdminClient();
-    const [periods, slots, bookings, notices, people, users] = await Promise.all([
+    const [periods, slots, bookings, notices, changes, people, users] = await Promise.all([
       fetchPeriods(admin),
       fetchSlots(admin),
       fetchBookings(admin),
       fetchNotices(admin),
+      fetchSlotChanges(admin),
       loadPeople(admin),
       admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
     ]);
@@ -115,16 +122,38 @@ export async function GET() {
       slots,
       bookings,
       notices,
+      // 226 §2: 誰がいつ日程を変えたか
+      changes,
       staff,
       today: jstTodayYmd(),
+      // 226 §2: 開いているのが院長か、委任された幹部か（画面の案内を出し分ける）
+      isAdmin: auth.isAdmin,
     });
   } catch (e) {
     return errorResponse(e);
   }
 }
 
+/**
+ * 226 §2: 変更の記録に残す「誰が」。
+ * 表示名はスタッフ名簿から引き、無ければメール／idにそのまま落とす。
+ */
+async function changedBy(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  user: { id: string; email?: string | null }
+): Promise<{ byId: string; byName: string; byIsDirector: boolean }> {
+  try {
+    const people = await loadPeople(admin);
+    const me = people.get(user.id);
+    if (me) return { byId: user.id, byName: me.name, byIsDirector: me.isDirector };
+  } catch {
+    /* 名簿が取れないときはメールで残す */
+  }
+  return { byId: user.id, byName: user.email ?? user.id, byIsDirector: false };
+}
+
 export async function POST(req: NextRequest) {
-  const auth = await requireAdmin();
+  const auth = await requireAdminItem("one-on-one-slots");
   if (auth.response) return auth.response;
   const body = await readBody(req);
   const input = readPeriodInput(body.period);
@@ -156,6 +185,11 @@ export async function POST(req: NextRequest) {
       })!;
       await savePeriod(admin, next, by);
       const r = await ensureSlots(admin, next, input, by);
+      await recordSlotChange(admin, {
+        ...(await changedBy(admin, auth.user)),
+        action: "extend",
+        detail: `${next.startDate.replaceAll("-", "/")}〜${next.endDate.replaceAll("-", "/")}・枠 ${r.created ?? 0}件`,
+      });
       return NextResponse.json({ period: next, ...r });
     }
 
@@ -167,6 +201,11 @@ export async function POST(req: NextRequest) {
     })!;
     await savePeriod(admin, period, by);
     const r = await ensureSlots(admin, period, input, by);
+    await recordSlotChange(admin, {
+      ...(await changedBy(admin, auth.user)),
+      action: "create",
+      detail: `${period.startDate.replaceAll("-", "/")}〜${period.endDate.replaceAll("-", "/")}・枠 ${r.created ?? 0}件`,
+    });
     return NextResponse.json({ period, ...r });
   } catch (e) {
     return errorResponse(e);
@@ -174,7 +213,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const auth = await requireAdmin();
+  const auth = await requireAdminItem("one-on-one-slots");
   if (auth.response) return auth.response;
   const body = await readBody(req);
   const action = typeof body.action === "string" ? body.action : "";
@@ -221,6 +260,11 @@ export async function PATCH(req: NextRequest) {
       const blocked = action === "blockDay";
       const released = blocked ? await release(target) : 0;
       for (const s of target) await setSlotBlocked(admin, s, blocked, by);
+      await recordSlotChange(admin, {
+        ...(await changedBy(admin, auth.user)),
+        action: blocked ? "blockDay" : "unblockDay",
+        detail: `${date.replaceAll("-", "/")}・${target.length}枠${released > 0 ? `・予約${released}件を取り消し` : ""}`,
+      });
       return NextResponse.json({ ok: true, changed: target.length, released });
     }
 
@@ -230,12 +274,25 @@ export async function PATCH(req: NextRequest) {
       if (!s) return NextResponse.json({ error: "対象の枠が見つかりません" }, { status: 404 });
       if (s.date < today) return bad("過ぎた枠は操作できません");
       const released = await release([s]);
+      const slotLabel = `${s.date.replaceAll("-", "/")} ${s.startTime}〜${s.endTime}${
+        released > 0 ? "・予約を取り消し" : ""
+      }`;
       if (action === "deleteSlot") {
         await deleteSlot(admin, s.id);
+        await recordSlotChange(admin, {
+          ...(await changedBy(admin, auth.user)),
+          action: "deleteSlot",
+          detail: slotLabel,
+        });
         // 「元に戻す」で戻せるように、消した枠の中身を返す
         return NextResponse.json({ ok: true, released, removed: s });
       }
       await setSlotBlocked(admin, s, true, by);
+      await recordSlotChange(admin, {
+        ...(await changedBy(admin, auth.user)),
+        action: "blockSlot",
+        detail: slotLabel,
+      });
       return NextResponse.json({ ok: true, released });
     }
 
@@ -264,6 +321,11 @@ export async function PATCH(req: NextRequest) {
         },
         by
       );
+      await recordSlotChange(admin, {
+        ...(await changedBy(admin, auth.user)),
+        action: "restoreSlot",
+        detail: `${String(s.date ?? "").replaceAll("-", "/")} ${String(s.startTime ?? "")}〜${String(s.endTime ?? "")}`,
+      });
       return NextResponse.json({ ok: true });
     }
 
@@ -282,6 +344,11 @@ export async function PATCH(req: NextRequest) {
         today,
         seedMark: testIds.has(userId),
       });
+      await recordSlotChange(admin, {
+        ...(await changedBy(admin, auth.user)),
+        action: "bookFor",
+        detail: `${s.date.replaceAll("-", "/")} ${s.startTime}〜${s.endTime}`,
+      });
       return NextResponse.json({ ok: true, booking: r.booking, moved: r.moved });
     }
 
@@ -290,6 +357,11 @@ export async function PATCH(req: NextRequest) {
       const b = bookingOf(id);
       if (!b) return NextResponse.json({ error: "対象の予約が見つかりません" }, { status: 404 });
       await cancelBooking(admin, { booking: b, staffName: nameOf(b.userId), by, seedMark: testIds.has(b.userId) });
+      await recordSlotChange(admin, {
+        ...(await changedBy(admin, auth.user)),
+        action: "cancel",
+        detail: `${b.date.replaceAll("-", "/")} ${b.startTime}〜${b.endTime}`,
+      });
       return NextResponse.json({ ok: true });
     }
 
@@ -300,7 +372,7 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE() {
-  const auth = await requireAdmin();
+  const auth = await requireAdminItem("one-on-one-slots");
   if (auth.response) return auth.response;
   try {
     const admin = createSupabaseAdminClient();

@@ -38,6 +38,14 @@ export const BOOKING_REBOOK_TYPE = "booking_rebook";
  * （行idが別なので両方 insert が通る）。そこで期間とユーザーで1行に固定し、
  * **最初の予約だけ insert が通る**ようにして2台目の端末を止める。詳しくは one-on-one-slots-server.ts。
  */
+/**
+ * 226 §2: 日程の変更の記録（誰がいつ何をしたか）。
+ * 委任された幹部も院長の代わりに動かせるようになったので、**変えた人と日時**を残し、
+ * 院長の画面（/admin/one-on-one-slots）で分かるようにする。
+ * 予約の中身（誰がいつ面談するか）はここには書かない（それは予約の一覧で見る）。
+ */
+export const SLOT_CHANGE_TYPE = "slot_change";
+
 export const BOOKING_HOLD_TYPE = "booking_hold";
 
 /** 既定の時間帯（205 §0-2） */
@@ -321,6 +329,70 @@ export const BOOKING_TAKEN_MESSAGE = "この枠は先に予約されました。
 export const BOOKING_NONE_LEFT_MESSAGE = "予約できる枠がありません。院長に伝えてください";
 export const BOOKING_PLEASE_MESSAGE = "1on1の予約をしてください";
 export const BOOKING_REBOOK_MESSAGE = "1on1の日程の取り直しをお願いします";
+
+// ─── 変更の記録（226 §2） ───
+
+/** 何をしたか。画面に出す言い方もここで決める（1か所） */
+export const SLOT_CHANGE_ACTIONS = [
+  { action: "create", label: "期間を作った" },
+  { action: "extend", label: "期間を変えた・枠を足した" },
+  { action: "blockDay", label: "1日まるごと休みにした" },
+  { action: "unblockDay", label: "1日の休みを取り消した" },
+  { action: "blockSlot", label: "枠を休みにした" },
+  { action: "deleteSlot", label: "枠を削除した" },
+  { action: "restoreSlot", label: "枠を元に戻した" },
+  { action: "bookFor", label: "代わりに予約を入れた" },
+  { action: "cancel", label: "予約を取り消した" },
+] as const;
+
+export type SlotChangeAction = (typeof SLOT_CHANGE_ACTIONS)[number]["action"];
+
+export function isSlotChangeAction(v: unknown): v is SlotChangeAction {
+  return SLOT_CHANGE_ACTIONS.some((a) => a.action === v);
+}
+
+export function slotChangeActionLabel(action: SlotChangeAction): string {
+  return SLOT_CHANGE_ACTIONS.find((a) => a.action === action)?.label ?? "";
+}
+
+export type SlotChange = {
+  id: string;
+  action: SlotChangeAction;
+  /** 変えた人（表示名。取れなければメールかid） */
+  byName: string;
+  byId: string;
+  /** 院長本人か（画面で「院長」と出し分ける） */
+  byIsDirector: boolean;
+  /** 何を変えたか（日付・枠数など。個人名は入れない） */
+  detail: string;
+  /** 変えた日時（ISO） */
+  at: string;
+};
+
+export function newSlotChangeId(now: number = Date.now()): string {
+  return `slotchg-${now}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function normalizeSlotChange(id: string, raw: unknown): SlotChange | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (!isSlotChangeAction(o.action)) return null;
+  return {
+    id,
+    action: o.action,
+    byName: str(o.byName, 120) || "（不明）",
+    byId: str(o.byId, 64),
+    byIsDirector: o.byIsDirector === true,
+    detail: str(o.detail, 300),
+    at: str(o.at, 64),
+  };
+}
+
+/** 画面に出す1行（226 §2「変えた人と日時」） */
+export function slotChangeLine(c: SlotChange): string {
+  const who = c.byIsDirector ? `${c.byName}（院長）` : c.byName;
+  return `${who}：${slotChangeActionLabel(c.action)}${c.detail ? `（${c.detail}）` : ""}`;
+}
 
 // ─── 正規化（保存された値・送られてきた値を整える） ───
 

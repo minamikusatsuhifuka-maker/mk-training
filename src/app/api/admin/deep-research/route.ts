@@ -1,6 +1,10 @@
 /**
  * ディープリサーチ実行 API（SSEストリーミング・Google検索Grounding付き）
- * ※ mk-training は admin 認証なし（流儀準拠）。保護は無し。
+ *
+ * 院長、または「🔬 ディープリサーチ」を委任された幹部だけ（226 §1・requireAdminItem）。
+ * 226 §3: 任された幹部は1人あたり月◯回まで（初期値30・院長が変えられる）。
+ *   院長は上限なし。判定は**ここ（サーバー）**で行い、画面だけで止めない。
+ *   上限に達していたら 429 と「今月の上限（◯回）に達しました。」を返す。
  */
 import { NextRequest } from "next/server";
 import {
@@ -9,15 +13,23 @@ import {
 } from "@/lib/deep-research/gemini-research";
 import { buildResearchPrompt } from "@/lib/deep-research/prompts";
 import type { ResearchRequest } from "@/lib/deep-research/types";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminItem } from "@/lib/admin-delegation-server";
+import { consumeDeepResearchQuota } from "@/lib/deep-research/quota-server";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // 5 分
 
 export async function POST(req: NextRequest) {
-  // 管理者のみ（指示書39）
-  const auth = await requireAdmin();
+  const auth = await requireAdminItem("deep-research");
   if (auth.response) return auth.response;
+  // 226 §3: 回数の上限（院長は上限なし）。AIを呼ぶ前に数える
+  const quota = await consumeDeepResearchQuota(auth.user);
+  if (!quota.ok) {
+    return new Response(JSON.stringify({ error: quota.message, code: "quota" }), {
+      status: 429,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
   try {
     const body = (await req.json()) as ResearchRequest;
     const { topic, mode, perspective, additionalContext } = body;
@@ -80,6 +92,8 @@ export async function POST(req: NextRequest) {
             type: "done",
             model_used: selectedModel,
             total_chars: totalLen,
+            // 226 §3: 実行後の残り回数（院長は null）
+            remaining: quota.state.remaining,
           });
           controller.close();
         } catch (error) {
