@@ -16,10 +16,10 @@ export default function MyGrowthPage() {
         <NavPageHeader
           navKey="/my-growth"
           title="🌱 わたしの可能性ノート"
-          description="自分の学びの記録・目標・1on1の約束"
         />
         {/* 225 §2: 見出しのすぐ下に、コーポレートブック 院長メッセージの一文を1行で出す。
-            院長・幹部が見る「可能性ノート」には出さない（この画面＝本人だけ） */}
+            院長・幹部が見る「可能性ノート」には出さない（この画面＝本人だけ）。
+            227 §1: 「3つ」の言い方だった説明（description）は消した＝見出しの下はこの一文だけ */}
         <p
           className="-mt-1 mb-3 text-[13px] leading-relaxed text-emerald-800"
           data-possibility-message

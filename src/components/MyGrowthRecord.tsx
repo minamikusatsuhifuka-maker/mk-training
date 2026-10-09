@@ -8,7 +8,7 @@ import { GrowthTabsBar, useRememberedTab } from "@/components/GrowthTabsBar";
 import { GROWTH_TABS, GROWTH_TAB_STORAGE_KEY, resolveGrowthTab, visibleGrowthTabs, type GrowthTabKey } from "@/lib/growth-tabs";
 
 // 本人ページ「わたしの可能性ノート」（指示書179 C）
-// 表示するのは 自分の学びの記録（B）／自分の目標／1on1の約束 の3つだけ。
+// 表示するタブは growth-tabs.ts の GROWTH_TABS から「🔒 基本情報」を外した7つ（220 §3・227 §1）。
 // 院長メモ・適性検査・履歴書・家族構成は**この画面に存在しない**（APIも返さない）。
 // 機能フラグ growth_record（既定OFF）で守られている（ページ側 FeatureGate ＋ API側 authorizeGrowth）。
 
@@ -311,9 +311,11 @@ export function MyGrowthRecord() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-3">
+      {/* 227 §1: 「3つだけです」は実際のタブ（7つ）と合っていないので消した。
+          すぐ下のタブの帯が、見られるものの一覧になっている。
+          227 §2: 担当の幹部も見られる（220の決まり）ので「院長と担当の方」に直した */}
       <p className="text-[11px] text-gray-600 leading-relaxed">
-        ここに載るのは <strong>自分の学びの記録・自分の目標・1on1の約束</strong> の3つだけです。
-        自分の学びと目標は自分で書き、院長も見ることができます。ほかのスタッフの記録は見られません。
+        自分の学びと目標は自分で書き、院長と担当の方も見ることができます。ほかのスタッフの記録は見られません。
       </p>
 
       {/* 197 B-2: 次回1on1（院長・担当幹部が登録した予定）と事前アンケートへの導線 */}
