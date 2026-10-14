@@ -49,6 +49,10 @@ export const FEATURE_IDS = [
   "one_on_one_booking",
   // 240: 1on1カレンダー（いつ・誰が1on1かをスタッフ全員で見る）。**既定OFF**。OFFの間は院長と検証用アカウントだけ
   "one_on_one_calendar",
+  // 243: 院長のGoogleカレンダーの予定を院内カレンダーに出す。**既定OFF**。OFFの間は院長と検証用アカウントだけ
+  "director_calendar",
+  // 245: 院長のGoogleカレンダーの「予定あり」の時間は1on1を予約できないようにする。**既定OFF**（画面ではない・判定はサーバー）
+  "director_calendar_busy",
   // ── お知らせ・イベント（指示書228）──
   // 画像・ファイルを貼れるお知らせと、出欠をとるイベント（/notices）。**既定OFF**。
   // OFFの間は院長と検証用アカウントだけが使える（プレビュー・判定はサーバー）。
@@ -119,6 +123,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   presurvey_alert_email: false, // 197 C-2（178のメール設定が終わってから）
   one_on_one_booking: false, // 205（枠の作り方とスタッフへの案内を説明してからON）
   one_on_one_calendar: false, // 240（既定OFF）
+  director_calendar: false, // 243（既定OFF・院長が見え方を確かめてからON）
+  director_calendar_busy: false, // 245（既定OFF・243のつながりを確かめてから院長がON）
   notices: false, // 228（既定OFF）
   notices_email: false, // 228 §5（既定OFF・178のメール設定が終わってから）
   page_members: true,
@@ -179,6 +185,8 @@ export const FEATURE_META: FeatureMeta[] = [
   //   旧名「事前アンケートの知らせをメールでも送る」では205のメールも兼ねていることが伝わらなかった。
   //   **保存しているキー（presurvey_alert_email）と今の状態は変えていない**（表示だけの変更）。
   { id: "one_on_one_calendar", label: "🗓 1on1カレンダー", description: "ログインしたスタッフ全員に、メニュー「🗓 1on1カレンダー」（/one-on-one/calendar）で、「🗓 1on1の日程」で確定している予約の日時と名前だけを出す（📋 リスト・🗓 月表示）。空いている枠・院長の予定がある日・面談する側の名前・1on1の中身（事前アンケート・記録・まとめ）は出さない。検証用アカウントの予約は、院長と検証用アカウントにだけ出す。ONにすると「🗓 1on1の予約」に「予約した日時と名前は、1on1カレンダーでスタッフ全員に表示されます。」の文も出る", phase: 5 },
+  { id: "director_calendar", label: "院長の予定を院内カレンダーに出す", description: "ログインしたスタッフ全員に、「🗓 院内カレンダー」で院長のGoogleカレンダーの予定を、色を変えて出す（📋 リスト・🗓 月表示・週表示・日付を押したとき）。1件ごとに出すのは時刻と題名だけ（場所・説明・参加者は出さない）。Googleカレンダーで「非公開」にした予定は、題名を出さず時刻と「院長の予定」だけ。「🗓 1on1カレンダー」には出さない。OFFの間は、院長と検証用アカウントにだけ出る", phase: 5 },
+  { id: "director_calendar_busy", label: "院長のGoogleカレンダーの予定がある時間は1on1を予約できないようにする", description: "院長のGoogleカレンダーで「予定あり」になっている予定と少しでも重なる1on1の枠は、「🗓 1on1の予約」で、ほかの人が予約済みの枠と同じく出さない（理由・題名は出さない）。予約する瞬間にもサーバーでもう一度確かめ、ふさがっていれば断る（スタッフが日程を変えるとき・院長や任された幹部が予約を入れる・動かすときも同じ）。「空き時間」の予定ではふさがない（終日の予定はふつう「空き時間」）。枠は消さず、Googleカレンダーで予定を消したり動かしたりすれば、また予約できる。すでにある予約は消さない・動かさない（「🗓 1on1の日程」に⚠が出る）。Googleカレンダーが読めないときは、24時間以内に読めた結果を使い、それも無ければ予約を受け付けて「🗓 1on1の日程」に⚠を出す。243の院長のGoogleカレンダーのつながりを確かめてからONにする", phase: 5 },
   { id: "notices", label: "📣 お知らせ・イベント", description: "スタッフ全員がお知らせ・イベントをつくれる（/notices）。画像・PDF・Wordを貼れる（画像は位置情報などを消して本文の中に出す）。イベントは「出席」「欠席」で答えられ、出欠を見られるのは、つくった人・院長・委任の設定で指定した幹部だけ。開催のあとに参加を確定すると、管理画面「📣 イベントの参加記録」に残る（院長と指定した幹部だけ）", phase: 5 },
   { id: "notices_email", label: "お知らせ・イベントをメールでも送る", description: "新しいお知らせ・イベントと、出欠の締切の3日前・前日（朝8時）の未回答の知らせを、アプリ内に加えてメールでも送る。メールに入れるのは題名とリンクだけ（本文・貼ったもの・出欠は入れない）。検証用アカウントには送らない。「📣 お知らせ・イベント」がOFFの間と、送信の設定（指示書178）が終わるまでは送られない", phase: 5 },
   { id: "presurvey_alert_email", label: "1on1の知らせ（事前アンケート・予定）をメールでも送る", description: "事前アンケートの知らせ（204）と、1on1の前日・当日の予定の知らせ（205）の両方に効きます。アプリ内の知らせに加えてメールでも送る（事前アンケートは提出期限の7日前・3日前・前日・当日、予定は前日・当日のいずれも朝8時）。本文は日付・期限・リンクだけ（回答の中身は入れない）。検証用アカウントには送らない。送信の設定（指示書178）が終わるまでは、ONにしても送られない", phase: 5 },
@@ -209,6 +217,7 @@ export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
   "one_on_one_presurvey", // 指示書197・197-補: 1on1の事前アンケート（/one-on-one/presurvey）
   "one_on_one_booking", // 指示書205: 1on1の日程調整（/one-on-one/booking・/admin/one-on-one-slots）
   "one_on_one_calendar", // 指示書240: 1on1カレンダー（/one-on-one/calendar）
+  "director_calendar", // 指示書243: 院長の予定を院内カレンダーに（/calendar・判定はサーバー）
   "notices", // 指示書228: お知らせ・イベント（/notices・/admin/notice-attendance）
   // notices_email はメールの切り替え（画面ではない）なので入れない＝プレビューでONに倒さない
 ]);

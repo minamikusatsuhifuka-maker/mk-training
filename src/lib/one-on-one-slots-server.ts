@@ -31,6 +31,7 @@ import { normalizeSchedule, type OneOnOneSchedule } from "./one-on-one-schedule"
 import { normalizePresurveyData } from "./one-on-one-presurvey";
 import { PRESURVEY_CONTENT_TYPE } from "./presurvey-access-server";
 import { SEED_MARK } from "./test-seed";
+import { directorGcalBusyForSlot } from "./director-busy-server";
 import {
   BOOKING_HOLD_TYPE,
   BOOKING_NOTICE_TYPE,
@@ -94,6 +95,18 @@ export class DirectorBusyError extends Error {
   constructor() {
     super("その時刻には院長の予定が入っています。別の枠を選んでください");
     this.name = "DirectorBusyError";
+  }
+}
+
+/**
+ * 245: 院長のGoogleカレンダーに「予定あり」の予定がある（予約の瞬間に確かめた）。
+ * スタッフには理由を出さないため、文は「先に予約された」ときと同じにする（SlotTakenError を継ぐ）。
+ * 院長・任された幹部の画面（管理のAPI）では、DirectorBusyError の文で返す。
+ */
+export class DirectorGcalBusyError extends SlotTakenError {
+  constructor() {
+    super();
+    this.name = "DirectorGcalBusyError";
   }
 }
 
@@ -631,6 +644,8 @@ export async function bookSlot(
   if (await directorBusyAt(admin, slot.date, slot.startTime, scheduleId)) {
     throw new DirectorBusyError();
   }
+  // 245: 院長のGoogleカレンダーの「予定あり」と重なる枠は予約させない（予約の瞬間に新しく確かめる・スイッチOFFなら何もしない）
+  if (await directorGcalBusyForSlot(admin, slot)) throw new DirectorGcalBusyError();
 
   // ─── 205-補: 同じ人が2台の端末から同時に別の枠を取るのを止める ───
   //

@@ -1,8 +1,10 @@
 "use client";
 
 // 🗓 院内カレンダー（指示書114・機能ID calendar / 月間グリッド追加=指示書121）
+// - 243: 📅 週表示・月表示の「大きく」・日付を押すとその日の予定を全部（部品は components/calendar/CalendarViews.tsx・1on1カレンダーと共通）。
+//   院長のGoogleカレンダーの予定を色を変えて出す（時刻と題名だけ・「非公開」は題名を出さない・判定はサーバー）。
 // - 予定の源泉は Google カレンダー（管理はGoogle側で直接・ポータル側に管理UIは作らない）。
-// - 取得は認証付き /api/calendar のみ（今月1日〜翌月末）。表示は2形態:
+// - 取得は認証付き /api/calendar のみ（243から先月1日〜翌々月末＝週表示で前後へ送れるように）。表示:
 //   📋 リスト=今日以降のみ（従来どおり）／🗓 月表示=今月＋翌月の2グリッド（121）。
 //   切替は localStorage "mk_calendar_view" に記憶（102/116の流儀・既定は月表示=指示書125）。
 // - env未設定・接続失敗はスタッフに「準備中」の穏やかな表示。管理者にのみ詳細
@@ -12,6 +14,22 @@ import { useState, useEffect, useCallback } from "react";
 import NavPageHeader from "@/components/NavPageHeader";
 import FeatureGate from "@/components/FeatureGate";
 import { jstTodayYmd } from "@/lib/library";
+import { addDays, addMonths, lastDayOfMonth, weekOverlaps, weekStartOf } from "@/lib/calendar-views";
+import {
+  BigToggle,
+  DIRECTOR_LABEL,
+  DayDetail,
+  DirectorLegend,
+  ListView,
+  MonthGrid,
+  ViewSwitch,
+  WeekNav,
+  WeekView,
+  groupByYmd,
+  useStoredChoice,
+  type CalItem,
+  type CalView,
+} from "@/components/calendar/CalendarViews";
 
 type CalendarEvent = {
   id: string;
@@ -21,6 +39,8 @@ type CalendarEvent = {
   allDay: boolean;
   location: string;
 };
+/** 243: 院長の予定（title が空＝Googleカレンダーで「非公開」にした予定） */
+type DirectorEvent = { id: string; title: string; start: string; end: string; allDay: boolean };
 
 type LoadState = "loading" | "ready" | "unauthenticated" | "unavailable";
 
@@ -28,6 +48,9 @@ const CALENDAR_INTRO =
   "勉強会・研修・院内イベントなどの予定です。予定の追加・変更はGoogleカレンダーで行われます。";
 const CALENDAR_EMPTY = "今日から翌月末までの予定はありません。";
 const CALENDAR_VIEW_LS_KEY = "mk_calendar_view";
+const CALENDAR_BIG_LS_KEY = "mk_calendar_big"; // 243: 月表示の「大きく」
+const VIEWS: readonly CalView[] = ["list", "month", "week"];
+const ON_OFF = ["on", "off"] as const;
 const CALENDAR_PREPARING =
   "カレンダーは準備中です。もうすこしお待ちください。";
 
@@ -39,19 +62,8 @@ function jstYmdOf(start: string): string {
   return jstTodayYmd(d);
 }
 
-// 日付見出し「7/29（水）」（JST基準・TZ非依存: ymd文字列からUTC構築で曜日算出）
-function formatDayHeading(ymd: string): string {
-  const m = ymd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return ymd;
-  const [, y, mo, da] = m;
-  const week = ["日", "月", "火", "水", "木", "金", "土"][
-    new Date(Date.UTC(Number(y), Number(mo) - 1, Number(da))).getUTCDay()
-  ];
-  return `${Number(mo)}/${Number(da)}（${week}）`;
-}
-
 // 時刻表示「10:00〜11:30」（JST固定・閲覧環境のTZに依存させない）
-function formatTimeRange(ev: CalendarEvent): string {
+function formatTimeRange(ev: { start: string; end: string }): string {
   const fmt = (iso: string): string => {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return "";
@@ -67,181 +79,38 @@ function formatTimeRange(ev: CalendarEvent): string {
   return e ? `${s}〜${e}` : s;
 }
 
-// 月グリッド構築（指示書121・日曜始まり）。TZ非依存: ymd文字列とUTC構築のみ使う
-// （formatDayHeading と同じ流儀）。null = 前後月の埋めセル。
-function buildMonthWeeks(year: number, month: number): (string | null)[][] {
-  const firstDow = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
-  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  const cells: (string | null)[] = [];
-  for (let i = 0; i < firstDow; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) {
-    cells.push(
-      `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`
-    );
-  }
-  while (cells.length % 7 !== 0) cells.push(null);
-  const weeks: (string | null)[][] = [];
-  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
-  return weeks;
-}
-
-// 予定1行（終日バッジ/時刻＋タイトル＋場所）。リスト表示と月表示の日別詳細で共用
-function EventRow({ ev }: { ev: CalendarEvent }) {
-  return (
-    <li className="flex items-start gap-3 rounded-lg bg-gray-50/60 border border-gray-100 px-3 py-2">
-      {ev.allDay ? (
-        <span className="text-[10px] font-medium bg-sky-100 text-sky-800 rounded-full px-2 py-0.5 shrink-0 mt-0.5">
-          終日
-        </span>
-      ) : (
-        <span className="text-xs text-gray-600 tabular-nums shrink-0 mt-0.5 w-24">
-          {formatTimeRange(ev)}
-        </span>
-      )}
-      <div className="min-w-0 flex-1">
-        <p className="text-sm text-gray-800 break-words">{ev.title}</p>
-        {ev.location && (
-          <p className="text-xs text-gray-500 break-words">📍 {ev.location}</p>
-        )}
-      </div>
-    </li>
-  );
-}
-
-const WEEKDAY_HEADERS = ["日", "月", "火", "水", "木", "金", "土"];
-
-// 1ヶ月分のグリッド（指示書121）。セル内はスマホ=ドット（最大3・4件以上は件数）、
-// md以上=タイトルチップ最大2件＋「+n」。予定のある日のみタップ可能。
-function MonthGrid({
-  year,
-  month,
-  today,
-  eventsByYmd,
-  selectedYmd,
-  onSelect,
-}: {
-  year: number;
-  month: number;
-  today: string;
-  eventsByYmd: Map<string, CalendarEvent[]>;
-  selectedYmd: string | null;
-  onSelect: (ymd: string) => void;
-}) {
-  const weeks = buildMonthWeeks(year, month);
-  return (
-    <section className="bg-white border border-gray-200 rounded-xl p-3 md:p-4 space-y-2">
-      <h2 className="text-sm font-semibold text-gray-800">
-        {year}年{month}月
-      </h2>
-      <div className="grid grid-cols-7 text-center text-[10px] text-gray-500">
-        {WEEKDAY_HEADERS.map((w, i) => (
-          <div
-            key={w}
-            className={`py-1 ${
-              i === 0 ? "text-red-400" : i === 6 ? "text-sky-500" : ""
-            }`}
-          >
-            {w}
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-px bg-gray-100 rounded-lg overflow-hidden border border-gray-100">
-        {weeks.flat().map((ymd, i) => {
-          if (!ymd) {
-            return (
-              <div key={`fill-${i}`} className="bg-gray-50/80 min-h-12 md:min-h-20" />
-            );
-          }
-          const dayEvents = eventsByYmd.get(ymd) ?? [];
-          const isToday = ymd === today;
-          const isSelected = ymd === selectedYmd;
-          return (
-            <button
-              key={ymd}
-              type="button"
-              disabled={dayEvents.length === 0}
-              onClick={() => onSelect(ymd)}
-              className={`bg-white min-h-12 md:min-h-20 p-1 text-left ${
-                isSelected ? "ring-2 ring-teal-500 ring-inset" : ""
-              } ${dayEvents.length > 0 ? "hover:bg-teal-50/50" : ""}`}
-            >
-              <span
-                className={`inline-flex items-center justify-center w-5 h-5 text-[11px] rounded-full ${
-                  isToday
-                    ? "bg-teal-600 text-white font-bold"
-                    : "text-gray-700"
-                }`}
-              >
-                {Number(ymd.slice(8))}
-              </span>
-              {dayEvents.length > 0 && (
-                <div className="md:hidden mt-0.5 flex items-center justify-center gap-0.5">
-                  {dayEvents.length <= 3 ? (
-                    dayEvents.map((ev) => (
-                      <span
-                        key={ev.id}
-                        className="w-1.5 h-1.5 rounded-full bg-teal-500"
-                      />
-                    ))
-                  ) : (
-                    <span className="text-[9px] text-teal-700 font-medium">
-                      ●{dayEvents.length}
-                    </span>
-                  )}
-                </div>
-              )}
-              <div className="hidden md:block mt-0.5 space-y-0.5">
-                {dayEvents.slice(0, 2).map((ev) => (
-                  <div
-                    key={ev.id}
-                    className="text-[10px] leading-tight truncate rounded bg-teal-50 text-teal-800 px-1 py-0.5"
-                  >
-                    {ev.title}
-                  </div>
-                ))}
-                {dayEvents.length > 2 && (
-                  <div className="text-[10px] text-gray-500 px-1">
-                    +{dayEvents.length - 2}
-                  </div>
-                )}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
+// 院内の予定・院長の予定を、表示の1件（CalItem）にそろえる（243）
+const clinicItem = (ev: CalendarEvent): CalItem => ({
+  id: `c-${ev.id}`,
+  ymd: jstYmdOf(ev.start),
+  time: ev.allDay ? "" : formatTimeRange(ev),
+  allDay: ev.allDay,
+  title: ev.title,
+  location: ev.location,
+});
+// 院長の予定は時刻と題名だけ。「非公開」の予定（題名が空）は「院長の予定」とだけ出す
+const directorItem = (ev: DirectorEvent): CalItem => ({
+  id: `d-${ev.id}`,
+  ymd: jstYmdOf(ev.start),
+  time: ev.allDay ? "" : formatTimeRange(ev),
+  allDay: ev.allDay,
+  title: ev.title || DIRECTOR_LABEL,
+  tone: "director",
+});
 
 function CalendarPageBody() {
   const [state, setState] = useState<LoadState>("loading");
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [directorEvents, setDirectorEvents] = useState<DirectorEvent[] | null>(null);
+  const [range, setRange] = useState<{ from: string; to: string } | null>(null);
   const [adminDetail, setAdminDetail] = useState("");
+  const [directorDetail, setDirectorDetail] = useState("");
   const [reloading, setReloading] = useState(false);
-  // 表示切替（📋 リスト / 🗓 月表示・指示書121）。既定は月表示（指示書125）。
-  // 保存済みの選択（mk_calendar_view）があればそれを優先＝既定変更は初回訪問者にのみ効く。
-  // localStorage 不可の環境では既定のまま（102/116の流儀）
-  const [view, setView] = useState<"list" | "month">("month");
+  // 表示切替（📋 リスト / 🗓 月表示 / 📅 週表示）。既定は月表示（指示書125）。選択は localStorage に記憶
+  const [view, setView] = useStoredChoice<CalView>(CALENDAR_VIEW_LS_KEY, VIEWS, "month");
+  const [big, setBig] = useStoredChoice(CALENDAR_BIG_LS_KEY, ON_OFF, "off");
   const [selectedYmd, setSelectedYmd] = useState<string | null>(null);
-
-  useEffect(() => {
-    try {
-      if (localStorage.getItem(CALENDAR_VIEW_LS_KEY) === "list") {
-        setView("list");
-      }
-    } catch {
-      /* 既定のまま */
-    }
-  }, []);
-
-  const changeView = (v: "list" | "month") => {
-    setView(v);
-    try {
-      localStorage.setItem(CALENDAR_VIEW_LS_KEY, v);
-    } catch {
-      /* 記憶できなくても切替自体は有効 */
-    }
-  };
+  const [weekSunday, setWeekSunday] = useState<string | null>(null);
 
   const load = useCallback(async (isReload: boolean) => {
     if (isReload) setReloading(true);
@@ -259,8 +128,17 @@ function CalendarPageBody() {
         setState("unavailable");
         return;
       }
-      const j = (await res.json()) as { events?: CalendarEvent[] };
+      const j = (await res.json()) as {
+        events?: CalendarEvent[];
+        directorEvents?: DirectorEvent[];
+        directorDetail?: string;
+        range?: { from: string; to: string };
+      };
       setEvents(Array.isArray(j.events) ? j.events : []);
+      // 243: 院長の予定（見せない人・つながらないときは来ない → 院内の予定だけ出す）
+      setDirectorEvents(Array.isArray(j.directorEvents) ? j.directorEvents : null);
+      setDirectorDetail(typeof j.directorDetail === "string" ? j.directorDetail : "");
+      setRange(j.range && typeof j.range.from === "string" && typeof j.range.to === "string" ? j.range : null);
       setState("ready");
     } catch {
       setAdminDetail("");
@@ -271,7 +149,9 @@ function CalendarPageBody() {
   }, []);
 
   useEffect(() => {
-    load(false);
+    void (async () => {
+      await load(false);
+    })();
   }, [load]);
 
   if (state === "loading") {
@@ -317,53 +197,28 @@ function CalendarPageBody() {
   }
 
   const today = jstTodayYmd();
+  const items: CalItem[] = [...events.map(clinicItem), ...(directorEvents ?? []).map(directorItem)];
+  // 日付→予定（終日 → 時刻の順）
+  const byYmd = groupByYmd(items);
 
-  // 日付（JST）でグループ化。API側で開始時刻順のため、日付キーの出現順で安定。
-  // リストは今日以降のみ（APIは月初からの過去分も返すが、リストには出さない・指示書121）
-  const groups: { ymd: string; items: CalendarEvent[] }[] = [];
-  for (const ev of events) {
-    const ymd = jstYmdOf(ev.start);
-    if (ymd < today) continue;
-    const last = groups[groups.length - 1];
-    if (last && last.ymd === ymd) {
-      last.items.push(ev);
-    } else {
-      groups.push({ ymd, items: [ev] });
-    }
-  }
-
-  // 月表示用: 日付→予定の索引と、今月・翌月の2ヶ月（指示書121）
-  const eventsByYmd = new Map<string, CalendarEvent[]>();
-  for (const ev of events) {
-    const ymd = jstYmdOf(ev.start);
-    if (!eventsByYmd.has(ymd)) eventsByYmd.set(ymd, []);
-    eventsByYmd.get(ymd)!.push(ev);
-  }
+  // リストは今日〜翌月末（従来どおり・指示書121。APIは週表示のために前後も返す）
   const thisY = Number(today.slice(0, 4));
   const thisM = Number(today.slice(5, 7));
-  const months: { y: number; m: number }[] = [
-    { y: thisY, m: thisM },
-    thisM === 12 ? { y: thisY + 1, m: 1 } : { y: thisY, m: thisM + 1 },
-  ];
+  const next = addMonths(thisY, thisM, 1);
+  const listEnd = lastDayOfMonth(next.y, next.m);
+  const groups = Array.from(byYmd.keys())
+    .filter((ymd) => ymd >= today && ymd <= listEnd)
+    .sort()
+    .map((ymd) => ({ ymd, items: byYmd.get(ymd)! }));
 
-  // 日別詳細カード（JSXを1変数に共通化・指示書127）。
-  // 縦並び時=タップした月の直下（xl:hidden）／横並び時=両グリッド下に全幅1つ（hidden xl:block）
+  // 月表示: 今月・翌月の2ヶ月（指示書121）
+  const months: { y: number; m: number }[] = [{ y: thisY, m: thisM }, next];
+
+  // 週表示（243）: 日曜から。◀ ▶ で送り、「今日」で今日のある週に戻る。読んである期間の外へは送らない
+  const sunday = weekSunday ?? weekStartOf(today);
+
   const dayDetail = selectedYmd ? (
-    <section className="bg-white border border-teal-200 rounded-xl p-4 space-y-2">
-      <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-        {formatDayHeading(selectedYmd)}
-        {selectedYmd === today && (
-          <span className="text-[10px] font-medium bg-teal-100 text-teal-700 rounded-full px-2 py-0.5">
-            今日
-          </span>
-        )}
-      </h2>
-      <ul className="space-y-1.5">
-        {(eventsByYmd.get(selectedYmd) ?? []).map((ev) => (
-          <EventRow key={ev.id} ev={ev} />
-        ))}
-      </ul>
-    </section>
+    <DayDetail ymd={selectedYmd} today={today} items={byYmd.get(selectedYmd) ?? []} onClose={() => setSelectedYmd(null)} />
   ) : null;
 
   return (
@@ -372,32 +227,19 @@ function CalendarPageBody() {
         <p className="text-sm text-gray-600 leading-relaxed bg-teal-50/60 border border-teal-100 rounded-xl px-4 py-3 flex-1 min-w-[240px]">
           {CALENDAR_INTRO}
         </p>
-        <div className="flex items-center gap-2 shrink-0 flex-wrap">
-          {/* 表示切替（指示書121・選択はlocalStorageに記憶） */}
-          <div className="flex rounded-full border border-gray-200 overflow-hidden text-sm">
-            <button
-              type="button"
-              onClick={() => changeView("list")}
-              className={
-                view === "list"
-                  ? "px-3 py-2 bg-teal-600 text-white"
-                  : "px-3 py-2 text-gray-600 hover:bg-gray-50"
-              }
-            >
-              📋 リスト
-            </button>
-            <button
-              type="button"
-              onClick={() => changeView("month")}
-              className={
-                view === "month"
-                  ? "px-3 py-2 bg-teal-600 text-white"
-                  : "px-3 py-2 text-gray-600 hover:bg-gray-50"
-              }
-            >
-              🗓 月表示
-            </button>
-          </div>
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          {/* 表示切替（指示書121・243で週表示を足した。選択はlocalStorageに記憶） */}
+          <ViewSwitch view={view} onChange={setView} />
+          {view === "month" && <BigToggle on={big === "on"} onChange={(v) => setBig(v ? "on" : "off")} />}
+          {view === "week" && (
+            <WeekNav
+              onPrev={() => setWeekSunday(addDays(sunday, -7))}
+              onNext={() => setWeekSunday(addDays(sunday, 7))}
+              onToday={() => setWeekSunday(null)}
+              canPrev={weekOverlaps(addDays(sunday, -7), range)}
+              canNext={weekOverlaps(addDays(sunday, 7), range)}
+            />
+          )}
           <button
             type="button"
             onClick={() => load(true)}
@@ -409,35 +251,28 @@ function CalendarPageBody() {
         </div>
       </div>
 
+      {/* 243: 院長の予定の色の見本（院長の予定が出ているときだけ）／院長だけに、つながらない理由 */}
+      {(directorEvents || directorDetail) && (
+        <div className="flex items-center gap-3 flex-wrap">
+          {directorEvents && <DirectorLegend />}
+          {directorDetail && (
+            <p className="text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 break-all">
+              【管理者向け】{DIRECTOR_LABEL}：{directorDetail}
+            </p>
+          )}
+        </div>
+      )}
+
       {view === "list" ? (
         groups.length === 0 ? (
           <p className="text-sm text-gray-600 text-center py-12">
             {CALENDAR_EMPTY}
           </p>
         ) : (
-          <div className="space-y-4">
-            {groups.map((g) => (
-              <section
-                key={g.ymd}
-                className="bg-white border border-gray-200 rounded-xl p-4 space-y-2"
-              >
-                <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-                  {formatDayHeading(g.ymd)}
-                  {g.ymd === today && (
-                    <span className="text-[10px] font-medium bg-teal-100 text-teal-700 rounded-full px-2 py-0.5">
-                      今日
-                    </span>
-                  )}
-                </h2>
-                <ul className="space-y-1.5">
-                  {g.items.map((ev) => (
-                    <EventRow key={ev.id} ev={ev} />
-                  ))}
-                </ul>
-              </section>
-            ))}
-          </div>
+          <ListView groups={groups} today={today} />
         )
+      ) : view === "week" ? (
+        <WeekView sunday={sunday} today={today} byYmd={byYmd} />
       ) : (
         // 月表示: xl以上は2グリッド横並び（指示書127）・lg以下は従来の縦並び
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 xl:gap-6">
@@ -447,8 +282,9 @@ function CalendarPageBody() {
                 year={y}
                 month={m}
                 today={today}
-                eventsByYmd={eventsByYmd}
+                byYmd={byYmd}
                 selectedYmd={selectedYmd}
+                big={big === "on"}
                 onSelect={(ymd) =>
                   setSelectedYmd((prev) => (prev === ymd ? null : ymd))
                 }

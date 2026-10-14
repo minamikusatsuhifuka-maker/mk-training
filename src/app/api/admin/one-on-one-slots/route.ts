@@ -27,6 +27,7 @@ import { jstTodayYmd } from "@/lib/library";
 import {
   AlreadyBookedError,
   DirectorBusyError,
+  DirectorGcalBusyError,
   SlotTakenError,
   bookSlot,
   cancelBooking,
@@ -52,9 +53,12 @@ import {
   normalizeSlotPeriod,
   summarizePlan,
   validatePeriod,
+  type Booking,
   type PeriodInput,
   type Slot,
 } from "@/lib/one-on-one-slots";
+import { loadDirectorBusy, type BusyStatus } from "@/lib/director-busy-server";
+import { formatBusyTime, overlapsOf } from "@/lib/director-busy";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -65,6 +69,10 @@ const bad = (error: string) => NextResponse.json({ error }, { status: 400 });
 function errorResponse(e: unknown): NextResponse {
   if (e instanceof GrowthTableMissingError) {
     return NextResponse.json({ error: e.message }, { status: 503 });
+  }
+  // 245: 院長・任された幹部には、院長の予定と重なったことをそのまま伝える（既存の DirectorBusyError の文）
+  if (e instanceof DirectorGcalBusyError) {
+    return NextResponse.json({ error: new DirectorBusyError().message, code: "taken" }, { status: 409 });
   }
   if (e instanceof SlotTakenError || e instanceof DirectorBusyError) {
     return NextResponse.json({ error: e.message, code: "taken" }, { status: 409 });
@@ -108,6 +116,38 @@ function readPeriodInput(raw: unknown): PeriodInput | null {
   };
 }
 
+/**
+ * 245: 院長のGoogleカレンダーの「予定あり」との重なり（スイッチOFFなら status "off" だけ）。
+ * ・conflicts：これからの予約ごとに、重なっているGoogleの予定（時刻。題名は院長にだけ）
+ * ・busySlotIds：これからの空き枠のうち、Googleの予定でふさがっている枠（スタッフには予約済みと同じに見える）
+ * 予約は消さない・動かさない（245 §3）。院長が動かすか取り消すかを決める。
+ */
+async function gcalFor(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  slots: Slot[],
+  bookings: Booking[],
+  today: string,
+  showTitles: boolean
+): Promise<{ status: BusyStatus; checkedAt: string; conflicts: Record<string, { time: string; title: string }[]>; busySlotIds: string[] }> {
+  const coming = slots.filter((sl) => sl.date >= today);
+  const to = coming.reduce((m, sl) => (sl.date > m ? sl.date : m), today);
+  const busy = coming.length > 0 ? await loadDirectorBusy(admin, today, to) : { status: "off" as BusyStatus, intervals: [], checkedAt: "" };
+  const conflicts: Record<string, { time: string; title: string }[]> = {};
+  const busySlotIds: string[] = [];
+  if (busy.status === "ok" || busy.status === "stale") {
+    for (const b of bookings) {
+      if (b.date < today) continue;
+      const hit = overlapsOf(busy.intervals, b);
+      if (hit.length > 0) conflicts[b.id] = hit.map((x) => ({ time: formatBusyTime(x), title: showTitles ? x.title : "" }));
+    }
+    const booked = new Set(bookings.map((b) => b.slotId));
+    for (const sl of coming) {
+      if (!booked.has(sl.id) && !sl.blocked && overlapsOf(busy.intervals, sl).length > 0) busySlotIds.push(sl.id);
+    }
+  }
+  return { status: busy.status, checkedAt: busy.checkedAt, conflicts, busySlotIds };
+}
+
 export async function GET() {
   const auth = await requireAdminItem("one-on-one-slots");
   if (auth.response) return auth.response;
@@ -133,10 +173,14 @@ export async function GET() {
       const testOnly = new Set(
         periods.filter((p) => p.staffIds.length > 0 && p.staffIds.every((id) => testIds.has(id))).map((p) => p.id)
       );
+      const shownSlots = slots.filter((sl) => !testOnly.has(sl.periodId));
+      const shownBookings = bookings.filter((b) => !testIds.has(b.userId) && !testOnly.has(b.periodId));
       return NextResponse.json({
         periods: periods.filter((p) => !testOnly.has(p.id)).map((p) => ({ ...p, staffIds: p.staffIds.filter((id) => !testIds.has(id)) })),
-        slots: slots.filter((sl) => !testOnly.has(sl.periodId)),
-        bookings: bookings.filter((b) => !testIds.has(b.userId) && !testOnly.has(b.periodId)),
+        slots: shownSlots,
+        bookings: shownBookings,
+        // 245: 任された幹部には、院長のGoogleの予定の題名は出さない（時刻だけ）
+        gcal: await gcalFor(admin, shownSlots, shownBookings, jstTodayYmd(), false),
         notices: notices.filter((n) => !testIds.has(n.userId)),
         changes: changes.filter((c) => !testIds.has(c.byId)),
         staff: allStaff.filter((st) => !st.testSeed),
@@ -155,6 +199,8 @@ export async function GET() {
       today: jstTodayYmd(),
       // 226 §2: 開いているのが院長か、委任された幹部か（画面の案内を出し分ける）
       isAdmin: auth.isAdmin,
+      // 245: 院長のGoogleカレンダーとの重なり（題名は院長にだけ）
+      gcal: await gcalFor(admin, slots, bookings, jstTodayYmd(), auth.isAdmin),
     });
   } catch (e) {
     return errorResponse(e);

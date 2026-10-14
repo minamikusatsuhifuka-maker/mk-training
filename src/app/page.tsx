@@ -4,6 +4,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PresurveyAlertBanner, ScheduleReminderBanner } from "@/components/OneOnOneSchedule";
 import { NoticesHomeBanner } from "@/components/notices/NoticesAlerts";
+import { DateTimeSelect } from "@/components/TimeSelect";
 import {
   loadPortalItems,
   savePortalItems,
@@ -1212,11 +1213,14 @@ export default function PortalHome() {
                   <label className="block text-xs font-medium text-gray-700 mb-1">
                     通知期限
                   </label>
-                  <input
-                    type="datetime-local"
+                  {/* 244: 日付はそのまま・時刻は「時」「分（5分刻み）」 */}
+                  <DateTimeSelect
                     value={nfNoticeUntil}
-                    onChange={(e) => setNfNoticeUntil(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg"
+                    onChange={setNfNoticeUntil}
+                    testId="home-notice-until"
+                    ariaLabel="通知期限の"
+                    dateClassName="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white"
+                    timeClassName="px-2 py-2 text-sm border border-gray-200 rounded-lg bg-white"
                   />
                 </div>
                 <div>

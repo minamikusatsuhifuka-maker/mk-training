@@ -21,6 +21,7 @@ import {
 } from "@/lib/section-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateTimeSelect } from "@/components/TimeSelect";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
@@ -674,15 +675,19 @@ export default function TasksPage() {
           <div className="space-y-1">
             <Label htmlFor="t-due">期限</Label>
             <div className="flex items-center gap-2">
-              <Input
-                ref={dueInputRef}
+              {/* 244: 日付はそのまま・時刻は「時」「分（5分刻み）」。「決定」との組み合わせは今までどおり */}
+              <DateTimeSelect
+                dateRef={dueInputRef}
                 id="t-due"
-                type="datetime-local"
                 value={dueLocal}
-                onChange={(e) => {
-                  setDueLocal(e.target.value);
+                onChange={(v) => {
+                  setDueLocal(v);
                   setDueConfirmed(false);
                 }}
+                testId="task-due-new"
+                ariaLabel="期限の"
+                dateClassName="h-9 rounded-md border border-input bg-transparent px-2.5 text-sm"
+                timeClassName="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
               />
               <Button
                 type="button"
@@ -1511,15 +1516,19 @@ function EditDialog({
           <div className="space-y-1">
             <Label htmlFor="e-due">期限</Label>
             <div className="flex items-center gap-2">
-              <Input
-                ref={dueInputRef}
+              {/* 244: 日付はそのまま・時刻は「時」「分（5分刻み）」。「決定」との組み合わせは今までどおり */}
+              <DateTimeSelect
+                dateRef={dueInputRef}
                 id="e-due"
-                type="datetime-local"
                 value={dueLocal}
-                onChange={(e) => {
-                  setDueLocal(e.target.value);
+                onChange={(v) => {
+                  setDueLocal(v);
                   setDueConfirmed(false);
                 }}
+                testId="task-due-edit"
+                ariaLabel="期限の"
+                dateClassName="h-9 rounded-md border border-input bg-transparent px-2.5 text-sm"
+                timeClassName="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
               />
               <Button
                 type="button"

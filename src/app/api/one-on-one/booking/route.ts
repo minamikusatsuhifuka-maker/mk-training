@@ -44,6 +44,8 @@ import {
   openSlotsForStaff,
   type Slot,
 } from "@/lib/one-on-one-slots";
+import { loadDirectorBusy } from "@/lib/director-busy-server";
+import { overlapsOf } from "@/lib/director-busy";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -122,12 +124,21 @@ export async function GET() {
     }
 
     const mine = periods.filter((p) => p.staffIds.includes(user.id));
+
+    // 245: 院長のGoogleカレンダーで「予定あり」の時間と重なる枠は、ほかの人が予約済みの枠と同じく出さない（理由も出さない）。
+    //   スイッチOFF・確かめられないとき（unknown）は今までどおり出す。5分は前の結果を使う
+    const myPeriodIds = new Set(mine.map((p) => p.id));
+    const comingSlots = allSlots.filter((s) => myPeriodIds.has(s.periodId) && s.date >= today);
+    const lastDate = comingSlots.reduce((m, s) => (s.date > m ? s.date : m), today);
+    const gcal = comingSlots.length > 0 ? await loadDirectorBusy(admin, today, lastDate) : null;
+    const gcalBusy = (s: Slot) => !!gcal && gcal.intervals.length > 0 && overlapsOf(gcal.intervals, s).length > 0;
+
     const out = mine.map((p) => {
       const slots = allSlots.filter((s) => s.periodId === p.id);
       const bookings = allBookings.filter((b) => b.periodId === p.id);
       const myBooking = bookings.find((b) => b.userId === user.id) ?? null;
       const open: Slot[] = openSlotsForStaff(slots, bookings, today).filter(
-        (s) => !directorBusy.has(`${s.date} ${s.startTime}`)
+        (s) => !directorBusy.has(`${s.date} ${s.startTime}`) && !gcalBusy(s)
       );
       const rebook = rebooks.find((r) => r.periodId === p.id) ?? null;
       return {

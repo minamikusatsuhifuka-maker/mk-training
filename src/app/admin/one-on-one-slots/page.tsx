@@ -56,7 +56,18 @@ type Payload = {
   today: string;
   /** 226 §2: 開いているのが院長か（委任された幹部なら false） */
   isAdmin: boolean;
+  /** 245: 院長のGoogleカレンダーとの重なり（スイッチOFFなら status "off"） */
+  gcal: GcalInfo;
 };
+type GcalInfo = {
+  status: "off" | "ok" | "stale" | "unknown";
+  checkedAt: string;
+  /** 予約id → 重なっているGoogleの予定（題名は院長にだけ入る） */
+  conflicts: Record<string, { time: string; title: string }[]>;
+  /** Googleの予定でふさがっている空き枠 */
+  busySlotIds: string[];
+};
+const GCAL_OFF: GcalInfo = { status: "off", checkedAt: "", conflicts: {}, busySlotIds: [] };
 
 /** 226 §2: 変更の記録を画面に出す件数 */
 const SLOT_CHANGES_SHOWN = 20;
@@ -149,6 +160,7 @@ export default function OneOnOneSlotsPage() {
         staff: j.staff ?? [],
         today: j.today ?? "",
         isAdmin: j.isAdmin !== false,
+        gcal: j.gcal && typeof j.gcal === "object" ? { ...GCAL_OFF, ...j.gcal } : GCAL_OFF,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込めませんでした");
@@ -421,6 +433,9 @@ export default function OneOnOneSlotsPage() {
           </ul>
         )}
       </section>
+
+      {/* 245: 院長のGoogleカレンダーの予定と重なっている予約（予約は消さない・動かさない。院長が決める） */}
+      <GcalWarnings data={data} today={today} nameOf={nameOf} />
 
       {/* 院長への知らせ（205 §4） */}
       {data.notices.length > 0 && (
@@ -747,6 +762,7 @@ export default function OneOnOneSlotsPage() {
                             {!canStaffChange(b.date, today) && (
                               <span className="text-[10px] text-amber-800">本人は変更できない時期</span>
                             )}
+                            <GcalMark gcal={data.gcal} booking={b} today={today} />
                           </>
                         ) : (
                           <span className="text-amber-800">未予約</span>
@@ -806,9 +822,17 @@ export default function OneOnOneSlotsPage() {
                                 {b ? (
                                   <span className="font-medium" data-slot-booked={s.id}>
                                     {nameOf(b.userId)}さん
+                                    {data.gcal.conflicts[b.id] && (
+                                      <span className="ml-0.5 text-amber-700" title="院長のGoogleカレンダーの予定と重なっています" data-slot-gcal-conflict={s.id}>
+                                        ⚠
+                                      </span>
+                                    )}
                                   </span>
                                 ) : s.blocked ? (
                                   <span data-slot-blocked={s.id}>ブロック</span>
+                                ) : data.gcal.busySlotIds.includes(s.id) ? (
+                                  // 245: Googleの予定でふさがっている（スタッフには予約済みと同じに見える）
+                                  <span className="text-violet-700" data-slot-gcal-busy={s.id}>院長の予定</span>
                                 ) : (
                                   <span className="text-slate-400">空き</span>
                                 )}
@@ -900,4 +924,71 @@ function addOne(ymd: string): string {
   const d = new Date(`${ymd}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + 1);
   return d.toISOString().slice(0, 10);
+}
+
+// ─── 245: 院長のGoogleカレンダーとの重なり ───
+
+/** 予約の行の「⚠」（重なっている予定の時刻と題名／確かめられていない） */
+function GcalMark({ gcal, booking, today }: { gcal: GcalInfo; booking: Booking; today: string }) {
+  if (booking.date < today) return null;
+  const hits = gcal.conflicts[booking.id];
+  if (hits) {
+    return (
+      <span className="text-[11px] font-medium text-amber-800" data-slot-gcal-mark={booking.id}>
+        ⚠ Googleカレンダーの予定と重なっています：{hits.map((h) => (h.title ? `${h.time} ${h.title}` : h.time)).join("、")}
+      </span>
+    );
+  }
+  if (gcal.status === "unknown") {
+    return (
+      <span className="text-[11px] text-amber-800" data-slot-gcal-unknown={booking.id}>
+        ⚠ 院長のGoogleカレンダーを確かめられていません
+      </span>
+    );
+  }
+  return null;
+}
+
+function GcalWarnings({ data, today, nameOf }: { data: Payload; today: string; nameOf: (id: string) => string }) {
+  const { gcal } = data;
+  if (gcal.status === "off") return null;
+  const coming = sortSlots(data.bookings.filter((b) => b.date >= today));
+  const hit = coming.filter((b) => gcal.conflicts[b.id]);
+  if (gcal.status === "ok" && hit.length === 0) return null;
+  return (
+    <section className="rounded-2xl border border-amber-300 bg-amber-50 p-4 space-y-1.5" data-slot-gcal-warnings={gcal.status}>
+      {gcal.status === "unknown" && (
+        <p className="text-sm font-medium text-amber-900">
+          ⚠ 院長のGoogleカレンダーを読めないため、予約が院長の予定と重なっていないか確かめられていません。予約は受け付けています。
+        </p>
+      )}
+      {gcal.status === "stale" && (
+        <p className="text-xs text-amber-900">
+          ⚠ 院長のGoogleカレンダーを読めないため、{formatCheckedAt(gcal.checkedAt)}に読めた予定で確かめています。
+        </p>
+      )}
+      {hit.length > 0 && (
+        <>
+          <h2 className="text-sm font-bold text-amber-900">⚠ 院長のGoogleカレンダーの予定と重なっている1on1</h2>
+          <ul className="space-y-0.5 text-sm text-slate-800">
+            {hit.map((b) => (
+              <li key={b.id} data-slot-gcal-hit={b.id}>
+                {formatDateW(b.date)} {b.startTime}〜{b.endTime}　{nameOf(b.userId)}さん
+                <span className="text-amber-800">
+                  {"　"}— Googleの予定 {gcal.conflicts[b.id].map((h) => (h.title ? `${h.time} ${h.title}` : h.time)).join("、")}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-amber-900">予約は消していません。動かすか取り消すかを決めてください。</p>
+        </>
+      )}
+    </section>
+  );
+}
+
+function formatCheckedAt(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "前";
+  return d.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }

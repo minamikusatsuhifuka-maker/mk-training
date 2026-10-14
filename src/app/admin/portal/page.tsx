@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PORTAL_TABS_ADMIN_ONLY } from "@/lib/admin-items";
+import { DateTimeSelect } from "@/components/TimeSelect";
 import {
   loadPortalItems,
   savePortalItems,
@@ -2919,13 +2920,14 @@ export default function AdminPortalPage() {
                 <label className="text-xs text-gray-800 mb-1 block">
                   通知アニメの表示期限（この日時まで毎回表示）
                 </label>
-                <input
-                  type="datetime-local"
+                {/* 244: 日付はそのまま・時刻は「時」「分（5分刻み）」 */}
+                <DateTimeSelect
                   value={newsForm.noticeUntil}
-                  onChange={(e) =>
-                    setNewsForm({ ...newsForm, noticeUntil: e.target.value })
-                  }
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                  onChange={(v) => setNewsForm({ ...newsForm, noticeUntil: v })}
+                  testId="portal-news-notice-until"
+                  ariaLabel="通知アニメの表示期限の"
+                  dateClassName="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+                  timeClassName="border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white"
                 />
               </div>
               <div className="sm:col-span-2">
@@ -3075,15 +3077,18 @@ export default function AdminPortalPage() {
                   <label className="text-xs text-gray-800">
                     通知期限
                   </label>
-                  <input
-                    type="datetime-local"
+                  {/* 244: 日付はそのまま・時刻は「時」「分（5分刻み）」 */}
+                  <DateTimeSelect
                     value={isoToDatetimeLocal(n.noticeUntil)}
-                    onChange={(e) =>
+                    onChange={(v) =>
                       updateNewsItem(n.id, {
-                        noticeUntil: datetimeLocalToIso(e.target.value),
+                        noticeUntil: datetimeLocalToIso(v),
                       })
                     }
-                    className="border border-gray-200 rounded-lg px-2 py-1 text-xs"
+                    testId={`portal-news-notice-until-${n.id}`}
+                    ariaLabel="通知期限の"
+                    dateClassName="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white"
+                    timeClassName="border border-gray-200 rounded-lg px-1 py-1 text-xs bg-white"
                   />
                   <span className="text-xs text-gray-600">
                     （未設定なら {charSettings.newsNoticeDays}日間）

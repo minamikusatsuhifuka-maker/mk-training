@@ -7,6 +7,7 @@
 
 import crypto from "crypto";
 import { jstTodayYmd } from "./library";
+import { addDays, clinicCalendarRange } from "./calendar-views";
 
 // ─── 設定ローダー（env 3点・読み込みはここに集約） ───
 
@@ -51,6 +52,13 @@ export function loadCalendarConfig(): {
   // リテラル "\n" を実改行に復元し、復元後にも前後を trim
   const privateKey = rawKey.replace(/\\n/g, "\n").trim();
   return { config: { email, privateKey, calendarId }, missing: [] };
+}
+
+// 243: 院長のGoogleカレンダー（院内カレンダーと同じサービスアカウントで読む。院長がそのアドレスにカレンダーを共有する）。
+// カレンダーIDは環境変数だけに置く（コード・コミット・報告書には書かない）。未設定なら院長の予定は出さないだけ。
+export const DIRECTOR_CALENDAR_ENV_VAR = "GOOGLE_DIRECTOR_CALENDAR_ID";
+export function loadDirectorCalendarId(): string {
+  return cleanEnv(process.env.GOOGLE_DIRECTOR_CALENDAR_ID);
 }
 
 // ─── Google API エラー（ルート側で 502 detail に使う。鍵・トークンは含まれない） ───
@@ -138,8 +146,6 @@ export type CalendarEvent = {
 };
 
 const EVENTS_TTL_MS = 5 * 60 * 1000;
-let eventsCache: { events: CalendarEvent[]; fetchedAt: number } | null = null;
-let inFlight: Promise<CalendarEvent[]> | null = null;
 
 function str(v: unknown): string {
   return typeof v === "string" ? v : "";
@@ -149,6 +155,7 @@ type GcalItem = {
   id?: unknown;
   summary?: unknown;
   location?: unknown;
+  visibility?: unknown;
   start?: { date?: unknown; dateTime?: unknown };
   end?: { date?: unknown; dateTime?: unknown };
 };
@@ -170,35 +177,51 @@ function mapEvent(item: GcalItem): CalendarEvent | null {
   };
 }
 
-export async function fetchCalendarEvents(
-  config: CalendarConfig
-): Promise<CalendarEvent[]> {
+/** 243: 院長の予定（時刻と題名だけ。場所・説明・参加者は運ばない）。title が空＝「非公開」の予定（画面では「院長の予定」とだけ出す） */
+export type DirectorEvent = { id: string; title: string; start: string; end: string; allDay: boolean };
+
+function mapDirectorEvent(item: GcalItem): DirectorEvent | null {
+  const id = str(item.id);
+  const start = str(item.start?.dateTime) || str(item.start?.date);
+  if (!id || !start) return null;
+  // Googleカレンダーで「非公開」（private／confidential）にした予定は、題名を出さない（院長が予定ごとに隠せる）
+  const vis = str(item.visibility);
+  const hidden = vis === "private" || vis === "confidential";
+  return {
+    id,
+    title: hidden ? "" : str(item.summary),
+    start,
+    end: str(item.end?.dateTime) || str(item.end?.date),
+    allDay: !!str(item.start?.date),
+  };
+}
+
+// キャッシュ（カレンダーごと: 5分TTL ＋ 取得中Promise共有）
+const caches = new Map<string, { items: GcalItem[]; fetchedAt: number; key: string }>();
+const inFlights = new Map<string, Promise<GcalItem[]>>();
+
+async function fetchItems(config: CalendarConfig, calendarId: string): Promise<GcalItem[]> {
+  // 243: 先月1日〜翌々月末（週表示で前後へ送れるように）。月表示・リストは今までどおり今月と翌月
+  const range = clinicCalendarRange(jstTodayYmd());
+  const rangeKey = `${range.from}~${range.to}`;
   const now = Date.now();
-  if (eventsCache && now - eventsCache.fetchedAt < EVENTS_TTL_MS) {
-    return eventsCache.events;
-  }
-  if (inFlight) return inFlight;
-  inFlight = (async () => {
+  const hit = caches.get(calendarId);
+  if (hit && hit.key === rangeKey && now - hit.fetchedAt < EVENTS_TTL_MS) return hit.items;
+  const running = inFlights.get(calendarId);
+  if (running) return running;
+  const p = (async () => {
     try {
       const token = await getAccessToken(config);
-      // timeMin = 今月のJST 1日 0時（指示書121・月間グリッドに月初からの過去分が必要）。
-      // timeMax は排他的なため「翌月末日23:59」ではなく翌々月1日のJST 0時を渡す
-      // （末日終盤開始の予定の取りこぼし防止・意味は同じ）。期間は59〜62日で
-      // 従来の60日と実質同水準 → maxResults は 250 のまま（62日×1日4件でも飽和しない）。
-      const todayYmd = jstTodayYmd();
-      const y = Number(todayYmd.slice(0, 4));
-      const m = Number(todayYmd.slice(5, 7));
-      const timeMin = `${todayYmd.slice(0, 7)}-01T00:00:00+09:00`;
-      const timeMax = `${m >= 11 ? y + 1 : y}-${String(((m + 1) % 12) + 1).padStart(2, "0")}-01T00:00:00+09:00`;
+      // timeMax は排他的なので、最後の日の翌日のJST 0時を渡す
       const params = new URLSearchParams({
         singleEvents: "true", // 繰り返し予定を展開（方式B・院長決定）
         orderBy: "startTime",
-        timeMin,
-        timeMax,
-        maxResults: "250",
+        timeMin: `${range.from}T00:00:00+09:00`,
+        timeMax: `${addDays(range.to, 1)}T00:00:00+09:00`,
+        maxResults: "2500",
       });
       const res = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(config.calendarId)}/events?${params.toString()}`,
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (!res.ok) {
@@ -210,14 +233,63 @@ export async function fetchCalendarEvents(
         );
       }
       const j = (await res.json()) as { items?: unknown };
-      const events = (Array.isArray(j.items) ? (j.items as GcalItem[]) : [])
-        .map(mapEvent)
-        .filter((e): e is CalendarEvent => e !== null);
-      eventsCache = { events, fetchedAt: Date.now() };
-      return events;
+      const items = Array.isArray(j.items) ? (j.items as GcalItem[]) : [];
+      caches.set(calendarId, { items, fetchedAt: Date.now(), key: rangeKey });
+      return items;
     } finally {
-      inFlight = null;
+      inFlights.delete(calendarId);
     }
   })();
-  return inFlight;
+  inFlights.set(calendarId, p);
+  return p;
+}
+
+export async function fetchCalendarEvents(config: CalendarConfig): Promise<CalendarEvent[]> {
+  return (await fetchItems(config, config.calendarId)).map(mapEvent).filter((e): e is CalendarEvent => e !== null);
+}
+
+/** 243: 院長の予定（院内カレンダーと同じ読み込みの間隔） */
+export async function fetchDirectorEvents(config: CalendarConfig, calendarId: string): Promise<DirectorEvent[]> {
+  return (await fetchItems(config, calendarId)).map(mapDirectorEvent).filter((e): e is DirectorEvent => e !== null);
+}
+
+/**
+ * 245: 院長のカレンダーの予定を、決めた時間のぶんだけ読む（キャッシュしない・1on1の枠をふさぐ判定用）。
+ * 「予定あり／空き時間」（transparency）・取り消し（status）・招待への返事（attendees）も運ぶ。
+ * 読む側（director-busy）が「ふさぐ予定」だけに絞る。timeMin/timeMax は ISO。
+ */
+export async function fetchCalendarItemsBetween(
+  config: CalendarConfig,
+  calendarId: string,
+  timeMin: string,
+  timeMax: string
+): Promise<unknown[]> {
+  const token = await getAccessToken(config);
+  const items: unknown[] = [];
+  let pageToken = "";
+  // 2500件×4ページまで（1on1の期間で足りる量。尽きたらそこまでで判定する）
+  for (let page = 0; page < 4; page++) {
+    const params = new URLSearchParams({
+      singleEvents: "true",
+      orderBy: "startTime",
+      timeMin,
+      timeMax,
+      maxResults: "2500",
+      fields: "nextPageToken,items(id,status,summary,transparency,start,end,attendees(self,responseStatus))",
+    });
+    if (pageToken) params.set("pageToken", pageToken);
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,
+      { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new GoogleApiError(res.status, `予定の取得に失敗しました (HTTP ${res.status}): ${body.slice(0, 200)}`);
+    }
+    const j = (await res.json()) as { items?: unknown; nextPageToken?: unknown };
+    if (Array.isArray(j.items)) items.push(...j.items);
+    pageToken = typeof j.nextPageToken === "string" ? j.nextPageToken : "";
+    if (!pageToken) break;
+  }
+  return items;
 }
