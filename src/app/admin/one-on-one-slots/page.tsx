@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TimeSelect } from "@/components/TimeSelect";
 import {
   BOOKING_CHANGE_DAYS,
   DEFAULT_SLOT_FROM,
@@ -40,7 +41,6 @@ import {
   type SlotChange,
   type SlotPeriod,
   type SlotStep,
-  MINUTE_OPTIONS,
   datesOfPeriod,
 } from "@/lib/one-on-one-slots";
 
@@ -70,31 +70,7 @@ function formatChangedAt(iso: string): string {
   return `${p2(jst.getUTCMonth() + 1)}/${p2(jst.getUTCDate())} ${p2(jst.getUTCHours())}:${p2(jst.getUTCMinutes())}`;
 }
 
-/**
- * 239: 時刻を「時」と「分（5分刻み）」で選ぶ。ブラウザの時刻の部品は、Mac の Chrome では step を付けても
- * 分が1分ごとに出るため使わない。今の値の分が5分刻みでないとき（古いデータ）は、その値も選択肢に残して表示する。
- */
-function TimeSelect({ value, onChange, testId }: { value: string; onChange: (v: string) => void; testId: string }) {
-  const [h, m] = /^\d{2}:\d{2}$/.test(value) ? value.split(":") : ["13", "00"];
-  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
-  const minutes = MINUTE_OPTIONS.includes(m) ? MINUTE_OPTIONS : [...MINUTE_OPTIONS, m].sort();
-  const cls = "h-9 rounded-md border border-slate-200 bg-white px-2 text-sm";
-  return (
-    <span className="mt-0.5 flex items-center gap-1" data-slot-time={testId}>
-      <select value={h} onChange={(e) => onChange(`${e.target.value}:${m}`)} className={cls} aria-label="時" data-slot-time-hour={testId}>
-        {hours.map((x) => (
-          <option key={x} value={x}>{x}</option>
-        ))}
-      </select>
-      :
-      <select value={m} onChange={(e) => onChange(`${h}:${e.target.value}`)} className={cls} aria-label="分" data-slot-time-minute={testId}>
-        {minutes.map((x) => (
-          <option key={x} value={x}>{x}</option>
-        ))}
-      </select>
-    </span>
-  );
-}
+// 239: 時刻を「時」と「分（5分刻み）」で選ぶ部品は、242 で components/TimeSelect.tsx に移した（ほかの欄でも使う）
 
 /** 239: 予定がある日を選ぶ（期間と曜日で決まる日を並べ、押すと「予定がある日」・もう一度押すと戻る） */
 function ExcludedDaysPicker({

@@ -19,6 +19,7 @@ import {
   type ScheduleView,
 } from "@/lib/one-on-one-schedule";
 import { RwdepcInfo } from "@/components/RwdepcInfo";
+import { TimeSelect } from "@/components/TimeSelect";
 import { activeAlerts, activeReminders, useMySchedules } from "@/lib/one-on-one-schedule-client";
 import { rebookText } from "@/lib/one-on-one-slots";
 
@@ -272,7 +273,7 @@ export function KarteScheduleCard({ userId }: { userId: string }) {
         <div className="rounded-lg border border-teal-200 bg-teal-50/40 p-2 space-y-1.5" data-karte-schedule-form>
           <div className="flex flex-wrap gap-1.5">
             <input type="date" value={form.date} min={data.today} onChange={(e) => setForm({ ...form, date: e.target.value })} className="h-9 rounded border border-gray-300 px-2 text-sm" aria-label="1on1の日付" />
-            <input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} className="h-9 rounded border border-gray-300 px-2 text-sm" aria-label="1on1の開始時刻" />
+            <TimeSelect value={form.time} onChange={(v) => setForm({ ...form, time: v })} allowEmpty testId="karte-schedule" ariaLabel="1on1の開始時刻の" className="h-9 rounded border border-gray-300 bg-white px-2 text-sm" />
             <select value={form.partnerId} onChange={(e) => setForm({ ...form, partnerId: e.target.value })} className="h-9 rounded border border-gray-300 px-2 text-sm" aria-label="担当者">
               {data.candidates.map((c) => (
                 <option key={c.userId} value={c.userId}>

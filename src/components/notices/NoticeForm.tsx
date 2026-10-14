@@ -6,6 +6,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { DROP_GUIDE_TEXT, DROP_HERE_TEXT, usePreventWindowFileDrop } from "@/components/DropZone";
+import { TimeSelect } from "@/components/TimeSelect";
 import {
   createNotice,
   removeNoticeFile,
@@ -191,8 +192,8 @@ export function NoticeForm({
             <input id="notice-held-on" type="date" className={input} value={v.heldOn} onChange={(e) => setHeldOn(e.target.value)} />
           </div>
           <div>
-            <label className={label} htmlFor="notice-held-time">開始の時刻（任意）</label>
-            <input id="notice-held-time" type="time" className={input} value={v.heldTime} onChange={(e) => set("heldTime", e.target.value)} />
+            <span className={label}>開始の時刻（任意）</span>
+            <TimeSelect value={v.heldTime} onChange={(t) => set("heldTime", t)} allowEmpty testId="notice-held-time" ariaLabel="開始の時刻の" />
           </div>
           <div>
             <label className={label} htmlFor="notice-place">場所（任意）</label>
