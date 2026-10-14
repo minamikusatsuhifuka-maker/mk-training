@@ -37,6 +37,8 @@ import {
   type StaffContactLogChange,
 } from "./staff-contacts";
 
+import { isTestSeedUser } from "./test-seed";
+
 export { ServiceRoleMissingError };
 
 export const STAFF_CONTACTS_TABLE = "clinic_staff_contacts";
@@ -107,6 +109,7 @@ export type StaffContactsAuth =
       isAdmin: boolean;
       /** 現在の指名リスト（管理者向けの設定画面でのみ使う） */
       viewerUserIds: string[];
+      testSeed: boolean;
     };
 
 export async function authorizeStaffContacts(): Promise<StaffContactsAuth> {
@@ -145,6 +148,8 @@ export async function authorizeStaffContacts(): Promise<StaffContactsAuth> {
     userEmail: user.email ?? "",
     isAdmin,
     viewerUserIds,
+    /** 237: 見る人が検証用アカウントか（院長でも検証用でもない人には、検証用の連絡先を出さない） */
+    testSeed: isTestSeedUser(user),
   };
 }
 

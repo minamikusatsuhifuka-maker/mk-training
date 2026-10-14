@@ -21,6 +21,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { GrowthTableMissingError } from "@/lib/staff-growth-server";
 import { loadPeople } from "@/lib/one-on-one-schedule-server";
 import { isTestSeedUser } from "@/lib/test-seed";
+import { hidesTestSeedFor } from "@/lib/test-seed-hide-server";
+import { loadTestSeedIds } from "@/lib/test-seed-server";
 import { jstTodayYmd } from "@/lib/library";
 import {
   AlreadyBookedError,
@@ -116,10 +118,27 @@ export async function GET() {
       admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
     ]);
     const testIds = new Set((users.data?.users ?? []).filter(isTestSeedUser).map((u) => u.id));
-    const staff = Array.from(people.values())
+    const allStaff = Array.from(people.values())
       .filter((p) => !p.isDirector)
       .map((p) => ({ userId: p.userId, name: p.name, testSeed: testIds.has(p.userId) }))
       .sort((a, b) => Number(a.testSeed) - Number(b.testSeed) || a.name.localeCompare(b.name, "ja"));
+    // 237: 任された本物の幹部（院長でも検証用でもない人）には、検証用アカウントとその予約・知らせ・変更の記録を出さない。
+    //   対象が検証用アカウントだけの期間は、期間ごと（枠も）出さない
+    if (hidesTestSeedFor(auth.user)) {
+      const testOnly = new Set(
+        periods.filter((p) => p.staffIds.length > 0 && p.staffIds.every((id) => testIds.has(id))).map((p) => p.id)
+      );
+      return NextResponse.json({
+        periods: periods.filter((p) => !testOnly.has(p.id)).map((p) => ({ ...p, staffIds: p.staffIds.filter((id) => !testIds.has(id)) })),
+        slots: slots.filter((sl) => !testOnly.has(sl.periodId)),
+        bookings: bookings.filter((b) => !testIds.has(b.userId) && !testOnly.has(b.periodId)),
+        notices: notices.filter((n) => !testIds.has(n.userId)),
+        changes: changes.filter((c) => !testIds.has(c.byId)),
+        staff: allStaff.filter((st) => !st.testSeed),
+        today: jstTodayYmd(),
+        isAdmin: auth.isAdmin,
+      });
+    }
     return NextResponse.json({
       periods,
       slots,
@@ -127,7 +146,7 @@ export async function GET() {
       notices,
       // 226 §2: 誰がいつ日程を変えたか
       changes,
-      staff,
+      staff: allStaff,
       today: jstTodayYmd(),
       // 226 §2: 開いているのが院長か、委任された幹部か（画面の案内を出し分ける）
       isAdmin: auth.isAdmin,
@@ -172,12 +191,18 @@ export async function POST(req: NextRequest) {
     const admin = createSupabaseAdminClient();
     const action = body.action === "extend" ? "extend" : "create";
     const now = new Date().toISOString();
+    // 237: 任された本物の幹部は、検証用アカウントを対象に入れられない（画面にも出していない）。
+    //   変える（extend）ときは、今その期間にいる検証用アカウントを引き継ぐ（見えない人を外してしまわないため）
+    const hideTest = hidesTestSeedFor(auth.user);
+    const seedIds = hideTest ? await loadTestSeedIds() : new Set<string>();
+    if (hideTest) input.staffIds = input.staffIds.filter((id) => !seedIds.has(id));
 
     if (action === "extend") {
       const periodId = typeof body.periodId === "string" ? body.periodId : "";
       const periods = await fetchPeriods(admin);
       const prev = periods.find((p) => p.id === periodId);
       if (!prev) return NextResponse.json({ error: "対象の期間が見つかりません" }, { status: 404 });
+      if (hideTest) input.staffIds = [...input.staffIds, ...prev.staffIds.filter((id) => seedIds.has(id))];
       // 既存の枠・予約は動かさず、足りない枠だけ作る（205 §1-1）
       const next = normalizeSlotPeriod(prev.id, {
         ...(prev as unknown as Record<string, unknown>),
@@ -258,7 +283,11 @@ export async function PATCH(req: NextRequest) {
         }
         const raw = Array.isArray(body.staffIds) ? body.staffIds : [];
         // 対象にできるのは、名簿にいる院長以外の人だけ（期間を作るときと同じ）
-        const staffIds = raw.filter((x): x is string => typeof x === "string" && people.has(x) && !people.get(x)!.isDirector);
+        let staffIds = raw.filter((x): x is string => typeof x === "string" && people.has(x) && !people.get(x)!.isDirector);
+        // 237: 任された本物の幹部は検証用アカウントを足せない。見えていない検証用アカウントは今のまま残す
+        if (hidesTestSeedFor(auth.user)) {
+          staffIds = [...staffIds.filter((id) => !testIds.has(id)), ...period.staffIds.filter((id) => testIds.has(id))];
+        }
         const updated = await updatePeriodStaff(admin, period, staffIds, by);
         await recordSlotChange(admin, {
           ...(await changedBy(admin, auth.user)),
@@ -373,6 +402,10 @@ export async function PATCH(req: NextRequest) {
       const userId = typeof body.userId === "string" ? body.userId : "";
       const s = byId.get(id);
       if (!s || !userId) return NextResponse.json({ error: "対象がわかりません" }, { status: 404 });
+      // 237: 任された本物の幹部は、検証用アカウントの代わりに予約できない（画面にも出していない）
+      if (hidesTestSeedFor(auth.user) && testIds.has(userId)) {
+        return NextResponse.json({ error: "対象がわかりません" }, { status: 404 });
+      }
       if (bookingOf(s.id)) return NextResponse.json({ error: "この枠はすでに予約されています", code: "taken" }, { status: 409 });
       // 院長は4日前を過ぎていても代わりに予約できる（205 §1-3）
       const r = await bookSlot(admin, {

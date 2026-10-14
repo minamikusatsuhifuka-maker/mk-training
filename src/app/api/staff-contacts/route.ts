@@ -95,7 +95,10 @@ export async function GET(req: Request) {
   if (one) {
     try {
       const { contacts, tableMissing } = await fetchAllStaffContacts(auth.admin);
-      const c = contacts.find((x) => x.userId === one) ?? null;
+      // 237: 院長でも検証用でもない閲覧者には、検証用アカウントの連絡先を「無い」ことにする
+      const hideTest = !auth.isAdmin && !auth.testSeed;
+      const testIds = hideTest ? await loadTestSeedIds() : new Set<string>();
+      const c = testIds.has(one) ? null : contacts.find((x) => x.userId === one) ?? null;
       return NextResponse.json({ contact: c ? (auth.isAdmin ? c : withoutFamily(c)) : null, tableMissing });
     } catch (e) {
       return errorResponse(e);
@@ -103,10 +106,14 @@ export async function GET(req: Request) {
   }
 
   try {
-    const [{ contacts, tableMissing }, retiredUserIds] = await Promise.all([
+    const [{ contacts: allContacts, tableMissing }, retiredUserIds, seedIds] = await Promise.all([
       fetchAllStaffContacts(auth.admin),
       loadRetiredUserIds(auth.admin),
+      loadTestSeedIds(),
     ]);
+    // 237: 院長でも検証用でもない閲覧者（指名された本物のスタッフ）には、検証用アカウントの連絡先を渡さない
+    const hideTest = !auth.isAdmin && !auth.testSeed;
+    const contacts = hideTest ? allContacts.filter((c) => !seedIds.has(c.userId)) : allContacts;
     // 無効化アカウントの一覧をそのまま渡さない。
     // 画面が必要とするのは「この連絡先が退職者かどうか」だけなので、
     // 連絡先に紐付いているIDだけに絞る（無関係なアカウントの状態を配らない）。
@@ -118,7 +125,7 @@ export async function GET(req: Request) {
       contacts: visible,
       retiredUserIds: retiredUserIds.filter((id) => linked.has(id)),
       // 191: 検証用アカウントの連絡先に印を付ける（院長の画面）
-      testUserIds: Array.from(await loadTestSeedIds()).filter((id) => linked.has(id)),
+      testUserIds: Array.from(seedIds).filter((id) => linked.has(id)),
       isAdmin: auth.isAdmin,
       tableMissing,
     });

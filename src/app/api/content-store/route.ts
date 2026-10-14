@@ -20,6 +20,9 @@ import { loadTestSeedIds } from "@/lib/test-seed-server";
 import { STAFF_PROFILES_INDEX_KEY } from "@/lib/staff-profiles";
 import { FEATURE_FLAGS_KEY, IMPLEMENTED_FEATURES } from "@/lib/feature-flags";
 import { isTestSeedUser } from "@/lib/test-seed";
+import { hideContextFor } from "@/lib/test-seed-hide-server";
+import { researchCreatorId } from "@/lib/deep-research/store";
+import { hasTestSeed, hideTestSeed, isTestSeedItem, restoreHidden } from "@/lib/test-seed-hide";
 import {
   serverDeleteContentRow,
   serverGetContentRow,
@@ -44,8 +47,15 @@ export async function GET(req: Request) {
   if (prefix !== null) {
     if (!isAllowedContentPrefix(prefix)) return forbidden();
     const rows = await serverGetContentRowsByPrefix(prefix);
+    // 237: 本物のスタッフ・幹部には、検証用アカウントの行（プロフィールなど）ごと渡さない
+    const ctx = await hideContextFor(user);
+    const visible = hasTestSeed(ctx)
+      ? rows
+          .filter((r) => !isTestSeedItem(r.data, ctx) && !Array.from(ctx.ids).some((id) => r.id === `staff_profile:${id}`))
+          .map((r) => ({ ...r, data: hideTestSeed(r.data, ctx) }))
+      : rows;
     // 146-E: 記念日は本人にしか渡さない（画面で隠すだけでなく配信段階で落とす）
-    return NextResponse.json({ rows: redactForeignProfileRows(rows, user.id) });
+    return NextResponse.json({ rows: redactForeignProfileRows(visible, user.id) });
   }
 
   const key = url.searchParams.get("key");
@@ -71,6 +81,22 @@ export async function GET(req: Request) {
         return NextResponse.json({ row: { ...row, data: { ...d, items: d.items.filter((it) => !(it && typeof it === "object" && testIds.has(String((it as { userId?: unknown }).userId ?? "")))) } } });
       }
     }
+  }
+  // 237: 本物のスタッフ・幹部には、検証用アカウントとその中身を渡さない。
+  //   検証用アカウントのもの（プロフィール・検証用が作ったリサーチ本文など）は「無い」と同じ応答。
+  //   共有の保存場所（気づき・朝礼・タスク・リアクション・お知らせなど）は、検証用の分を外して渡す
+  //   （書くときは PUT で戻す＝中身は消えない）
+  const ctx = await hideContextFor(user);
+  if (row && hasTestSeed(ctx)) {
+    const isTestProfile = Array.from(ctx.ids).some((id) => key === `staff_profile:${id}`);
+    // ディープリサーチの本文は作った人を持たないので、一覧から引いて確かめる
+    const isTestResearch = key.startsWith("deep_research:") && ctx.ids.has(await researchCreatorId(key.slice("deep_research:".length)));
+    if (isTestProfile || isTestResearch || isTestSeedItem(row.data, ctx)) return hidden();
+    const shown = { ...row, data: hideTestSeed(row.data, ctx) };
+    if (key.startsWith("staff_profile:")) {
+      return NextResponse.json({ row: redactForeignProfileRows([shown], user.id)[0] });
+    }
+    return NextResponse.json({ row: shown });
   }
   // 182: 他人のプロフィールを1件で読むときも、一覧と同じ伏せ処理（記念日・サーベイ）を通す
   if (row && key.startsWith("staff_profile:")) {
@@ -116,7 +142,15 @@ export async function PUT(req: Request) {
     typeof contentType === "string" && contentType
       ? contentType
       : key.split("_")[0];
-  const ok = await serverPutContentRow(key, type, data, user.email ?? undefined);
+  // 237: 本物のスタッフ・幹部には検証用の分を隠して渡しているので、書き戻すときに今の保存値から戻す
+  //   （戻さないと、本物のスタッフが保存した瞬間に検証用アカウントの投稿・反応が消える）
+  let toSave: unknown = data;
+  const ctx = await hideContextFor(user);
+  if (hasTestSeed(ctx)) {
+    const current = await serverGetContentRow(key);
+    if (current) toSave = restoreHidden(current.data, data, ctx);
+  }
+  const ok = await serverPutContentRow(key, type, toSave, user.email ?? undefined);
   if (!ok) {
     return NextResponse.json({ error: "保存に失敗しました" }, { status: 500 });
   }

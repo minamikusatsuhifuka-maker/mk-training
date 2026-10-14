@@ -70,6 +70,12 @@ export async function listResearch(): Promise<ResearchIndexItem[]> {
   return [...items].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
+/** 237: その結果を作った人の id（一覧から引く。本体には持たせていない）。分からなければ空 */
+export async function researchCreatorId(id: string): Promise<string> {
+  const items = await loadResearchIndex();
+  return items.find((it) => it.id === id)?.createdById ?? "";
+}
+
 /** 本体（全文）取得。見つからなければ null */
 export async function getResearch(id: string): Promise<ResearchResult | null> {
   const row = await getContentRow(RESEARCH_PREFIX + id);

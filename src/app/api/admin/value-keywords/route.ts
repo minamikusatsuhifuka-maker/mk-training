@@ -28,15 +28,20 @@ import {
   type ValueKeywordDef,
 } from "@/lib/value-keywords";
 
+import { hidesTestSeedFor } from "@/lib/test-seed-hide-server";
+import { loadTestSeedIds } from "@/lib/test-seed-server";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   const auth = await requireAdminItem("profile-fields"); // 183: プロフィール項目管理を委任された幹部も可
   if (auth.response) return auth.response;
+  // 237: 任された本物の幹部に見せる人数には、検証用アカウントを数えない
+  const exclude = hidesTestSeedFor(auth.user) ? await loadTestSeedIds() : new Set<string>();
   const [config, usage] = await Promise.all([
     loadValueKeywordsConfigServer(),
-    loadValueKeywordUsage(),
+    loadValueKeywordUsage(exclude),
   ]);
   return NextResponse.json({ config, usage });
 }

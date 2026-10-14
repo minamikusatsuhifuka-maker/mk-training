@@ -50,6 +50,9 @@ async function libraryContentError(file: Blob, name: string): Promise<string> {
   return supported && chk.ok ? "" : rejectTypeText(name || "資料");
 }
 
+import { hideContextFor } from "@/lib/test-seed-hide-server";
+import { hideTestSeed } from "@/lib/test-seed-hide";
+
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
@@ -102,8 +105,10 @@ export async function GET() {
     // 保存されている公開URLは書き換えず、**返すときだけ**署名URLにする。
     // 外部リンク（kind:"link"）は公開URLではないのでそのまま通る。
     const signedDocs = await withSignedDocUrls(admin, docs);
+    // 237: 本物のスタッフ・幹部には、検証用アカウントが登録した資料と、その操作の記録を出さない
+    const ctx = await hideContextFor(user);
     // 変更履歴は既に新しい順（append時に先頭挿入）
-    return NextResponse.json({ docs: signedDocs, log: log.entries });
+    return NextResponse.json(hideTestSeed({ docs: signedDocs, log: log.entries }, ctx));
   } catch (e) {
     return errorResponse(e);
   }

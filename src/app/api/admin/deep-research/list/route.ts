@@ -10,8 +10,16 @@ import {
   listResearch,
   getResearch,
   deleteResearch,
+  researchCreatorId,
 } from "@/lib/deep-research/store";
 import { requireAdminItem } from "@/lib/admin-delegation-server";
+import { hidesTestSeedFor } from "@/lib/test-seed-hide-server";
+import { loadTestSeedIds } from "@/lib/test-seed-server";
+
+/** 237: 任された本物の幹部には、検証用アカウントが作った結果を出さない（一覧・本文・削除） */
+async function hiddenCreators(user: Parameters<typeof hidesTestSeedFor>[0]): Promise<Set<string>> {
+  return hidesTestSeedFor(user) ? await loadTestSeedIds() : new Set<string>();
+}
 
 export const runtime = "nodejs";
 
@@ -23,8 +31,9 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
+    const hidden = await hiddenCreators(auth.user);
     if (id) {
-      const result = await getResearch(id);
+      const result = hidden.has(await researchCreatorId(id)) ? null : await getResearch(id);
       if (!result) {
         return NextResponse.json(
           { error: "対象が見つかりません" },
@@ -34,7 +43,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ result });
     }
 
-    const results = await listResearch();
+    const results = (await listResearch()).filter((it) => !(it.createdById && hidden.has(it.createdById)));
     return NextResponse.json({ results });
   } catch (e) {
     console.error("Deep Research list error:", e);
@@ -53,6 +62,9 @@ export async function DELETE(request: Request) {
 
     if (!id) {
       return NextResponse.json({ error: "id が必要です" }, { status: 400 });
+    }
+    if ((await hiddenCreators(auth.user)).has(await researchCreatorId(id))) {
+      return NextResponse.json({ error: "対象が見つかりません" }, { status: 404 });
     }
 
     await deleteResearch(id);

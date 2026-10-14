@@ -29,10 +29,14 @@ export async function loadValueKeywordsConfigServer(): Promise<ValueKeywordsConf
 }
 
 /** 語の識別子 → その語を選択している人数（保存済みプロフィール全件を数える） */
-export async function loadValueKeywordUsage(): Promise<Record<string, number>> {
+export async function loadValueKeywordUsage(
+  /** 237: 数えない人（任された本物の幹部に見せるときは検証用アカウント） */
+  excludeUserIds: ReadonlySet<string> = new Set()
+): Promise<Record<string, number>> {
   const rows = await serverGetContentRowsByPrefix("staff_profile:");
   const usage: Record<string, number> = {};
   for (const row of rows) {
+    if (Array.from(excludeUserIds).some((id) => row.id === `staff_profile:${id}`)) continue;
     const p = row.data as { valueKeywords?: unknown } | null;
     const ids = Array.isArray(p?.valueKeywords) ? p.valueKeywords : [];
     // 1人が同じ語を二重に持っていても1と数える

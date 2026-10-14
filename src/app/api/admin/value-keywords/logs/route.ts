@@ -9,6 +9,8 @@
 import { NextResponse } from "next/server";
 import { requireAdminItem } from "@/lib/admin-delegation-server";
 import { fetchValueKeywordLogsServer } from "@/lib/value-keywords-server";
+import { hideContextFor } from "@/lib/test-seed-hide-server";
+import { TEST_ACCOUNTS } from "@/lib/test-seed";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +18,10 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const auth = await requireAdminItem("profile-fields"); // 183: プロフィール項目管理を委任された幹部も可
   if (auth.response) return auth.response;
-  const logs = await fetchValueKeywordLogsServer();
+  const all = await fetchValueKeywordLogsServer();
+  // 237: 任された本物の幹部には、検証用アカウントが操作した記録を出さない（by はメールか名前）
+  const ctx = await hideContextFor(auth.user);
+  const testEmails = new Set<string>(ctx.ids.size > 0 ? TEST_ACCOUNTS.map((a) => a.email) : []);
+  const logs = all.filter((l) => !testEmails.has(String(l.by ?? "")) && !ctx.names.has(String(l.by ?? "")));
   return NextResponse.json({ logs });
 }

@@ -40,6 +40,8 @@ export async function GET() {
         heldOn: r.heldOn,
         heldTime: r.heldTime,
         participants: r.userIds
+          // 237: 古い記録に残っていても、院長と検証用アカウント以外には検証用アカウントを出さない
+          .filter((id) => showTest || !accounts.find((a) => a.id === id)?.testSeed)
           .map((id) => ({ userId: id, name: nameOf.get(id) || r.names[id] || "（名前不明）" }))
           .sort((a, b) => a.name.localeCompare(b.name, "ja")),
         testSeed: r.testSeed,

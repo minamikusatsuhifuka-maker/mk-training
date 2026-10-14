@@ -141,6 +141,8 @@ export async function GET(req: Request) {
         const p = row.data as StaffProfile | null;
         if (!p || typeof p.userId !== "string") continue;
         if (disabled?.ids.has(p.userId)) continue;
+        // 237: items と同じく、検証用アカウントのプロフィールも返さない（191 B の取りこぼし）
+        if (testIds.has(p.userId)) continue;
         profiles[p.userId] = { ...emptyProfile(p.userId), ...p };
       }
       // 164: **署名URLを発行する前に**、本人以外に見せない情報を削ぐ。

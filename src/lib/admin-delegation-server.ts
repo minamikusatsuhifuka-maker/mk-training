@@ -12,6 +12,7 @@ import { getSessionUser } from "./staff-profiles-server";
 import { isAdminUser } from "./admin-role";
 import { createSupabaseAdminClient } from "./supabase-admin";
 import { loadMenuAccess, saveMenuAllowedUserIds } from "./menu-access-server";
+import { loadTestSeedIds } from "./test-seed-server";
 import type { MenuAccessConfig } from "./menu-access";
 import {
   ADMIN_ITEMS,
@@ -70,7 +71,11 @@ export async function loadDelegatedItems(userId: string): Promise<string[]> {
 /** その幹部の担当スタッフ（読み取り失敗は空＝見られない） */
 export async function loadKarteAssignments(managerUserId: string): Promise<string[]> {
   try {
-    return karteAssignmentsOf(await loadMenuAccess(), managerUserId);
+    const assigned = karteAssignmentsOf(await loadMenuAccess(), managerUserId);
+    // 237: 本物の幹部の担当からは、検証用アカウントを外す（207 で混ぜられないようにしたが、
+    //   それより前の指定が残っていても見えないように、読む側でも外す）。検証用の幹部はそのまま
+    const testIds = await loadTestSeedIds();
+    return testIds.has(managerUserId) ? assigned : assigned.filter((id) => !testIds.has(id));
   } catch {
     return [];
   }

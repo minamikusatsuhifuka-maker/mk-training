@@ -119,10 +119,11 @@ export default function OneOnOneSlotsPage() {
     void load();
   }, [load]);
 
-  // 対象スタッフの既定は全員（院長・無効化済みは入っていない）
+  // 対象スタッフの既定は全員（院長・無効化済みは入っていない）。
+  // 237: 「全員」には検証用アカウント（🧪）を入れない。検証用アカウントは個別にチェックするか「✏️ 直す」で足す
   useEffect(() => {
     if (!data || staffPicked !== null) return;
-    setStaffPicked(new Set(data.staff.map((s) => s.userId)));
+    setStaffPicked(new Set(data.staff.filter((s) => !s.testSeed).map((s) => s.userId)));
   }, [data, staffPicked]);
 
   const picked = useMemo(() => Array.from(staffPicked ?? []), [staffPicked]);
