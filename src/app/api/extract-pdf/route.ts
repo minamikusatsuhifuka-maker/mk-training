@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireLogin } from "@/lib/require-login";
 import { callGeminiParts } from "@/lib/ai-provider";
 
+import { checkFileContent } from "@/lib/file-sniff";
+
 export const maxDuration = 60;
 
 // PDFテキスト抽出。175: Claude の document 入力をやめ、Gemini（gemini-3.8-flash）の inline_data で読み取る
@@ -12,6 +14,11 @@ export async function POST(req: NextRequest) {
 
   try {
     const arrayBuffer = await req.arrayBuffer();
+    // 234: 中身が PDF かを確かめてから読み取る（名前だけ変えたファイルは AI に渡さない）。
+    //   文は組織知識ベースの画面にもとからある文（admin/knowledge の「未対応のファイル形式です: .○○」）
+    if (!checkFileContent(new Uint8Array(arrayBuffer.slice(0, 2048)), { allowed: ["pdf"] }).ok) {
+      return NextResponse.json({ error: "未対応のファイル形式です: .pdf" }, { status: 400 });
+    }
     const base64 = Buffer.from(arrayBuffer).toString("base64");
 
     const res = await callGeminiParts({

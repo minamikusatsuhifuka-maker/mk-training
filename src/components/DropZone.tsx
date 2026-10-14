@@ -7,17 +7,14 @@
 //   （領域内の drop は自分で処理する）
 
 import { useEffect, useRef, useState } from "react";
-import { dragTypesMayMatch, splitByAccept } from "@/lib/file-accept";
+import { dragTypesMayMatch, rejectTypeText, splitByAccept } from "@/lib/file-accept";
+
+export { rejectTypeText };
 
 /** 186 A-2 の文（231: お知らせ・イベントでも同じ文を使う。新しい言い回しを作らない） */
 export const DROP_HERE_TEXT = "ここに離すと追加されます";
 export const DROP_GUIDE_TEXT = "ここにファイルをドラッグ＆ドロップ（複数可）";
-/**
- * 233-補: 種類の合わないファイルを落としたときの文。231 の「貼るもの」の断りの文
- * 「「○○」は貼れない種類です（画像・PDF・Wordだけ）」の前半をそのまま使う（新しい言い回しは作らない）。
- * その画面に、もとから種類を断る文がある場合は、FileDropArea の rejectText でその文を渡す。
- */
-export const rejectTypeText = (name: string) => `「${name}」は貼れない種類です`;
+// 233-補の断りの文 rejectTypeText は lib/file-accept.ts（234 でサーバーからも使うため移した）
 
 /**
  * 186 A-2: 領域外へのドロップで画面が移動しないようにする（ブラウザがファイルを開くと、書きかけの入力が消える）。

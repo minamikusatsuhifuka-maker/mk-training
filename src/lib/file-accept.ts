@@ -7,6 +7,13 @@
 //   accept が空 … 何でも通す（「選ぶ」も絞らない）
 // 「選ぶ」の画面は accept で絞られるが、ドラッグ＆ドロップでは絞られない。その差をここで埋める。
 
+/**
+ * 233-補: 種類の合わないファイルを断るときの文。231 の「貼るもの」の断りの文
+ * 「「○○」は貼れない種類です（画像・PDF・Wordだけ）」の前半をそのまま使う（新しい言い回しは作らない）。
+ * 234 でサーバーからも使うため、画面用の DropZone.tsx からここへ移した。
+ */
+export const rejectTypeText = (name: string) => `「${name}」は貼れない種類です`;
+
 export function acceptTokens(accept: string): string[] {
   return (accept || "")
     .split(",")

@@ -442,20 +442,9 @@ export function extFor(kind: NoticeAttachmentKind, mime: string): string {
   return "jpg";
 }
 
-/** 中身の先頭から本当の種類を見る（拡張子の付け替えを通さない） */
-export type SniffedType = "jpeg" | "png" | "webp" | "pdf" | "zip" | "unknown";
-export function sniffFileType(b: Uint8Array): SniffedType {
-  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "jpeg";
-  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "png";
-  if (
-    b.length >= 12 &&
-    b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
-    b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50
-  ) return "webp";
-  if (b.length >= 5 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 && b[4] === 0x2d) return "pdf";
-  if (b.length >= 4 && b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04) return "zip";
-  return "unknown";
-}
+/** 中身の先頭から本当の種類を見る（拡張子の付け替えを通さない）。234 で lib/file-sniff.ts に移して共通にした */
+export { sniffFileType, type SniffedType } from "./file-sniff";
+import type { SniffedType } from "./file-sniff";
 
 /** 中身と申告が合っているか */
 export function sniffMatches(kind: NoticeAttachmentKind, mime: string, sniffed: SniffedType): boolean {

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireLogin } from "@/lib/require-login";
 import { callGeminiParts } from "@/lib/ai-provider";
 
+import { checkFileContent, extOfName, headBytesFromBase64 } from "@/lib/file-sniff";
+
 export const maxDuration = 60;
 
 // 画像OCR。175: Claude 直書きをやめ、Gemini（gemini-3.8-flash）の inline_data で読み取る
@@ -11,12 +13,17 @@ export async function POST(req: NextRequest) {
   if (gate.response) return gate.response;
 
   try {
-    const { base64, mimeType } = (await req.json()) as {
+    const { base64, mimeType, fileName } = (await req.json()) as {
       base64: string;
       mimeType: string;
       fileName?: string;
     };
     if (!base64) return NextResponse.json({ error: "画像データがありません" }, { status: 400 });
+    // 234: 中身が画像（今受け付けている JPEG・PNG・WebP・GIF）で、名前・種類と合うかを確かめてから読み取る
+    const chk = checkFileContent(headBytesFromBase64(base64), { allowed: ["jpeg", "png", "webp", "gif"], name: fileName, mime: mimeType });
+    if (!chk.ok) {
+      return NextResponse.json({ error: `未対応のファイル形式です: .${extOfName(fileName ?? "") || "?"}` }, { status: 400 });
+    }
 
     const res = await callGeminiParts({
       parts: [

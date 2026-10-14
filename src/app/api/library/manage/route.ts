@@ -43,6 +43,21 @@ import {
   type PendingUpdate,
 } from "@/lib/library";
 
+import { checkFileContent } from "@/lib/file-sniff";
+import { rejectTypeText } from "@/lib/file-accept";
+import { isSupportedLibraryFile } from "@/lib/library";
+
+/** 234: 資料庫で受け付ける中身（PDF・Word/PowerPoint/Excel の新しい形式=ZIP・古い形式=OLE）。種類は今までと同じ */
+const LIBRARY_CONTENT = ["pdf", "zip", "cfb"] as const;
+
+/** 234: 中身まで確かめる（保存・読み取りの前）。合わなければ断りの文、合えば空 */
+async function libraryContentError(file: Blob, name: string): Promise<string> {
+  const head = new Uint8Array(await file.slice(0, 2048).arrayBuffer());
+  const supported = isSupportedLibraryFile(name, file.type);
+  const chk = checkFileContent(head, { allowed: LIBRARY_CONTENT, name, mime: file.type });
+  return supported && chk.ok ? "" : rejectTypeText(name || "資料");
+}
+
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
@@ -468,6 +483,9 @@ export async function POST(req: NextRequest) {
     const fileName =
       ((form.get("fileName") as string) || "").trim() ||
       store.docs[idx].fileName;
+    // 234: 差し替えのファイルも、中身まで確かめてから置き場に入れる
+    const typeError = await libraryContentError(file, fileName);
+    if (typeError) return NextResponse.json({ error: typeError }, { status: 400 });
     const mimeType = file.type || store.docs[idx].mimeType;
     const searchText = ((form.get("searchText") as string) || "").slice(
       0,

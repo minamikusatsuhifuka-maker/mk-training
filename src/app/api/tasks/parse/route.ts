@@ -4,6 +4,8 @@ import { normalizeParsedTask, type ParsedTask } from "@/lib/staff-tasks";
 import { requireLogin } from "@/lib/require-login";
 
 // edge は使わない（GEMINI_API_KEY を使う Node 実行）
+import { checkFileContent, extOfName, headBytesFromBase64 } from "@/lib/file-sniff";
+
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
@@ -112,6 +114,21 @@ export async function POST(req: NextRequest) {
 
     if (items.length === 0)
       return NextResponse.json({ tasks: [] });
+
+    // 234: 画像は中身まで確かめてから AI に渡す（名前だけ変えたファイルは断る）。
+    //   画面（tasks/FileImport）は画像を縮小して JPEG にしてから送るので、元の名前の拡張子（.png など）と
+    //   中身（JPEG）は合わないのが正常。ここでは「名前が画像の拡張子」「中身が画像」「付けた種類と中身が合う」を見る。
+    //   文字のファイル（.xlsx/.csv/.txt など）は画面で文字にしてから送るため、中身の印では確かめられない（文字として扱うだけ）。
+    //   文は画面にもとからある文（tasks/FileImport の「非対応形式: ○○」）。
+    for (const it of items) {
+      if (it.kind !== "image") continue;
+      const name = it.name ?? "";
+      const imageName = ["png", "jpg", "jpeg", "webp"].includes(extOfName(name));
+      const chk = checkFileContent(headBytesFromBase64(it.base64 ?? ""), { allowed: ["jpeg", "png", "webp"], mime: it.mediaType });
+      if (!imageName || !chk.ok) {
+        return NextResponse.json({ error: `非対応形式: ${name}` }, { status: 400 });
+      }
+    }
 
     // 選択中の Gemini モデル
     const model = await getSelectedGeminiModel();

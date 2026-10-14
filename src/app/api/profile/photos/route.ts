@@ -25,6 +25,9 @@ import {
   MAX_SHARED_PHOTOS,
 } from "@/lib/staff-profiles";
 
+import { checkFileContent } from "@/lib/file-sniff";
+import { rejectTypeText } from "@/lib/file-accept";
+
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
@@ -76,6 +79,20 @@ export async function POST(req: NextRequest) {
       { error: "PDFはサーベイのみアップロードできます" },
       { status: 400 }
     );
+  }
+  // 234: 中身まで確かめる（保存の前）。アバター・共有写真は画像だけ、サーベイ結果は画像かPDF。
+  //   画面は縮小した JPEG を送る。PDF と申告したのに中身が違う物・名前だけ変えた物は断る
+  {
+    const head = new Uint8Array(await file.slice(0, 2048).arrayBuffer());
+    const name = file instanceof File ? file.name : "";
+    const chk = checkFileContent(head, {
+      allowed: kind === "survey" ? ["jpeg", "png", "webp", "pdf"] : ["jpeg", "png", "webp"],
+      name,
+      mime: file.type,
+    });
+    if (!chk.ok || (isPdf && chk.sniffed !== "pdf")) {
+      return NextResponse.json({ error: rejectTypeText(name || "ファイル") }, { status: 400 });
+    }
   }
   const maxBytes = isPdf ? MAX_PDF_BYTES : MAX_UPLOAD_BYTES;
   if (file.size === 0 || file.size > maxBytes) {
