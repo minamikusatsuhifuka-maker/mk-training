@@ -32,6 +32,7 @@ import { KarteScheduleCard } from "@/components/OneOnOneSchedule";
 import { GoalsStaged, weeklyLinksFromPromises } from "@/components/GoalsStaged";
 import { FeedbackPanel } from "@/components/FeedbackPanel";
 import { PresurveyCompare } from "@/components/PresurveyCompare";
+import { NeedsPerspectiveSection } from "@/components/NeedsPerspectiveSection";
 // 220: タブの帯・開いていたタブの記憶
 import { GrowthTabsBar, useRememberedTab } from "@/components/GrowthTabsBar";
 import { GROWTH_TABS, GROWTH_TAB_STORAGE_KEY, resolveGrowthTab, visibleGrowthTabs } from "@/lib/growth-tabs";
@@ -396,6 +397,9 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
           採用資料の登録・AI整理・連絡先の反映ができます。アカウントができたら一覧から紐づけてください。
         </p>
       )}
+
+      {/* 欲求の視点（院長・担当の幹部だけ。初期は閉じる。見られるかはサーバーが判定し、404なら区画ごと出ない） */}
+      {!isProspect && <NeedsPerspectiveSection userId={userId} />}
 
       {/* 220 §2-2: タブ。見られないタブは出さない（判定はサーバー側の結果をそのまま使う） */}
       <GrowthTabsBar tabs={tabs} current={tab} onChange={setTab} />
