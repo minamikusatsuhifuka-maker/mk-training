@@ -192,6 +192,32 @@ export default function OneOnOneSlotsPage() {
     flash(`枠を${j.created ?? 0}個作りました。`);
   };
 
+  // ─── 235 §1: 期間を消す・対象スタッフを直す（ボタンと文は、アプリにすでにある言い方を使う） ───
+  const [editStaff, setEditStaff] = useState<{ periodId: string; picked: Set<string> } | null>(null);
+
+  const periodName = (p: SlotPeriod) =>
+    p.label || `${p.startDate.replaceAll("-", "/")}〜${p.endDate.replaceAll("-", "/")}`;
+
+  const removePeriod = async (p: SlotPeriod, periodBookings: Booking[]) => {
+    // 予約がある期間は、この画面の確かめの文「○○さんの予約が入っています。」を先に出す
+    const names = Array.from(new Set(periodBookings.map((b) => nameOf(b.userId)))).join("・");
+    const head = names ? `${names}さんの予約が入っています。\n` : "";
+    if (!confirm(`${head}「${periodName(p)}」を消します。元に戻せません。よろしいですか？`)) return;
+    const j = await patch({ action: "deletePeriod", periodId: p.id }, `delp:${p.id}`);
+    if (!j) return;
+    if (openPeriod === p.id) setOpenPeriod("");
+  };
+
+  const saveStaff = async () => {
+    if (!editStaff) return;
+    const j = await patch(
+      { action: "updateStaff", periodId: editStaff.periodId, staffIds: Array.from(editStaff.picked) },
+      `staff:${editStaff.periodId}`
+    );
+    if (!j) return;
+    setEditStaff(null);
+  };
+
   const extend = async (p: SlotPeriod) => {
     const j = await post(
       {
@@ -576,12 +602,71 @@ export default function OneOnOneSlotsPage() {
                   <Button type="button" variant="outline" onClick={() => setOpenPeriod(open ? "" : p.id)} data-slot-toggle={p.id}>
                     {open ? "枠をたたむ" : "枠を見る"}
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-red-200 text-red-700"
+                    onClick={() => void removePeriod(p, bookings)}
+                    disabled={busy === `delp:${p.id}`}
+                    data-slot-period-delete={p.id}
+                  >
+                    🗑 消す
+                  </Button>
                 </div>
               </div>
 
               {/* 予約の一覧（205 §1-3） */}
               <div className="rounded-lg bg-slate-50 p-3 text-xs" data-slot-bookings={p.id}>
-                <p className="font-medium text-slate-700">対象スタッフ {p.staffIds.length}人</p>
+                <p className="flex flex-wrap items-center gap-2 font-medium text-slate-700">
+                  対象スタッフ {p.staffIds.length}人
+                  {editStaff?.periodId !== p.id && (
+                    <button
+                      type="button"
+                      onClick={() => setEditStaff({ periodId: p.id, picked: new Set(p.staffIds) })}
+                      className="min-h-[32px] rounded-md border border-slate-300 bg-white px-2 text-[11px] font-normal text-slate-700"
+                      data-slot-staff-edit={p.id}
+                    >
+                      ✏️ 直す
+                    </button>
+                  )}
+                </p>
+                {editStaff?.periodId === p.id && (
+                  <div className="my-2 space-y-2 rounded-lg border border-slate-200 bg-white p-2" data-slot-staff-editor={p.id}>
+                    <div className="flex flex-wrap gap-2">
+                      {data.staff.map((st) => (
+                        <label
+                          key={st.userId}
+                          className="flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={editStaff.picked.has(st.userId)}
+                            onChange={(e) =>
+                              setEditStaff((prev) => {
+                                if (!prev) return prev;
+                                const next = new Set(prev.picked);
+                                if (e.target.checked) next.add(st.userId);
+                                else next.delete(st.userId);
+                                return { ...prev, picked: next };
+                              })
+                            }
+                            data-slot-staff-edit-pick={st.userId}
+                          />
+                          {st.name}
+                          {st.testSeed && <span className="text-[10px] text-violet-700">🧪</span>}
+                        </label>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" onClick={() => void saveStaff()} disabled={busy === `staff:${p.id}`} data-slot-staff-save={p.id}>
+                        直して保存
+                      </Button>
+                      <Button type="button" variant="outline" onClick={() => setEditStaff(null)}>
+                        やめる
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 <ul className="mt-1 space-y-0.5">
                   {p.staffIds.map((id) => {
                     const b = bookings.find((x) => x.userId === id);

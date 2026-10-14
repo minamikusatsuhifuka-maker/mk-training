@@ -33,6 +33,16 @@ const COUNT_LABEL: Record<string, string> = {
   // 207-4: 委任と担当の指定も対象一覧に出す
   karte_assignment: "可能性ノートの担当の指定",
   item_delegation: "管理画面の委任",
+  // 235: 英語のキー名のまま出ていた種類を、その画面・メニューの名前で出す
+  scouter: "🧭 適性検査（スカウター）",
+  transcript_consent: "🎙 1on1の録音・書き起こし（同意の印）",
+  transcript_quota: "🎙 1on1の録音・書き起こし（回数）",
+  request: "講座の追加依頼",
+  slot_change: "🗓 1on1の日程（日程の変更の記録）",
+  deep_research: "🔬 ディープリサーチ（リサーチの結果）",
+  deep_research_usage: "🔬 ディープリサーチ（回数）",
+  evidence_files: "🌱 可能性ノートの証跡画像（ファイル）",
+  photo_files: "👤 プロフィール写真・サーベイ画像（ファイル）",
   // 228: お知らせ・イベント
   notice: "お知らせ・イベント（検証用がつくったもの）",
   notice_rsvp: "イベントの出欠",
@@ -222,7 +232,7 @@ export function TestSeedPanel() {
             <ul className="list-disc pl-5 text-[11px]">
               {Object.entries(deleted).map(([k, v]) => (
                 <li key={k}>
-                  {k} {v}件
+                  {COUNT_LABEL[k] ?? k} {v}件
                 </li>
               ))}
             </ul>

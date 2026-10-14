@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import NavPageHeader from "@/components/NavPageHeader";
 import FeatureGate from "@/components/FeatureGate";
+import { useFeatureFlags } from "@/lib/use-feature-flags";
 import {
   BOOKING_LOCKED_MESSAGE,
   BOOKING_NONE_LEFT_MESSAGE,
@@ -49,6 +50,10 @@ function periodLabel(p: PeriodView): string {
 }
 
 function BookingPageBody() {
+  // 235 §3: 事前アンケートへの案内（と期限の表示）は、事前アンケートのスイッチがONのときだけ出す
+  //   （院長・検証用アカウントはプレビューで開けるので出る。判定はサーバーが解決した値）
+  const { flags } = useFeatureFlags();
+  const presurveyOn = flags.one_on_one_presurvey;
   const [data, setData] = useState<Payload | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -170,16 +175,20 @@ function BookingPageBody() {
           <p className="text-base font-bold text-gray-900" data-booking-done-when>
             {formatDateW(done.date)} {done.startTime}〜{done.endTime}　相手：院長
           </p>
-          <p className="text-sm text-gray-800">
-            事前アンケートの期限：{formatJpDate(presurveyDeadline({ date: done.date }))}
-          </p>
-          <Link
-            href="/one-on-one/presurvey"
-            className="flex min-h-[52px] w-full items-center justify-center rounded-xl bg-teal-600 px-4 text-base font-bold text-white hover:bg-teal-700"
-            data-booking-presurvey-cta
-          >
-            📝 事前アンケートに答える
-          </Link>
+          {presurveyOn && (
+            <>
+              <p className="text-sm text-gray-800">
+                事前アンケートの期限：{formatJpDate(presurveyDeadline({ date: done.date }))}
+              </p>
+              <Link
+                href="/one-on-one/presurvey"
+                className="flex min-h-[52px] w-full items-center justify-center rounded-xl bg-teal-600 px-4 text-base font-bold text-white hover:bg-teal-700"
+                data-booking-presurvey-cta
+              >
+                📝 事前アンケートに答える
+              </Link>
+            </>
+          )}
         </div>
       )}
 
@@ -233,11 +242,13 @@ function BookingPageBody() {
                     </span>
                     　相手：院長
                   </p>
+                  {presurveyOn && (
                   <p className="text-[11px] text-gray-600">
                     事前アンケートの期限は {formatJpDate(presurveyDeadline({ date: b.date }))} です。
                   </p>
-                  {/* 212 A: 未回答のあいだは答える導線を出し、提出済みならそう出す */}
-                  {p.presurveyAnswered ? (
+                  )}
+                  {/* 212 A: 未回答のあいだは答える導線を出し、提出済みならそう出す（235: スイッチONのときだけ） */}
+                  {!presurveyOn ? null : p.presurveyAnswered ? (
                     <p className="text-sm font-medium text-emerald-800" data-booking-presurvey-done>
                       事前アンケート 回答済み ✓
                     </p>
@@ -320,9 +331,11 @@ function BookingPageBody() {
             </span>
             　相手：院長
           </p>
-          <p className="text-[11px] text-gray-600">
-            事前アンケートの期限は {formatJpDate(presurveyDeadline({ date: confirming.slot.date }))} になります。
-          </p>
+          {presurveyOn && (
+            <p className="text-[11px] text-gray-600">
+              事前アンケートの期限は {formatJpDate(presurveyDeadline({ date: confirming.slot.date }))} になります。
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -344,11 +357,13 @@ function BookingPageBody() {
         </div>
       )}
 
-      <p className="text-xs text-gray-500">
-        <Link href="/one-on-one/presurvey" className="text-teal-700 underline underline-offset-2">
-          📝 1on1の事前アンケートへ
-        </Link>
-      </p>
+      {presurveyOn && (
+        <p className="text-xs text-gray-500" data-booking-presurvey-link>
+          <Link href="/one-on-one/presurvey" className="text-teal-700 underline underline-offset-2">
+            📝 1on1の事前アンケートへ
+          </Link>
+        </p>
+      )}
     </div>
   );
 }

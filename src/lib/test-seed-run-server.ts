@@ -39,6 +39,12 @@ import { fetchGates, saveGateCheck, saveMatrixReview, saveStaffGrade, seedGates 
 import { SEED_MARK, TEST_ACCOUNTS, TEST_PROSPECT_NAME, TEST_SEED_FLAG, isTestSeedUser, onlyTestIds, type TestAccountDef } from "./test-seed";
 import { clearTestSeedCache } from "./test-seed-server";
 import { NOTICE_PURGE_LABEL } from "./notices";
+import { GROWTH_EVIDENCE_BUCKET } from "./staff-growth-server";
+import { STAFF_PHOTOS_BUCKET } from "./staff-profiles";
+import { SLOT_CHANGE_TYPE } from "./one-on-one-slots";
+import { deleteResearch, listResearch } from "./deep-research/store";
+import { DEEP_RESEARCH_USAGE_KEY } from "./deep-research/quota-server";
+import { normalizeUsage } from "./deep-research/quota";
 import { collectNoticeSeedTargets, countNoticeSeedTargets, purgeNoticeSeedTargets, type NoticeSeedTargets } from "./notices-server";
 
 type Admin = SupabaseClient;
@@ -533,7 +539,46 @@ type Targets = {
   itemDelegations: string[];
   /** 228: お知らせ・イベント（検証用がつくったもの・出欠・開いた印・参加の記録・ファイル） */
   notices: NoticeSeedTargets;
+  /** 235: 1on1の日程の変更の記録（検証用アカウントが変えたもの） */
+  slotChangeIds: string[];
+  /** 235: ディープリサーチの結果（検証用アカウントが実行したもの） */
+  researchIds: string[];
+  /** 235: ディープリサーチの回数（検証用アカウントの分がある月の数） */
+  researchUsageMonths: number;
+  /** 235: 置き場のファイル（可能性ノートの証跡画像・プロフィール写真とサーベイ画像） */
+  evidenceFiles: string[];
+  photoFiles: string[];
 };
+
+// ─── 235: 置き場のファイル（検証用アカウントのフォルダの中だけ） ───
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** フォルダの中のファイルを全部（下のフォルダも）並べる。置き場が無い・読めないときは空 */
+async function listFilesUnder(admin: Admin, bucket: string, prefix: string, depth = 0): Promise<string[]> {
+  if (depth > 4) return [];
+  const { data, error } = await admin.storage.from(bucket).list(prefix, { limit: 1000 });
+  if (error || !data) return [];
+  const out: string[] = [];
+  for (const o of data) {
+    if (!o.name) continue;
+    const path = `${prefix}/${o.name}`;
+    // フォルダは id を持たない
+    if ((o as { id?: string | null }).id) out.push(path);
+    else out.push(...(await listFilesUnder(admin, bucket, path, depth + 1)));
+  }
+  return out;
+}
+
+/** 検証用アカウントのフォルダ（<userId>/…）のファイル。userId の形でないものは見ない（ほかのフォルダに触れない） */
+export async function testUserFiles(admin: Admin, bucket: string, testIds: Set<string>): Promise<string[]> {
+  const out: string[] = [];
+  for (const uid of testIds) {
+    if (!UUID_RE.test(uid)) continue;
+    out.push(...(await listFilesUnder(admin, bucket, uid)));
+  }
+  return out.filter((p) => Array.from(testIds).some((uid) => p.startsWith(`${uid}/`)));
+}
 
 async function collectTargets(admin: Admin, testIds: Set<string>): Promise<{ targets: Targets; foreign: string[] }> {
   const foreign: string[] = [];
@@ -591,7 +636,28 @@ async function collectTargets(admin: Admin, testIds: Set<string>): Promise<{ tar
   const itemDelegations = Object.keys(snap.items).filter((k) => (snap.items[k] ?? []).some((u) => testIds.has(u)));
   // 228 §6: お知らせ・イベント。一般のイベントの参加の記録は消さず、検証用アカウントだけを外す
   const notices = await collectNoticeSeedTargets(admin, testIds);
-  return { targets: { testIds, growth, privateRows, contactIds, hiringDocs: docs, prospectIds, contentKeys, seedCourseIds, karteManagers, itemDelegations, notices }, foreign };
+  // 235: 1on1の日程の変更の記録（変えた人＝検証用アカウント）
+  const slotChangeIds: string[] = [];
+  {
+    const { data: scRows } = await admin.from(GROWTH_TABLE).select("id, data").eq("record_type", SLOT_CHANGE_TYPE);
+    for (const r of (scRows ?? []) as { id: string; data: Record<string, unknown> | null }[]) {
+      const byId = typeof r.data?.byId === "string" ? r.data.byId : "";
+      if (byId && testIds.has(byId)) slotChangeIds.push(String(r.id));
+    }
+  }
+  // 235: ディープリサーチの結果（作った人＝検証用アカウント）と回数
+  const researchIds = (await listResearch().catch(() => []))
+    .filter((it) => it.createdById && testIds.has(it.createdById))
+    .map((it) => it.id);
+  const usage = normalizeUsage((await serverGetContentRow(DEEP_RESEARCH_USAGE_KEY))?.data ?? null);
+  const researchUsageMonths = Object.values(usage.months).filter((m) => Object.keys(m).some((uid) => testIds.has(uid))).length;
+  // 235: 置き場のファイル（検証用アカウントのフォルダだけ）
+  const evidenceFiles = await testUserFiles(admin, GROWTH_EVIDENCE_BUCKET, testIds);
+  const photoFiles = await testUserFiles(admin, STAFF_PHOTOS_BUCKET, testIds);
+  return {
+    targets: { testIds, growth, privateRows, contactIds, hiringDocs: docs, prospectIds, contentKeys, seedCourseIds, karteManagers, itemDelegations, notices, slotChangeIds, researchIds, researchUsageMonths, evidenceFiles, photoFiles },
+    foreign,
+  };
 }
 
 async function countTargets(admin: Admin, testIds: Set<string>): Promise<Record<string, number>> {
@@ -616,6 +682,12 @@ async function countTargets(admin: Admin, testIds: Set<string>): Promise<Record<
     item_delegation: targets.itemDelegations.length,
     // 228: お知らせ・イベント（種類ごと）
     ...countNoticeSeedTargets(targets.notices),
+    // 235
+    slot_change: targets.slotChangeIds.length,
+    deep_research: targets.researchIds.length,
+    deep_research_usage: targets.researchUsageMonths,
+    evidence_files: targets.evidenceFiles.length,
+    photo_files: targets.photoFiles.length,
   };
 }
 
@@ -637,7 +709,8 @@ export async function purgeTestData(admin: Admin, by: string): Promise<PurgeResu
   for (const g of targets.growth) {
     const { error } = await admin.from(GROWTH_TABLE).delete().eq("id", g.id).eq("record_type", g.record_type);
     if (error) throw new Error(error.message);
-    add(`記録（${g.record_type}）`, 1);
+    // 235: 種類のキーのまま返し、画面（TestSeedPanel の COUNT_LABEL）で日本語の名前にする
+    add(g.record_type, 1);
   }
   // 2. private_store（自己評価・1on1）
   for (const r of targets.privateRows) {
@@ -699,6 +772,36 @@ export async function purgeTestData(admin: Admin, by: string): Promise<PurgeResu
   }
   // 7-2. お知らせ・イベント（228 §6）。ファイル→行→一般の記録から検証用だけ外す
   for (const [k, v] of Object.entries(await purgeNoticeSeedTargets(admin, targets.notices, testIds, by))) add(NOTICE_PURGE_LABEL[k] ?? k, v);
+  // 7-3. 235: 1on1の日程の変更の記録・ディープリサーチ（結果と回数）・置き場のファイル
+  for (const id of targets.slotChangeIds) {
+    const { error } = await admin.from(GROWTH_TABLE).delete().eq("id", id).eq("record_type", SLOT_CHANGE_TYPE);
+    if (error) throw new Error(error.message);
+    add("🗓 1on1の日程（日程の変更の記録）", 1);
+  }
+  for (const id of targets.researchIds) {
+    await deleteResearch(id);
+    add("🔬 ディープリサーチ（リサーチの結果）", 1);
+  }
+  if (targets.researchUsageMonths > 0) {
+    const row = await serverGetContentRow(DEEP_RESEARCH_USAGE_KEY);
+    const usage = normalizeUsage(row?.data ?? null);
+    for (const m of Object.keys(usage.months)) {
+      for (const uid of Object.keys(usage.months[m])) if (testIds.has(uid)) delete usage.months[m][uid];
+    }
+    await serverPutContentRow(DEEP_RESEARCH_USAGE_KEY, "deep_research", usage as unknown as Record<string, unknown>, by);
+    add("🔬 ディープリサーチ（回数）", targets.researchUsageMonths);
+  }
+  for (const [bucket, files, label] of [
+    [GROWTH_EVIDENCE_BUCKET, targets.evidenceFiles, "🌱 可能性ノートの証跡画像（ファイル）"],
+    [STAFF_PHOTOS_BUCKET, targets.photoFiles, "👤 プロフィール写真・サーベイ画像（ファイル）"],
+  ] as const) {
+    for (let i = 0; i < files.length; i += 100) {
+      const chunk = files.slice(i, i + 100);
+      const { error } = await admin.storage.from(bucket).remove(chunk);
+      if (error) throw new Error(`${label}を消せませんでした: ${error.message}`);
+    }
+    if (files.length > 0) add(label, files.length);
+  }
   // 8. アカウント
   for (const u of testUsers) {
     const { error } = await admin.auth.admin.deleteUser(u.id);

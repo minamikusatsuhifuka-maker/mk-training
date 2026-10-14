@@ -224,6 +224,71 @@ export async function deletePeriod(admin: GrowthAdminClient, id: string): Promis
   await remove(admin, SLOT_PERIOD_TYPE, id);
 }
 
+/** 235: 本物のスタッフの予約が入っているので、期間を消せない／その人を対象から外せない */
+export class PeriodHasRealBookingsError extends Error {
+  userIds: string[];
+  constructor(userIds: string[]) {
+    super("予約が入っています");
+    this.name = "PeriodHasRealBookingsError";
+    this.userIds = userIds;
+  }
+}
+
+/**
+ * 235 §1: 期間を、その枠・予約といっしょに消す。
+ *   ・本物のスタッフ（検証用でない人）の予約が1件でもあれば、何も消さずに PeriodHasRealBookingsError
+ *   ・検証用アカウントの予約は、予約・持ち分（hold）・次回1on1の予定（schedule）まで消す
+ *     ＝予定が無くなるので、朝8時の処理も含めて、その予約の知らせ・メールは出ない
+ *   ・院長への「予約の動き」の知らせ（booking_notice）は**足さない**（消したことで知らせが出ないように）
+ *   ・取り直しのお願い（booking_rebook）と持ち分は、その期間の分をすべて消す
+ */
+export async function deletePeriodCascade(
+  admin: GrowthAdminClient,
+  period: SlotPeriod,
+  isTestUser: (userId: string) => boolean
+): Promise<{ slots: number; bookings: number }> {
+  const bookings = await fetchBookings(admin, period.id);
+  const real = bookings.filter((b) => !isTestUser(b.userId));
+  if (real.length > 0) throw new PeriodHasRealBookingsError(Array.from(new Set(real.map((b) => b.userId))));
+  for (const b of bookings) {
+    await remove(admin, BOOKING_TYPE, b.id);
+    if (b.scheduleId) await remove(admin, "schedule", b.scheduleId);
+  }
+  for (const t of [BOOKING_HOLD_TYPE, BOOKING_REBOOK_TYPE]) {
+    const { error } = await admin.from(GROWTH_TABLE).delete().eq("record_type", t).eq("data->>periodId", period.id);
+    wrap(error);
+  }
+  const slots = await fetchSlots(admin, period.id);
+  for (const sl of slots) await remove(admin, SLOT_TYPE, sl.id);
+  await remove(admin, SLOT_PERIOD_TYPE, period.id);
+  return { slots: slots.length, bookings: bookings.length };
+}
+
+/**
+ * 235 §1: 期間の対象スタッフを直す。外そうとする人にこの期間の予約があれば外せない
+ * （PeriodHasRealBookingsError に、その人たちを入れて返す）。外した人の取り直しのお願いは消す。
+ */
+export async function updatePeriodStaff(
+  admin: GrowthAdminClient,
+  period: SlotPeriod,
+  staffIds: string[],
+  by: string
+): Promise<SlotPeriod> {
+  const next = Array.from(new Set(staffIds.filter((x) => typeof x === "string" && x)));
+  const removed = period.staffIds.filter((id) => !next.includes(id));
+  if (removed.length > 0) {
+    const booked = (await fetchBookings(admin, period.id)).filter((b) => removed.includes(b.userId));
+    if (booked.length > 0) throw new PeriodHasRealBookingsError(Array.from(new Set(booked.map((b) => b.userId))));
+    for (const uid of removed) await clearRebook(admin, period.id, uid);
+  }
+  // 検証用データとして作られた期間なら、一括削除で拾う印を引き継ぐ
+  const { data: raw } = await admin.from(GROWTH_TABLE).select("data").eq("id", period.id).eq("record_type", SLOT_PERIOD_TYPE).maybeSingle();
+  const seedMark = ((raw?.data ?? {}) as Record<string, unknown>)[SEED_MARK] === true;
+  const updated: SlotPeriod = { ...period, staffIds: next };
+  await savePeriod(admin, updated, by, seedMark);
+  return updated;
+}
+
 // ─── 枠 ───
 
 export async function fetchSlots(admin: GrowthAdminClient, periodId?: string): Promise<Slot[]> {

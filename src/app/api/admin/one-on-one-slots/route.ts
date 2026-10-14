@@ -39,6 +39,9 @@ import {
   recordSlotChange,
   restoreSlot,
   savePeriod,
+  deletePeriodCascade,
+  updatePeriodStaff,
+  PeriodHasRealBookingsError,
   setSlotBlocked,
 } from "@/lib/one-on-one-slots-server";
 import {
@@ -232,6 +235,42 @@ export async function PATCH(req: NextRequest) {
     const nameOf = (id: string) => people.get(id)?.name ?? "名前未設定";
     const byId = new Map(slots.map((s) => [s.id, s]));
     const bookingOf = (slotId: string) => bookings.find((b) => b.slotId === slotId) ?? null;
+
+    // ─── 235 §1: 期間を消す（枠と予約もいっしょに）／対象スタッフを直す ───
+    if (action === "deletePeriod" || action === "updateStaff") {
+      const periodId = typeof body.periodId === "string" ? body.periodId : "";
+      const period = (await fetchPeriods(admin)).find((p) => p.id === periodId);
+      if (!period) return NextResponse.json({ error: "対象の期間が見つかりません" }, { status: 404 });
+      // 断るときの文は、この画面の確かめの文「○○さんの予約が入っています。」と同じ
+      const refuse = (userIds: string[]) =>
+        bad(`${userIds.map(nameOf).join("・")}さんの予約が入っています。`);
+      const span = `${period.startDate.replaceAll("-", "/")}〜${period.endDate.replaceAll("-", "/")}`;
+      try {
+        if (action === "deletePeriod") {
+          // 本物のスタッフの予約が1件でもあれば消さない。検証用アカウントの予約は、予約・予定ごと消す
+          const r = await deletePeriodCascade(admin, period, (uid) => testIds.has(uid));
+          await recordSlotChange(admin, {
+            ...(await changedBy(admin, auth.user)),
+            action: "deleteSlot",
+            detail: `${span}・枠 ${r.slots}件`,
+          });
+          return NextResponse.json({ ok: true, ...r });
+        }
+        const raw = Array.isArray(body.staffIds) ? body.staffIds : [];
+        // 対象にできるのは、名簿にいる院長以外の人だけ（期間を作るときと同じ）
+        const staffIds = raw.filter((x): x is string => typeof x === "string" && people.has(x) && !people.get(x)!.isDirector);
+        const updated = await updatePeriodStaff(admin, period, staffIds, by);
+        await recordSlotChange(admin, {
+          ...(await changedBy(admin, auth.user)),
+          action: "extend",
+          detail: `${span}・対象スタッフ ${updated.staffIds.length}人`,
+        });
+        return NextResponse.json({ period: updated });
+      } catch (e) {
+        if (e instanceof PeriodHasRealBookingsError) return refuse(e.userIds);
+        throw e;
+      }
+    }
 
     /** 予約が入っている枠を外す（取り消して本人に取り直しの知らせ・205 §1-2） */
     const release = async (target: Slot[]) => {
