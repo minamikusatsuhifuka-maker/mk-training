@@ -24,6 +24,7 @@ import {
   type NavLink,
 } from "@/lib/nav";
 import { AdminBanner } from "@/components/AdminBanner";
+import { AdminMenuGroupsEditor } from "@/components/admin/AdminMenuGroupsEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -767,6 +768,9 @@ export default function AdminNavPage() {
           </div>
         ))}
       </div>
+
+      {/* 241: 管理画面の左のメニューのグループ（院長だけに出る） */}
+      <AdminMenuGroupsEditor />
     </div>
   );
 }

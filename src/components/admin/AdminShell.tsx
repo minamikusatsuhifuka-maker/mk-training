@@ -9,9 +9,40 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FontSwitcher } from "@/components/FontSwitcher";
 import { ADMIN_ITEMS } from "@/lib/admin-items";
+import { loadPortalObject } from "@/lib/portal-store";
+import {
+  ADMIN_MENU_GROUPS_KEY,
+  ADMIN_MENU_UPDATED_EVENT,
+  EXTRA_MENU_ITEMS,
+  groupOfHref,
+  normalizeAdminMenuConfig,
+  resolveAdminMenu,
+  type AdminMenuConfig,
+  type MenuItemLike,
+} from "@/lib/admin-menu-groups";
 
-// 項目一覧（表示順は lib/admin-items.ts の定義順）
+/** 241: グループの開け閉めをこのブラウザで覚える（読み書きできなくても画面は出る） */
+const MENU_OPEN_LS_KEY = "mk_admin_menu_open";
+
+function readOpen(): Record<string, boolean> {
+  try {
+    const v = JSON.parse(localStorage.getItem(MENU_OPEN_LS_KEY) || "{}") as unknown;
+    return v && typeof v === "object" ? (v as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
+function writeOpen(v: Record<string, boolean>): void {
+  try {
+    localStorage.setItem(MENU_OPEN_LS_KEY, JSON.stringify(v));
+  } catch {
+    /* 覚えられなくても開け閉めはできる */
+  }
+}
+
+// 項目一覧（表示順は lib/admin-items.ts の定義順。241 からはグループの並びで出す）
 const adminNav = ADMIN_ITEMS.filter((i) => !i.hidden).map((i) => ({ key: i.key, label: i.label, href: i.href }));
+const extra = (key: string): MenuItemLike => EXTRA_MENU_ITEMS.find((i) => i.key === key)!;
 
 export function AdminShell({
   children,
@@ -57,46 +88,127 @@ export function AdminShell({
     };
   }, []);
 
-  const navItems = [
+  const navItems: MenuItemLike[] = [
     ...adminNav.filter((i) => allowedKeys.includes(i.key)),
     ...(canSeeNotes
-      ? [{ label: "📔 メンバーノート", href: "/member-notes" }]
+      ? [extra("x:member-notes")]
       : []),
     ...(canSeeDocTasks
       ? [
-          { label: "📋 書類進捗ボード", href: "/doc-tasks" },
+          extra("x:doc-tasks"),
           // 157: 設定はここから開く（実体は /doc-tasks/settings。
           //   /admin 配下だと未ログイン・非管理者に200が返り、ルートの存在が漏れるため）
           // 211 D: **設定は院長のみ**（/doc-tasks/settings は管理者以外に404）。
           //   ボードが見える人みんなに出していたため、押すと404になっていた。
           ...(isAdmin
-            ? [{ label: "⚙️ 書類進捗ボードの設定", href: "/doc-tasks/settings" }]
+            ? [extra("x:doc-tasks-settings")]
             : []),
         ]
       : []),
     ...(canSeeContacts
       ? [
-          { label: "📇 スタッフ連絡先", href: "/staff-contacts" },
+          extra("x:staff-contacts"),
           // 169: 設定はここから開く（実体は /staff-contacts/settings。
           //   /admin 配下だとルートの存在が漏れるため・157と同じ理由）
           // 211 D: 書類進捗の設定と**同じ作り**＝こちらも院長のみ（押すと404だった）
           ...(isAdmin
-            ? [{ label: "⚙️ スタッフ連絡先の設定", href: "/staff-contacts/settings" }]
+            ? [extra("x:staff-contacts-settings")]
             : []),
         ]
       : []),
     ...(canSeeRetro
-      ? [{ label: "🧭 院長の振り返り記録", href: "/director-retrospective" }]
+      ? [extra("x:retro")]
       : []),
     ...(canSeeGrowth
       ? [
-          { label: "🌱 可能性ノート", href: "/staff-growth" },
+          extra("x:staff-growth"),
           // 179: 講座マスタ・設定はここから開く（/admin 配下だとルートの存在が漏れるため・157と同じ理由）。
           // 183: 講座マスタ（AI下書きの設定を含む）は院長のみ
-          ...(isAdmin ? [{ label: "🗂 講座マスタ・AI下書き設定", href: "/staff-growth/courses" }] : []),
+          ...(isAdmin ? [extra("x:courses")] : []),
         ]
       : []),
   ];
+
+  // ─── 241: グループに分けて折りたたむ ───
+  const [menuCfg, setMenuCfg] = useState<AdminMenuConfig>(() => normalizeAdminMenuConfig(null));
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      loadPortalObject<unknown>(ADMIN_MENU_GROUPS_KEY, null)
+        .then((raw) => alive && setMenuCfg(normalizeAdminMenuConfig(raw)))
+        .catch(() => {
+          /* 読めなければ、はじめの振り分けのまま */
+        });
+    void load();
+    window.addEventListener(ADMIN_MENU_UPDATED_EVENT, load);
+    return () => {
+      alive = false;
+      window.removeEventListener(ADMIN_MENU_UPDATED_EVENT, load);
+    };
+  }, []);
+  const menu = resolveAdminMenu(menuCfg, navItems);
+  const activeGroup = groupOfHref(menu, pathname);
+  const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    // 覚えている開け閉めは、画面を出したあとに読む（サーバーで作る画面と食い違わないように）
+    let alive = true;
+    void Promise.resolve().then(() => {
+      if (alive) setOpenMap(readOpen());
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  // 今開いているページを含むグループは開いておく（覚えている状態より優先）
+  const isOpen = (id: string) => id === activeGroup || openMap[id] === true;
+  const toggle = (id: string, open: boolean) => {
+    if (id === activeGroup && !open) return; // 今のページのグループは閉じない
+    setOpenMap((prev) => {
+      const next = { ...prev, [id]: open };
+      writeOpen(next);
+      return next;
+    });
+  };
+
+  const renderGroups = (variant: "mobile" | "desktop") => {
+    const linkCls = (active: boolean) =>
+      variant === "mobile"
+        ? `block rounded-md px-3 py-2 text-sm transition-colors ${active ? "bg-slate-500 text-white font-medium" : "text-slate-300 hover:bg-slate-600 hover:text-white"}`
+        : `block rounded-md px-3 py-2 text-sm transition-colors ${active ? "bg-slate-600 text-white font-medium" : "text-slate-300 hover:bg-slate-700 hover:text-white"}`;
+    const link = (item: MenuItemLike) => (
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={variant === "mobile" ? () => setMenuOpen(false) : undefined}
+        className={linkCls(pathname === item.href)}
+      >
+        {item.label}
+      </Link>
+    );
+    return (
+      <>
+        {menu.top && link(menu.top)}
+        {menu.groups.map((g) => (
+          <details
+            key={g.id}
+            open={isOpen(g.id)}
+            data-admin-menu-group={g.id}
+          >
+            {/* 開け閉めは React の状態だけで決める（ブラウザ任せの開閉と食い違うと、続けて押したとき覚えそこねるため） */}
+            <summary
+              onClick={(e) => {
+                e.preventDefault();
+                toggle(g.id, !isOpen(g.id));
+              }}
+              className="cursor-pointer select-none rounded-md px-2 py-2 text-xs font-semibold text-slate-400 hover:text-white">
+              {g.label}
+            </summary>
+            <div className="space-y-1 pl-1">{g.items.map(link)}</div>
+          </details>
+        ))}
+      </>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -133,47 +245,14 @@ export function AdminShell({
           <div className="py-1.5">
             <FontSwitcher dark />
           </div>
-          {navItems.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMenuOpen(false)}
-                className={`block rounded-md px-3 py-2 text-sm transition-colors ${
-                  isActive
-                    ? "bg-slate-500 text-white font-medium"
-                    : "text-slate-300 hover:bg-slate-600 hover:text-white"
-                }`}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
+          {renderGroups("mobile")}
         </div>
       )}
 
       <div className="flex">
         {/* Desktop Sidebar */}
         <aside className="hidden md:block w-[200px] shrink-0 bg-slate-800 min-h-[calc(100vh-52px)] px-3 py-4">
-          <nav className="space-y-1">
-            {navItems.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`block rounded-md px-3 py-2 text-sm transition-colors ${
-                    isActive
-                      ? "bg-slate-600 text-white font-medium"
-                      : "text-slate-300 hover:bg-slate-700 hover:text-white"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+          <nav className="space-y-1">{renderGroups("desktop")}</nav>
         </aside>
 
         {/* Content */}

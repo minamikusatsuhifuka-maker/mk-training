@@ -15,6 +15,8 @@
 const ADMIN_ONLY_KEYS = new Set<string>([
   // 招待・アカウント系（露出すると誰でも入室できる）
   "join_config",
+  // 241: 管理画面の左のメニューのグループ（決めるのは院長だけ。読むのはログイン済みなら誰でも＝幹部の左のメニューにも要る）
+  "admin_menu_groups",
   // 公開範囲・導線
   "portal_feature_flags",
   "portal_nav_config",
