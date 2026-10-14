@@ -80,6 +80,7 @@ import {
   type DocVersion,
   type UpdateCandidate,
 } from "@/lib/library";
+import { FileDropArea } from "@/components/DropZone";
 
 // ログイン中の管理者判定（GanttChart と同じ流儀・一括タグ付けボタンの表示制御）
 function useIsAdmin(): boolean {
@@ -2351,12 +2352,14 @@ export default function LibraryBrowser() {
                     </span>
                   )}
                 </Label>
-                <input
-                  type="file"
-                  accept=".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,application/pdf"
-                  onChange={(e) => onPickFile(e.target.files?.[0] ?? null)}
-                  className="block w-full text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-input file:bg-background file:text-sm hover:file:bg-muted"
-                />
+                <FileDropArea testId="library-form-file" className="p-1">
+                  <input
+                    type="file"
+                    accept=".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,application/pdf"
+                    onChange={(e) => onPickFile(e.target.files?.[0] ?? null)}
+                    className="block w-full text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-input file:bg-background file:text-sm hover:file:bg-muted"
+                  />
+                </FileDropArea>
                 {form.fileName && (
                   <p className="text-xs text-muted-foreground truncate">
                     {form.fileName}

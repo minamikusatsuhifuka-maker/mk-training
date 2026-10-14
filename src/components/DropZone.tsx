@@ -120,3 +120,77 @@ export function DropZone({
     </div>
   );
 }
+
+/**
+ * 233: すでに「選ぶ」欄（input type="file"）がある画面を、そのままドラッグ＆ドロップにも対応させる包み。
+ *
+ * 【同じ処理を通す】落とされたファイルを、包みの中の「選ぶ」欄そのものに入れ、選んだときと同じ change の合図を送る。
+ *   画面は「選ぶ」で選ばれたときと区別がつかない＝種類・大きさ・数の確かめ、画像の変換、断るときの知らせが1字も変わらない。
+ *   （書き起こしのように、保存を押したときに欄から読む画面でも、そのまま同じ結果になる）
+ * 【1つだけの欄】欄に multiple が無ければ、最初の1つだけを入れる（選ぶときと同じ）。
+ * 【使えない間】欄が disabled（読み込み中など）のときは受け付けない。
+ * 【欄の外】usePreventWindowFileDrop でブラウザがファイルを開かない（入力中の内容が消えない）。
+ * 文言は 186 の部品と同じ「ここに離すと追加されます」だけ（新しい言い回しは作らない）。
+ */
+export function FileDropArea({
+  children,
+  className = "",
+  testId,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  testId?: string;
+}) {
+  const [over, setOver] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  usePreventWindowFileDrop();
+
+  const inputOf = (): HTMLInputElement | null =>
+    boxRef.current?.querySelector<HTMLInputElement>('input[type="file"]') ?? null;
+  const isFileDrag = (e: React.DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
+  const usable = () => {
+    const input = inputOf();
+    return !!input && !input.disabled;
+  };
+
+  return (
+    <div
+      ref={boxRef}
+      data-file-drop-area={testId ?? "true"}
+      data-over={over ? "1" : "0"}
+      onDragEnter={(e) => {
+        if (!isFileDrag(e) || !usable()) return;
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragOver={(e) => {
+        if (!isFileDrag(e) || !usable()) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        if (!over) setOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+        setOver(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        const input = inputOf();
+        if (!input || input.disabled) return;
+        const dropped = Array.from(e.dataTransfer.files);
+        if (dropped.length === 0) return;
+        const dt = new DataTransfer();
+        for (const f of input.multiple ? dropped : dropped.slice(0, 1)) dt.items.add(f);
+        input.files = dt.files;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }}
+      className={`rounded-lg border-2 border-dashed transition-colors ${
+        over ? "border-teal-500 bg-teal-50" : "border-transparent"
+      } ${className}`}
+    >
+      {children}
+      {over && <p className="px-1 text-[12px] font-medium text-teal-800">{DROP_HERE_TEXT}</p>}
+    </div>
+  );
+}

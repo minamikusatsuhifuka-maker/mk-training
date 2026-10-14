@@ -36,6 +36,7 @@ import {
 } from "@/lib/staff-growth-client";
 import { useDraft, DISCARD_CONFIRM } from "@/lib/retro-drafts";
 import { PHOTO_MAX_EDGE, resizeImageToJpeg } from "@/lib/image-resize";
+import { FileDropArea } from "@/components/DropZone";
 
 export type LearningFormValues = {
   courseId: string;
@@ -281,31 +282,33 @@ export function LearningRecordForm({
       </div>
 
       {aiDraftEnabled && !isEdit && (
-        <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-2 space-y-1">
-          <p className="text-[11px] font-medium text-violet-900">🪄 受講証・メモの画像から下書きを作る（AI）</p>
-          <p className="text-[10px] text-violet-800 leading-relaxed">
-            講座・参加日・場所を読み取って埋めます。読み取った内容は必ず確認してから保存してください（AIは保存しません）。
-          </p>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            disabled={aiBusy || busy}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void runAiDraft(f);
-            }}
-            className="text-xs"
-          />
-          {aiBusy && <p className="text-[11px] text-violet-800">読み取り中…</p>}
-          {aiNote && <p className="text-[11px] text-violet-900">{aiNote}</p>}
-          {evidence && (
-            <label className="flex items-center gap-2 text-[11px] text-violet-900 min-h-[32px]">
-              <input type="checkbox" checked={attachEvidence} onChange={(e) => setAttachEvidence(e.target.checked)} />
-              この画像を証跡として保存時に添付する
-            </label>
-          )}
-        </div>
+        <FileDropArea testId="learning-ai-draft">
+          <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-2 space-y-1">
+            <p className="text-[11px] font-medium text-violet-900">🪄 受講証・メモの画像から下書きを作る（AI）</p>
+            <p className="text-[10px] text-violet-800 leading-relaxed">
+              講座・参加日・場所を読み取って埋めます。読み取った内容は必ず確認してから保存してください（AIは保存しません）。
+            </p>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              disabled={aiBusy || busy}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void runAiDraft(f);
+              }}
+              className="text-xs"
+            />
+            {aiBusy && <p className="text-[11px] text-violet-800">読み取り中…</p>}
+            {aiNote && <p className="text-[11px] text-violet-900">{aiNote}</p>}
+            {evidence && (
+              <label className="flex items-center gap-2 text-[11px] text-violet-900 min-h-[32px]">
+                <input type="checkbox" checked={attachEvidence} onChange={(e) => setAttachEvidence(e.target.checked)} />
+                この画像を証跡として保存時に添付する
+              </label>
+            )}
+          </div>
+        </FileDropArea>
       )}
 
       {/* 講座（一覧から選ぶ） */}

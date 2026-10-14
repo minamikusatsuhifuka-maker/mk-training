@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ClinicMetrics } from "@/lib/clinic-metrics";
 import { METRICS_CSV_HEADER, type ImportPreview } from "@/lib/clinic-metrics-import";
+import { FileDropArea } from "@/components/DropZone";
 
 type ImportLog = {
   id: string;
@@ -152,16 +153,18 @@ export default function ClinicMetricsImportPanel({
         aria-label="CSVの貼り付け欄"
       />
       <div className="flex flex-wrap items-center gap-2">
-        <label className="text-xs px-3 h-8 inline-flex items-center rounded border border-gray-300 bg-white hover:bg-gray-50 cursor-pointer">
-          📄 CSVファイルを選ぶ
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv,text/csv,text/plain"
-            className="hidden"
-            onChange={(e) => handleFile(e.target.files?.[0])}
-          />
-        </label>
+        <FileDropArea testId="metrics-csv" className="inline-block p-1">
+          <label className="text-xs px-3 h-8 inline-flex items-center rounded border border-gray-300 bg-white hover:bg-gray-50 cursor-pointer">
+            📄 CSVファイルを選ぶ
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv,text/plain"
+              className="hidden"
+              onChange={(e) => handleFile(e.target.files?.[0])}
+            />
+          </label>
+        </FileDropArea>
         <button
           type="button"
           onClick={handlePreview}

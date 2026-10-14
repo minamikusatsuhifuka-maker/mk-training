@@ -41,6 +41,7 @@ import {
   type TranscriptDraft,
   type TranscriptSummary,
 } from "@/lib/one-on-one-transcript";
+import { FileDropArea } from "@/components/DropZone";
 
 type StaffOption = { userId: string; name: string };
 
@@ -272,14 +273,16 @@ export function TranscriptImportDialog({
             <span className="text-[10px] text-gray-500 tabular-nums">
               {text.length} / {TRANSCRIPT_MAX_CHARS}字
             </span>
-            <input
-              ref={fileRef}
-              type="file"
-              accept={TRANSCRIPT_ACCEPT}
-              onChange={(e) => setFileName(e.target.files?.[0]?.name ?? "")}
-              className="text-[11px]"
-              aria-label="書き起こしのファイル"
-            />
+            <FileDropArea testId="transcript-file" className="inline-block p-1">
+              <input
+                ref={fileRef}
+                type="file"
+                accept={TRANSCRIPT_ACCEPT}
+                onChange={(e) => setFileName(e.target.files?.[0]?.name ?? "")}
+                className="text-[11px]"
+                aria-label="書き起こしのファイル"
+              />
+            </FileDropArea>
             {fileName && <span className="text-[11px] text-gray-600">{fileName}</span>}
             {sampleAllowed && (
               <button

@@ -49,6 +49,7 @@ import {
   useHasDraft,
   writeDraft,
 } from "@/lib/retro-drafts";
+import { FileDropArea } from "@/components/DropZone";
 
 const INPUT = "w-full rounded-md border border-gray-200 px-3 py-2 text-sm min-h-[40px] bg-white";
 const TEXTAREA =
@@ -331,20 +332,22 @@ export function RetrospectiveImportPanel({
                   {tooLong && "（上限を超えています。分けて取り込んでください）"}
                   {input.dirty && <span className="ml-2 text-amber-800">📝 下書き（このタブに一時保存中）</span>}
                 </p>
-                <label className={`${BTN_SMALL} cursor-pointer inline-flex items-center`}>
-                  {fileBusy ? "読み込み中…" : "📄 ファイルから読み込む"}
-                  <input
-                    type="file"
-                    accept={IMPORT_FILE_ACCEPT}
-                    className="hidden"
-                    disabled={fileBusy || busy}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      e.target.value = "";
-                      if (f) void readFile(f);
-                    }}
-                  />
-                </label>
+                <FileDropArea testId="retro-import" className="inline-block p-1">
+                  <label className={`${BTN_SMALL} cursor-pointer inline-flex items-center`}>
+                    {fileBusy ? "読み込み中…" : "📄 ファイルから読み込む"}
+                    <input
+                      type="file"
+                      accept={IMPORT_FILE_ACCEPT}
+                      className="hidden"
+                      disabled={fileBusy || busy}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = "";
+                        if (f) void readFile(f);
+                      }}
+                    />
+                  </label>
+                </FileDropArea>
               </div>
               <p className="text-[10px] text-gray-500 mt-0.5">
                 読み込めるファイル: .txt / .md / .docx / .pptx（5MBまで）。PDFはAIでしか文字を読めず、氏名を置き換える前の本文がAIに渡るため対象外です（文章をコピーして貼り付けてください）。

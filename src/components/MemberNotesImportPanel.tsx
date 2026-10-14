@@ -11,6 +11,7 @@ import {
   type MemberNote,
 } from "@/lib/member-notes";
 import type { StaffProfileIndexEntry } from "@/lib/staff-profiles";
+import { FileDropArea } from "@/components/DropZone";
 
 type Proposal = {
   sourceFile: string;
@@ -207,15 +208,17 @@ export function MemberNotesImportPanel({
             され、どこにも保存されません。
           </p>
 
-          <input
-            ref={inputRef}
-            type="file"
-            multiple
-            accept="image/*,application/pdf,.doc,.docx"
-            onChange={(e) => analyze(e.target.files)}
-            disabled={busy}
-            className="block w-full text-sm text-gray-700 file:mr-3 file:px-4 file:py-2 file:rounded-full file:border-0 file:bg-teal-600 file:text-white file:text-sm hover:file:bg-teal-700 disabled:opacity-40"
-          />
+          <FileDropArea testId="member-notes-import" className="p-1">
+            <input
+              ref={inputRef}
+              type="file"
+              multiple
+              accept="image/*,application/pdf,.doc,.docx"
+              onChange={(e) => analyze(e.target.files)}
+              disabled={busy}
+              className="block w-full text-sm text-gray-700 file:mr-3 file:px-4 file:py-2 file:rounded-full file:border-0 file:bg-teal-600 file:text-white file:text-sm hover:file:bg-teal-700 disabled:opacity-40"
+            />
+          </FileDropArea>
           {busy && <p className="text-xs text-gray-600">処理中です…</p>}
           {error && (
             <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">

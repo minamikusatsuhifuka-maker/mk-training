@@ -30,6 +30,7 @@ import {
 } from "@/lib/clinic-events";
 import { jstTodayYmd } from "@/lib/library";
 import { resizeImageToJpeg, PHOTO_MAX_EDGE } from "@/lib/image-resize";
+import { FileDropArea } from "@/components/DropZone";
 
 // 開催日「2026/8/3（月）」（TZ非依存・カレンダーページと同じ流儀）
 function formatHeldOn(ymd: string): string {
@@ -441,24 +442,26 @@ function EventsPageBody() {
                         </div>
                       )}
                       {canEdit && (
-                        <label className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 border border-gray-200 rounded-full text-gray-600 hover:bg-gray-50 cursor-pointer">
-                          {uploadingId === ev.id
-                            ? "アップロード中…"
-                            : "📷 写真を追加（複数可）"}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            className="hidden"
-                            disabled={uploadingId === ev.id}
-                            onChange={(e) => {
-                              if (e.target.files?.length) {
-                                handlePhotoUpload(ev, e.target.files);
-                                e.target.value = "";
-                              }
-                            }}
-                          />
-                        </label>
+                        <FileDropArea testId="event-photos" className="inline-block p-1">
+                          <label className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 border border-gray-200 rounded-full text-gray-600 hover:bg-gray-50 cursor-pointer">
+                            {uploadingId === ev.id
+                              ? "アップロード中…"
+                              : "📷 写真を追加（複数可）"}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              className="hidden"
+                              disabled={uploadingId === ev.id}
+                              onChange={(e) => {
+                                if (e.target.files?.length) {
+                                  handlePhotoUpload(ev, e.target.files);
+                                  e.target.value = "";
+                                }
+                              }}
+                            />
+                          </label>
+                        </FileDropArea>
                       )}
                     </div>
                   )}

@@ -69,6 +69,7 @@ import {
   valueKeywordLabel,
   type ValueKeywordsConfig,
 } from "@/lib/value-keywords";
+import { FileDropArea } from "@/components/DropZone";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -770,47 +771,49 @@ export default function ProfilePage() {
       )}
 
       {/* アバター */}
-      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-        <h2 className="text-sm font-semibold">アバター写真</h2>
-        <div className="flex items-center gap-4">
-          {profile.avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={profile.avatarUrl}
-              alt="アバター"
-              className="h-20 w-20 rounded-full object-cover border border-border"
-            />
-          ) : (
-            <div className="h-20 w-20 rounded-full bg-accent flex items-center justify-center text-2xl">
-              👤
+      <FileDropArea testId="avatar" className="p-1">
+        <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+          <h2 className="text-sm font-semibold">アバター写真</h2>
+          <div className="flex items-center gap-4">
+            {profile.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={profile.avatarUrl}
+                alt="アバター"
+                className="h-20 w-20 rounded-full object-cover border border-border"
+              />
+            ) : (
+              <div className="h-20 w-20 rounded-full bg-accent flex items-center justify-center text-2xl">
+                👤
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={uploading}
+                onClick={() => avatarInputRef.current?.click()}
+              >
+                {uploading ? "アップロード中..." : "画像を選ぶ"}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                自動で長辺512pxに縮小されます（JPEG）
+              </p>
             </div>
-          )}
-          <div className="space-y-1.5">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={uploading}
-              onClick={() => avatarInputRef.current?.click()}
-            >
-              {uploading ? "アップロード中..." : "画像を選ぶ"}
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              自動で長辺512pxに縮小されます（JPEG）
-            </p>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files) handleAvatarFiles(e.target.files);
+                e.target.value = "";
+              }}
+            />
           </div>
-          <input
-            ref={avatarInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files) handleAvatarFiles(e.target.files);
-              e.target.value = "";
-            }}
-          />
         </div>
-      </div>
+      </FileDropArea>
 
       {/* 基本情報 */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
