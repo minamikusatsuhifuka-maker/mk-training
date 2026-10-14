@@ -142,8 +142,8 @@ export function NeedsPerspectiveSection({ userId }: { userId: string }) {
                   <p className="mt-1 text-[13px] text-gray-800">{phiItem.firstQuestion}</p>
                 </div>
               )}
-              <ItemList keys={p.strong} side="high" label="強い欲求（上位3）" />
-              <ItemList keys={p.weak} side="low" label="エネルギーを使わない領域（下位3）" />
+              <ItemList keys={p.strong} side="high" label="高い欲求（上位3）" />
+              <ItemList keys={p.weak} side="low" label="低い欲求（下位3）" />
               {(p.overwork.length > 0 || p.rethink.length > 0) && (
                 <div className="space-y-1.5" data-needs-patterns>
                   <p className="text-[12px] font-bold text-gray-900">気になるパターン</p>

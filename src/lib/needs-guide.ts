@@ -1,7 +1,7 @@
 // 可能性ノート「欲求の視点（関わる側のヒント）」の判定（純関数・依存なし）
 //
 // 【守ること】
-//   ・判定（強い／エネルギーを使わない／φ／頑張りすぎ／やり方の見直し）は**保存しない**。表示のたびにここで計算するだけ。
+//   ・判定（高い欲求／低い欲求／φ／頑張りすぎ／やり方の見直し）は**保存しない**。表示のたびにここで計算するだけ。
 //   ・他のスタッフとの比較・順位・平均は計算しない（1人の結果の中だけで並べる）。
 //   ・欲求の結果も判定も、どのAI処理にも渡さない（このファイルを AI の呼び出しから import しない）。
 //   ・ガイドの文言は needs-guide-data.ts（docs/needs-guide/*.md から機械的に作ったもの）だけを使う。
@@ -48,7 +48,7 @@ export const NEEDS_GUIDE_SECTION_LABELS: { key: keyof NeedsGuideSide; label: str
 
 /** 「頑張りすぎ」「やり方の見直し」のしきい値（指示書 §5・ここ1か所で変える） */
 export const NEEDS_PATTERN_THRESHOLD = 20;
-/** 強い欲求・エネルギーを使わない領域の数 */
+/** 高い欲求・低い欲求の数（232で見出しを「高い欲求」「低い欲求」に） */
 export const NEEDS_TOP_COUNT = 3;
 
 /** 区画の上部に常に出す注意（指示書 §6 の文のまま） */
@@ -60,7 +60,7 @@ export type DetailValues = { desire?: number; focus?: number; current?: number }
 export type NeedsPerspective = {
   /** 本人の中で「欲求」が高い上位3（項目キー） */
   strong: string[];
-  /** 本人の中で「欲求」が低い下位3（強い欲求と重ならない） */
+  /** 本人の中で「欲求」が低い下位3（高い欲求と重ならない） */
   weak: string[];
   /** 「欲求 − 現実」が最も大きい項目（φ）。現実の値が無ければ null */
   phi: string | null;
