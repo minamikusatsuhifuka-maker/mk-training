@@ -8,6 +8,28 @@
 
 import { useEffect, useRef, useState } from "react";
 
+/** 186 A-2 の文（231: お知らせ・イベントでも同じ文を使う。新しい言い回しを作らない） */
+export const DROP_HERE_TEXT = "ここに離すと追加されます";
+export const DROP_GUIDE_TEXT = "ここにファイルをドラッグ＆ドロップ（複数可）";
+
+/**
+ * 186 A-2: 領域外へのドロップで画面が移動しないようにする（ブラウザがファイルを開くと、書きかけの入力が消える）。
+ * ページに1つでも使っていれば効く。231 で DropZone 以外の欄（お知らせ・イベントの「貼るもの」）からも使えるよう切り出した。
+ */
+export function usePreventWindowFileDrop(): void {
+  useEffect(() => {
+    const prevent = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes("Files")) e.preventDefault();
+    };
+    window.addEventListener("dragover", prevent);
+    window.addEventListener("drop", prevent);
+    return () => {
+      window.removeEventListener("dragover", prevent);
+      window.removeEventListener("drop", prevent);
+    };
+  }, []);
+}
+
 export function DropZone({
   onFiles,
   accept,
@@ -31,17 +53,7 @@ export function DropZone({
   const inputRef = useRef<HTMLInputElement>(null);
 
   // 186 A-2: 領域外へのドロップで画面が移動しないようにする（ページに1つでも DropZone があれば効く）
-  useEffect(() => {
-    const prevent = (e: DragEvent) => {
-      if (e.dataTransfer?.types.includes("Files")) e.preventDefault();
-    };
-    window.addEventListener("dragover", prevent);
-    window.addEventListener("drop", prevent);
-    return () => {
-      window.removeEventListener("dragover", prevent);
-      window.removeEventListener("drop", prevent);
-    };
-  }, []);
+  usePreventWindowFileDrop();
 
   const take = (list: FileList | File[] | null) => {
     if (!list) return;
@@ -80,7 +92,7 @@ export function DropZone({
         over ? "border-teal-500 bg-teal-50" : "border-gray-300 bg-white"
       } ${disabled ? "opacity-50" : ""} ${className}`}
     >
-      <p className="text-[12px] text-gray-800">{over ? "ここに離すと追加されます" : label}</p>
+      <p className="text-[12px] text-gray-800">{over ? DROP_HERE_TEXT : label}</p>
       {hint && <p className="text-[10px] text-gray-500 mt-0.5">{hint}</p>}
       <div className="mt-2">
         <input

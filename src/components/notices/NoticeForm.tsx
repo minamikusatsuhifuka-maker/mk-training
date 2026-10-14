@@ -5,6 +5,7 @@
 // 画像は送る前に端末で描き直す（位置情報などを消す・HEICはJPEGに）。サーバーでももう一度消す。
 
 import { useMemo, useRef, useState } from "react";
+import { DROP_GUIDE_TEXT, DROP_HERE_TEXT, usePreventWindowFileDrop } from "@/components/DropZone";
 import {
   createNotice,
   removeNoticeFile,
@@ -56,6 +57,11 @@ export function NoticeForm({
   const [progress, setProgress] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  // 231: 「貼るもの」の欄全体にファイルを落とせる。持ってきている間は枠と色を変える
+  const [dragOver, setDragOver] = useState(false);
+  // 欄の外に落としてもブラウザがファイルを開かない（書きかけの題名・本文が消えない）
+  usePreventWindowFileDrop();
+  const isFileDrag = (e: React.DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
 
   const total = existing.length + files.length;
   const set = <K extends keyof NoticeFormValue>(k: K, val: NoticeFormValue[K]) => setV((p) => ({ ...p, [k]: val }));
@@ -78,11 +84,14 @@ export function NoticeForm({
     [files]
   );
 
-  const pick = (list: FileList | null) => {
+  // 「📎 ファイルを選ぶ」とドラッグ＆ドロップは、どちらもここを通す（231 §1: 確かめることと処理は同じ道）
+  const pick = (list: FileList | File[] | null) => {
     if (!list) return;
+    const all = Array.from(list);
+    if (all.length === 0) return;
     const room = NOTICE_FILE_MAX_COUNT - total;
-    const add = Array.from(list).slice(0, Math.max(0, room));
-    if (list.length > add.length) setErrors([`1件に貼れるのは${NOTICE_FILE_MAX_COUNT}ファイルまでです`]);
+    const add = all.slice(0, Math.max(0, room));
+    if (all.length > add.length) setErrors([`1件に貼れるのは${NOTICE_FILE_MAX_COUNT}ファイルまでです`]);
     setFiles((p) => [...p, ...add]);
     if (inputRef.current) inputRef.current.value = "";
   };
@@ -206,7 +215,35 @@ export function NoticeForm({
         </div>
       )}
 
-      <div className="space-y-2">
+      <div
+        className={`space-y-2 rounded-lg border-2 border-dashed p-2 -m-2 transition-colors ${
+          dragOver ? "border-teal-500 bg-teal-50" : "border-transparent"
+        } ${busy ? "pointer-events-none" : ""}`}
+        data-notice-dropzone
+        data-over={dragOver ? "1" : "0"}
+        onDragEnter={(e) => {
+          if (busy || !isFileDrag(e)) return;
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragOver={(e) => {
+          if (busy || !isFileDrag(e)) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+          if (!dragOver) setDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          // 欄の中の部品へ移っただけなら消さない
+          if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+          setDragOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          if (busy) return;
+          pick(e.dataTransfer.files);
+        }}
+      >
         <p className={label}>
           貼るもの（画像・PDF・Word／1ファイル{formatBytes(NOTICE_FILE_MAX_BYTES)}まで・{NOTICE_FILE_MAX_COUNT}ファイルまで）
         </p>
@@ -234,11 +271,19 @@ export function NoticeForm({
             ))}
           </ul>
         )}
-        {total < NOTICE_FILE_MAX_COUNT && (
-          <label className="inline-flex min-h-[40px] cursor-pointer items-center rounded-lg border border-dashed border-teal-400 px-3 text-sm text-teal-800">
-            📎 ファイルを選ぶ
-            <input ref={inputRef} type="file" multiple accept={ACCEPT} className="sr-only" onChange={(e) => pick(e.target.files)} data-notice-file-input />
-          </label>
+        {dragOver ? (
+          <p className="text-[12px] font-medium text-teal-800">{DROP_HERE_TEXT}</p>
+        ) : (
+          total < NOTICE_FILE_MAX_COUNT && (
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex min-h-[40px] cursor-pointer items-center rounded-lg border border-dashed border-teal-400 px-3 text-sm text-teal-800">
+                📎 ファイルを選ぶ
+                <input ref={inputRef} type="file" multiple accept={ACCEPT} className="sr-only" onChange={(e) => pick(e.target.files)} data-notice-file-input />
+              </label>
+              {/* 186の文をそのまま使う（パソコンだけ。スマホはドラッグできないので出さない） */}
+              <span className="hidden text-[11px] text-gray-500 sm:inline">{DROP_GUIDE_TEXT}</span>
+            </div>
+          )
         )}
       </div>
 
