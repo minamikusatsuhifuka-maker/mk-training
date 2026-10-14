@@ -6270,11 +6270,15 @@ export default function AdminPortalPage() {
           </section>
 
           {/* 質問プール（期間ごとの自動ローテーション） */}
-          <section className="space-y-3 border-t border-gray-200 pt-6">
-            <div>
-              <h2 className="text-sm font-semibold text-gray-800">
+          {/* 238: 開いたときは見出しだけ（同じ画面の「▶ 取り込みの記録」と同じ <details> の ▶／▼）。
+              閉じても中身は消えない（隠すだけ）ので、直しかけの内容は保存するまで残る */}
+          <section className="border-t border-gray-200 pt-6">
+            <details className="group" data-weekly-pool-fold>
+            <summary className="cursor-pointer text-sm font-semibold text-gray-800">
                 ❓ みんなへの質問 — 質問プール
-              </h2>
+            </summary>
+            <div className="space-y-3 mt-3">
+            <div>
               <p className="text-xs text-gray-500 mt-1">
                 期間が切り替わるとこのプールから上から順（循環）に自動で出題されます。切替間隔は上の「配信間隔」で設定できます。ホームの「✏️
                 質問を編集」（管理者のみ）で手動上書きした期間はそれが優先され、次の切替からまた自動に戻ります。プールを空にすると自動出題は止まります。
@@ -6361,6 +6365,8 @@ export default function AdminPortalPage() {
                 </div>
               </>
             )}
+            </div>
+            </details>
           </section>
 
           {/* 📈 クリニックの歩み — データ入力（指示書80）
@@ -6432,10 +6438,11 @@ export default function AdminPortalPage() {
             ) : (
               <>
                 {/* 月次データ */}
-                <div>
-                  <p className="text-xs font-semibold text-gray-700 mb-1">
+                <details data-metrics-months-fold>
+                  {/* 238: 開いたときは見出しだけ（▶／▼ は同じ画面の「取り込みの記録」と同じ） */}
+                  <summary className="cursor-pointer text-xs font-semibold text-gray-700 mb-1">
                     月次データ
-                  </p>
+                  </summary>
                   {metrics.months.length === 0 ? (
                     <p className="text-xs text-gray-500">
                       まだありません。下の欄から追加してください。
@@ -6565,7 +6572,7 @@ export default function AdminPortalPage() {
                       追加
                     </button>
                   </div>
-                </div>
+                </details>
 
                 {/* 施策 */}
                 <div className="border-t border-gray-100 pt-3">
