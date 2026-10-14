@@ -100,6 +100,11 @@ function readPeriodInput(raw: unknown): PeriodInput | null {
     stepMinutes: typeof o.stepMinutes === "number" ? o.stepMinutes : 0,
     staffIds: Array.isArray(o.staffIds) ? o.staffIds.filter((x): x is string => typeof x === "string") : [],
     label: typeof o.label === "string" ? o.label : "",
+    // 239: 予定がある日（枠を作らない日）
+    // 送られてこないとき（undefined）は「今の設定のまま」（枠を足すときに予定がある日を消さない）
+    excludedDates: Array.isArray(o.excludedDates)
+      ? o.excludedDates.filter((d): d is string => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d))
+      : undefined,
   };
 }
 
@@ -203,6 +208,8 @@ export async function POST(req: NextRequest) {
       const prev = periods.find((p) => p.id === periodId);
       if (!prev) return NextResponse.json({ error: "対象の期間が見つかりません" }, { status: 404 });
       if (hideTest) input.staffIds = [...input.staffIds, ...prev.staffIds.filter((id) => seedIds.has(id))];
+      // 239: 予定がある日は、送られてこなければ今の設定を引き継ぐ（その日の枠を作り直さない）
+      if (!input.excludedDates) input.excludedDates = prev.excludedDates;
       // 既存の枠・予約は動かさず、足りない枠だけ作る（205 §1-1）
       const next = normalizeSlotPeriod(prev.id, {
         ...(prev as unknown as Record<string, unknown>),
@@ -288,11 +295,15 @@ export async function PATCH(req: NextRequest) {
         if (hidesTestSeedFor(auth.user)) {
           staffIds = [...staffIds.filter((id) => !testIds.has(id)), ...period.staffIds.filter((id) => testIds.has(id))];
         }
-        const updated = await updatePeriodStaff(admin, period, staffIds, by);
+        // 239: 予定がある日（送られてきたときだけ直す）
+        const excludedDates = Array.isArray(body.excludedDates)
+          ? body.excludedDates.filter((d): d is string => typeof d === "string")
+          : undefined;
+        const updated = await updatePeriodStaff(admin, period, staffIds, by, { excludedDates, today });
         await recordSlotChange(admin, {
           ...(await changedBy(admin, auth.user)),
           action: "extend",
-          detail: `${span}・対象スタッフ ${updated.staffIds.length}人`,
+          detail: `${span}・対象スタッフ ${updated.staffIds.length}人・予定がある日 ${updated.excludedDates.length}日`,
         });
         return NextResponse.json({ period: updated });
       } catch (e) {

@@ -50,6 +50,7 @@ import {
   normalizeSlotPeriod,
   newSlotChangeId,
   planSlots,
+  datesOfPeriod,
   rebookId,
   scheduleIdFor,
   slotId,
@@ -267,25 +268,63 @@ export async function deletePeriodCascade(
 /**
  * 235 §1: 期間の対象スタッフを直す。外そうとする人にこの期間の予約があれば外せない
  * （PeriodHasRealBookingsError に、その人たちを入れて返す）。外した人の取り直しのお願いは消す。
+ * 239 §2-2: 予定がある日（excludedDates）も直す（渡されたときだけ）。
+ *   ・足した日：その日に予約があれば足せない（同じエラーで予約の人を返す）。無ければその日の枠を消す
+ *     （空いている枠・休みにした枠とも。スタッフの予約画面には出なくなる）
+ *   ・外した日：その日の枠を、期間の時間帯・刻みで作り直す（今日より前の日は作らない）
  */
 export async function updatePeriodStaff(
   admin: GrowthAdminClient,
   period: SlotPeriod,
   staffIds: string[],
-  by: string
+  by: string,
+  opts: { excludedDates?: string[]; today?: string } = {}
 ): Promise<SlotPeriod> {
   const next = Array.from(new Set(staffIds.filter((x) => typeof x === "string" && x)));
   const removed = period.staffIds.filter((id) => !next.includes(id));
+  const bookings = await fetchBookings(admin, period.id);
   if (removed.length > 0) {
-    const booked = (await fetchBookings(admin, period.id)).filter((b) => removed.includes(b.userId));
+    const booked = bookings.filter((b) => removed.includes(b.userId));
     if (booked.length > 0) throw new PeriodHasRealBookingsError(Array.from(new Set(booked.map((b) => b.userId))));
-    for (const uid of removed) await clearRebook(admin, period.id, uid);
+  }
+  // 239: 予定がある日
+  let excludedDates = period.excludedDates;
+  let addedDays: string[] = [];
+  let removedDays: string[] = [];
+  if (opts.excludedDates) {
+    const candidates = new Set(datesOfPeriod(period));
+    excludedDates = Array.from(new Set(opts.excludedDates.filter((d) => candidates.has(d)))).sort();
+    addedDays = excludedDates.filter((d) => !period.excludedDates.includes(d));
+    removedDays = period.excludedDates.filter((d) => !excludedDates.includes(d));
+    const bookedOnAdded = bookings.filter((b) => addedDays.includes(b.date));
+    if (bookedOnAdded.length > 0) {
+      throw new PeriodHasRealBookingsError(Array.from(new Set(bookedOnAdded.map((b) => b.userId))));
+    }
+  }
+  // ここから書き込み（断る判定はすべて上で済ませた）
+  for (const uid of removed) await clearRebook(admin, period.id, uid);
+  if (addedDays.length > 0) {
+    for (const sl of await fetchSlots(admin, period.id)) {
+      if (addedDays.includes(sl.date)) await remove(admin, SLOT_TYPE, sl.id);
+    }
   }
   // 検証用データとして作られた期間なら、一括削除で拾う印を引き継ぐ
   const { data: raw } = await admin.from(GROWTH_TABLE).select("data").eq("id", period.id).eq("record_type", SLOT_PERIOD_TYPE).maybeSingle();
   const seedMark = ((raw?.data ?? {}) as Record<string, unknown>)[SEED_MARK] === true;
-  const updated: SlotPeriod = { ...period, staffIds: next };
+  const updated: SlotPeriod = { ...period, staffIds: next, excludedDates };
   await savePeriod(admin, updated, by, seedMark);
+  if (removedDays.length > 0) {
+    const today = opts.today ?? "";
+    const days = new Set(removedDays.filter((d) => !today || d >= today));
+    const existing = new Set((await fetchSlots(admin, period.id)).map((sl) => sl.id));
+    const now = new Date().toISOString();
+    for (const ps of planSlots({ ...updated }).filter((x) => days.has(x.date))) {
+      const id = slotId(period.id, ps.date, ps.startTime);
+      if (existing.has(id)) continue;
+      const data: Record<string, unknown> = { periodId: period.id, date: ps.date, startTime: ps.startTime, endTime: ps.endTime, blocked: false, createdAt: now, updatedAt: now };
+      await upsert(admin, SLOT_TYPE, id, seedMark ? { ...data, [SEED_MARK]: true } : data, by);
+    }
+  }
   return updated;
 }
 

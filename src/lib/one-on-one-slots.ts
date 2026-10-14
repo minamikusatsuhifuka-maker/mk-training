@@ -83,6 +83,8 @@ export type SlotPeriod = {
   staffIds: string[];
   /** 表示用の名前（院長が付ける。空なら期間の日付で表す） */
   label: string;
+  /** 239: 予定がある日（院長に予定があって1on1ができない日）。この日には枠を作らない */
+  excludedDates: string[];
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -219,9 +221,14 @@ export type PeriodInput = {
   stepMinutes: number;
   staffIds: string[];
   label: string;
+  /** 239: 予定がある日（枠を作らない日）。省略は「なし」 */
+  excludedDates?: string[];
 };
 
 /** 入力の検証。問題があればその文言、無ければ null */
+/** 239: 時刻の分の選択肢（5分刻み） */
+export const MINUTE_OPTIONS = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
+
 export function validatePeriod(p: PeriodInput): string | null {
   if (!isYmd(p.startDate) || !isYmd(p.endDate)) return "実施期間の日付を入れてください";
   if (p.endDate < p.startDate) return "終了日は開始日より後にしてください";
@@ -270,13 +277,19 @@ export function datesOfPeriod(p: Pick<PeriodInput, "startDate" | "endDate" | "we
   return out;
 }
 
+/** 239: 枠を作る日（期間と曜日で決まる日から、予定がある日を除く） */
+export function plannedDatesOf(p: Pick<PeriodInput, "startDate" | "endDate" | "weekdays" | "excludedDates">): string[] {
+  const excluded = new Set(p.excludedDates ?? []);
+  return datesOfPeriod(p).filter((d) => !excluded.has(d));
+}
+
 export type PlannedSlot = { date: string; startTime: string; endTime: string };
 
-/** 作る枠の一覧（確認の表示にも、実際の作成にも同じこれを使う） */
+/** 作る枠の一覧（確認の表示にも、実際の作成にも同じこれを使う）。予定がある日には作らない */
 export function planSlots(p: PeriodInput): PlannedSlot[] {
   const times = slotTimesOfDay(p.fromTime, p.toTime, p.stepMinutes);
   const out: PlannedSlot[] = [];
-  for (const date of datesOfPeriod(p)) {
+  for (const date of plannedDatesOf(p)) {
     for (const t of times) out.push({ date, ...t });
   }
   return out;
@@ -299,7 +312,7 @@ export function summarizePlan(p: PeriodInput): SlotPlanSummary {
     count: slots.length,
     first: slots[0] ?? null,
     last: slots[slots.length - 1] ?? null,
-    dates: datesOfPeriod(p).length,
+    dates: plannedDatesOf(p).length,
     perDay,
     tooMany: slots.length > SLOT_MAX_PER_PERIOD,
   };
@@ -423,6 +436,9 @@ export function normalizeSlotPeriod(id: string, raw: unknown): SlotPeriod | null
     stepMinutes: isSlotStep(g.stepMinutes) ? g.stepMinutes : 15,
     staffIds: ids(g.staffIds),
     label: str(g.label, 100),
+    excludedDates: Array.isArray(g.excludedDates)
+      ? Array.from(new Set(g.excludedDates.filter((d): d is string => isYmd(d)))).sort()
+      : [],
     createdBy: str(g.createdBy, 100),
     createdAt,
     updatedAt: str(g.updatedAt, 64) || createdAt,

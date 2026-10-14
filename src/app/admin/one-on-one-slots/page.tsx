@@ -40,6 +40,8 @@ import {
   type SlotChange,
   type SlotPeriod,
   type SlotStep,
+  MINUTE_OPTIONS,
+  datesOfPeriod,
 } from "@/lib/one-on-one-slots";
 
 type StaffRow = { userId: string; name: string; testSeed: boolean };
@@ -66,6 +68,68 @@ function formatChangedAt(iso: string): string {
   const jst = new Date(t.getTime() + 9 * 60 * 60 * 1000);
   const p2 = (n: number) => String(n).padStart(2, "0");
   return `${p2(jst.getUTCMonth() + 1)}/${p2(jst.getUTCDate())} ${p2(jst.getUTCHours())}:${p2(jst.getUTCMinutes())}`;
+}
+
+/**
+ * 239: 時刻を「時」と「分（5分刻み）」で選ぶ。ブラウザの時刻の部品は、Mac の Chrome では step を付けても
+ * 分が1分ごとに出るため使わない。今の値の分が5分刻みでないとき（古いデータ）は、その値も選択肢に残して表示する。
+ */
+function TimeSelect({ value, onChange, testId }: { value: string; onChange: (v: string) => void; testId: string }) {
+  const [h, m] = /^\d{2}:\d{2}$/.test(value) ? value.split(":") : ["13", "00"];
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+  const minutes = MINUTE_OPTIONS.includes(m) ? MINUTE_OPTIONS : [...MINUTE_OPTIONS, m].sort();
+  const cls = "h-9 rounded-md border border-slate-200 bg-white px-2 text-sm";
+  return (
+    <span className="mt-0.5 flex items-center gap-1" data-slot-time={testId}>
+      <select value={h} onChange={(e) => onChange(`${e.target.value}:${m}`)} className={cls} aria-label="時" data-slot-time-hour={testId}>
+        {hours.map((x) => (
+          <option key={x} value={x}>{x}</option>
+        ))}
+      </select>
+      :
+      <select value={m} onChange={(e) => onChange(`${h}:${e.target.value}`)} className={cls} aria-label="分" data-slot-time-minute={testId}>
+        {minutes.map((x) => (
+          <option key={x} value={x}>{x}</option>
+        ))}
+      </select>
+    </span>
+  );
+}
+
+/** 239: 予定がある日を選ぶ（期間と曜日で決まる日を並べ、押すと「予定がある日」・もう一度押すと戻る） */
+function ExcludedDaysPicker({
+  dates,
+  excluded,
+  onToggle,
+  testId,
+}: {
+  dates: string[];
+  excluded: readonly string[];
+  onToggle: (date: string) => void;
+  testId: string;
+}) {
+  if (dates.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1.5" data-slot-excluded={testId}>
+      {dates.map((d) => {
+        const on = excluded.includes(d);
+        return (
+          <button
+            key={d}
+            type="button"
+            onClick={() => onToggle(d)}
+            aria-pressed={on}
+            data-slot-excluded-day={d}
+            className={`min-h-[36px] rounded-full border px-2.5 text-xs ${
+              on ? "border-amber-500 bg-amber-100 text-amber-900 line-through" : "border-slate-300 bg-white text-slate-700"
+            }`}
+          >
+            {formatDateW(d)}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 const EMPTY_FORM = (): PeriodInput => ({
@@ -127,7 +191,11 @@ export default function OneOnOneSlotsPage() {
   }, [data, staffPicked]);
 
   const picked = useMemo(() => Array.from(staffPicked ?? []), [staffPicked]);
-  const input: PeriodInput = useMemo(() => ({ ...form, staffIds: picked }), [form, picked]);
+  // 239: 予定がある日は、今の期間・曜日で決まる日の中だけを残す（期間や曜日を変えたら外れた日は落とす）
+  const input: PeriodInput = useMemo(() => {
+    const days = new Set(datesOfPeriod(form));
+    return { ...form, staffIds: picked, excludedDates: (form.excludedDates ?? []).filter((d) => days.has(d)) };
+  }, [form, picked]);
   const plan = useMemo(() => summarizePlan(input), [input]);
   const problem = useMemo(() => validatePeriod(input), [input]);
 
@@ -194,7 +262,7 @@ export default function OneOnOneSlotsPage() {
   };
 
   // ─── 235 §1: 期間を消す・対象スタッフを直す（ボタンと文は、アプリにすでにある言い方を使う） ───
-  const [editStaff, setEditStaff] = useState<{ periodId: string; picked: Set<string> } | null>(null);
+  const [editStaff, setEditStaff] = useState<{ periodId: string; picked: Set<string>; excluded: string[] } | null>(null);
 
   const periodName = (p: SlotPeriod) =>
     p.label || `${p.startDate.replaceAll("-", "/")}〜${p.endDate.replaceAll("-", "/")}`;
@@ -212,7 +280,7 @@ export default function OneOnOneSlotsPage() {
   const saveStaff = async () => {
     if (!editStaff) return;
     const j = await patch(
-      { action: "updateStaff", periodId: editStaff.periodId, staffIds: Array.from(editStaff.picked) },
+      { action: "updateStaff", periodId: editStaff.periodId, staffIds: Array.from(editStaff.picked), excludedDates: editStaff.excluded },
       `staff:${editStaff.periodId}`
     );
     if (!j) return;
@@ -233,6 +301,8 @@ export default function OneOnOneSlotsPage() {
           stepMinutes: p.stepMinutes,
           staffIds: p.staffIds,
           label: p.label,
+          // 239: 予定がある日はそのまま（その日の枠は作らない）
+          excludedDates: p.excludedDates,
         },
       },
       `extend:${p.id}`
@@ -444,25 +514,11 @@ export default function OneOnOneSlotsPage() {
           </label>
           <label className="block text-xs text-slate-600">
             時間帯（開始）
-            <Input
-              type="time"
-              step={300}
-              value={form.fromTime}
-              onChange={(e) => setForm((f) => ({ ...f, fromTime: e.target.value }))}
-              data-slot-from
-              className="mt-0.5 h-9 text-sm"
-            />
+            <TimeSelect value={form.fromTime} onChange={(v) => setForm((f) => ({ ...f, fromTime: v }))} testId="from" />
           </label>
           <label className="block text-xs text-slate-600">
             時間帯（終了）
-            <Input
-              type="time"
-              step={300}
-              value={form.toTime}
-              onChange={(e) => setForm((f) => ({ ...f, toTime: e.target.value }))}
-              data-slot-to
-              className="mt-0.5 h-9 text-sm"
-            />
+            <TimeSelect value={form.toTime} onChange={(v) => setForm((f) => ({ ...f, toTime: v }))} testId="to" />
           </label>
           <label className="block text-xs text-slate-600">
             刻み
@@ -516,6 +572,23 @@ export default function OneOnOneSlotsPage() {
               );
             })}
           </div>
+          {/* 239: 予定がある日（院長に予定があって1on1ができない日）。押した日には枠を作らない */}
+          {datesOfPeriod(form).length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs text-slate-600">予定がある日</p>
+              <ExcludedDaysPicker
+                dates={datesOfPeriod(form)}
+                excluded={form.excludedDates ?? []}
+                onToggle={(d) =>
+                  setForm((f) => {
+                    const cur = f.excludedDates ?? [];
+                    return { ...f, excludedDates: cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d].sort() };
+                  })
+                }
+                testId="create"
+              />
+            </div>
+          )}
         </div>
 
         <div>
@@ -623,7 +696,7 @@ export default function OneOnOneSlotsPage() {
                   {editStaff?.periodId !== p.id && (
                     <button
                       type="button"
-                      onClick={() => setEditStaff({ periodId: p.id, picked: new Set(p.staffIds) })}
+                      onClick={() => setEditStaff({ periodId: p.id, picked: new Set(p.staffIds), excluded: p.excludedDates ?? [] })}
                       className="min-h-[32px] rounded-md border border-slate-300 bg-white px-2 text-[11px] font-normal text-slate-700"
                       data-slot-staff-edit={p.id}
                     >
@@ -657,6 +730,22 @@ export default function OneOnOneSlotsPage() {
                           {st.testSeed && <span className="text-[10px] text-violet-700">🧪</span>}
                         </label>
                       ))}
+                    </div>
+                    {/* 239: 予定がある日（足すとその日の空き枠が消える。予約がある日は足せない／外すと枠が戻る） */}
+                    <div>
+                      <p className="text-xs text-slate-600">予定がある日</p>
+                      <ExcludedDaysPicker
+                        dates={datesOfPeriod(p)}
+                        excluded={editStaff.excluded}
+                        onToggle={(d) =>
+                          setEditStaff((prev) =>
+                            prev
+                              ? { ...prev, excluded: prev.excluded.includes(d) ? prev.excluded.filter((x) => x !== d) : [...prev.excluded, d].sort() }
+                              : prev
+                          )
+                        }
+                        testId={p.id}
+                      />
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button type="button" onClick={() => void saveStaff()} disabled={busy === `staff:${p.id}`} data-slot-staff-save={p.id}>
