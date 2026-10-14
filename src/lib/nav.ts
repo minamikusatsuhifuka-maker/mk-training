@@ -50,6 +50,8 @@ export const MASTER_ITEMS: MasterItem[] = [
   { key: "/one-on-one/presurvey", href: "/one-on-one/presurvey", label: "📝 1on1の事前アンケート", categoryId: "home", featureId: "one_on_one_presurvey" },
   // 205: 1on1の日程調整。空き枠から自分で予約する
   { key: "/one-on-one/booking", href: "/one-on-one/booking", label: "🗓 1on1の予約", categoryId: "home", featureId: "one_on_one_booking" },
+  // 240: 1on1カレンダー（確定した予約の日時と名前だけ・スタッフ全員）
+  { key: "/one-on-one/calendar", href: "/one-on-one/calendar", label: "🗓 1on1カレンダー", categoryId: "home", featureId: "one_on_one_calendar" },
   // わたしの可能性ノート（指示書179-C・本人の学び／目標／1on1の約束。既定OFF＝説明後に院長がON）
   { key: "/my-growth", href: "/my-growth", label: "🌱 わたしの可能性ノート", categoryId: "home", featureId: "growth_record" },
   // 外部リンク（別タブ）。指示書59

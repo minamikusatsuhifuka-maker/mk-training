@@ -14,6 +14,9 @@ import Link from "next/link";
 import NavPageHeader from "@/components/NavPageHeader";
 import FeatureGate from "@/components/FeatureGate";
 import { useFeatureFlags } from "@/lib/use-feature-flags";
+
+/** 240 §0-4: 院長が決めた文（そのまま載せる・言い換えない） */
+const ONE_ON_ONE_CALENDAR_NOTE = "予約した日時と名前は、1on1カレンダーでスタッフ全員に表示されます。";
 import {
   BOOKING_LOCKED_MESSAGE,
   BOOKING_NONE_LEFT_MESSAGE,
@@ -54,6 +57,8 @@ function BookingPageBody() {
   //   （院長・検証用アカウントはプレビューで開けるので出る。判定はサーバーが解決した値）
   const { flags } = useFeatureFlags();
   const presurveyOn = flags.one_on_one_presurvey;
+  // 240 §3: 1on1カレンダーのスイッチがONのときだけ、院長が決めた文を予約のボタンの近くに出す
+  const calendarOn = flags.one_on_one_calendar;
   const [data, setData] = useState<Payload | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -334,6 +339,11 @@ function BookingPageBody() {
           {presurveyOn && (
             <p className="text-[11px] text-gray-600">
               事前アンケートの期限は {formatJpDate(presurveyDeadline({ date: confirming.slot.date }))} になります。
+            </p>
+          )}
+          {calendarOn && (
+            <p className="text-[12px] text-gray-700" data-booking-calendar-note>
+              {ONE_ON_ONE_CALENDAR_NOTE}
             </p>
           )}
           <div className="flex flex-wrap items-center gap-2">

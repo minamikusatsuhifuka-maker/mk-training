@@ -47,6 +47,8 @@ export const FEATURE_IDS = [
   // 院長が枠を作り、スタッフが自分で予約する（/one-on-one/booking）。**既定OFF**。
   // OFFの間はスタッフに出さず、1on1の予定の知らせ（前日・当日）も送らない。
   "one_on_one_booking",
+  // 240: 1on1カレンダー（いつ・誰が1on1かをスタッフ全員で見る）。**既定OFF**。OFFの間は院長と検証用アカウントだけ
+  "one_on_one_calendar",
   // ── お知らせ・イベント（指示書228）──
   // 画像・ファイルを貼れるお知らせと、出欠をとるイベント（/notices）。**既定OFF**。
   // OFFの間は院長と検証用アカウントだけが使える（プレビュー・判定はサーバー）。
@@ -116,6 +118,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   one_on_one_presurvey: false, // 197（質問の内容と「評価に使わない」ことを説明してからON）
   presurvey_alert_email: false, // 197 C-2（178のメール設定が終わってから）
   one_on_one_booking: false, // 205（枠の作り方とスタッフへの案内を説明してからON）
+  one_on_one_calendar: false, // 240（既定OFF）
   notices: false, // 228（既定OFF）
   notices_email: false, // 228 §5（既定OFF・178のメール設定が終わってから）
   page_members: true,
@@ -175,6 +178,7 @@ export const FEATURE_META: FeatureMeta[] = [
   // 206 A: 名前を中身に合わせた。このスイッチ1つで204と205の両方のメールが決まるため、
   //   旧名「事前アンケートの知らせをメールでも送る」では205のメールも兼ねていることが伝わらなかった。
   //   **保存しているキー（presurvey_alert_email）と今の状態は変えていない**（表示だけの変更）。
+  { id: "one_on_one_calendar", label: "🗓 1on1カレンダー", description: "ログインしたスタッフ全員に、メニュー「🗓 1on1カレンダー」（/one-on-one/calendar）で、「🗓 1on1の日程」で確定している予約の日時と名前だけを出す（📋 リスト・🗓 月表示）。空いている枠・院長の予定がある日・面談する側の名前・1on1の中身（事前アンケート・記録・まとめ）は出さない。検証用アカウントの予約は、院長と検証用アカウントにだけ出す。ONにすると「🗓 1on1の予約」に「予約した日時と名前は、1on1カレンダーでスタッフ全員に表示されます。」の文も出る", phase: 5 },
   { id: "notices", label: "📣 お知らせ・イベント", description: "スタッフ全員がお知らせ・イベントをつくれる（/notices）。画像・PDF・Wordを貼れる（画像は位置情報などを消して本文の中に出す）。イベントは「出席」「欠席」で答えられ、出欠を見られるのは、つくった人・院長・委任の設定で指定した幹部だけ。開催のあとに参加を確定すると、管理画面「📣 イベントの参加記録」に残る（院長と指定した幹部だけ）", phase: 5 },
   { id: "notices_email", label: "お知らせ・イベントをメールでも送る", description: "新しいお知らせ・イベントと、出欠の締切の3日前・前日（朝8時）の未回答の知らせを、アプリ内に加えてメールでも送る。メールに入れるのは題名とリンクだけ（本文・貼ったもの・出欠は入れない）。検証用アカウントには送らない。「📣 お知らせ・イベント」がOFFの間と、送信の設定（指示書178）が終わるまでは送られない", phase: 5 },
   { id: "presurvey_alert_email", label: "1on1の知らせ（事前アンケート・予定）をメールでも送る", description: "事前アンケートの知らせ（204）と、1on1の前日・当日の予定の知らせ（205）の両方に効きます。アプリ内の知らせに加えてメールでも送る（事前アンケートは提出期限の7日前・3日前・前日・当日、予定は前日・当日のいずれも朝8時）。本文は日付・期限・リンクだけ（回答の中身は入れない）。検証用アカウントには送らない。送信の設定（指示書178）が終わるまでは、ONにしても送られない", phase: 5 },
@@ -204,6 +208,7 @@ export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
   "growth_record", // 指示書179-C: わたしの可能性ノート（/my-growth・学び／目標／1on1の約束）
   "one_on_one_presurvey", // 指示書197・197-補: 1on1の事前アンケート（/one-on-one/presurvey）
   "one_on_one_booking", // 指示書205: 1on1の日程調整（/one-on-one/booking・/admin/one-on-one-slots）
+  "one_on_one_calendar", // 指示書240: 1on1カレンダー（/one-on-one/calendar）
   "notices", // 指示書228: お知らせ・イベント（/notices・/admin/notice-attendance）
   // notices_email はメールの切り替え（画面ではない）なので入れない＝プレビューでONに倒さない
 ]);
