@@ -1,7 +1,9 @@
-// 可能性ノート「欲求の視点（関わる側のヒント）」のAPI — 院長、またはそのスタッフの担当に指定された幹部だけ
+// 可能性ノート「欲求の視点（関わる側のヒント）」のAPI — そのスタッフの可能性ノートを開ける人だけ
+//   （院長・管理者＝app_metadata の管理者は、担当の指定に関係なく全員分／幹部は担当に指定されたスタッフの分）
 //   GET ?user=<スタッフのuserId> → { available, perspective, focusCurrentShared }
 //
-// 【見られる人】authorizeGrowth＋canViewStaff（179/183 と同じ判定）。本人・担当でない幹部・一般スタッフ・未ログインは
+// 【見られる人】authorizeGrowth＋canViewStaff（可能性ノートを開けるかと同じ判定・179/183）。管理者には担当の制限が無い。
+//   本人・担当でない幹部・一般スタッフ・未ログインは
 //   **何も返さない**（404＝カルテと同じ「存在しない」応答）。自分自身のページも 404（本人の画面には出さない）。
 // 【使う診断結果】本人の公開設定どおりに削いだあと（redactSurveyForViewer＝182の唯一の判定）だけ。
 //   ・「詳細（詳細15項目の欲求値）も公開」の人だけ、15項目の「欲求」の値がある → 高い欲求（上位3）・低い欲求（下位3）が出る
@@ -25,7 +27,7 @@ export async function GET(req: Request) {
   const auth = await authorizeGrowth();
   if (!auth.ok) return hidden();
   const userId = new URL(req.url).searchParams.get("user") ?? "";
-  // 本人の画面には出さない／院長か担当の幹部だけ
+  // 本人の画面には出さない／可能性ノートを開ける人（管理者は全員分・幹部は担当の分）だけ
   if (!userId || userId === auth.userId || !canViewStaff(auth, userId)) return hidden();
 
   try {

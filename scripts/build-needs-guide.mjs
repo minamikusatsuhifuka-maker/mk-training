@@ -166,14 +166,46 @@ export const NEEDS_GUIDE_ITEMS: readonly NeedsGuideItem[] = ${JSON.stringify(dat
 export const NEEDS_GUIDE_HINTS: readonly NeedsGuideHint[] = ${JSON.stringify(hints, null, 2)};
 `;
 
+// ─── ガイド・人材育成研修の全文（管理画面「📘 欲求別成長支援ガイド」「🎓 人材育成研修」で表示） ───
+// .md の中身を**そのまま**入れる（1文字も変えない）。サーバー専用（API が見られる人にだけ返す）。
+const DOCS_OUT = join(ROOT, "src/lib/needs-guide-docs-server.ts");
+const DOC_FILES = [
+  ["step1", "STEP1_", "土台", "guide"],
+  ["survival", "STEP2-1_", "生存の欲求", "guide"],
+  ["belonging", "STEP2-2_", "愛・所属の欲求", "guide"],
+  ["power", "STEP2-3_", "力の欲求", "guide"],
+  ["freedom", "STEP2-4_", "自由の欲求", "guide"],
+  ["fun", "STEP2-5_", "楽しみの欲求", "guide"],
+  ["oneonone", "STEP3-1_", "1on1での使い方", "guide"],
+  ["training", "STEP3-2_", "人材育成研修", "training"],
+];
+const docs = DOC_FILES.map(([id, part, label, kind]) => {
+  const matched = files.filter((x) => x.includes(part));
+  if (matched.length !== 1) throw new Error(`docs/needs-guide に ${part} がちょうど1つありません（${matched.length}件）`);
+  return { id, label, kind, file: matched[0], markdown: readFileSync(join(DOCS, matched[0]), "utf8") };
+});
+const docsSrc = `// このファイルは scripts/build-needs-guide.mjs が docs/needs-guide/*.md から作ります。**手で直さないこと。**
+// .md の中身をそのまま入れています（言い換え・要約・追記をしない）。
+// **サーバー専用**：クライアントから import しないこと（見られる人の判定は /api/admin/people-training/*）。
+
+import type { NeedsGuideDoc } from "./needs-guide-docs";
+
+export const NEEDS_GUIDE_DOCS: readonly NeedsGuideDoc[] = ${JSON.stringify(docs, null, 2)};
+`;
+
 if (process.argv.includes("--check")) {
+  if (readFileSync(DOCS_OUT, "utf8") !== docsSrc) {
+    console.error("[needs-guide] src/lib/needs-guide-docs-server.ts が docs/needs-guide/*.md と食い違っています。node scripts/build-needs-guide.mjs で作り直してください");
+    process.exit(1);
+  }
   const now = readFileSync(OUT, "utf8");
   if (now !== src) {
     console.error("[needs-guide] src/lib/needs-guide-data.ts が docs/needs-guide/*.md と食い違っています。node scripts/build-needs-guide.mjs で作り直してください");
     process.exit(1);
   }
-  console.log("[needs-guide] データは .md と一致しています（15項目・読み方のヒント5）");
+  console.log("[needs-guide] データは .md と一致しています（15項目・読み方のヒント5・全文8ファイル）");
 } else {
   writeFileSync(OUT, src);
-  console.log(`[needs-guide] ${OUT} を作りました（15項目・読み方のヒント5）`);
+  writeFileSync(DOCS_OUT, docsSrc);
+  console.log(`[needs-guide] ${OUT} と ${DOCS_OUT} を作りました（15項目・読み方のヒント5・全文8ファイル）`);
 }

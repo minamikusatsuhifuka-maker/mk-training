@@ -14,6 +14,9 @@
 //   ・/api/content-store の管理者専用キーの書き込みは、その項目に指名された幹部だけ通す（contentKeys/contentPrefixes）
 //   ・/api/admin/<項目> の各ルートは requireAdminItem(項目key) でもう一度判定する（関門が外れても素通りさせない）
 
+/** 人材育成研修（受講者の指定は、この項目の委任で行う） */
+export const PEOPLE_TRAINING_ITEM_KEY = "people-training";
+
 export type AdminItem = {
   /** 項目key（= /admin/<key> のパス。ダッシュボードは "dashboard"） */
   key: string;
@@ -130,6 +133,17 @@ export const ADMIN_ITEMS: readonly AdminItem[] = [
     delegable: true,
     reason: "イベントの出欠と参加の記録（誰がいつ参加したか＝個人の記録）。",
   },
+  // 人材育成研修（欲求別成長支援ガイド STEP3-2）。院長が「⚙ 委任」で受講者（幹部）を指定・解除する。
+  //   指定された人は「📘 欲求別成長支援ガイド」（/admin/people-training/guide）も見られる。
+  //   ガイドは同じ区切り（/admin/people-training/...）の下に置き、proxy と API の判定をこの項目1つに揃えた。
+  //   スタッフの欲求の値・診断結果は、ガイドにも研修にも出さない。
+  {
+    key: PEOPLE_TRAINING_ITEM_KEY,
+    label: "🎓 人材育成研修",
+    href: "/admin/people-training",
+    delegable: true,
+    reason: "院長が指定した幹部向けの研修（欲求別成長支援ガイド STEP3-2）。ここで任せた人が受講者になり、「📘 欲求別成長支援ガイド」も見られる。スタッフの診断結果は含まない",
+  },
   { key: "staff-accounts", label: "👤 アカウント招待", href: "/admin/staff-accounts", delegable: false, reason: "アカウント・招待コード・仮パスワード（権限・アカウント）" },
   {
     key: "profile-fields",
@@ -200,6 +214,8 @@ const API_ITEM_MAP: Record<string, string> = {
   "deep-research": "deep-research",
   // 228: イベントの参加の記録（院長＋委任された幹部）
   "notice-attendance": "notice-attendance",
+  // 人材育成研修とガイド（院長・管理者＋受講者に指定された人）
+  "people-training": PEOPLE_TRAINING_ITEM_KEY,
 };
 
 export function adminItemKeyForApiPath(pathname: string): string | null {

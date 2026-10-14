@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FontSwitcher } from "@/components/FontSwitcher";
-import { ADMIN_ITEMS } from "@/lib/admin-items";
+import { ADMIN_ITEMS, PEOPLE_TRAINING_ITEM_KEY } from "@/lib/admin-items";
 import { loadPortalObject } from "@/lib/portal-store";
 import {
   ADMIN_MENU_GROUPS_KEY,
@@ -68,6 +68,8 @@ export function AdminShell({
   const [canSeeRetro, setCanSeeRetro] = useState(false);
   // 179: スタッフ育成カルテも同じ流儀（管理者だけ・probeが404ならリンクを出さない）
   const [canSeeGrowth, setCanSeeGrowth] = useState(false);
+  // 人材育成研修も同じ流儀（院長と受講者だけ・ほかの管理者には出さない。probeが404ならリンクを出さない）
+  const [canSeeTraining, setCanSeeTraining] = useState(false);
   useEffect(() => {
     let cancelled = false;
     const probe = (path: string, set: (ok: boolean) => void) =>
@@ -83,13 +85,14 @@ export function AdminShell({
     probe("/api/staff-contacts?probe=1", setCanSeeContacts);
     probe("/api/director-retrospective?probe=1", setCanSeeRetro);
     probe("/api/growth/karte?probe=1", setCanSeeGrowth);
+    probe("/api/admin/people-training", setCanSeeTraining);
     return () => {
       cancelled = true;
     };
   }, []);
 
   const navItems: MenuItemLike[] = [
-    ...adminNav.filter((i) => allowedKeys.includes(i.key)),
+    ...adminNav.filter((i) => allowedKeys.includes(i.key) && (i.key !== PEOPLE_TRAINING_ITEM_KEY || canSeeTraining)),
     ...(canSeeNotes
       ? [extra("x:member-notes")]
       : []),
@@ -127,6 +130,8 @@ export function AdminShell({
           ...(isAdmin ? [extra("x:courses")] : []),
         ]
       : []),
+    // 欲求別成長支援ガイド：院長・管理者と、人材育成研修の受講者（その項目を任された人）
+    ...(allowedKeys.includes(PEOPLE_TRAINING_ITEM_KEY) ? [extra("x:needs-guide")] : []),
   ];
 
   // ─── 241: グループに分けて折りたたむ ───

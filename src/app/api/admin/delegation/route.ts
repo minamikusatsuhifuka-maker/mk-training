@@ -18,7 +18,9 @@ import {
   saveItemDelegation,
   saveKarteAssignment,
 } from "@/lib/admin-delegation-server";
-import { ADMIN_ITEMS, findAdminItem } from "@/lib/admin-items";
+import { ADMIN_ITEMS, PEOPLE_TRAINING_ITEM_KEY, findAdminItem } from "@/lib/admin-items";
+import { PEOPLE_TRAINING_LOG_KIND, PEOPLE_TRAINING_LOG_TARGET } from "@/lib/people-training";
+import { isDirectorUser } from "@/lib/people-training-server";
 import {
   loadDeepResearchLimit,
   saveDeepResearchLimit,
@@ -115,6 +117,8 @@ export async function PUT(req: Request) {
   const rejected: string[] = [];
   /** 207: 検証用と実在が混ざっていて保存しなかった幹部 */
   const rejectedKarte: string[] = [];
+  /** 人材育成研修の受講者の指定・解除（記録用） */
+  let trainingChange: { added: string[]; removed: string[] } | null = null;
 
   if (body.items && typeof body.items === "object") {
     for (const [key, raw] of Object.entries(body.items as Record<string, unknown>)) {
@@ -124,11 +128,21 @@ export async function PUT(req: Request) {
         continue;
       }
       const ids = idList(raw);
+      // 人材育成研修の受講者を変えられるのは院長だけ（ほかの管理者からの変更は保存しない・変わっていなければそのまま）
+      if (key === PEOPLE_TRAINING_ITEM_KEY && !isDirectorUser(auth.user)) {
+        const prevIds = before.items[key] ?? [];
+        if ([...prevIds].sort().join() !== [...ids].sort().join()) rejected.push(key);
+        continue;
+      }
       const ok = await saveItemDelegation(key, ids, by);
       if (!ok) return NextResponse.json({ error: `${item.label} の保存に失敗しました` }, { status: 500 });
       const prev = before.items[key] ?? [];
       if ([...prev].sort().join() !== [...ids].sort().join()) {
         changes.push({ field: `管理画面「${item.label}」を開ける幹部`, before: `${prev.length}人`, after: `${ids.length}人` });
+        // 人材育成研修の受講者は、指定・解除の記録（いつ・誰を）を名前で残す
+        if (key === PEOPLE_TRAINING_ITEM_KEY) {
+          trainingChange = { added: ids.filter((id) => !prev.includes(id)), removed: prev.filter((id) => !ids.includes(id)) };
+        }
       }
     }
   }
@@ -175,6 +189,20 @@ export async function PUT(req: Request) {
     const g = await authorizeGrowth();
     if (g.ok) {
       await recordGrowthLog(g.admin, { by, action: "設定変更", kind: "権限設定", target: "委任", changes });
+      if (trainingChange) {
+        const nameOf = new Map((await loadRoster()).map((r) => [r.userId, r.name]));
+        const names = (ids: string[]) => ids.map((id) => nameOf.get(id) ?? id).join("、");
+        await recordGrowthLog(g.admin, {
+          by,
+          action: "設定変更",
+          kind: PEOPLE_TRAINING_LOG_KIND,
+          target: PEOPLE_TRAINING_LOG_TARGET,
+          changes: [
+            ...(trainingChange.added.length > 0 ? [{ field: "指定", before: "", after: names(trainingChange.added) }] : []),
+            ...(trainingChange.removed.length > 0 ? [{ field: "解除", before: names(trainingChange.removed), after: "" }] : []),
+          ],
+        });
+      }
     }
   }
 
@@ -191,6 +219,8 @@ export async function PUT(req: Request) {
     rejectedKarte,
     ...(rejectedKarte.length > 0
       ? { error: "🧪 検証用の幹部には 🧪 検証用のスタッフだけを指定できます（実在のスタッフとは組み合わせられません）" }
-      : {}),
+      : rejected.includes(PEOPLE_TRAINING_ITEM_KEY)
+        ? { error: "人材育成研修の受講者を指定・解除できるのは院長だけです" }
+        : {}),
   });
 }
