@@ -7,10 +7,17 @@
 //   （領域内の drop は自分で処理する）
 
 import { useEffect, useRef, useState } from "react";
+import { dragTypesMayMatch, splitByAccept } from "@/lib/file-accept";
 
 /** 186 A-2 の文（231: お知らせ・イベントでも同じ文を使う。新しい言い回しを作らない） */
 export const DROP_HERE_TEXT = "ここに離すと追加されます";
 export const DROP_GUIDE_TEXT = "ここにファイルをドラッグ＆ドロップ（複数可）";
+/**
+ * 233-補: 種類の合わないファイルを落としたときの文。231 の「貼るもの」の断りの文
+ * 「「○○」は貼れない種類です（画像・PDF・Wordだけ）」の前半をそのまま使う（新しい言い回しは作らない）。
+ * その画面に、もとから種類を断る文がある場合は、FileDropArea の rejectText でその文を渡す。
+ */
+export const rejectTypeText = (name: string) => `「${name}」は貼れない種類です`;
 
 /**
  * 186 A-2: 領域外へのドロップで画面が移動しないようにする（ブラウザがファイルを開くと、書きかけの入力が消える）。
@@ -131,17 +138,26 @@ export function DropZone({
  * 【使えない間】欄が disabled（読み込み中など）のときは受け付けない。
  * 【欄の外】usePreventWindowFileDrop でブラウザがファイルを開かない（入力中の内容が消えない）。
  * 文言は 186 の部品と同じ「ここに離すと追加されます」だけ（新しい言い回しは作らない）。
+ *
+ * 【種類（233-補）】「選ぶ」は欄の accept で絞られるが、落とすときは絞られない。
+ *   落としたファイルも accept と同じ規則（lib/file-accept.ts）で絞り、合わない物は欄に入れない（画面の処理に届かない）。
+ *   持ってきている途中で種類が合わないと分かる物は、枠の色を変えず、カーソルも「置けない」にする。
+ *   断ったときは、その画面にもとからある断りの文（rejectText）か、231 の部品の文を欄の下に出す。
  */
 export function FileDropArea({
   children,
   className = "",
   testId,
+  rejectText = rejectTypeText,
 }: {
   children: React.ReactNode;
   className?: string;
   testId?: string;
+  /** 種類が合わないときの文。その画面の処理（画面かサーバー）にもとからある断りの文を、そのまま渡す。無ければ 231 の部品の文 */
+  rejectText?: (name: string) => string;
 }) {
   const [over, setOver] = useState(false);
+  const [rejected, setRejected] = useState<string[]>([]);
   const boxRef = useRef<HTMLDivElement>(null);
   usePreventWindowFileDrop();
 
@@ -152,6 +168,13 @@ export function FileDropArea({
     const input = inputOf();
     return !!input && !input.disabled;
   };
+  // 持ってきている途中の種類（名前はまだ分からない）
+  const mayMatch = (e: React.DragEvent) => {
+    const types = Array.from(e.dataTransfer?.items ?? [])
+      .filter((it) => it.kind === "file")
+      .map((it) => it.type);
+    return dragTypesMayMatch(types, inputOf()?.accept ?? "");
+  };
 
   return (
     <div
@@ -161,11 +184,18 @@ export function FileDropArea({
       onDragEnter={(e) => {
         if (!isFileDrag(e) || !usable()) return;
         e.preventDefault();
-        setOver(true);
+        setRejected([]);
+        if (mayMatch(e)) setOver(true);
       }}
       onDragOver={(e) => {
         if (!isFileDrag(e) || !usable()) return;
         e.preventDefault();
+        if (!mayMatch(e)) {
+          // 種類が合わない物だけ：置けないことをカーソルで示し、枠の色も変えない
+          e.dataTransfer.dropEffect = "none";
+          if (over) setOver(false);
+          return;
+        }
         e.dataTransfer.dropEffect = "copy";
         if (!over) setOver(true);
       }}
@@ -180,8 +210,13 @@ export function FileDropArea({
         if (!input || input.disabled) return;
         const dropped = Array.from(e.dataTransfer.files);
         if (dropped.length === 0) return;
+        // 233-補: 「選ぶ」と同じ種類に絞る。合わない物は欄に入れない
+        const { ok, rejected: ng } = splitByAccept(dropped, input.accept);
+        // 同じ文が並ばないようにまとめる（画面の文は名前を含まないものがある）
+        setRejected(Array.from(new Set(ng.map((f) => rejectText(f.name)))));
+        if (ok.length === 0) return;
         const dt = new DataTransfer();
-        for (const f of input.multiple ? dropped : dropped.slice(0, 1)) dt.items.add(f);
+        for (const f of input.multiple ? ok : ok.slice(0, 1)) dt.items.add(f);
         input.files = dt.files;
         input.dispatchEvent(new Event("change", { bubbles: true }));
       }}
@@ -191,6 +226,13 @@ export function FileDropArea({
     >
       {children}
       {over && <p className="px-1 text-[12px] font-medium text-teal-800">{DROP_HERE_TEXT}</p>}
+      {rejected.length > 0 && (
+        <ul className="px-1 text-[12px] text-red-700" role="alert" data-file-drop-rejected>
+          {rejected.map((t, i) => (
+            <li key={i}>{t}</li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

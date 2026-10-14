@@ -442,7 +442,7 @@ function EventsPageBody() {
                         </div>
                       )}
                       {canEdit && (
-                        <FileDropArea testId="event-photos" className="inline-block p-1">
+                        <FileDropArea testId="event-photos" className="inline-block p-1" rejectText={() => "画像ファイルのみアップロードできます"}>
                           <label className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 border border-gray-200 rounded-full text-gray-600 hover:bg-gray-50 cursor-pointer">
                             {uploadingId === ev.id
                               ? "アップロード中…"

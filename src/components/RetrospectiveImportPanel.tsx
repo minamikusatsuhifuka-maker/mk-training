@@ -332,7 +332,7 @@ export function RetrospectiveImportPanel({
                   {tooLong && "（上限を超えています。分けて取り込んでください）"}
                   {input.dirty && <span className="ml-2 text-amber-800">📝 下書き（このタブに一時保存中）</span>}
                 </p>
-                <FileDropArea testId="retro-import" className="inline-block p-1">
+                <FileDropArea testId="retro-import" className="inline-block p-1" rejectText={() => "対応していない形式です（.txt / .md / .docx / .pptx）"}>
                   <label className={`${BTN_SMALL} cursor-pointer inline-flex items-center`}>
                     {fileBusy ? "読み込み中…" : "📄 ファイルから読み込む"}
                     <input

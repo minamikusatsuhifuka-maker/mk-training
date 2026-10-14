@@ -273,7 +273,7 @@ export function TranscriptImportDialog({
             <span className="text-[10px] text-gray-500 tabular-nums">
               {text.length} / {TRANSCRIPT_MAX_CHARS}字
             </span>
-            <FileDropArea testId="transcript-file" className="inline-block p-1">
+            <FileDropArea testId="transcript-file" className="inline-block p-1" rejectText={() => "取り込めるのは .txt / .md / .docx / .pdf です"}>
               <input
                 ref={fileRef}
                 type="file"

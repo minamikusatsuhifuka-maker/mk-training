@@ -282,7 +282,7 @@ export function LearningRecordForm({
       </div>
 
       {aiDraftEnabled && !isEdit && (
-        <FileDropArea testId="learning-ai-draft">
+        <FileDropArea testId="learning-ai-draft" rejectText={() => "画像ファイルのみ読み取れます"}>
           <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-2 space-y-1">
             <p className="text-[11px] font-medium text-violet-900">🪄 受講証・メモの画像から下書きを作る（AI）</p>
             <p className="text-[10px] text-violet-800 leading-relaxed">

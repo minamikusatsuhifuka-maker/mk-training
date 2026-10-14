@@ -208,7 +208,7 @@ export function MemberNotesImportPanel({
             され、どこにも保存されません。
           </p>
 
-          <FileDropArea testId="member-notes-import" className="p-1">
+          <FileDropArea testId="member-notes-import" className="p-1" rejectText={() => "対応していない形式です（画像・PDF・Wordのみ）"}>
             <input
               ref={inputRef}
               type="file"
