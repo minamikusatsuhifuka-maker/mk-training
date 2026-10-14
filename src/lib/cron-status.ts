@@ -18,7 +18,7 @@ export const CRON_RUN_TYPE = "cron_run";
 /** この時間を超えて実行の記録が無ければ「呼ばれていない」とみなす（219 §2） */
 export const CRON_STALE_HOURS = 26;
 
-export type CronJobKey = "doc-tasks-alert" | "presurvey-alert";
+export type CronJobKey = "doc-tasks-alert" | "presurvey-alert" | "notices-alert";
 
 export const CRON_JOBS: {
   key: CronJobKey;
@@ -36,6 +36,13 @@ export const CRON_JOBS: {
   {
     key: "presurvey-alert",
     label: "📝 1on1の知らせ（事前アンケート・予定）",
+    href: "",
+    hrefLabel: "",
+  },
+  // 228 §5: 出欠の締切の3日前・前日に、未回答の人へメール
+  {
+    key: "notices-alert",
+    label: "📣 お知らせ・イベントの知らせ（出欠の締切前）",
     href: "",
     hrefLabel: "",
   },
@@ -227,6 +234,36 @@ export function presurveyRunRecord(outcome: PresurveyOutcomeLike, at: string): C
   };
 }
 
+// ─── お知らせ・イベントの締切前の知らせ（228 §5）の結果を記録の形にする ───
+
+const NOTICES_SKIP: Record<string, { result: CronRunResult; reason: string }> = {
+  feature_off: { result: "mail_off", reason: "「📣 お知らせ・イベント」が公開されていません" },
+  flag_off: { result: "mail_off", reason: "「お知らせ・イベントをメールでも送る」がOFFです" },
+  smtp_not_configured: { result: "mail_off", reason: "メールの送信設定がまだです" },
+};
+
+export function noticesRunRecord(outcome: PresurveyPartLike, at: string): CronRunRecord {
+  const label = "出欠の締切前の知らせ（3日前・前日）";
+  const skip = NOTICES_SKIP[outcome.reason ?? ""];
+  const part: CronRunPart = skip
+    ? { label, result: skip.result, reason: skip.reason, sent: 0, failed: 0 }
+    : presurveyPart(label, { ...outcome, reason: "" });
+  if (!skip && part.result === "nothing" && (outcome.due ?? 0) === 0) {
+    part.reason = "今日知らせるイベントはありません";
+  }
+  const failures = outcome.failures ?? [];
+  return {
+    job: "notices-alert",
+    at,
+    result: mergeResults([part]),
+    reason: `${part.label}: ${part.reason}`,
+    sent: part.sent,
+    failed: part.failed,
+    parts: [part],
+    error: failures.length > 0 ? maskPersonal(failures.join(" ／ ")) : "",
+  };
+}
+
 /** 処理そのものが落ちたとき（catch から使う） */
 export function failedRunRecord(job: CronJobKey, at: string, error: unknown): CronRunRecord {
   const message = error instanceof Error ? error.message : String(error ?? "");
@@ -259,7 +296,7 @@ function result(v: unknown): CronRunResult {
 export function normalizeCronRecord(raw: unknown): CronRunRecord | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
-  const job = o.job === "doc-tasks-alert" || o.job === "presurvey-alert" ? o.job : null;
+  const job = o.job === "doc-tasks-alert" || o.job === "presurvey-alert" || o.job === "notices-alert" ? o.job : null;
   if (!job) return null;
   const parts = Array.isArray(o.parts)
     ? o.parts.slice(0, 5).map((p) => {

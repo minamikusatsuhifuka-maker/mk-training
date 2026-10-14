@@ -107,6 +107,7 @@ import {
   FEATURE_META,
   PAGE_FLAG_META,
   IMPLEMENTED_FEATURES,
+  MAIL_SWITCH_FEATURES,
   getFeatureFlags,
   saveFeatureFlags,
   type FeatureFlags,
@@ -6740,7 +6741,7 @@ export default function AdminPortalPage() {
                     <span className="text-[10px] font-medium bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">
                       Phase {m.phase}
                     </span>
-                    {!IMPLEMENTED_FEATURES.has(m.id) && (
+                    {!IMPLEMENTED_FEATURES.has(m.id) && !MAIL_SWITCH_FEATURES.has(m.id) && (
                       <span className="text-[10px] font-medium bg-amber-100 text-amber-800 rounded-full px-2 py-0.5">
                         未実装
                       </span>

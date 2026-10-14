@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PresurveyAlertBanner, ScheduleReminderBanner } from "@/components/OneOnOneSchedule";
+import { NoticesHomeBanner } from "@/components/notices/NoticesAlerts";
 import {
   loadPortalItems,
   savePortalItems,
@@ -1021,6 +1022,8 @@ export default function PortalHome() {
       <section className="px-4 pt-4 empty:hidden">
         <ScheduleReminderBanner />
         <PresurveyAlertBanner />
+        {/* 228: お知らせ・イベント（未読・出欠の締切前の未回答） */}
+        <NoticesHomeBanner />
       </section>
 
       {/* タスク期限アラート（超過/今日が0なら非表示・並び替え対象外） */}

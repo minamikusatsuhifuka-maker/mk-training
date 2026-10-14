@@ -33,6 +33,14 @@ const COUNT_LABEL: Record<string, string> = {
   // 207-4: 委任と担当の指定も対象一覧に出す
   karte_assignment: "可能性ノートの担当の指定",
   item_delegation: "管理画面の委任",
+  // 228: お知らせ・イベント
+  notice: "お知らせ・イベント（検証用がつくったもの）",
+  notice_rsvp: "イベントの出欠",
+  notice_read: "お知らせを開いた印",
+  notice_attendance: "イベントの参加の記録",
+  notice_attendance_fix: "参加の記録から外す（一般のイベント）",
+  notice_mail_sent: "お知らせのメールを送った印",
+  notice_files: "お知らせに貼ったファイル（お知らせごと）",
   presurvey_alert_sent: "知らせを送った記録",
   course: "講座",
   grade: "等級・キャリアライン",

@@ -120,6 +120,16 @@ export const ADMIN_ITEMS: readonly AdminItem[] = [
     delegable: true,
     reason: "担当に指定したスタッフの回答の閲覧だけ（質問の編集・他のスタッフの回答は含まない）",
   },
+  // 228 §3・§4: イベントの出欠と参加の記録。任された人は、すべてのイベントの出欠の一覧（スタッフの画面）と、
+  //   参加の確定・直し・この画面の参加の記録（いつ・誰が・どのイベントに参加したか）を見られる。既定は誰もいない。
+  //   判定は requireAdminItem（この画面とAPI）と notices-server の canSeeRsvpList（スタッフの画面のAPI）。
+  {
+    key: "notice-attendance",
+    label: "📣 イベントの出欠・参加記録",
+    href: "/admin/notice-attendance",
+    delegable: true,
+    reason: "イベントの出欠と参加の記録（誰がいつ参加したか＝個人の記録）。",
+  },
   { key: "staff-accounts", label: "👤 アカウント招待", href: "/admin/staff-accounts", delegable: false, reason: "アカウント・招待コード・仮パスワード（権限・アカウント）" },
   {
     key: "profile-fields",
@@ -188,6 +198,8 @@ const API_ITEM_MAP: Record<string, string> = {
   // 226: 1on1の日程・ディープリサーチ（配下のサブルートもこの1行で判定される）
   "one-on-one-slots": "one-on-one-slots",
   "deep-research": "deep-research",
+  // 228: イベントの参加の記録（院長＋委任された幹部）
+  "notice-attendance": "notice-attendance",
 };
 
 export function adminItemKeyForApiPath(pathname: string): string | null {

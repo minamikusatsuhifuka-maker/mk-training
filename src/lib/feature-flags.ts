@@ -47,6 +47,13 @@ export const FEATURE_IDS = [
   // 院長が枠を作り、スタッフが自分で予約する（/one-on-one/booking）。**既定OFF**。
   // OFFの間はスタッフに出さず、1on1の予定の知らせ（前日・当日）も送らない。
   "one_on_one_booking",
+  // ── お知らせ・イベント（指示書228）──
+  // 画像・ファイルを貼れるお知らせと、出欠をとるイベント（/notices）。**既定OFF**。
+  // OFFの間は院長と検証用アカウントだけが使える（プレビュー・判定はサーバー）。
+  "notices",
+  // 228 §5: お知らせ・イベントの知らせをメールでも送る。**既定OFF**。
+  //   OFFでもアプリ内の知らせ（一覧の印・メニューの印・ホームの帯）は出る。
+  "notices_email",
 ] as const;
 export type FeatureId = (typeof FEATURE_IDS)[number];
 
@@ -109,6 +116,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   one_on_one_presurvey: false, // 197（質問の内容と「評価に使わない」ことを説明してからON）
   presurvey_alert_email: false, // 197 C-2（178のメール設定が終わってから）
   one_on_one_booking: false, // 205（枠の作り方とスタッフへの案内を説明してからON）
+  notices: false, // 228（既定OFF）
+  notices_email: false, // 228 §5（既定OFF・178のメール設定が終わってから）
   page_members: true,
   page_philosophy: true,
   page_corporate_book: true,
@@ -166,6 +175,8 @@ export const FEATURE_META: FeatureMeta[] = [
   // 206 A: 名前を中身に合わせた。このスイッチ1つで204と205の両方のメールが決まるため、
   //   旧名「事前アンケートの知らせをメールでも送る」では205のメールも兼ねていることが伝わらなかった。
   //   **保存しているキー（presurvey_alert_email）と今の状態は変えていない**（表示だけの変更）。
+  { id: "notices", label: "📣 お知らせ・イベント", description: "スタッフ全員がお知らせ・イベントをつくれる（/notices）。画像・PDF・Wordを貼れる（画像は位置情報などを消して本文の中に出す）。イベントは「出席」「欠席」で答えられ、出欠を見られるのは、つくった人・院長・委任の設定で指定した幹部だけ。開催のあとに参加を確定すると、管理画面「📣 イベントの参加記録」に残る（院長と指定した幹部だけ）", phase: 5 },
+  { id: "notices_email", label: "お知らせ・イベントをメールでも送る", description: "新しいお知らせ・イベントと、出欠の締切の3日前・前日（朝8時）の未回答の知らせを、アプリ内に加えてメールでも送る。メールに入れるのは題名とリンクだけ（本文・貼ったもの・出欠は入れない）。検証用アカウントには送らない。「📣 お知らせ・イベント」がOFFの間と、送信の設定（指示書178）が終わるまでは送られない", phase: 5 },
   { id: "presurvey_alert_email", label: "1on1の知らせ（事前アンケート・予定）をメールでも送る", description: "事前アンケートの知らせ（204）と、1on1の前日・当日の予定の知らせ（205）の両方に効きます。アプリ内の知らせに加えてメールでも送る（事前アンケートは提出期限の7日前・3日前・前日・当日、予定は前日・当日のいずれも朝8時）。本文は日付・期限・リンクだけ（回答の中身は入れない）。検証用アカウントには送らない。送信の設定（指示書178）が終わるまでは、ONにしても送られない", phase: 5 },
 ];
 
@@ -193,6 +204,17 @@ export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
   "growth_record", // 指示書179-C: わたしの可能性ノート（/my-growth・学び／目標／1on1の約束）
   "one_on_one_presurvey", // 指示書197・197-補: 1on1の事前アンケート（/one-on-one/presurvey）
   "one_on_one_booking", // 指示書205: 1on1の日程調整（/one-on-one/booking・/admin/one-on-one-slots）
+  "notices", // 指示書228: お知らせ・イベント（/notices・/admin/notice-attendance）
+  // notices_email はメールの切り替え（画面ではない）なので入れない＝プレビューでONに倒さない
+]);
+
+/**
+ * 228: 画面ではなく「メールでも送るか」の切り替え。IMPLEMENTED_FEATURES に入れない（プレビューでONに倒さない）ので、
+ * 管理画面で「未実装」の印を付けないための一覧（印が付くと、使えない機能に見えてしまう）。
+ */
+export const MAIL_SWITCH_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
+  "presurvey_alert_email",
+  "notices_email",
 ]);
 
 // ページの公開設定の管理UI用メタ（指示書124・「📄 ページの公開設定」セクション）

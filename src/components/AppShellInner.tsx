@@ -14,6 +14,7 @@ import { useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { PresurveyNavMark } from "@/components/OneOnOneSchedule";
+import { NoticesNavMark } from "@/components/notices/NoticesAlerts";
 import { Sidebar } from "@/components/sidebar";
 import { useResolvedNav } from "@/lib/use-nav";
 import { UserMenu } from "@/components/UserMenu";
@@ -126,6 +127,7 @@ export default function AppShellInner({
                               {item.label}
                               <PreviewMark on={item.preview} />
                               <PresurveyNavMark href={item.href} />
+                              <NoticesNavMark href={item.href} />
                             </Link>
                           )}
                         </li>

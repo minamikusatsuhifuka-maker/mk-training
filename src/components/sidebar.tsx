@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { PresurveyNavMark } from "@/components/OneOnOneSchedule";
+import { NoticesNavMark } from "@/components/notices/NoticesAlerts";
 import { usePathname } from "next/navigation";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -97,6 +98,7 @@ export function Sidebar() {
                         {item.label}
                         <PreviewMark on={item.preview} />
                         <PresurveyNavMark href={item.href} />
+                        <NoticesNavMark href={item.href} />
                       </Link>
                     </li>
                   );

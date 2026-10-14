@@ -38,6 +38,8 @@ import { SEED203_JIRO_ANSWERS, SEED203_JIRO_GOAL_QUESTION_IDS, SEED203_JIRO_PRES
 import { fetchGates, saveGateCheck, saveMatrixReview, saveStaffGrade, seedGates } from "./growth-matrix-server";
 import { SEED_MARK, TEST_ACCOUNTS, TEST_PROSPECT_NAME, TEST_SEED_FLAG, isTestSeedUser, onlyTestIds, type TestAccountDef } from "./test-seed";
 import { clearTestSeedCache } from "./test-seed-server";
+import { NOTICE_PURGE_LABEL } from "./notices";
+import { collectNoticeSeedTargets, countNoticeSeedTargets, purgeNoticeSeedTargets, type NoticeSeedTargets } from "./notices-server";
 
 type Admin = SupabaseClient;
 
@@ -529,6 +531,8 @@ type Targets = {
   karteManagers: string[];
   /** 207: 検証用アカウントが指名されている管理画面の項目（委任） */
   itemDelegations: string[];
+  /** 228: お知らせ・イベント（検証用がつくったもの・出欠・開いた印・参加の記録・ファイル） */
+  notices: NoticeSeedTargets;
 };
 
 async function collectTargets(admin: Admin, testIds: Set<string>): Promise<{ targets: Targets; foreign: string[] }> {
@@ -585,7 +589,9 @@ async function collectTargets(admin: Admin, testIds: Set<string>): Promise<{ tar
   const karteManagers = Object.keys(snap.karte).filter((m) => testIds.has(m) || (snap.karte[m] ?? []).some((s) => testIds.has(s)));
   // 207-4: 管理画面の委任（検証用アカウントが指名されている項目）も対象にする
   const itemDelegations = Object.keys(snap.items).filter((k) => (snap.items[k] ?? []).some((u) => testIds.has(u)));
-  return { targets: { testIds, growth, privateRows, contactIds, hiringDocs: docs, prospectIds, contentKeys, seedCourseIds, karteManagers, itemDelegations }, foreign };
+  // 228 §6: お知らせ・イベント。一般のイベントの参加の記録は消さず、検証用アカウントだけを外す
+  const notices = await collectNoticeSeedTargets(admin, testIds);
+  return { targets: { testIds, growth, privateRows, contactIds, hiringDocs: docs, prospectIds, contentKeys, seedCourseIds, karteManagers, itemDelegations, notices }, foreign };
 }
 
 async function countTargets(admin: Admin, testIds: Set<string>): Promise<Record<string, number>> {
@@ -608,6 +614,8 @@ async function countTargets(admin: Admin, testIds: Set<string>): Promise<Record<
     // 207-4: 委任と担当の指定も対象一覧に出す（消えることが院長に見えるように）
     karte_assignment: targets.karteManagers.length,
     item_delegation: targets.itemDelegations.length,
+    // 228: お知らせ・イベント（種類ごと）
+    ...countNoticeSeedTargets(targets.notices),
   };
 }
 
@@ -689,6 +697,8 @@ export async function purgeTestData(admin: Admin, by: string): Promise<PurgeResu
       add("講座（検証用に作ったもの）", 1);
     }
   }
+  // 7-2. お知らせ・イベント（228 §6）。ファイル→行→一般の記録から検証用だけ外す
+  for (const [k, v] of Object.entries(await purgeNoticeSeedTargets(admin, targets.notices, testIds, by))) add(NOTICE_PURGE_LABEL[k] ?? k, v);
   // 8. アカウント
   for (const u of testUsers) {
     const { error } = await admin.auth.admin.deleteUser(u.id);

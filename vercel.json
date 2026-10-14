@@ -10,6 +10,10 @@
     {
       "path": "/api/cron/presurvey-alert",
       "schedule": "0 23 * * *"
+    },
+    {
+      "path": "/api/cron/notices-alert",
+      "schedule": "0 23 * * *"
     }
   ]
 }

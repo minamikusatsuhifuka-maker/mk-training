@@ -30,6 +30,7 @@ const GUARDS = [
   "authorizeGrowth", // 179: スタッフ育成カルテ／学びの記録（本人=フラグON時のみ・管理者=常に・非許可は404）
   "authorizeHiring", // 184: 採用資料（院長のみ・委任不可・非許可は404）
   "authorizeEvents", // 128: イベント（閲覧=ログイン済み・投稿=編集者）
+  "authorizeNotices", // 228: お知らせ・イベント（ログイン済み・スイッチOFFは院長と検証用だけ・出欠の一覧は限られた人）
   "CRON_SECRET", // 155: Vercel Cron 用の共有鍵
   "HR_CHAT_KNOWLEDGE_TOKEN", // ai-incho からのサーバー間呼び出し
 ];

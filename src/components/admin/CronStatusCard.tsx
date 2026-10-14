@@ -52,7 +52,8 @@ export function CronStatusCard() {
           list.map((r) => {
             const o = (r ?? {}) as { job?: unknown; record?: unknown };
             return {
-              job: (o.job === "presurvey-alert" ? "presurvey-alert" : "doc-tasks-alert") as CronJobKey,
+              // 228: 処理の種類は CRON_JOBS（正本）にあるものだけを受け取る
+              job: (CRON_JOBS.find((j) => j.key === o.job)?.key ?? "doc-tasks-alert") as CronJobKey,
               record: normalizeCronRecord(o.record),
             };
           })
