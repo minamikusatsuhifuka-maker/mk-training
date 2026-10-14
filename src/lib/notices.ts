@@ -214,6 +214,36 @@ export function inReminderWindow(n: Pick<Notice, "kind" | "rsvpDeadline">, today
   return isRsvpOpen(n, today) && today >= addDaysYmd(n.rsvpDeadline, -3);
 }
 
+// ─── 締切の色分け（指示書230 §1）───
+
+/** 締切までの日数（日本時間の日付で数える。当日=0・前日=1・過ぎた=負） */
+export function deadlineDaysLeft(deadline: string, today: string): number | null {
+  if (!isYmd(deadline) || !isYmd(today)) return null;
+  return Math.round((Date.parse(`${deadline}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000);
+}
+
+/** 色の段（8日以上=緑／7〜2日=オレンジ／前日〜当日=赤／過ぎた=灰） */
+export type DeadlineTone = "green" | "orange" | "red" | "past";
+
+export function deadlineTone(daysLeft: number): DeadlineTone {
+  if (daysLeft < 0) return "past";
+  if (daysLeft <= 1) return "red";
+  if (daysLeft <= 7) return "orange";
+  return "green";
+}
+
+/** 色だけに頼らない文字（「あと○日」） */
+export function deadlineLeftText(daysLeft: number): string {
+  if (daysLeft < 0) return "締切を過ぎました";
+  if (daysLeft === 0) return "今日が締切";
+  return `あと${daysLeft}日`;
+}
+
+/** 締切3日前からの帯の文（230 §2） */
+export function rsvpAlertText(title: string, deadline: string): string {
+  return `${title}の出欠が、まだです。締切は${formatYmdJp(deadline)}です。`;
+}
+
 /** "2026-10-20" → "10月20日（火）" */
 export function formatYmdJp(ymd: string): string {
   if (!isYmd(ymd)) return "";
@@ -477,7 +507,7 @@ export type NoticeSummary = {
   unread: number;
   unanswered: number;
   /** 締切の3日前〜締切日で、まだ答えていないイベント（ホームの知らせ） */
-  reminders: { id: string; title: string; rsvpDeadline: string }[];
+  reminders: { id: string; title: string; rsvpDeadline: string; daysLeft: number }[];
 };
 
 export function summarizeNotices(items: NoticeListItem[], today: string): NoticeSummary {
@@ -488,7 +518,9 @@ export function summarizeNotices(items: NoticeListItem[], today: string): Notice
     if (!n.read && !n.isMine) unread += 1;
     if (n.kind === "event" && n.inAudience && n.rsvpOpen && !n.myRsvp) {
       unanswered += 1;
-      if (inReminderWindow(n, today)) reminders.push({ id: n.id, title: n.title, rsvpDeadline: n.rsvpDeadline });
+      if (inReminderWindow(n, today)) {
+        reminders.push({ id: n.id, title: n.title, rsvpDeadline: n.rsvpDeadline, daysLeft: deadlineDaysLeft(n.rsvpDeadline, today) ?? 0 });
+      }
     }
   }
   reminders.sort((a, b) => a.rsvpDeadline.localeCompare(b.rsvpDeadline));

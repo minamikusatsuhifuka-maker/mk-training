@@ -20,7 +20,8 @@ import {
   type NoticeDetailResponse,
   type NoticesListResponse,
 } from "@/lib/notices-client";
-import { NOTICE_KIND_LABEL, formatHeld, formatYmdJp, type Notice, type NoticeListItem } from "@/lib/notices";
+import { NOTICE_KIND_LABEL, formatHeld, type Notice, type NoticeListItem } from "@/lib/notices";
+import { DeadlineMark, RsvpAlertBanners } from "@/components/notices/NoticesAlerts";
 
 type Filter = "all" | "event" | "notice" | "unread";
 
@@ -30,7 +31,7 @@ function formatCreated(iso: string): string {
   return new Date(t).toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric" });
 }
 
-function NoticeCard({ n, onOpen }: { n: NoticeListItem; onOpen: () => void }) {
+function NoticeCard({ n, onOpen, today }: { n: NoticeListItem; onOpen: () => void; today: string }) {
   const unread = !n.read && !n.isMine;
   return (
     <li>
@@ -56,7 +57,8 @@ function NoticeCard({ n, onOpen }: { n: NoticeListItem; onOpen: () => void }) {
               {n.inAudience && (
                 <span className="flex items-center gap-1">
                   あなた：<RsvpBadge status={n.myRsvp ?? "none"} />
-                  {!n.myRsvp && n.rsvpOpen && <span className="text-amber-700">（締切 {formatYmdJp(n.rsvpDeadline)}）</span>}
+                  <span className="text-gray-500">締切</span>
+                  <DeadlineMark deadline={n.rsvpDeadline} today={today} colored={!n.myRsvp} />
                 </span>
               )}
             </>
@@ -220,7 +222,7 @@ function NoticesBoard() {
       {list && shown.length === 0 && <p className="text-sm text-gray-500">まだありません。</p>}
       <ul className="space-y-2">
         {shown.map((n) => (
-          <NoticeCard key={n.id} n={n} onOpen={() => go(n.id)} />
+          <NoticeCard key={n.id} n={n} onOpen={() => go(n.id)} today={list?.today ?? ""} />
         ))}
       </ul>
     </div>
@@ -236,6 +238,8 @@ export default function NoticesPage() {
         description="画像やファイルを貼れるお知らせと、出欠をとるイベント"
       />
       <FeatureGate feature="notices">
+        {/* 230 §2: 締切3日前からの未回答の帯（一覧・1件のどちらを開いていても上に出す） */}
+        <RsvpAlertBanners />
         <Suspense fallback={<p className="text-sm text-gray-500">読み込み中…</p>}>
           <NoticesBoard />
         </Suspense>

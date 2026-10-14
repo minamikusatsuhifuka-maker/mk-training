@@ -20,11 +20,11 @@ import {
   RSVP_LABEL,
   formatBytes,
   formatHeld,
-  formatYmdJp,
   type NoticeAttachment,
   type RsvpStatus,
 } from "@/lib/notices";
 import { AttendanceEditor } from "./AttendanceEditor";
+import { DeadlineMark } from "./NoticesAlerts";
 
 function formatDateTime(iso: string): string {
   const t = Date.parse(iso);
@@ -134,7 +134,9 @@ export function NoticeDetail({
               </>
             )}
             <dt className="text-gray-500">出欠の締切</dt>
-            <dd className="text-gray-900">{formatYmdJp(n.rsvpDeadline)}</dd>
+            <dd className="text-gray-900">
+              <DeadlineMark deadline={n.rsvpDeadline} today={d.today} colored={d.inAudience && !d.myRsvp} />
+            </dd>
           </dl>
         )}
       </header>
@@ -296,7 +298,7 @@ function MyRsvp({ d, onSaved }: { d: NoticeDetailResponse; onSaved: () => void }
             {err && <span className="text-xs text-red-600">{err}</span>}
           </div>
           <p className="text-[11px] text-gray-500">
-            締切（{formatYmdJp(d.notice.rsvpDeadline)}）までは変えられます。あなたの回答は、つくった人・院長・指定された幹部だけが見られます。
+            締切（<DeadlineMark deadline={d.notice.rsvpDeadline} today={d.today} colored={!d.myRsvp} />）までは変えられます。あなたの回答は、つくった人・院長・指定された幹部だけが見られます。
           </p>
         </>
       ) : (
