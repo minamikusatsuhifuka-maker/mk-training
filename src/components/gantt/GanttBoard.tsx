@@ -22,6 +22,11 @@ import {
   GANTT_PALETTES,
   OTHER_CATEGORY_ID,
   STATUS_LABEL,
+  TEAM_CATEGORY_ID,
+  TEAM_NAME_MAX,
+  TEAM_OVERVIEW_MAX,
+  firstLine,
+  isFixedCategory,
   TASK_STATUSES,
   VIEW_LABEL,
   categoryOf,
@@ -40,6 +45,7 @@ import {
   type GanttRange,
   type GanttView,
   type PlanFields,
+  type TeamMember,
   type TaskStatus,
 } from "@/lib/gantt";
 
@@ -91,6 +97,14 @@ const ROW_H = 48;
 type GanttData = {
   categories: GanttCategory[];
   plans: GanttPlan[];
+  /** 直す・消すを出してよい計画（判定はサーバー） */
+  editableIds: string[];
+  /** 252: チームプロジェクトを足せる（ログインしたスタッフ全員） */
+  canAddTeam: boolean;
+  /** 252: メンバーに選べる人 */
+  teamCandidates: TeamMember[];
+  /** 見ている人の id */
+  me: string;
   canWrite: boolean;
   canEditCategories: boolean;
   fiscalStartMonth: number;
@@ -218,6 +232,7 @@ function PlanBar({
           }}
         />
         <span className="whitespace-nowrap text-[11px]" style={{ color: pal.text }}>
+          {plan.status === "done" && <span data-gantt-done>✓ </span>}
           {shortDate(plan.start)}
         </span>
       </button>
@@ -232,6 +247,7 @@ function PlanBar({
       aria-label={label}
       aria-expanded={open}
       data-gantt-bar={plan.id}
+      data-gantt-bar-done={plan.status === "done" ? "1" : undefined}
       className="absolute top-1/2 -translate-y-1/2 outline-none focus-visible:ring-2 focus-visible:ring-[#E7A6B8]"
       style={{
         left: `${span.left * 100}%`,
@@ -245,7 +261,19 @@ function PlanBar({
             ? `inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 6px 14px ${pal.shadow}`
             : "inset 0 1px 0 rgba(255, 255, 255, 0.8)",
       }}
-    />
+    >
+      {/* 252 §3: 完了になったら横棒に✓ */}
+      {plan.status === "done" && (
+        <span
+          aria-hidden="true"
+          data-gantt-done
+          className="absolute left-1.5 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-full bg-white/90 font-bold leading-none"
+          style={{ width: h - 8, height: h - 8, minWidth: 10, minHeight: 10, fontSize: depth === 0 ? 12 : 9, color: pal.text }}
+        >
+          ✓
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -257,6 +285,7 @@ function PlanDetail({
   today,
   anchor,
   canWrite,
+  canEdit,
   isDirector,
   onEdit,
   onDelete,
@@ -267,6 +296,8 @@ function PlanDetail({
   today: string;
   anchor: HTMLElement;
   canWrite: boolean;
+  /** この計画の「直す」「消す」を出す（サーバーの editableIds） */
+  canEdit: boolean;
   isDirector: boolean;
   onEdit: () => void;
   onDelete: () => void;
@@ -335,6 +366,23 @@ function PlanDetail({
           <Chip kind="white">{STATUS_LABEL[plan.status]}</Chip>
         </span>
       </div>
+      {plan.kind === "team" ? (
+        // 252 §3: チーム名・プロジェクト概要の全文・目標の達成期間・メンバー・状態・作った人
+        <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-[14px] gap-y-1.5 px-[18px] pb-4 pt-[14px] text-[13px]" data-gantt-team-detail>
+          <dt style={{ color: C.sub }}>分類</dt>
+          <dd className="m-0">{category.name}</dd>
+          <dt style={{ color: C.sub }}>プロジェクト概要</dt>
+          <dd className="m-0 whitespace-pre-wrap break-words">{plan.memo}</dd>
+          <dt style={{ color: C.sub }}>目標の達成期間</dt>
+          <dd className="m-0">{periodLabel(plan.start, plan.end, today)}</dd>
+          <dt style={{ color: C.sub }}>メンバー</dt>
+          <dd className="m-0 break-words">{(plan.members ?? []).map((m) => m.name || "名前未設定").join("、")}</dd>
+          <dt style={{ color: C.sub }}>状態</dt>
+          <dd className="m-0">{STATUS_LABEL[plan.status]}</dd>
+          <dt style={{ color: C.sub }}>作った人</dt>
+          <dd className="m-0">{plan.createdByName || "—"}</dd>
+        </dl>
+      ) : (
       <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-[14px] gap-y-1.5 px-[18px] pb-4 pt-[14px] text-[13px]">
         <dt style={{ color: C.sub }}>分類</dt>
         <dd className="m-0">{category.name}</dd>
@@ -355,6 +403,7 @@ function PlanDetail({
           </>
         )}
       </dl>
+      )}
       {canWrite && fromMatrix && (
         <p className="px-[18px] pb-3 text-[12px]" style={{ color: C.sub }} data-gantt-matrix-note>
           四象限マトリクスの項目です。直すのは四象限マトリクスで行います。
@@ -369,7 +418,7 @@ function PlanDetail({
         </p>
       )}
       <div className="flex justify-end gap-2 px-[18px] pb-4">
-        {canWrite && !fromMatrix && (
+        {canEdit && !fromMatrix && (
           <>
             <button type="button" onClick={onEdit} data-gantt-edit className="min-h-[36px] rounded-full px-4 text-[13px] font-bold text-white" style={{ background: C.hero, boxShadow: C.heroShadow }}>
               直す
@@ -414,7 +463,7 @@ function PlanForm({
   const [d, setD] = useState<Draft>(initial);
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
   const hasChildren = editingId ? plans.some((p) => p.parentId === editingId) : false;
-  const parents = plans.filter((p) => !p.parentId && p.source !== "matrix" && p.id !== editingId);
+  const parents = plans.filter((p) => !p.parentId && p.source !== "matrix" && p.kind !== "team" && p.id !== editingId);
   const parent = parents.find((p) => p.id === d.parentId);
   const missing = !d.name.trim() ? "名前を入れてください" : !d.start ? "開始日を入れてください" : !d.oneDay && d.end && d.end < d.start ? "終了日は開始日より後にしてください" : "";
 
@@ -473,7 +522,8 @@ function PlanForm({
               style={fieldStyle}
               data-gantt-f-category
             >
-              {categories.map((c) => (
+              {/* 252: 「チームプロジェクト」はスタッフが「＋ チームプロジェクトを追加」から書く分類なので、院の計画では選ばない */}
+              {categories.filter((c) => c.id !== TEAM_CATEGORY_ID).map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
@@ -535,6 +585,166 @@ function PlanForm({
   );
 }
 
+// ─── 252: チームプロジェクトを足す・直す ───
+
+type TeamDraft = { name: string; memo: string; start: string; end: string; memberIds: string[]; status: TaskStatus };
+
+function TeamForm({
+  initial,
+  editing,
+  candidates,
+  myId,
+  busy,
+  error,
+  onSave,
+  onClose,
+}: {
+  initial: TeamDraft;
+  editing: boolean;
+  candidates: TeamMember[];
+  myId: string;
+  busy: boolean;
+  error: string;
+  onSave: (d: TeamDraft) => void;
+  onClose: () => void;
+}) {
+  const [d, setD] = useState<TeamDraft>(initial);
+  const [q, setQ] = useState("");
+  const set = <K extends keyof TeamDraft>(k: K, v: TeamDraft[K]) => setD((p) => ({ ...p, [k]: v }));
+  const missing = !d.name.trim()
+    ? "チーム名を入れてください"
+    : !d.memo.trim()
+      ? "プロジェクト概要を入れてください"
+      : !d.start || !d.end
+        ? "目標の達成期間（開始日と達成日）を入れてください"
+        : d.end < d.start
+          ? "達成日は開始日より後にしてください"
+          : "";
+  const toggle = (id: string) => set("memberIds", d.memberIds.includes(id) ? d.memberIds.filter((x) => x !== id) : [...d.memberIds, id]);
+  const shown = candidates.filter((c) => !q.trim() || c.name.includes(q.trim()));
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !e.isComposing) onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const field = "mt-1 w-full rounded-xl border bg-white px-3 py-2 text-[14px] outline-none focus:ring-2 focus:ring-[#F2C6D3]";
+  const fieldStyle = { borderColor: "rgba(240, 209, 218, 0.9)", color: C.ink };
+  const lab = "block text-[12px] font-medium";
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/25 sm:items-center" data-gantt-form-backdrop>
+      <form
+        role="dialog"
+        aria-label={editing ? "チームプロジェクトを直す" : "チームプロジェクトを追加"}
+        data-gantt-team-form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!missing && !busy) onSave(d);
+        }}
+        className="max-h-[92vh] w-full overflow-y-auto rounded-t-[24px] p-5 sm:max-w-[560px] sm:rounded-[24px]"
+        style={{ background: "#FFFFFF", fontFamily: C.sans, color: C.ink, boxShadow: "0 20px 44px rgba(142, 91, 181, 0.18)" }}
+      >
+        <h2 className="mb-1 text-[18px] font-bold" style={{ fontFamily: C.serif }}>
+          {editing ? "チームプロジェクトを直す" : "＋ チームプロジェクトを追加"}
+        </h2>
+        {!editing && (
+          <p className="mb-3 text-[12px]" style={{ color: C.sub }}>
+            保存すると、すぐにガントチャートに出て、「📣 お知らせ・イベント」で全員に知らせます。
+          </p>
+        )}
+        <div className="space-y-3">
+          <label className={lab} style={{ color: C.sub }}>
+            チーム名
+            <input type="text" value={d.name} maxLength={TEAM_NAME_MAX} onChange={(e) => set("name", e.target.value)} className={field} style={fieldStyle} data-gantt-t-name />
+          </label>
+          <label className={lab} style={{ color: C.sub }}>
+            プロジェクト概要（{TEAM_OVERVIEW_MAX}字まで）
+            <textarea value={d.memo} rows={4} maxLength={TEAM_OVERVIEW_MAX} onChange={(e) => set("memo", e.target.value)} className={field} style={fieldStyle} data-gantt-t-memo />
+            <span className="mt-0.5 block text-right text-[11px]" data-gantt-t-count>
+              {d.memo.length}／{TEAM_OVERVIEW_MAX}
+            </span>
+          </label>
+          <fieldset>
+            <legend className="text-[12px] font-medium" style={{ color: C.sub }}>
+              目標の達成期間
+            </legend>
+            <div className="grid grid-cols-2 gap-3">
+              <label className={lab} style={{ color: C.sub }}>
+                開始日
+                <input type="date" value={d.start} onChange={(e) => set("start", e.target.value)} className={field} style={fieldStyle} data-gantt-t-start />
+              </label>
+              <label className={lab} style={{ color: C.sub }}>
+                達成日
+                <input type="date" value={d.end} min={d.start || undefined} onChange={(e) => set("end", e.target.value)} className={field} style={fieldStyle} data-gantt-t-end />
+              </label>
+            </div>
+          </fieldset>
+          <fieldset data-gantt-t-members>
+            <legend className="text-[12px] font-medium" style={{ color: C.sub }}>
+              メンバー（{d.memberIds.length}人）
+            </legend>
+            {candidates.length > 8 && (
+              <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="名前でさがす" aria-label="名前でさがす" className={field} style={fieldStyle} />
+            )}
+            <div className="mt-1.5 flex max-h-[180px] flex-wrap gap-1.5 overflow-y-auto">
+              {shown.map((c) => {
+                const on = d.memberIds.includes(c.id);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => toggle(c.id)}
+                    data-gantt-t-member={c.id}
+                    className="min-h-[40px] rounded-full border px-3 text-[13px]"
+                    style={{
+                      borderColor: on ? "#E8C35A" : "rgba(240, 209, 218, 0.9)",
+                      background: on ? "linear-gradient(135deg, #FDF0C8 0%, #FBE3CF 100%)" : "#FFFFFF",
+                      color: on ? "#86650F" : C.ink,
+                      fontWeight: on ? 700 : 400,
+                    }}
+                  >
+                    {on ? "✓ " : ""}
+                    {c.name}
+                    {c.id === myId ? "（自分）" : ""}
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+          <label className={lab} style={{ color: C.sub }}>
+            状態
+            <select value={d.status} onChange={(e) => set("status", e.target.value as TaskStatus)} className={field} style={fieldStyle} data-gantt-t-status>
+              {TASK_STATUSES.map((st) => (
+                <option key={st.value} value={st.value}>
+                  {st.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {(error || missing) && (
+          <p role="alert" className="mt-3 rounded-xl px-3 py-2 text-[13px]" style={{ background: "#FCEEF1", color: C.statusText }} data-gantt-t-error>
+            {error || missing}
+          </p>
+        )}
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="min-h-[44px] rounded-full border px-5 text-[14px]" style={{ borderColor: "rgba(240, 209, 218, 0.9)", color: C.sub }}>
+            閉じる
+          </button>
+          <button type="submit" disabled={!!missing || busy} className="min-h-[44px] rounded-full px-6 text-[14px] font-bold text-white disabled:opacity-50" style={{ background: C.hero, boxShadow: C.heroShadow }} data-gantt-t-save>
+            {busy ? "保存しています…" : "保存"}
+          </button>
+        </div>
+      </form>
+    </div>,
+    document.body
+  );
+}
+
 // ─── 分類を直す（院長だけ） ───
 
 function CategoryEditor({ categories, onSaved }: { categories: GanttCategory[]; onSaved: (c: GanttCategory[], moved: number) => void }) {
@@ -549,6 +759,7 @@ function CategoryEditor({ categories, onSaved }: { categories: GanttCategory[]; 
     setRows((p) => {
       const j = i + dir;
       if (j < 0 || j >= p.length || p[j].id === OTHER_CATEGORY_ID || p[i].id === OTHER_CATEGORY_ID) return p;
+      // チームプロジェクトは動かさないが、ほかの分類はその上下へ動ける
       const n = [...p];
       [n[i], n[j]] = [n[j], n[i]];
       return n;
@@ -586,7 +797,7 @@ function CategoryEditor({ categories, onSaved }: { categories: GanttCategory[]; 
         分類を直す（院長だけ）
       </summary>
       <p className="mt-2 text-[12px]" style={{ color: C.sub }}>
-        分類を足す・名前を変える・色を選ぶ・消すことができます。消した分類の計画は「その他」に移ります。「その他」は消せません。
+        分類を足す・名前を変える・色を選ぶ・消すことができます。消した分類の計画は「その他」に移ります。「チームプロジェクト」と「その他」は消せません（名前は変えられます）。
       </p>
       <ul className="mt-3 space-y-2">
         {rows.map((c, i) => (
@@ -603,6 +814,11 @@ function CategoryEditor({ categories, onSaved }: { categories: GanttCategory[]; 
               style={{ borderColor: "rgba(240, 209, 218, 0.9)" }}
               data-gantt-cat-name
             />
+            {c.id === TEAM_CATEGORY_ID ? (
+              <span className="text-[11px]" style={{ color: C.sub }} data-gantt-cat-fixed-color>
+                色はバターで決まっています・消せません
+              </span>
+            ) : (
             <span className="flex flex-wrap gap-1" role="radiogroup" aria-label="色">
               {GANTT_COLOR_KEYS.map((k) => (
                 <button
@@ -619,7 +835,8 @@ function CategoryEditor({ categories, onSaved }: { categories: GanttCategory[]; 
                 />
               ))}
             </span>
-            {c.id !== OTHER_CATEGORY_ID && (
+            )}
+            {!isFixedCategory(c.id) && (
               <span className="flex gap-1">
                 <button type="button" onClick={() => move(i, -1)} aria-label="上へ" className="h-[36px] w-[36px] rounded-full border bg-white text-[12px]" style={{ borderColor: "rgba(240, 209, 218, 0.9)" }}>
                   ↑
@@ -649,6 +866,12 @@ function CategoryEditor({ categories, onSaved }: { categories: GanttCategory[]; 
   );
 }
 
+/** 直すとき：今のメンバーが一覧に無い（アカウントが止まった等）なら、名前だけ足して外せるようにする */
+function teamCandidatesWithMembers(candidates: TeamMember[], members: TeamMember[]): TeamMember[] {
+  const extra = members.filter((m) => !candidates.some((c) => c.id === m.id));
+  return [...candidates, ...extra];
+}
+
 // ─── 本体 ───
 
 export function GanttBoard() {
@@ -661,6 +884,7 @@ export function GanttBoard() {
   const [hiddenCats, setHiddenCats] = useState<Set<string>>(new Set());
   const [opened, setOpened] = useState<{ id: string; el: HTMLElement } | null>(null);
   const [form, setForm] = useState<{ editingId: string | null; initial: Draft } | null>(null);
+  const [teamForm, setTeamForm] = useState<{ editingId: string | null; initial: TeamDraft } | null>(null);
   const [formBusy, setFormBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
@@ -668,7 +892,8 @@ export function GanttBoard() {
 
   const load = useCallback(async () => {
     try {
-      setData(await api<GanttData>("/api/gantt"));
+      const j = await api<GanttData>("/api/gantt");
+      setData({ ...j, editableIds: j.editableIds ?? [], teamCandidates: j.teamCandidates ?? [], canAddTeam: !!j.canAddTeam });
       setLoadError("");
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "読み込めませんでした");
@@ -705,9 +930,44 @@ export function GanttBoard() {
     setOpened(null);
   };
 
+  const canEditPlan = (p: GanttPlan) => !!data?.editableIds.includes(p.id);
+  /** 自分の id（メンバーに最初から入れる。サーバーでも必ず入れる） */
+  const myId = data?.me ?? "";
+
+  const newTeamDraft = (): TeamDraft => ({
+    name: "",
+    memo: "",
+    start: today,
+    end: today,
+    memberIds: myId ? [myId] : [],
+    status: "todo",
+  });
+
+  const saveTeam = async (d: TeamDraft) => {
+    if (!teamForm) return;
+    setFormBusy(true);
+    setFormError("");
+    const fields = { name: d.name.trim(), memo: d.memo, start: d.start, end: d.end, status: d.status, members: d.memberIds };
+    try {
+      if (teamForm.editingId) {
+        await api("/api/gantt", { method: "PATCH", body: JSON.stringify({ id: teamForm.editingId, fields }) });
+        setNotice("直しました");
+      } else {
+        const j = await api<{ noticeError?: string }>("/api/gantt", { method: "POST", body: JSON.stringify({ kind: "team", fields }) });
+        setNotice(j.noticeError ? `追加しました（お知らせは出せませんでした：${j.noticeError}）` : "追加しました。「📣 お知らせ・イベント」で全員に知らせました");
+      }
+      setTeamForm(null);
+      await load();
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : "保存できませんでした");
+    } finally {
+      setFormBusy(false);
+    }
+  };
+
   const newDraft = (): Draft => ({
     name: "",
-    categoryId: categories[0]?.id ?? OTHER_CATEGORY_ID,
+    categoryId: categories.find((c) => c.id !== TEAM_CATEGORY_ID)?.id ?? OTHER_CATEGORY_ID,
     parentId: "",
     start: today,
     end: today,
@@ -823,20 +1083,37 @@ export function GanttBoard() {
               {range.title}
             </p>
           </div>
-          {canWrite && (
-            <button
-              type="button"
-              onClick={() => {
-                setFormError("");
-                setForm({ editingId: null, initial: newDraft() });
-              }}
-              className="min-h-[44px] rounded-full px-6 text-[14px] font-bold text-white"
-              style={{ background: C.hero, boxShadow: C.heroShadow }}
-              data-gantt-add
-            >
-              ＋ 追加
-            </button>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 252: チームプロジェクトはログインしたスタッフ全員が足せる */}
+            {data?.canAddTeam && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFormError("");
+                  setTeamForm({ editingId: null, initial: newTeamDraft() });
+                }}
+                className="min-h-[44px] rounded-full px-5 text-[14px] font-bold"
+                style={{ background: "linear-gradient(135deg, #FDF0C8 0%, #FBE3CF 100%)", color: "#86650F", boxShadow: "0 8px 20px rgba(134, 101, 15, 0.18)" }}
+                data-gantt-add-team
+              >
+                ＋ チームプロジェクトを追加
+              </button>
+            )}
+            {canWrite && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFormError("");
+                  setForm({ editingId: null, initial: newDraft() });
+                }}
+                className="min-h-[44px] rounded-full px-6 text-[14px] font-bold text-white"
+                style={{ background: C.hero, boxShadow: C.heroShadow }}
+                data-gantt-add
+              >
+                ＋ 追加
+              </button>
+            )}
+          </div>
         </div>
 
         {/* 表示の単位・◀ 今日 ▶（幅を固定＝切り替えても動かない） */}
@@ -966,7 +1243,7 @@ export function GanttBoard() {
                   <div className="flex">
                     <div className={`${NAME_COL} sticky left-0 shrink-0`} style={{ background: "rgba(255,255,255,0.97)" }} />
                     <div className="relative flex-1 py-10 text-center text-[14px]" style={{ minWidth: TIMELINE_MIN[view], color: C.sub }} data-gantt-empty>
-                      {data?.plans.length ? "選んだ分類の計画はありません" : canWrite ? "まだ計画はありません。「＋ 追加」から書けます" : "まだ計画はありません"}
+                      {data?.plans.length ? "選んだ分類の計画はありません" : canWrite ? "まだ計画はありません。「＋ 追加」から書けます" : "まだ計画はありません。「＋ チームプロジェクトを追加」から書けます"}
                     </div>
                   </div>
                 )}
@@ -1005,13 +1282,25 @@ export function GanttBoard() {
                               {depth === 1 && (
                                 <span aria-hidden="true" className="-mt-1.5 h-[10px] w-[10px] shrink-0 rounded-bl-[4px]" style={{ borderLeft: "1.5px solid #E3C4CB", borderBottom: "1.5px solid #E3C4CB" }} />
                               )}
-                              <span
-                                className={`min-w-0 flex-1 leading-tight [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden break-all ${depth ? "text-[12px] md:text-[13px]" : "text-[12px] font-medium md:text-[14px]"}`}
-                                style={{ color: depth ? C.sub : C.ink }}
-                                title={plan.name}
-                              >
-                                {plan.name}
-                              </span>
+                              {plan.kind === "team" ? (
+                                // 252 §3: チーム名と、プロジェクト概要の最初の1行（はみ出す分は「…」）
+                                <span className="min-w-0 flex-1 leading-tight" title={`${plan.name}\n${plan.memo}`}>
+                                  <span className="block truncate text-[12px] font-medium md:text-[14px]" style={{ color: C.ink }}>
+                                    {plan.name}
+                                  </span>
+                                  <span className="mt-0.5 block truncate text-[11px]" style={{ color: C.sub }} data-gantt-team-line>
+                                    {firstLine(plan.memo)}
+                                  </span>
+                                </span>
+                              ) : (
+                                <span
+                                  className={`min-w-0 flex-1 leading-tight [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden break-all ${depth ? "text-[12px] md:text-[13px]" : "text-[12px] font-medium md:text-[14px]"}`}
+                                  style={{ color: depth ? C.sub : C.ink }}
+                                  title={plan.name}
+                                >
+                                  {plan.name}
+                                </span>
+                              )}
                               <span className="hidden shrink-0 gap-1.5 md:flex">
                                 {fromMatrix && <Chip kind="matrix">四象限</Chip>}
                                 {/* 「未着手」は札にしない（見本どおり・くわしい内容には出る） */}
@@ -1069,11 +1358,26 @@ export function GanttBoard() {
           today={today}
           anchor={opened.el}
           canWrite={canWrite}
+          canEdit={canEditPlan(openedPlan)}
           isDirector={!!data?.canEditCategories}
           onEdit={() => {
             setOpened(null);
             setFormError("");
-            setForm({ editingId: openedPlan.id, initial: draftOf(openedPlan) });
+            if (openedPlan.kind === "team") {
+              setTeamForm({
+                editingId: openedPlan.id,
+                initial: {
+                  name: openedPlan.name,
+                  memo: openedPlan.memo,
+                  start: openedPlan.start,
+                  end: openedPlan.end,
+                  memberIds: (openedPlan.members ?? []).map((m) => m.id),
+                  status: openedPlan.status,
+                },
+              });
+            } else {
+              setForm({ editingId: openedPlan.id, initial: draftOf(openedPlan) });
+            }
           }}
           onDelete={() => void removePlan(openedPlan)}
           onClose={() => setOpened(null)}
@@ -1089,6 +1393,18 @@ export function GanttBoard() {
           error={formError}
           onSave={(d) => void savePlan(d)}
           onClose={() => setForm(null)}
+        />
+      )}
+      {teamForm && (
+        <TeamForm
+          initial={teamForm.initial}
+          editing={!!teamForm.editingId}
+          candidates={teamCandidatesWithMembers(data?.teamCandidates ?? [], data?.plans.find((p) => p.id === teamForm.editingId)?.members ?? [])}
+          myId={myId}
+          busy={formBusy}
+          error={formError}
+          onSave={(d) => void saveTeam(d)}
+          onClose={() => setTeamForm(null)}
         />
       )}
     </div>

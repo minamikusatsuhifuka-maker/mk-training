@@ -23,6 +23,9 @@ import { hidesTestSeedFor } from "./test-seed-hide-server";
 import { serverGetContentRow } from "./content-store-server";
 import { PM_CONTENT_TYPE, PM_TABLE } from "./priority-matrix-server";
 import { normalizeTask } from "./priority-matrix";
+import { audienceOf, loadAccounts, saveNotice, sendNewNoticeMails } from "./notices-server";
+import { NOTICE_BODY_MAX, NOTICE_TITLE_MAX, genNoticeId, type Notice } from "./notices";
+import { portalOrigin } from "./mail-send";
 import {
   MATRIX_CATEGORY_ID,
   OTHER_CATEGORY_ID,
@@ -31,6 +34,7 @@ import {
   normalizeFiscalStart,
   normalizePlan,
   planFromMatrixTask,
+  teamNoticeText,
   type GanttCategory,
   type GanttPlan,
 } from "./gantt";
@@ -231,6 +235,59 @@ export async function loadFiscalStart(): Promise<number> {
     return 6;
   }
 }
+
+// ─── 252: チームプロジェクト ───
+
+/**
+ * メンバーに選べる人（有効なアカウント）。本物のスタッフには本物のスタッフだけ、
+ * 検証用アカウントには検証用アカウントだけ（237：検証用の中身を本物に混ぜない）。
+ */
+export async function teamCandidates(admin: Admin, testSeed: boolean): Promise<{ id: string; name: string }[]> {
+  const accounts = await loadAccounts(admin);
+  return audienceOf(testSeed, accounts).map((a) => ({ id: a.id, name: a.name }));
+}
+
+/** 送られてきたメンバーを、選べる人の中だけに絞り、名前を付け直す */
+export function pickMembers(raw: unknown, candidates: { id: string; name: string }[]): { id: string; name: string }[] {
+  const ids = Array.isArray(raw)
+    ? raw.map((v) => (typeof v === "string" ? v : v && typeof v === "object" ? (v as { id?: unknown }).id : null)).filter((v): v is string => typeof v === "string")
+    : [];
+  const out: { id: string; name: string }[] = [];
+  for (const id of ids) {
+    const c = candidates.find((x) => x.id === id);
+    if (c && !out.some((m) => m.id === id)) out.push({ id: c.id, name: c.name });
+  }
+  return out;
+}
+
+/**
+ * 252 §5: チームプロジェクトを足したとき、「📣 お知らせ・イベント」に1件出す（出す人＝作った人）。
+ * 中身はお知らせとして保存し、アプリ内の知らせ・メールはふつうのお知らせと同じ（メールはスイッチに従う・検証用は送らない）。
+ */
+export async function postTeamNotice(admin: Admin, plan: GanttPlan, author: { id: string; name: string; testSeed: boolean }, today: string): Promise<Notice> {
+  const now = new Date().toISOString();
+  const text = teamNoticeText(plan, today, `${portalOrigin()}/gantt`);
+  const notice: Notice = {
+    id: genNoticeId(),
+    kind: "notice",
+    title: text.title.slice(0, NOTICE_TITLE_MAX),
+    body: text.body.slice(0, NOTICE_BODY_MAX),
+    heldOn: "",
+    heldTime: "",
+    place: "",
+    rsvpDeadline: "",
+    attachments: [],
+    authorId: author.id,
+    authorName: author.name,
+    testSeed: author.testSeed,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await saveNotice(admin, notice, true);
+  return notice;
+}
+
+export { sendNewNoticeMails };
 
 /** 見る人に返す計画（本物のスタッフには検証用の計画を出さない） */
 export function visiblePlans(plans: GanttPlan[], user: Pick<User, "app_metadata">): GanttPlan[] {

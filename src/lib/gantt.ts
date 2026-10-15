@@ -110,14 +110,26 @@ export type GanttCategory = { id: string; name: string; color: GanttColorKey };
 
 /** 消せない分類（消した分類の計画はここへ移る） */
 export const OTHER_CATEGORY_ID = "other";
+/** 252: スタッフのチームプロジェクトの分類（消せない・名前は院長が変えられる・色はバター） */
+export const TEAM_CATEGORY_ID = "team";
+export const TEAM_COLOR: GanttColorKey = "butter";
 
-/** はじめの4つ（院長の言葉のまま） */
+const OTHER_DEFAULT: GanttCategory = { id: OTHER_CATEGORY_ID, name: "その他", color: "greige" };
+const TEAM_DEFAULT: GanttCategory = { id: TEAM_CATEGORY_ID, name: "チームプロジェクト", color: TEAM_COLOR };
+
+/** はじめの分類（院長の言葉のまま）。252で「チームプロジェクト」を足した */
 export const DEFAULT_CATEGORIES: GanttCategory[] = [
   { id: "project", name: "院の取り組み・プロジェクト", color: "sakura" },
   { id: "event", name: "年間の行事・研修", color: "lavender" },
   { id: "hiring", name: "採用・教育の計画", color: "mint" },
-  { id: OTHER_CATEGORY_ID, name: "その他", color: "greige" },
+  { ...TEAM_DEFAULT },
+  { ...OTHER_DEFAULT },
 ];
+
+/** 消せない分類か */
+export function isFixedCategory(id: string): boolean {
+  return id === OTHER_CATEGORY_ID || id === TEAM_CATEGORY_ID;
+}
 
 /** 四象限から出す項目の既定の分類（251: 四象限の編集欄で選べる。選んでいなければこれ） */
 export const MATRIX_CATEGORY_ID = "project";
@@ -131,7 +143,10 @@ export function matrixCategoryOf(chosen: string | undefined, categories: Pick<Ga
 export const CATEGORY_NAME_MAX = 30;
 export const CATEGORY_MAX = 12;
 
-/** 保存値を整える。「その他」は必ず最後に1つ残す。名前の空・重複idは捨てる */
+/**
+ * 保存値を整える。「その他」は必ず最後に1つ残す。「チームプロジェクト」も必ず残す（無ければ「その他」の前に足す・色はバター）。
+ * 名前の空・重複idは捨てる
+ */
 export function normalizeCategories(raw: unknown): GanttCategory[] {
   const arr = Array.isArray(raw) ? raw : null;
   if (!arr) return DEFAULT_CATEGORIES.map((c) => ({ ...c }));
@@ -146,17 +161,20 @@ export function normalizeCategories(raw: unknown): GanttCategory[] {
     out.push({ id, name, color: isColorKey(o.color) ? o.color : "greige" });
     if (out.length >= CATEGORY_MAX) break;
   }
-  if (!seen.has(OTHER_CATEGORY_ID)) out.push({ ...DEFAULT_CATEGORIES[3] });
+  if (!seen.has(TEAM_CATEGORY_ID)) out.push({ ...TEAM_DEFAULT });
+  if (!seen.has(OTHER_CATEGORY_ID)) out.push({ ...OTHER_DEFAULT });
+  // チームプロジェクトの色はバターに固定（250-補 §2・252 §1）
+  const fixed = out.map((c) => (c.id === TEAM_CATEGORY_ID ? { ...c, color: TEAM_COLOR } : c));
   // 「その他」はいつもいちばん下
-  const other = out.find((c) => c.id === OTHER_CATEGORY_ID)!;
-  return [...out.filter((c) => c.id !== OTHER_CATEGORY_ID), other];
+  const other = fixed.find((c) => c.id === OTHER_CATEGORY_ID)!;
+  return [...fixed.filter((c) => c.id !== OTHER_CATEGORY_ID), other];
 }
 
 export function categoryOf(categories: GanttCategory[], id: string): GanttCategory {
   return (
     categories.find((c) => c.id === id) ??
     categories.find((c) => c.id === OTHER_CATEGORY_ID) ??
-    DEFAULT_CATEGORIES[3]
+    OTHER_DEFAULT
   );
 }
 
@@ -181,8 +199,49 @@ export type GanttPlan = {
   testSeed?: boolean;
   /** 出どころ。"matrix" は四象限の項目（ガントチャート側では直せない） */
   source?: "matrix";
+  /** 252: スタッフのチームプロジェクト（name＝チーム名・memo＝プロジェクト概要・start〜end＝目標の達成期間） */
+  kind?: "team";
+  /** 252: メンバー（スタッフの一覧から選ぶ。名前は保存したときの表示名） */
+  members?: TeamMember[];
+  /** 252: 作った人 */
+  createdBy?: string;
+  createdByName?: string;
+  /** 252: 足したときに出したお知らせの id */
+  noticeId?: string;
   updatedAt: string;
 };
+
+export type TeamMember = { id: string; name: string };
+
+export const TEAM_NAME_MAX = 40;
+export const TEAM_OVERVIEW_MAX = 200;
+export const TEAM_MEMBERS_MAX = 50;
+
+function normalizeMembers(raw: unknown): TeamMember[] {
+  if (!Array.isArray(raw)) return [];
+  const out: TeamMember[] = [];
+  const seen = new Set<string>();
+  for (const v of raw) {
+    const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+    const id = typeof o.id === "string" ? o.id.slice(0, 64) : "";
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, name: typeof o.name === "string" ? o.name.slice(0, 60) : "" });
+    if (out.length >= TEAM_MEMBERS_MAX) break;
+  }
+  return out;
+}
+
+/** 252: 直す・消すができるか（作った人・メンバー。院長と任された幹部は writer で渡す） */
+export function canEditTeam(p: Pick<GanttPlan, "kind" | "createdBy" | "members">, userId: string, writer: boolean): boolean {
+  if (p.kind !== "team") return writer;
+  return writer || p.createdBy === userId || (p.members ?? []).some((m) => m.id === userId);
+}
+
+/** 252: プロジェクト概要の最初の1行（名前の欄に出す） */
+export function firstLine(s: string): string {
+  return (s.split(/\r?\n/).find((l) => l.trim()) ?? "").trim();
+}
 
 export const PLAN_NAME_MAX = 80;
 export const PLAN_ASSIGNEE_MAX = 60;
@@ -203,11 +262,33 @@ function isStatus(v: unknown): v is TaskStatus {
 /** 保存値・送られてきた値を計画に整える。名前・開始日が無いものは成り立たないので null */
 export function normalizePlan(id: string, raw: unknown): GanttPlan | null {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  const name = typeof o.name === "string" ? o.name.trim().slice(0, PLAN_NAME_MAX) : "";
+  const team = o.kind === "team";
+  const name = typeof o.name === "string" ? o.name.trim().slice(0, team ? TEAM_NAME_MAX : PLAN_NAME_MAX) : "";
   const start = isYmd(o.start) ? o.start : "";
   if (!id || !name || !start) return null;
   let end = isYmd(o.end) ? o.end : start;
   if (end < start) end = start;
+  if (team) {
+    return {
+      id,
+      name,
+      categoryId: TEAM_CATEGORY_ID,
+      start,
+      end,
+      assignee: "",
+      status: isStatus(o.status) ? o.status : "todo",
+      memo: typeof o.memo === "string" ? o.memo.slice(0, TEAM_OVERVIEW_MAX) : "",
+      parentId: "",
+      order: typeof o.order === "number" && Number.isFinite(o.order) ? o.order : 0,
+      ...(o.testSeed === true ? { testSeed: true } : {}),
+      kind: "team",
+      members: normalizeMembers(o.members),
+      createdBy: typeof o.createdBy === "string" ? o.createdBy.slice(0, 64) : "",
+      createdByName: typeof o.createdByName === "string" ? o.createdByName.slice(0, 60) : "",
+      ...(typeof o.noticeId === "string" && o.noticeId ? { noticeId: o.noticeId.slice(0, 64) } : {}),
+      updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : "",
+    };
+  }
   return {
     id,
     name,
@@ -224,10 +305,35 @@ export function normalizePlan(id: string, raw: unknown): GanttPlan | null {
   };
 }
 
-/** 書く人が送ってよい項目 */
+/** 書く人が送ってよい項目（252: チームプロジェクトは members も） */
 export type PlanFields = Partial<
-  Pick<GanttPlan, "name" | "categoryId" | "start" | "end" | "assignee" | "status" | "memo" | "parentId">
+  Pick<GanttPlan, "name" | "categoryId" | "start" | "end" | "assignee" | "status" | "memo" | "parentId" | "members">
 >;
+
+/** 252: 自動のお知らせ（題名と本文）。院長が確かめる文の形 */
+export function teamNoticeText(
+  p: Pick<GanttPlan, "name" | "memo" | "start" | "end" | "members" | "createdByName">,
+  today: string,
+  ganttUrl: string
+): { title: string; body: string } {
+  const members = (p.members ?? []).map((m) => m.name || "名前未設定").join("、") || "（なし）";
+  return {
+    title: `🤝 チームプロジェクト「${p.name}」`,
+    body: [
+      `${p.createdByName || "スタッフ"}さんが、チームプロジェクトを始めます。`,
+      "",
+      `チーム名：${p.name}`,
+      "プロジェクト概要：",
+      p.memo,
+      "",
+      `目標の達成期間：${periodLabel(p.start, p.end, today)}`,
+      `メンバー：${members}`,
+      "",
+      "📊 ガントチャートで見る：",
+      ganttUrl,
+    ].join("\n"),
+  };
+}
 
 export function genPlanId(now = Date.now(), rand = Math.random()): string {
   return `gp-${now.toString(36)}${Math.floor(rand * 1e8).toString(36)}`;

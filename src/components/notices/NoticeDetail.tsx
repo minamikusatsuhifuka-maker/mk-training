@@ -141,7 +141,11 @@ export function NoticeDetail({
         )}
       </header>
 
-      {n.body && <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-800">{n.body}</div>}
+      {n.body && (
+        <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-800">
+          <LinkedText text={n.body} />
+        </div>
+      )}
 
       {images.length > 0 && (
         <div className={`grid gap-2 ${images.length === 1 ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-3"}`} data-notice-images>
@@ -390,5 +394,37 @@ function AttendanceBox({ d, onSaved }: { d: NoticeDetailResponse; onSaved: () =>
         </button>
       )}
     </section>
+  );
+}
+
+/**
+ * 252: 本文の中の https:// のURLを押せるようにする（チームプロジェクトのお知らせの「ガントチャートで見る」など）。
+ * このポータルのURLは同じタブで開き、ほかのサイトは新しいタブで開く。文字はそのまま（HTMLとしては読まない）。
+ */
+function LinkedText({ text }: { text: string }) {
+  const parts = text.split(/(https:\/\/[^\s<>"'）」]+)/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (i % 2 === 0) return part;
+        let sameOrigin = false;
+        try {
+          sameOrigin = typeof window !== "undefined" && new URL(part).origin === window.location.origin;
+        } catch {
+          return part;
+        }
+        return (
+          <a
+            key={i}
+            href={part}
+            className="text-teal-700 underline underline-offset-2 break-all"
+            {...(sameOrigin ? {} : { target: "_blank", rel: "noopener noreferrer" })}
+            data-notice-link
+          >
+            {part}
+          </a>
+        );
+      })}
+    </>
   );
 }
