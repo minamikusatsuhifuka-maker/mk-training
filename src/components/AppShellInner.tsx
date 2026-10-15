@@ -21,6 +21,7 @@ import { UserMenu } from "@/components/UserMenu";
 import { AdminAreaLink } from "@/components/AdminAreaLink";
 import { FontSwitcher } from "@/components/FontSwitcher";
 import { DocTasksNavLink } from "@/components/DocTasksNavLink";
+import { PeopleTrainingNavLinks } from "@/components/PeopleTrainingNavLinks";
 import { StaffContactsNavLink } from "@/components/StaffContactsNavLink";
 import { DirectorRetrospectiveNavLink } from "@/components/DirectorRetrospectiveNavLink";
 import { StaffGrowthNavLink } from "@/components/StaffGrowthNavLink";
@@ -142,6 +143,9 @@ export default function AppShellInner({
                   variant="drawer"
                   onNavigate={() => setMenuOpen(false)}
                 />
+
+                {/* 254: 欲求別成長支援ガイド・人材育成研修。任された人と院長にだけ出る */}
+                <PeopleTrainingNavLinks variant="drawer" onNavigate={() => setMenuOpen(false)} />
 
                 {/* スタッフ連絡先（169）。指名された人にだけ出る */}
                 <StaffContactsNavLink

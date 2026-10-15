@@ -8,6 +8,8 @@
 //   外すとすぐ見られなくなる（毎回 menu_access を読む・キャッシュしない）。
 // 【記録】指定・解除は /api/admin/delegation が操作ログに名前つきで残す（いつ・誰を）。ここは院長にだけ返す。
 // 【返すもの】研修の本文と、受講者の名前（院長だけ）。スタッフの欲求の値・診断結果は返さない。どのAI処理にも渡さない。
+//   GET ?probe=1 → { guide: true, training }（254：左のメニューの入口を出すかどうかだけ。本文は返さない）
+//     guide＝「📘 欲求別成長支援ガイド」を開ける（この口を通れた＝管理者か受講者）／training＝「🎓 人材育成研修」も開ける
 
 import { NextResponse } from "next/server";
 import { requireAdminItem, loadDelegationSnapshot } from "@/lib/admin-delegation-server";
@@ -22,9 +24,13 @@ import { canSeePeopleTraining, isDirectorUser } from "@/lib/people-training-serv
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   const auth = await requireAdminItem(PEOPLE_TRAINING_ITEM_KEY);
   if (auth.response) return auth.response;
+  // 254: 左のメニューの入口の判定だけ（ガイドは requireAdminItem を通れば開ける・研修はさらに院長か受講者）
+  if (new URL(req.url).searchParams.get("probe") === "1") {
+    return NextResponse.json({ guide: true, training: await canSeePeopleTraining(auth) }, { headers: { "Cache-Control": "no-store" } });
+  }
   if (!(await canSeePeopleTraining(auth))) return NextResponse.json({ error: "Not Found" }, { status: 404 });
 
   const doc = NEEDS_GUIDE_DOCS.find((d) => d.kind === "training") ?? null;

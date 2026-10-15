@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { useResolvedNav } from "@/lib/use-nav";
 import { UserMenu } from "@/components/UserMenu";
 import { AdminAreaLink } from "@/components/AdminAreaLink";
+import { PeopleTrainingNavLinks } from "@/components/PeopleTrainingNavLinks";
 import { FontSwitcher } from "@/components/FontSwitcher";
 import { DocTasksNavLink } from "@/components/DocTasksNavLink";
 import { StaffContactsNavLink } from "@/components/StaffContactsNavLink";
@@ -110,6 +111,9 @@ export function Sidebar() {
 
           {/* 書類進捗ボード（154）。指名された人にだけ出る（未許可には描画されない） */}
           <DocTasksNavLink variant="sidebar" />
+
+          {/* 254: 欲求別成長支援ガイド・人材育成研修。任された人と院長にだけ出る（未許可には描画されない） */}
+          <PeopleTrainingNavLinks variant="sidebar" />
 
           {/* スタッフ連絡先（169）。指名された人にだけ出る（未許可には描画されない） */}
           <StaffContactsNavLink variant="sidebar" />
