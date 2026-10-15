@@ -9,7 +9,7 @@
 //   ログに出すのは **文字数・処理時間・結果だけ**（本文は出さない）。
 //
 // 【使える人（221 §0-4・§1・§4）】院長、または担当スタッフの1on1を記録する幹部。
-//   スタッフごとの同意の印が無ければ取り込めない。判定は one-on-one-transcript-server（サーバー側）。
+//   取り込めるのは院長と担当の幹部だけ（247: 同意の印は見ない・口頭の説明で同意をいただく）。判定は one-on-one-transcript-server（サーバー側）。
 //
 // 【AI】モデルは gemini-models.ts の定数（175で gemini-3.8-flash）。callGeminiRaw を使い、
 //   失敗しても別のモデルに切り替えない（221 §6）。PDFはそのままAIに読ませる（抽出で二度送らない）。
@@ -60,15 +60,9 @@ export async function POST(req: Request) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(heldOn)) return bad("実施日を選んでください");
 
   const admin = createSupabaseAdminClient();
-  const permission = await canImportTranscript(admin, user, userId);
+  const permission = await canImportTranscript(user, userId);
   if (!permission.ok) {
-    // 機能OFF・権限なしは「存在しない」と同じ応答。同意が無いときだけ理由を伝える（院長が印を付けられるように）
-    if (permission.reason === "no_consent") {
-      return NextResponse.json(
-        { error: "このスタッフの「1on1の録音・書き起こし：同意あり」の印がありません。" },
-        { status: 403 }
-      );
-    }
+    // 機能OFF・権限なしは「存在しない」と同じ応答
     return hidden();
   }
 

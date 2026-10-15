@@ -38,10 +38,9 @@ import { GrowthTabsBar, useRememberedTab } from "@/components/GrowthTabsBar";
 import { GROWTH_TABS, GROWTH_TAB_STORAGE_KEY, resolveGrowthTab, visibleGrowthTabs } from "@/lib/growth-tabs";
 import { transitionLabel } from "@/lib/growth-matrix";
 import { formatMonthDayW } from "@/lib/one-on-one-schedule";
-// 221: 書き起こしの取り込みと、録音・書き起こしの同意の印
+// 221: 書き起こしの取り込み
 import { TranscriptImportDialog } from "@/components/TranscriptImportDialog";
 import { RwdepcInfo } from "@/components/RwdepcInfo";
-import { TranscriptConsentPanel } from "@/components/TranscriptConsentPanel";
 import { TRANSCRIPT_ENTRY_LABEL } from "@/lib/one-on-one-transcript";
 import { fetchGoalsApi, fetchPromisesApi, supportGoalApi, type PromiseItem } from "@/lib/staff-growth-client";
 import {
@@ -588,7 +587,7 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
             )}
           </section>
 
-          {/* 221 §2: 書き起こしから記録する（院長・担当の幹部だけ。同意の印が無ければAPIが断る） */}
+          {/* 221 §2: 書き起こしから記録する（院長・担当の幹部だけ） */}
           {!isProspect && (
             transcriptOpen ? (
               <TranscriptImportDialog
@@ -747,8 +746,6 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
       {/* 184/188: 採用資料・経歴・入職時の想い・適性検査（院長のみ） */}
       {tab === "basic" && isAdmin && (
         <div className="space-y-3" data-tab-panel="basic">
-          {/* 221 §1: 1on1の録音・書き起こしの同意の印（院長だけが付け外しできる） */}
-          {!isProspect && <TranscriptConsentPanel userId={userId} staffName={entry.name} canEdit />}
       {/* 184: 採用資料・経歴・入職時の想い（院長のみ。幹部モードでは描画しない＝APIも404） */}
       {isAdmin && <HiringDocsPanel userId={userId} staffName={entry.name} />}
       {/* 188 4: 適性検査（スカウター）— 院長のみ・委任対象外 */}

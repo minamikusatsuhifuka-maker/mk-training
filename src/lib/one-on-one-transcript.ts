@@ -45,41 +45,9 @@ export const TRANSCRIPT_DRAFT_MARK = "AIの下書き";
 /** 本人の画面でまとめに添える一文（221 §4） */
 export const TRANSCRIPT_SUMMARY_NOTE = "AIで整理し、記録者が確かめた内容です。";
 
-// ─── 同意の印（221 §1） ───
-
-/** 本人の画面に出す文（○月○日が入る・文言を変えないこと） */
-export function consentNoticeForOwner(on: string): string {
-  const d = /^\d{4}-(\d{2})-(\d{2})$/.exec(on || "");
-  const when = d ? `${Number(d[1])}月${Number(d[2])}日` : "";
-  return on
-    ? `1on1の録音と書き起こし：同意あり（${when}）。やめたいときは院長に伝えてください。`
-    : "1on1の録音と書き起こし：同意はまだありません。";
-}
-
-/** 同意の印の行id（スタッフごとに1行） */
-export function transcriptConsentId(userId: string): string {
-  return `tcons-${userId}`;
-}
-
 /** 1日の回数の行id（人ごと・日ごとに1行） */
 export function transcriptQuotaId(userId: string, ymd: string): string {
   return `tq-${userId}-${ymd.replaceAll("-", "")}`;
-}
-
-export type TranscriptConsent = { userId: string; on: string; by: string; updatedAt: string };
-
-export function normalizeConsent(raw: unknown): TranscriptConsent | null {
-  if (!raw || typeof raw !== "object") return null;
-  const o = raw as Record<string, unknown>;
-  const userId = typeof o.userId === "string" ? o.userId : "";
-  const on = typeof o.on === "string" && /^\d{4}-\d{2}-\d{2}$/.test(o.on) ? o.on : "";
-  if (!userId || !on) return null;
-  return {
-    userId,
-    on,
-    by: typeof o.by === "string" ? o.by.slice(0, 200) : "",
-    updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : "",
-  };
 }
 
 // ─── まとめ（221 §3-1） ───

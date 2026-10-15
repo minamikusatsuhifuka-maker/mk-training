@@ -6,7 +6,7 @@
 // ・上部にたどった道筋（四象限 › 採用を強くする › 面接の質）。各段に戻れる
 // ・中央＝いま開いている題。中央をクリックするとその題を直せる
 // ・周りの8マスは**クリックするとその場で書ける**（下の入力パネルは無い）
-//   － Enterで確定して**時計回りに次の空きマス**へ。Escで取り消し。欄から離れたら確定
+//   － Enterは改行（247）。マスの外を押すと保存。Escで取り消し。改行は表示にも残る
 //   － 各マスの角に完了チェック。「8マス中◯つ完了」
 // ・書いてあるマスの「▦」で、そのマスを中央にした9マスへ（**最初の9マスから3段まで**）
 // ・下の段に中身があるマスは右下に点。空にする・消すときは**下の段も消える**ことを確認してから
@@ -18,8 +18,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  CELL_COUNT,
-  CLOCKWISE,
   GRID_SLOTS,
   MAX_DEPTH,
   QUADRANTS,
@@ -46,58 +44,86 @@ import {
 } from "@/lib/priority-matrix";
 import { SAVED_MARK_MS, SaveMark, useTextDraft, type SaveState } from "./PriorityPieces";
 
-// ─── マスの中の入力欄（確定したら次の空きマスへ） ───
+// ─── マスの中の入力欄（247: Enterは改行・マスの外を押すと保存） ───
+
+const CELL_EDITOR_CLS =
+  "h-full w-full resize-none rounded border border-teal-500 bg-white px-1 py-0.5 text-[11px] leading-tight text-slate-800 outline-none";
 
 function CellEditor({
   draftKey,
   initial,
+  multiline = true,
   onDone,
   onCancel,
 }: {
   draftKey: string;
   initial: string;
-  /** 確定。advance＝Enterで確定したので次の空きマスへ進む */
-  onDone: (text: string, advance: boolean) => void;
+  /** マスは true（Enterで改行）。中央の題は false（1行・Enterでは何も確定しない） */
+  multiline?: boolean;
+  /** 確定（マスの外を押したとき） */
+  onDone: (text: string) => void;
   onCancel: () => void;
 }) {
   const { value, change, settle } = useTextDraft(draftKey, initial);
-  const ref = useRef<HTMLInputElement | null>(null);
-  /** Enter／Escで決着したあとの blur で二重に確定しないための印 */
+  const ref = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
+  /** Escで取り消したあとの blur で保存してしまわないための印 */
   const settled = useRef(false);
 
   useEffect(() => {
     ref.current?.focus();
-    ref.current?.select();
+    const el = ref.current;
+    if (el) el.setSelectionRange(el.value.length, el.value.length); // 続きから書けるよう末尾に
   }, []);
 
-  const finish = (advance: boolean) => {
+  // 改行が増えたら、欄の高さを中身に合わせる（枠線の分を足さないと最後の行が隠れる）
+  useEffect(() => {
+    const el = ref.current;
+    if (!multiline || !(el instanceof HTMLTextAreaElement)) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }, [value, multiline]);
+
+  const finish = () => {
     if (settled.current) return;
     settled.current = true;
     settle(value);
-    onDone(value, advance);
+    onDone(value);
   };
 
-  return (
-    <input
-      ref={ref}
-      type="text"
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    // Enterは何もしない（マスでは改行・題では何も起きない）。日本語の変換中のEscは変換の取り消しに任せる
+    if (e.key === "Escape" && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      if (settled.current) return;
+      settled.current = true;
+      settle(initial);
+      onCancel();
+    }
+  };
+
+  return multiline ? (
+    <textarea
+      ref={ref as React.RefObject<HTMLTextAreaElement>}
       value={value}
+      rows={3}
       aria-label="このマスに書く"
       onChange={(e) => change(e.target.value)}
-      onBlur={() => finish(false)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          finish(true);
-        } else if (e.key === "Escape") {
-          e.preventDefault();
-          if (settled.current) return;
-          settled.current = true;
-          settle(initial);
-          onCancel();
-        }
-      }}
-      className="h-full w-full resize-none rounded border border-teal-500 bg-white px-1 py-0.5 text-[11px] leading-tight text-slate-800 outline-none"
+      onBlur={finish}
+      onKeyDown={onKeyDown}
+      data-pm-cell-input
+      className={CELL_EDITOR_CLS}
+    />
+  ) : (
+    <input
+      ref={ref as React.RefObject<HTMLInputElement>}
+      type="text"
+      value={value}
+      aria-label="この題を直す"
+      onChange={(e) => change(e.target.value)}
+      onBlur={finish}
+      onKeyDown={onKeyDown}
+      data-pm-center-input
+      className={CELL_EDITOR_CLS}
     />
   );
 }
@@ -130,7 +156,7 @@ function GridCellBox({
   draftKey: string;
   linkedTitle: string;
   onStartEdit: () => void;
-  onDone: (text: string, advance: boolean) => void;
+  onDone: (text: string) => void;
   onCancel: () => void;
   onToggleDone: () => void;
   onToggleMenu: () => void;
@@ -202,7 +228,7 @@ function GridCellBox({
             type="button"
             onClick={onStartEdit}
             data-pm-cell-text={index}
-            className={`h-full w-full break-words text-left ${
+            className={`h-full w-full whitespace-pre-wrap break-words text-left ${
               cell.done ? "text-slate-500 line-through" : "text-slate-700"
             }`}
           >
@@ -364,7 +390,7 @@ export function NineGridScreen({
     }),
   ];
 
-  const commitCell = (index: number, text: string, advance: boolean) => {
+  const commitCell = (index: number, text: string) => {
     setMenuAt(null);
     const current = cells[index];
     const next = text.trim();
@@ -384,22 +410,8 @@ export function NineGridScreen({
     if (next !== current.text) {
       void save({ cells: setGridCell(record.cells, path, index, { text: next }) });
     }
-    if (!advance) {
-      setEditing(null);
-      return;
-    }
-    // Enterで確定したら時計回りに次の空きマスへ（202 §3）
-    const after = cells.map((c, i) => (i === index ? { ...c, text: next } : c));
-    const at = CLOCKWISE.indexOf(index);
-    let target: number | null = null;
-    for (let step = 1; step <= CELL_COUNT; step++) {
-      const cand = CLOCKWISE[(at + step) % CELL_COUNT];
-      if (!after[cand].text.trim()) {
-        target = cand;
-        break;
-      }
-    }
-    setEditing(target);
+    // 247: Enterで次のマスへは進まない（Enterは改行）。マスの外を押したら、そのマスの入力を閉じる
+    setEditing(null);
   };
 
   const clearCell = (index: number) => {
@@ -513,6 +525,7 @@ export function NineGridScreen({
                   <CellEditor
                     draftKey={`pm:center:${record.id}:${pathToParam(path)}`}
                     initial={centerText}
+                    multiline={false}
                     onDone={(t) => commitCenter(t)}
                     onCancel={() => setEditingCenter(false)}
                   />
@@ -546,7 +559,7 @@ export function NineGridScreen({
                 setMenuAt(null);
                 setEditing(index);
               }}
-              onDone={(text, advance) => commitCell(index, text, advance)}
+              onDone={(text) => commitCell(index, text)}
               onCancel={() => setEditing(null)}
               onToggleDone={() =>
                 void save({
@@ -562,8 +575,8 @@ export function NineGridScreen({
       </div>
 
       <p className="text-[11px] text-slate-500">
-        マスをクリックすると、その場で書けます。Enterで確定して時計回りに次の空きマスへ進み、
-        Escで取り消します。{dig ? "書いてあるマスの「▦」で下の段へ進めます。" : `ここは${MAX_DEPTH}段目なので、これ以上下の段は作れません。`}
+        マスをクリックすると、その場で書けます。Enterで改行でき、マスの外を押すと保存されます
+        （Escで取り消し）。{dig ? "書いてあるマスの「▦」で下の段へ進めます。" : `ここは${MAX_DEPTH}段目なので、これ以上下の段は作れません。`}
         変えたところはその場で保存されます。
       </p>
 

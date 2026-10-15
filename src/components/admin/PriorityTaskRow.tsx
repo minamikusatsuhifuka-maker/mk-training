@@ -24,6 +24,7 @@ import {
   type TaskFields,
   type TaskStatus,
 } from "@/lib/priority-matrix";
+import { GridPeek } from "./GridPeek";
 import { SAVED_MARK_MS, SaveMark, useTextDraft, type SaveState } from "./PriorityPieces";
 
 export function PriorityTaskRow({
@@ -133,6 +134,8 @@ export function PriorityTaskRow({
         >
           {task.title}
         </button>
+        {/* 247 §4: 9マスに書いてあるときだけ「▦」。合わせると中身が出る */}
+        <GridPeek title={task.title} cells={task.cells} dataKey={task.id} />
         {task.due && (
           <span
             className={`shrink-0 text-[10px] ${overdue ? "font-bold text-rose-600" : "text-slate-500"}`}
@@ -168,12 +171,6 @@ export function PriorityTaskRow({
               value={title.value}
               onChange={(e) => title.change(e.target.value)}
               onBlur={commitTitle}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  commitTitle();
-                }
-              }}
               data-pm-panel-title
               className="mt-0.5 w-full rounded-md border border-slate-300 px-2 py-1 text-xs"
             />

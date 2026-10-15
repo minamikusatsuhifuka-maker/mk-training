@@ -55,6 +55,7 @@ import {
   type TaskFields,
   type TaskStatus,
 } from "@/lib/priority-matrix";
+import { GridPeek } from "./GridPeek";
 import { PriorityTaskRow } from "./PriorityTaskRow";
 import {
   InlineAddHint,
@@ -255,12 +256,6 @@ function BookRow({
         value={title.value}
         onChange={(e) => title.change(e.target.value)}
         onBlur={() => void commit()}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            void commit();
-          }
-        }}
         aria-label="9マス帳の名前"
         data-pm-book-title={book.id}
         className="min-w-[8rem] flex-1 rounded-md border border-transparent px-1.5 py-0.5 font-medium text-slate-800 hover:border-slate-300 focus:border-teal-400"
@@ -589,7 +584,9 @@ export function PriorityMatrixBoard() {
                 <span className={`rounded px-1 py-0.5 text-[10px] ${QUADRANT_TONE[t.quadrant].chip}`}>
                   {QUADRANT_META[t.quadrant].short}
                 </span>
-                <p className="mt-1 break-words text-xs font-medium text-slate-800">{t.title}</p>
+                <p className="mt-1 break-words text-xs font-medium text-slate-800">
+                  {t.title} <GridPeek title={t.title} cells={t.cells} dataKey={`focus-${t.id}`} />
+                </p>
                 <span className="text-[10px] text-slate-500">
                   {dueLabel(t, today)}・{STATUS_LABEL[t.status]}
                 </span>

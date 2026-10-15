@@ -131,11 +131,6 @@ export const MAX_DEPTH = 3;
  */
 export const GRID_SLOTS: (number | "center")[] = [0, 1, 2, 3, "center", 4, 5, 6, 7];
 
-/**
- * 「Enterで時計回りに次の空きマスへ」の順番（202 §3）。
- * 上の並びでは左上→上→右上→右→右下→下→左下→左 が 0,1,2,4,7,6,5,3 になる。
- */
-export const CLOCKWISE: number[] = [0, 1, 2, 4, 7, 6, 5, 3];
 
 export type NineCell = {
   text: string;
@@ -257,6 +252,11 @@ export function canDigInto(path: CellPath): boolean {
 export function hasContentDeep(cell: NineCell): boolean {
   if (cell.text.trim() || cell.done) return true;
   return cell.children.some(hasContentDeep);
+}
+
+/** 9マスのどこか（下の段も含む）に文字が書いてあるか（247: 「▦」の印を出すかどうか） */
+export function hasGridText(cells: NineCell[]): boolean {
+  return cells.some((c) => c.text.trim().length > 0 || hasGridText(c.children));
 }
 
 /** 下の段に中身があるか（右下の点・消すときの確認に使う） */

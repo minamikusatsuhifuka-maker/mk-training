@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { GridPeek } from "./GridPeek";
 import {
   FOCUS_MAX,
   QUADRANT_META,
@@ -67,6 +68,7 @@ export function PriorityFocusMini() {
                 {QUADRANT_META[t.quadrant].short}
               </span>{" "}
               <span className="font-medium">{t.title}</span>{" "}
+              <GridPeek title={t.title} cells={t.cells} dataKey={`mini-${t.id}`} />{" "}
               <span
                 className={`text-[10px] ${isOverdue(t, today) ? "font-bold text-rose-600" : "text-slate-500"}`}
               >

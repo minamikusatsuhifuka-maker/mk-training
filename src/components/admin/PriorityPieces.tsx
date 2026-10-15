@@ -3,7 +3,7 @@
 // 四象限マトリクスの小さな共通部品（指示書202）
 //
 // ・SaveMark        … 行・マスの中に出す「保存中…／保存済み／失敗」の小さな印（202 §2・§3）
-// ・InlineAddInput  … その場に出る1行の入力欄。**Enterで登録して欄は開いたまま**（202 §1・§4）
+// ・InlineAddInput  … その場に出る1行の入力欄。**「登録」ボタンで登録して欄は開いたまま**（202 §1・§4。247でEnterでは登録しなくした）
 // ・useTextDraft    … 確定前の文字を sessionStorage に預ける（202 §2「書きかけ保持」）
 //
 // 【部品はモジュール直下に置く（201の実測で踏んだ罠）】
@@ -79,13 +79,12 @@ export function useTextDraft(key: string, initial: string) {
  * 【実測で踏んだ罠】入力欄に disabled を付けてはいけない。
  * 送信中だけ disabled にしたところ、Chromium が disabled になった瞬間に焦点を外し、
  * そのあと focus() を呼んでも（まだ disabled なので）効かず、
- * 「Enterで登録して欄は開いたまま続けて書ける」が1件目で止まった。
+ * 「登録して欄は開いたまま続けて書ける」が1件目で止まった。
  * 二重送信は ref で止め、入力欄は常に書ける状態にしておく。
  */
 /**
  * 象限の空いている所・「＋ ここに追加」・9マス帳の欄から出る1行入力。
- *   Enter          … 登録して**欄は開いたまま**（続けて書ける）
- *   空のままEnter   … 閉じる
+ *   「登録」ボタン  … 登録して**欄は開いたまま**（続けて書ける）。247から、Enterでは登録しない
  *   Esc            … 閉じる（書きかけは預けたまま＝もう一度開けば戻る）
  */
 export function InlineAddInput({
@@ -145,10 +144,8 @@ export function InlineAddInput({
         placeholder={placeholder}
         onChange={(e) => change(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            void submit();
-          } else if (e.key === "Escape") {
+          // 247: Enterでは登録しない（日本語の変換を確定するEnterで、タイトルが確定してしまうため）。登録は「登録」ボタン
+          if (e.key === "Escape" && !e.nativeEvent.isComposing) {
             e.preventDefault();
             onClose();
           }
@@ -177,11 +174,11 @@ export function InlineAddInput({
   );
 }
 
-/** 「Enterで続けて登録できます」の案内（入力欄の下に小さく） */
+/** 「登録ボタンで続けて登録できます」の案内（入力欄の下に小さく） */
 export function InlineAddHint() {
   return (
     <p className="mt-0.5 text-[10px] text-slate-500">
-      Enterで登録（続けて書けます）・空のままEnterまたはEscで閉じます
+      「登録」ボタンで登録します（続けて書けます）。Escで閉じます
     </p>
   );
 }
