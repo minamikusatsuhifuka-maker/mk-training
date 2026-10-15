@@ -1,0 +1,161 @@
+"use client";
+
+// 管理ダッシュボードの本文（院長＝管理者の画面）。255: 任された幹部には AdminDelegateDashboard を出す（どちらを出すかは app/admin/page.tsx＝サーバーが決める）
+import Link from "next/link";
+import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { diseases } from "@/data/diseases";
+import { drugs } from "@/data/drugs";
+import { quizQuestions } from "@/data/quiz";
+import { contraindications } from "@/data/contraindications";
+import { EXPERT_ROLES } from "@/data/expertRoles";
+// 201: 院長の「★ いま注力すること」3件。院長でなければ何も出ない（部品側で fail-close）
+import { PriorityFocusMini } from "@/components/admin/PriorityFocusMini";
+// 219: 毎朝8時の定時処理の前回の結果。こちらも院長のみ（部品側で fail-close）
+import { CronStatusCard } from "@/components/admin/CronStatusCard";
+
+const stats = [
+  { label: "疾患", count: diseases.length, unit: "件", href: "/admin/diseases" },
+  { label: "薬剤", count: drugs.length, unit: "件", href: "/admin/drugs" },
+  { label: "クイズ", count: quizQuestions.length, unit: "問", href: "/admin/quiz" },
+  { label: "禁忌", count: contraindications.length, unit: "件", href: "/admin/contraindications" },
+];
+
+export function AdminFullDashboard() {
+  return (
+    <div className="max-w-4xl space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-800">管理ダッシュボード</h1>
+        <p className="text-sm text-slate-600 mt-1">コンテンツの管理・編集が行えます</p>
+      </div>
+
+      <PriorityFocusMini />
+
+      <CronStatusCard />
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {stats.map((s) => (
+          <Card key={s.label} className="text-center">
+            <CardHeader className="pb-2 pt-4 px-4">
+              <p className="text-3xl font-bold text-slate-700">
+                {s.count}
+                <span className="text-base font-normal text-slate-600 ml-1">{s.unit}</span>
+              </p>
+              <CardDescription>{s.label}</CardDescription>
+            </CardHeader>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* ポータル管理（最上部に配置） */}
+        <Link href="/admin/portal">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-pink-400 border-l-4 border-l-pink-500 sm:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">🏠 ポータル管理</CardTitle>
+              <CardDescription className="text-xs">
+                ポータルトップ（新着情報・気づきシェア・ありがとうカード・経営方針・今日の一言）の管理
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
+        {/* 四象限マトリクス（201・院長のみ） */}
+        <Link href="/admin/priority-matrix">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-amber-400 border-l-4 border-l-amber-500 sm:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">🧭 四象限マトリクス</CardTitle>
+              <CardDescription className="text-xs">
+                タスクを緊急度×重要度の四象限で管理。★で「いま注力すること」を3件まで、各タスクは9マスで分解（院長のみ）
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
+        {/* サイドバー構成 */}
+        <Link href="/admin/nav">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-pink-400 border-l-4 border-l-pink-500 sm:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">🧭 サイドバー構成</CardTitle>
+              <CardDescription className="text-xs">
+                スタッフ側サイドバーのカテゴリ・メニューの並び・所属・表示/非表示・表示名を編集
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
+        {/* 組織知識ベース管理 */}
+        <Link href="/admin/knowledge-system">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-purple-400 border-l-4 border-l-purple-500 sm:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">🏛️ 組織知識ベース管理</CardTitle>
+              <CardDescription className="text-xs">
+                マニュアル・スキルマップ・組織ナレッジをAIと共に構築・管理（生成・改善・公開・承認）
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
+        {/* スタッフ名簿 */}
+        <Link href="/admin/staff-members">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-teal-400 border-l-4 border-l-teal-500 sm:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">👥 スタッフ名簿</CardTitle>
+              <CardDescription className="text-xs">
+                「みんなのタスク」の担当者候補に使うスタッフ名を追加・削除
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
+        {/* AI背景情報 */}
+        <Link href="/admin/ai-background">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-teal-400 border-l-4 border-l-teal-500 sm:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">🧭 背景情報・理念管理</CardTitle>
+              <CardDescription className="text-xs">
+                理念・経営方針を1か所で編集。相談・ロールプレイ・症例・ロードマップ・知識生成など主要AIに共通で反映
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
+        {/* AI設定 */}
+        <Link href="/admin/settings">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-teal-400 border-l-4 border-l-teal-500 sm:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">⚙️ AI設定</CardTitle>
+              <CardDescription className="text-xs">
+                管理画面の評価・分析機能で使用するGeminiモデルを選択（既定: Gemini 3.5 Flash）
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
+        {stats.map((s) => (
+          <Link key={s.href} href={s.href}>
+            <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-slate-400">
+              <CardHeader>
+                <CardTitle className="text-base">{s.label}管理</CardTitle>
+                <CardDescription className="text-xs">
+                  {s.label}データの追加・編集・削除({s.count}{s.unit})
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          </Link>
+        ))}
+
+        {/* エキスパート要件管理 */}
+        <Link href="/admin/expert">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer hover:border-teal-400 border-l-4 border-l-teal-500">
+            <CardHeader>
+              <CardTitle className="text-base">⭐ エキスパート要件管理</CardTitle>
+              <CardDescription className="text-xs">
+                各ロールのエキスパート要件をAIの力を借りて改善・追加できます({EXPERT_ROLES.length}ロール)
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+      </div>
+    </div>
+  );
+}
