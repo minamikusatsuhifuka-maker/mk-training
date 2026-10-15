@@ -9,12 +9,8 @@ import { Separator } from "@/components/ui/separator";
 import { useResolvedNav } from "@/lib/use-nav";
 import { UserMenu } from "@/components/UserMenu";
 import { AdminAreaLink } from "@/components/AdminAreaLink";
-import { PeopleTrainingNavLinks } from "@/components/PeopleTrainingNavLinks";
 import { FontSwitcher } from "@/components/FontSwitcher";
-import { DocTasksNavLink } from "@/components/DocTasksNavLink";
-import { StaffContactsNavLink } from "@/components/StaffContactsNavLink";
-import { DirectorRetrospectiveNavLink } from "@/components/DirectorRetrospectiveNavLink";
-import { StaffGrowthNavLink } from "@/components/StaffGrowthNavLink";
+import { GatedNavLink, filterNavForViewer, useGatedAccess } from "@/components/GatedNavLinks";
 import { useSidebarAccordion } from "@/lib/sidebar-accordion";
 /**
  * 203（院長の返答）: 保存された設定では「準備中」で、院長・検証用アカウントだけが
@@ -36,7 +32,9 @@ function PreviewMark({ on }: { on?: true }) {
 
 export function Sidebar() {
   const pathname = usePathname();
-  const navSections = useResolvedNav().filter((s) => s.items.length > 0);
+  // 262: 任された人にだけ出る項目は、グループに置かれていればその中に、置かれていなければいちばん下に出す
+  const gatedAccess = useGatedAccess();
+  const { sections: navSections, bottom: gatedBottom } = filterNavForViewer(useResolvedNav(), gatedAccess);
   // 166: カテゴリの開閉。既定の開閉は管理画面「サイドバー構成」の設定（未設定は全開＝従来どおり）
   const { isOpen, toggle } = useSidebarAccordion(navSections, pathname);
 
@@ -65,6 +63,13 @@ export function Sidebar() {
               {isOpen(section.id) && (
               <ul className="space-y-0.5">
                 {section.items.map((item) => {
+                  if (item.gated) {
+                    return (
+                      <li key={item.key}>
+                        <GatedNavLink item={item} badge={gatedAccess[item.key]?.badge} variant="sidebar" />
+                      </li>
+                    );
+                  }
                   // 外部リンクは別タブで開く（現在ページのハイライトは不要）。指示書59
                   // 171: メニューに並ぶと「アプリの一機能」に見えるため、↗ で外部サイトだと分かるようにする
                   if (item.external) {
@@ -109,20 +114,12 @@ export function Sidebar() {
             </div>
           ))}
 
-          {/* 書類進捗ボード（154）。指名された人にだけ出る（未許可には描画されない） */}
-          <DocTasksNavLink variant="sidebar" />
-
-          {/* 254: 欲求別成長支援ガイド・人材育成研修。任された人と院長にだけ出る（未許可には描画されない） */}
-          <PeopleTrainingNavLinks variant="sidebar" />
-
-          {/* スタッフ連絡先（169）。指名された人にだけ出る（未許可には描画されない） */}
-          <StaffContactsNavLink variant="sidebar" />
-
-          {/* 院長の振り返り記録（173）。管理者にだけ出る（未許可には描画されない） */}
-          <DirectorRetrospectiveNavLink variant="sidebar" />
-
-          {/* スタッフ育成カルテ（179）。管理者にだけ出る（未許可には描画されない） */}
-          <StaffGrowthNavLink variant="sidebar" />
+          {/* 書類進捗（154）・欲求別成長支援ガイド／人材育成研修（254）・スタッフ連絡先（169）・
+              院長の振り返り記録（173）・可能性ノート（179）のうち、グループに置かれていないもの。
+              任された人にだけ出る（未許可には描画されない・262でまとめた） */}
+          {gatedBottom.map((g) => (
+            <GatedNavLink key={g.key} item={g} badge={gatedAccess[g.key]?.badge} variant="sidebar" />
+          ))}
         </nav>
       </ScrollArea>
 

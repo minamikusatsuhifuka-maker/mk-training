@@ -20,11 +20,8 @@ import { useResolvedNav } from "@/lib/use-nav";
 import { UserMenu } from "@/components/UserMenu";
 import { AdminAreaLink } from "@/components/AdminAreaLink";
 import { FontSwitcher } from "@/components/FontSwitcher";
-import { DocTasksNavLink } from "@/components/DocTasksNavLink";
-import { PeopleTrainingNavLinks } from "@/components/PeopleTrainingNavLinks";
-import { StaffContactsNavLink } from "@/components/StaffContactsNavLink";
-import { DirectorRetrospectiveNavLink } from "@/components/DirectorRetrospectiveNavLink";
-import { StaffGrowthNavLink } from "@/components/StaffGrowthNavLink";
+import { GatedNavLink, filterNavForViewer, useGatedAccess } from "@/components/GatedNavLinks";
+import type { ResolvedCategory } from "@/lib/nav";
 import { useSidebarAccordion } from "@/lib/sidebar-accordion";
 /**
  * 203（院長の返答）: 保存された設定では「準備中」で、院長・検証用アカウントだけが
@@ -51,9 +48,7 @@ export default function AppShellInner({
 }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
-  const mobileNavSections = useResolvedNav().filter((s) => s.items.length > 0);
-  // 166: カテゴリの開閉（デスクトップのサイドバーと同じ設定・記憶を共有）
-  const { isOpen, toggle } = useSidebarAccordion(mobileNavSections, pathname);
+  const resolvedNav = useResolvedNav();
 
   return (
     <div className="flex min-h-full">
@@ -83,88 +78,7 @@ export default function AppShellInner({
                 <h1 className="text-lg font-bold text-teal">南草津皮フ科</h1>
                 <p className="text-xs text-muted-foreground">スタッフ研修</p>
               </div>
-              <nav className="px-3 py-4 space-y-4">
-                {mobileNavSections.map((section) => (
-                  <div key={section.id}>
-                    <button
-                      type="button"
-                      onClick={() => toggle(section.id)}
-                      aria-expanded={isOpen(section.id)}
-                      className="w-full flex items-center justify-between px-2 mb-1 min-h-[44px] text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
-                    >
-                      <span>{section.label}</span>
-                      <span aria-hidden="true">{isOpen(section.id) ? "▾" : "▸"}</span>
-                    </button>
-                    {isOpen(section.id) && (
-                    <ul className="space-y-0.5">
-                      {section.items.map((item) => (
-                        <li key={item.key}>
-                          {item.external ? (
-                            // 外部リンクは別タブで開く（指示書59）
-                            // 171: ↗ で外部サイトだと分かるようにする（タップ領域は44px維持）
-                            <a
-                              href={item.href}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={() => setMenuOpen(false)}
-                              title={`${item.label}（外部サイト・新しいタブで開きます）`}
-                              className="rounded-md px-2 py-2 text-sm min-h-[44px] flex items-center gap-1 transition-colors text-foreground hover:bg-accent"
-                            >
-                              <span className="min-w-0 truncate">{item.label}</span>
-                              <PreviewMark on={item.preview} />
-                              <span aria-hidden="true" className="shrink-0 text-[11px] text-muted-foreground">↗</span>
-                              <span className="sr-only">（外部サイト・新しいタブで開きます）</span>
-                            </a>
-                          ) : (
-                            <Link
-                              href={item.href}
-                              onClick={() => setMenuOpen(false)}
-                              className={`block rounded-md px-2 py-2 text-sm min-h-[44px] flex items-center transition-colors ${
-                                pathname === item.href
-                                  ? "bg-teal-light text-teal font-medium"
-                                  : "text-foreground hover:bg-accent"
-                              }`}
-                            >
-                              {item.label}
-                              <PreviewMark on={item.preview} />
-                              <PresurveyNavMark href={item.href} />
-                              <NoticesNavMark href={item.href} />
-                            </Link>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                    )}
-                  </div>
-                ))}
-
-                {/* 書類進捗ボード（154）。指名された人にだけ出る */}
-                <DocTasksNavLink
-                  variant="drawer"
-                  onNavigate={() => setMenuOpen(false)}
-                />
-
-                {/* 254: 欲求別成長支援ガイド・人材育成研修。任された人と院長にだけ出る */}
-                <PeopleTrainingNavLinks variant="drawer" onNavigate={() => setMenuOpen(false)} />
-
-                {/* スタッフ連絡先（169）。指名された人にだけ出る */}
-                <StaffContactsNavLink
-                  variant="drawer"
-                  onNavigate={() => setMenuOpen(false)}
-                />
-
-                {/* 院長の振り返り記録（173）。管理者にだけ出る */}
-                <DirectorRetrospectiveNavLink
-                  variant="drawer"
-                  onNavigate={() => setMenuOpen(false)}
-                />
-
-                {/* スタッフ育成カルテ（179）。管理者にだけ出る */}
-                <StaffGrowthNavLink
-                  variant="drawer"
-                  onNavigate={() => setMenuOpen(false)}
-                />
-              </nav>
+              <DrawerNav resolved={resolvedNav} pathname={pathname} onNavigate={() => setMenuOpen(false)} />
               <div className="px-3 py-2.5 border-t">
                 <FontSwitcher />
               </div>
@@ -188,5 +102,88 @@ export default function AppShellInner({
         </main>
       </div>
     </div>
+  );
+}
+
+/**
+ * スマートフォンのメニューの引き出し（262でPCのサイドバーと同じ並び・同じ判定にした）。
+ * 引き出しを開いたときだけ描く＝任された人にだけ出る項目の判定（probe）も、開いたときだけ行う（今までどおり）。
+ */
+function DrawerNav({
+  resolved,
+  pathname,
+  onNavigate,
+}: {
+  resolved: ResolvedCategory[];
+  pathname: string;
+  onNavigate: () => void;
+}) {
+  const gatedAccess = useGatedAccess();
+  const { sections: mobileNavSections, bottom: gatedBottom } = filterNavForViewer(resolved, gatedAccess);
+  // 166: カテゴリの開閉（デスクトップのサイドバーと同じ設定・記憶を共有）
+  const { isOpen, toggle } = useSidebarAccordion(mobileNavSections, pathname);
+  return (
+    <nav className="px-3 py-4 space-y-4">
+      {mobileNavSections.map((section) => (
+        <div key={section.id}>
+          <button
+            type="button"
+            onClick={() => toggle(section.id)}
+            aria-expanded={isOpen(section.id)}
+            className="w-full flex items-center justify-between px-2 mb-1 min-h-[44px] text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+          >
+            <span>{section.label}</span>
+            <span aria-hidden="true">{isOpen(section.id) ? "▾" : "▸"}</span>
+          </button>
+          {isOpen(section.id) && (
+          <ul className="space-y-0.5">
+            {section.items.map((item) => (
+              <li key={item.key}>
+                {item.gated ? (
+                  <GatedNavLink item={item} badge={gatedAccess[item.key]?.badge} variant="drawer" onNavigate={onNavigate} />
+                ) : item.external ? (
+                  // 外部リンクは別タブで開く（指示書59）
+                  // 171: ↗ で外部サイトだと分かるようにする（タップ領域は44px維持）
+                  <a
+                    href={item.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={onNavigate}
+                    title={`${item.label}（外部サイト・新しいタブで開きます）`}
+                    className="rounded-md px-2 py-2 text-sm min-h-[44px] flex items-center gap-1 transition-colors text-foreground hover:bg-accent"
+                  >
+                    <span className="min-w-0 truncate">{item.label}</span>
+                    <PreviewMark on={item.preview} />
+                    <span aria-hidden="true" className="shrink-0 text-[11px] text-muted-foreground">↗</span>
+                    <span className="sr-only">（外部サイト・新しいタブで開きます）</span>
+                  </a>
+                ) : (
+                  <Link
+                    href={item.href}
+                    onClick={onNavigate}
+                    className={`block rounded-md px-2 py-2 text-sm min-h-[44px] flex items-center transition-colors ${
+                      pathname === item.href
+                        ? "bg-teal-light text-teal font-medium"
+                        : "text-foreground hover:bg-accent"
+                    }`}
+                  >
+                    {item.label}
+                    <PreviewMark on={item.preview} />
+                    <PresurveyNavMark href={item.href} />
+                    <NoticesNavMark href={item.href} />
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ul>
+          )}
+        </div>
+      ))}
+
+      {/* 262: 任された人にだけ出る項目のうち、グループに置かれていないもの（今までどおりいちばん下） */}
+      {gatedBottom.map((g) => (
+        <GatedNavLink key={g.key} item={g} badge={gatedAccess[g.key]?.badge} variant="drawer" onNavigate={onNavigate} />
+      ))}
+    </nav>
   );
 }

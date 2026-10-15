@@ -130,6 +130,30 @@ export const MASTER_ITEMS: MasterItem[] = [
   { key: "/roleplay", href: "/roleplay", label: "🎭 ロールプレイ", featureId: "group_learning", categoryId: "test" },
 ];
 
+// 262: 任された人（指名された人・管理者）にだけ出る項目。
+// 見られるかどうかは各機能のサーバーの判定（probe・許可されていないと404）で決まり、ナビの設定では変えない。
+// 既定ではどのグループにも入らず、左のメニューのいちばん下に出る（今までどおり）。
+// 管理画面「🧭 サイドバー構成」でグループへ移すと、そのグループの中に出る（見られる人は同じ）。
+// key はルート（マスター項目と同じ流儀）。マスターとは別の一覧に持つ＝resolveNav が誰にでも出す項目と混ざらない。
+export type GatedItemKey =
+  | "/doc-tasks"
+  | "/admin/people-training/guide"
+  | "/admin/people-training"
+  | "/staff-contacts"
+  | "/director-retrospective"
+  | "/staff-growth";
+export type GatedItem = { key: GatedItemKey; href: string; label: string };
+export const GATED_ITEMS: GatedItem[] = [
+  { key: "/doc-tasks", href: "/doc-tasks", label: "📋 書類進捗" },
+  { key: "/admin/people-training/guide", href: "/admin/people-training/guide", label: "📘 欲求別成長支援ガイド" },
+  { key: "/admin/people-training", href: "/admin/people-training", label: "🎓 人材育成研修" },
+  { key: "/staff-contacts", href: "/staff-contacts", label: "📇 スタッフ連絡先" },
+  { key: "/director-retrospective", href: "/director-retrospective", label: "🧭 院長の振り返り記録" },
+  { key: "/staff-growth", href: "/staff-growth", label: "🌱 可能性ノート" },
+];
+export const GATED_ITEM_BY_KEY = new Map<string, GatedItem>(GATED_ITEMS.map((g) => [g.key, g]));
+export const isGatedKey = (key: string): key is GatedItemKey => GATED_ITEM_BY_KEY.has(key);
+
 // --- 設定（content_store に保存する形） ---
 export type NavCategory = { id: string; label: string; order: number; hidden?: boolean };
 export type NavItemConfig = {
@@ -208,6 +232,8 @@ export type ResolvedItem = {
    * 院長・検証用アカウントだけがプレビューで開けている。メニューに小さく「準備中」と出す。
    */
   preview?: true;
+  /** 262: 任された人にだけ出る項目（描画側がサーバーの判定を見て、許可された人にだけ出す） */
+  gated?: true;
 };
 export type ResolvedCategory = { id: string; label: string; items: ResolvedItem[] };
 
@@ -278,6 +304,21 @@ export function normalizeConfig(cfg: NavConfig | null | undefined): NavConfig {
       ...(e?.labelOverride ? { labelOverride: e.labelOverride } : {}),
     };
   });
+
+  // 262: 任された人にだけ出る項目は、グループに置かれているものだけを持つ
+  //（置かれていないもの＝左のメニューのいちばん下。グループが無くなったものも、いちばん下へ戻す）
+  const seenGated = new Set<string>();
+  for (const it of base.items ?? []) {
+    if (!it || typeof it.key !== "string" || !isGatedKey(it.key) || seenGated.has(it.key)) continue;
+    if (!catIds.has(it.categoryId)) continue;
+    seenGated.add(it.key);
+    items.push({
+      key: it.key,
+      categoryId: it.categoryId,
+      order: typeof it.order === "number" ? it.order : 9999,
+      hidden: false,
+    });
+  }
 
   // 外部リンク（171）。形が壊れているものだけ落とし、URLが不正なものは残す
   //（管理画面で直せるようにするため。**表示側は resolveNav が弾く**＝フェイルクローズド）
@@ -453,6 +494,18 @@ export function resolveNav(
       }
     }
 
+    // 262: 任された人にだけ出る項目をグループへ置いたもの。
+    // グループが非表示・無いときは、ここでは出さず、いちばん下（gatedKeysOutsideGroups）に出る＝見えなくならない。
+    // 見られる人の判定はここではしない（描画側がサーバーの判定を見る）。
+    const seenGated = new Set<string>();
+    for (const it of cfg.items) {
+      if (!it || typeof it.key !== "string" || seenGated.has(it.key)) continue;
+      const g = GATED_ITEM_BY_KEY.get(it.key);
+      if (!g || !visibleCatIds.has(it.categoryId)) continue;
+      seenGated.add(it.key);
+      pushTo(it.categoryId, { key: g.key, href: g.href, label: g.label, gated: true as const }, it.order ?? 9999);
+    }
+
     // 管理画面から追加された外部リンク（171）。マスターに実体が無いので config だけが情報源。
     // **URLが https:// でないものはここで捨てる**＝壊れた値が保存されていてもリンクは出ない。
     for (const l of cfg.links ?? []) {
@@ -505,4 +558,14 @@ export function resolveNav(
   } catch {
     return defaultResolved(flags, previewIds);
   }
+}
+
+/**
+ * 262: グループに置かれていない「任された人にだけ出る項目」（左のメニューのいちばん下に出す分）。
+ * 並びは GATED_ITEMS の順（今までのいちばん下の並び）。
+ */
+export function gatedKeysOutsideGroups(resolved: ResolvedCategory[]): GatedItem[] {
+  const placed = new Set<string>();
+  for (const c of resolved) for (const it of c.items) if (it.gated) placed.add(it.key);
+  return GATED_ITEMS.filter((g) => !placed.has(g.key));
 }
