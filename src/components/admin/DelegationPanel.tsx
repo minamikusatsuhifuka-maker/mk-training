@@ -30,10 +30,13 @@ const LEAVE_CLOSE_MS = 250;
 
 /**
  * 指名のポップアップ（1つだけ開く）。body の直下に出し、画面の端で切れない位置に置く。
+ * 256: カーソルを合わせて開いたとき（パソコン）は、行の**右側**・行の高さの所に出す（下の行へ動かす道をふさがない）。
+ *   右に入りきらなければ画面の右端の中に収める（行の左側＝項目名のあたりは空けておく）。押して開いたとき（スマホ・キーボード）は今までどおり行の下。
  * 中を一度でも押したら、カーソルが外に出ても閉じない（外を押す・Esc・行をもう一度押すと閉じる）。
  */
 function ItemPopover({
   anchor,
+  side,
   label,
   onPointerEnter,
   onPointerLeave,
@@ -42,6 +45,8 @@ function ItemPopover({
   children,
 }: {
   anchor: HTMLElement;
+  /** right＝行の右側（カーソルで開いたとき）／below＝行の下（押して開いたとき） */
+  side: "right" | "below";
   label: string;
   onPointerEnter: () => void;
   onPointerLeave: () => void;
@@ -60,9 +65,18 @@ function ItemPopover({
       const h = el.offsetHeight;
       const vw = window.innerWidth;
       const vh = window.innerHeight;
-      const left = Math.min(Math.max(8, b.left), Math.max(8, vw - w - 8));
-      let top = b.bottom + 4;
-      if (top + h > vh - 8) top = b.top - h - 4 >= 8 ? b.top - h - 4 : Math.max(8, vh - h - 8);
+      let left: number;
+      let top: number;
+      if (side === "right") {
+        // 行の右側に。入りきらなければ画面の右端の中へ。ただし行の左側（項目名のあたり）は空けておく
+        const keepFree = Math.min(360, b.width * 0.45);
+        left = b.right + 8 + w <= vw - 8 ? b.right + 8 : Math.max(b.left + keepFree, vw - w - 8);
+        top = Math.min(Math.max(8, b.top), Math.max(8, vh - h - 8));
+      } else {
+        left = Math.min(Math.max(8, b.left), Math.max(8, vw - w - 8));
+        top = b.bottom + 4;
+        if (top + h > vh - 8) top = b.top - h - 4 >= 8 ? b.top - h - 4 : Math.max(8, vh - h - 8);
+      }
       el.style.left = `${left}px`;
       el.style.top = `${top}px`;
       el.style.visibility = "visible";
@@ -77,7 +91,7 @@ function ItemPopover({
       window.removeEventListener("resize", place);
       window.removeEventListener("scroll", place, true);
     };
-  }, [anchor]);
+  }, [anchor, side]);
 
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
@@ -113,7 +127,7 @@ function ItemPopover({
       }}
       onPointerDownCapture={onPin}
       style={{ position: "fixed", left: 0, top: 0, visibility: "hidden", zIndex: 60 }}
-      className="w-[min(30rem,calc(100vw-16px))] max-h-[calc(100vh-16px)] overflow-y-auto rounded-xl border border-slate-300 bg-white p-3 shadow-xl"
+      className={`${side === "right" ? "w-[min(24rem,calc(100vw-16px))]" : "w-[min(30rem,calc(100vw-16px))]"} max-h-[calc(100vh-16px)] overflow-y-auto rounded-xl border border-slate-300 bg-white p-3 shadow-xl`}
     >
       {children}
     </div>,
@@ -134,7 +148,7 @@ export function DelegationPanel() {
   const [drLimit, setDrLimit] = useState(DEEP_RESEARCH_DEFAULT_LIMIT);
   const [drInput, setDrInput] = useState(String(DEEP_RESEARCH_DEFAULT_LIMIT));
   // 開いているポップアップ（1つだけ）。pinned＝押して開いた／中を押した（カーソルが外れても閉じない）
-  const [openItem, setOpenItem] = useState<{ key: string; el: HTMLElement } | null>(null);
+  const [openItem, setOpenItem] = useState<{ key: string; el: HTMLElement; side: "right" | "below" } | null>(null);
   const pinned = useRef(false);
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [savedKey, setSavedKey] = useState("");
@@ -255,7 +269,8 @@ export function DelegationPanel() {
       // ほかの行のポップアップは閉じて、こちらを開く（開くのは1つだけ）
       pinned.current = pin;
       setSavedKey("");
-      setOpenItem({ key, el });
+      // 256: カーソルで開いたら行の右側、押して開いたら（スマホ・キーボード）行の下
+      setOpenItem({ key, el, side: pin ? "below" : "right" });
     } else if (pin) {
       pinned.current = true;
     }
@@ -437,6 +452,7 @@ export function DelegationPanel() {
             return (
               <ItemPopover
                 anchor={openItem.el}
+                side={openItem.side}
                 label={it.label}
                 onPointerEnter={cancelLeave}
                 onPointerLeave={scheduleLeave}
