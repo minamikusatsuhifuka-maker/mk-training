@@ -6,7 +6,7 @@
 // - 予定の源泉は Google カレンダー（管理はGoogle側で直接・ポータル側に管理UIは作らない）。
 // - 取得は認証付き /api/calendar のみ。260: 表示している月（週）の分だけ ?from&to で読む（今月の前後12か月まで進める）。
 //   読んだ期間は画面の中で覚える（同じ月へ戻ったときは読み直さない・「再読み込み」で今の期間を読み直す）。表示:
-//   📋 リスト=今日以降のみ（従来どおり）／🗓 月表示=今月＋翌月の2グリッド（121）。
+//   📋 リスト=今月から4か月分を4列（261・今月は今日以降）／🗓 月表示=2グリッド（121）。
 //   切替は localStorage "mk_calendar_view" に記憶（102/116の流儀・既定は月表示=指示書125）。
 // - 246: 説明は別の行・ボタンは CalendarToolbar で1行に（切り替えてもボタンが動かない）。月表示の「大きく」は既定ON
 // - env未設定・接続失敗はスタッフに「準備中」の穏やかな表示。管理者にのみ詳細
@@ -23,7 +23,7 @@ import {
   DIRECTOR_LABEL,
   DayDetail,
   DirectorLegend,
-  ListView,
+  MonthColumnsList,
   MonthGrid,
   MonthNav,
   WeekNav,
@@ -57,7 +57,10 @@ const rangeKeyOf = (r: { from: string; to: string }) => `${r.from}~${r.to}`;
 
 const CALENDAR_INTRO =
   "勉強会・研修・院内イベントなどの予定です。予定の追加・変更はGoogleカレンダーで行われます。";
-const CALENDAR_EMPTY = "今日から翌月末までの予定はありません。";
+// 261: 予定の無い月の列に出す（今ある文）
+const CALENDAR_MONTH_EMPTY = "予定はありません。";
+/** 261: リストに出す月の数（今月・来月・再来月・3か月先） */
+const LIST_MONTHS = 4;
 const CALENDAR_VIEW_LS_KEY = "mk_calendar_view";
 const CALENDAR_BIG_LS_KEY = "mk_calendar_big"; // 243: 月表示の「大きく」
 const VIEWS: readonly CalView[] = ["list", "month", "week"];
@@ -127,7 +130,7 @@ function CalendarPageBody() {
   // 260: 月表示で、今月から何か月ずらしているか（0＝今月と翌月）
   const [monthOffset, setMonthOffset] = useState(0);
 
-  // 今の表示に要る期間（月表示＝出している2か月・週表示＝その週を含む月・リスト＝今日〜翌月末を含む2か月）
+  // 今の表示に要る期間（月表示＝出している2か月・週表示＝その週を含む月・リスト＝今月から4か月（261））
   const today = jstTodayYmd();
   const thisY = Number(today.slice(0, 4));
   const thisM = Number(today.slice(5, 7));
@@ -135,7 +138,7 @@ function CalendarPageBody() {
   const first = addMonths(thisY, thisM, monthOffset);
   const sunday = weekSunday ?? weekStartOf(today);
   const need =
-    view === "month" ? monthsRange(first.y, first.m, 2) : view === "week" ? weekFetchRange(sunday) : monthsRange(thisY, thisM, 2);
+    view === "month" ? monthsRange(first.y, first.m, 2) : view === "week" ? weekFetchRange(sunday) : monthsRange(thisY, thisM, LIST_MONTHS);
   const needKey = rangeKeyOf(need);
 
   const load = useCallback(async (range: { from: string; to: string }, isReload: boolean) => {
@@ -241,13 +244,8 @@ function CalendarPageBody() {
   // 日付→予定（終日 → 時刻の順）
   const byYmd = groupByYmd(items);
 
-  // リストは今日〜翌月末（従来どおり・指示書121）
-  const next = addMonths(thisY, thisM, 1);
-  const listEnd = lastDayOfMonth(next.y, next.m);
-  const groups = Array.from(byYmd.keys())
-    .filter((ymd) => ymd >= today && ymd <= listEnd)
-    .sort()
-    .map((ymd) => ({ ymd, items: byYmd.get(ymd)! }));
+  // 261: リストは今月から4か月分（今月の列は今日から先）
+  const listMonths = Array.from({ length: LIST_MONTHS }, (_, i) => addMonths(thisY, thisM, i));
 
   // 月表示: 2ヶ月（指示書121）。260: ◀ ▶ で送る（今月の前後12か月まで）
   const second = addMonths(first.y, first.m, 1);
@@ -315,13 +313,7 @@ function CalendarPageBody() {
       )}
 
       {view === "list" ? (
-        groups.length === 0 ? (
-          <p className="text-sm text-gray-600 text-center py-12">
-            {CALENDAR_EMPTY}
-          </p>
-        ) : (
-          <ListView groups={groups} today={today} />
-        )
+        <MonthColumnsList months={listMonths} today={today} byYmd={byYmd} emptyText={CALENDAR_MONTH_EMPTY} />
       ) : view === "week" ? (
         <WeekView sunday={sunday} today={today} byYmd={byYmd} />
       ) : (

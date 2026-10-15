@@ -137,6 +137,84 @@ export function ListView({ groups, today }: { groups: { ymd: string; items: CalI
 }
 
 /**
+ * 261: 院内カレンダーの「📋 リスト」。今月から4か月分を、1か月＝1列で横に並べる。
+ * パソコン（xl以上）＝4列／タブレットくらい（md〜xl）＝2列×2段／スマートフォン＝1列で縦に。
+ * 列の中は今のリストと同じ：日ごとのまとまりに、終日→時刻の順。題名は折り返して全文。
+ * 列ごとに中だけ縦に動く（md以上・列の高さをそろえる）。予定の無い月は「予定はありません。」
+ */
+export function MonthColumnsList({
+  months,
+  today,
+  byYmd,
+  emptyText,
+}: {
+  months: { y: number; m: number }[];
+  today: string;
+  byYmd: Map<string, CalItem[]>;
+  emptyText: string;
+}) {
+  const days = Array.from(byYmd.keys()).sort();
+  return (
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4" data-cal-list-columns>
+      {months.map(({ y, m }) => {
+        const prefix = `${y}-${String(m).padStart(2, "0")}-`;
+        // 今月の列は今日から先（今のリストの決まりどおり）
+        const groups = days.filter((d) => d.startsWith(prefix) && d >= today).map((ymd) => ({ ymd, items: byYmd.get(ymd)! }));
+        return (
+          <section
+            key={prefix}
+            className="flex min-w-0 flex-col rounded-xl border border-gray-200 bg-white md:h-[70vh] md:min-h-[420px]"
+            data-cal-list-month={`${y}-${m}`}
+          >
+            <h2 className="shrink-0 border-b border-gray-100 px-3 py-2.5 text-sm font-semibold text-gray-800">
+              {y}年{m}月
+            </h2>
+            <div className="min-h-0 flex-1 space-y-3 px-2.5 py-2.5 md:overflow-y-auto" data-cal-list-scroll>
+              {groups.length === 0 ? (
+                <p className="py-6 text-center text-sm text-gray-500">{emptyText}</p>
+              ) : (
+                groups.map((g) => (
+                  <div key={g.ymd} className="space-y-1" data-cal-list-day={g.ymd}>
+                    <h3 className="flex items-center gap-1.5 text-xs font-semibold text-gray-700">
+                      {formatDayHeading(g.ymd)}
+                      {g.ymd === today && <TodayBadge />}
+                    </h3>
+                    <ul className="space-y-1">
+                      {g.items.map((it) => (
+                        <CompactItem key={it.id} it={it} />
+                      ))}
+                    </ul>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 261: リストの列の1件（少し詰める）。「終日」の札と時刻は今のまま・題名は折り返して全文 */
+function CompactItem({ it }: { it: CalItem }) {
+  const director = it.tone === "director";
+  return (
+    <li
+      className={`rounded-md border px-2 py-1.5 ${director ? "border-violet-200 bg-violet-50" : "border-gray-100 bg-gray-50/60"}`}
+      data-cal-item={director ? "director" : "clinic"}
+    >
+      {it.allDay ? (
+        <span className="mr-1.5 inline-block rounded-full bg-sky-100 px-2 py-0.5 align-middle text-[10px] font-medium text-sky-800">終日</span>
+      ) : (
+        <span className="mr-1.5 align-middle text-[11px] tabular-nums text-gray-600">{it.time}</span>
+      )}
+      <span className={`break-words align-middle text-[13px] leading-snug ${director ? "text-violet-900" : "text-gray-800"}`}>{it.title}</span>
+      {it.location && <span className="block break-words text-[11px] text-gray-500">📍 {it.location}</span>}
+    </li>
+  );
+}
+
+/**
  * 1か月のマス目（日曜始まり）。
  * ふつう：スマホ＝点（4件以上は件数）、md以上＝題名を2件＋「+n」。
  * 大きく（big）：マス目が予定の数に合わせて広がり、全部の予定を時刻と題名で出す（省いたり「…」で切ったりしない）。
