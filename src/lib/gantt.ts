@@ -320,7 +320,7 @@ export function teamNoticeText(
   return {
     title: `🤝 チームプロジェクト「${p.name}」`,
     body: [
-      `${p.createdByName || "スタッフ"}さんが、チームプロジェクトを始めます。`,
+      `${p.createdByName || "スタッフ"}さんたちが、新しいチームプロジェクトに挑戦します。`,
       "",
       `チーム名：${p.name}`,
       "プロジェクト概要：",
