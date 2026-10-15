@@ -5,7 +5,7 @@
 // - 1件 = 時刻＋題名（院内カレンダーは場所も）。tone="director" は院長の予定（色を変える）
 // - 「大きく」と表示の選択は、そのブラウザで覚える（読み書きに失敗しても画面は正しく出る）
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { WEEKDAY_HEADERS, buildMonthWeeks, formatDayHeading, formatWeekRange, weekDays } from "@/lib/calendar-views";
 
 export type CalItem = {
@@ -299,6 +299,46 @@ export function ViewSwitch({ view, onChange }: { view: CalView; onChange: (v: Ca
       {b("list", "📋 リスト")}
       {b("month", "🗓 月表示")}
       {b("week", "📅 週表示")}
+    </div>
+  );
+}
+
+/**
+ * 切り替えのボタンの行（246）。表示を切り替えても、切り替えのボタンと「🔄 再読み込み」の位置を動かさない。
+ * - lg以上：1行に [📋 🗓 📅] [表示ごとのボタン（残りの幅）] [🔄 再読み込み]
+ * - lg未満：1行目に [📋 🗓 📅]、2行目に [表示ごとのボタン] [🔄 再読み込み]。表示ごとのボタンが無い表示でも2行目の高さは同じ
+ *   折り返し方を中身ではなく画面の幅だけで決めるので、どの表示でも同じ折り返し方になる
+ */
+export function CalendarToolbar({
+  view,
+  onViewChange,
+  extra,
+  reloading,
+  onReload,
+}: {
+  view: CalView;
+  onViewChange: (v: CalView) => void;
+  extra?: ReactNode;
+  reloading: boolean;
+  onReload: () => void;
+}) {
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2" data-cal-toolbar>
+      <div className="col-span-2 lg:col-span-1 lg:col-start-1 lg:row-start-1 justify-self-start" data-cal-toolbar-switch>
+        <ViewSwitch view={view} onChange={onViewChange} />
+      </div>
+      <div className="col-start-1 row-start-2 lg:col-start-2 lg:row-start-1 min-w-0 min-h-[38px] flex items-center gap-2 flex-wrap" data-cal-toolbar-extra>
+        {extra}
+      </div>
+      <button
+        type="button"
+        onClick={onReload}
+        disabled={reloading}
+        className="col-start-2 row-start-2 lg:col-start-3 lg:row-start-1 self-start justify-self-end min-w-[8.5rem] text-sm px-3 py-2 border border-gray-200 rounded-full hover:bg-gray-50 disabled:opacity-50"
+        data-cal-reload
+      >
+        {reloading ? "更新中…" : "🔄 再読み込み"}
+      </button>
     </div>
   );
 }

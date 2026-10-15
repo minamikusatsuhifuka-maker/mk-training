@@ -7,6 +7,7 @@
 // - 取得は認証付き /api/calendar のみ（243から先月1日〜翌々月末＝週表示で前後へ送れるように）。表示:
 //   📋 リスト=今日以降のみ（従来どおり）／🗓 月表示=今月＋翌月の2グリッド（121）。
 //   切替は localStorage "mk_calendar_view" に記憶（102/116の流儀・既定は月表示=指示書125）。
+// - 246: 説明は別の行・ボタンは CalendarToolbar で1行に（切り替えてもボタンが動かない）。月表示の「大きく」は既定ON
 // - env未設定・接続失敗はスタッフに「準備中」の穏やかな表示。管理者にのみ詳細
 //   （detail はサーバー側 isAdminUser 判定で応答に含まれる。クライアントは有無だけ見る）。
 
@@ -17,12 +18,12 @@ import { jstTodayYmd } from "@/lib/library";
 import { addDays, addMonths, lastDayOfMonth, weekOverlaps, weekStartOf } from "@/lib/calendar-views";
 import {
   BigToggle,
+  CalendarToolbar,
   DIRECTOR_LABEL,
   DayDetail,
   DirectorLegend,
   ListView,
   MonthGrid,
-  ViewSwitch,
   WeekNav,
   WeekView,
   groupByYmd,
@@ -108,7 +109,7 @@ function CalendarPageBody() {
   const [reloading, setReloading] = useState(false);
   // 表示切替（📋 リスト / 🗓 月表示 / 📅 週表示）。既定は月表示（指示書125）。選択は localStorage に記憶
   const [view, setView] = useStoredChoice<CalView>(CALENDAR_VIEW_LS_KEY, VIEWS, "month");
-  const [big, setBig] = useStoredChoice(CALENDAR_BIG_LS_KEY, ON_OFF, "off");
+  const [big, setBig] = useStoredChoice(CALENDAR_BIG_LS_KEY, ON_OFF, "on"); // 246: 既定は「大きく」
   const [selectedYmd, setSelectedYmd] = useState<string | null>(null);
   const [weekSunday, setWeekSunday] = useState<string | null>(null);
 
@@ -223,32 +224,30 @@ function CalendarPageBody() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <p className="text-sm text-gray-600 leading-relaxed bg-teal-50/60 border border-teal-100 rounded-xl px-4 py-3 flex-1 min-w-[240px]">
+      <div className="space-y-3">
+        <p className="text-sm text-gray-600 leading-relaxed bg-teal-50/60 border border-teal-100 rounded-xl px-4 py-3">
           {CALENDAR_INTRO}
         </p>
-        <div className="flex items-center gap-2 flex-wrap min-w-0">
-          {/* 表示切替（指示書121・243で週表示を足した。選択はlocalStorageに記憶） */}
-          <ViewSwitch view={view} onChange={setView} />
-          {view === "month" && <BigToggle on={big === "on"} onChange={(v) => setBig(v ? "on" : "off")} />}
-          {view === "week" && (
-            <WeekNav
-              onPrev={() => setWeekSunday(addDays(sunday, -7))}
-              onNext={() => setWeekSunday(addDays(sunday, 7))}
-              onToday={() => setWeekSunday(null)}
-              canPrev={weekOverlaps(addDays(sunday, -7), range)}
-              canNext={weekOverlaps(addDays(sunday, 7), range)}
-            />
-          )}
-          <button
-            type="button"
-            onClick={() => load(true)}
-            disabled={reloading}
-            className="text-sm px-3 py-2 border border-gray-200 rounded-full hover:bg-gray-50 disabled:opacity-50 shrink-0"
-          >
-            {reloading ? "更新中…" : "🔄 再読み込み"}
-          </button>
-        </div>
+        {/* 表示切替（指示書121・243で週表示を足した。選択はlocalStorageに記憶）。246: ボタンの位置は表示によって変えない */}
+        <CalendarToolbar
+          view={view}
+          onViewChange={setView}
+          reloading={reloading}
+          onReload={() => load(true)}
+          extra={
+            view === "month" ? (
+              <BigToggle on={big === "on"} onChange={(v) => setBig(v ? "on" : "off")} />
+            ) : view === "week" ? (
+              <WeekNav
+                onPrev={() => setWeekSunday(addDays(sunday, -7))}
+                onNext={() => setWeekSunday(addDays(sunday, 7))}
+                onToday={() => setWeekSunday(null)}
+                canPrev={weekOverlaps(addDays(sunday, -7), range)}
+                canNext={weekOverlaps(addDays(sunday, 7), range)}
+              />
+            ) : null
+          }
+        />
       </div>
 
       {/* 243: 院長の予定の色の見本（院長の予定が出ているときだけ）／院長だけに、つながらない理由 */}

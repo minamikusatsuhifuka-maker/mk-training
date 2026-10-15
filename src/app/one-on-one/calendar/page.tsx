@@ -7,6 +7,7 @@
 //   月表示は ◀ ▶ で月を送れる。選んだ表示は localStorage "mk_1on1_calendar_view" に記憶（院内カレンダーと同じ流儀）
 // - 見出しの下に説明文は付けない（240 §1）
 // - 243: 📅 週表示・月表示の「大きく」・日付を押すとその日の予定を全部（院内カレンダーと同じ部品）。院長のGoogleカレンダーは出さない
+// - 246: ボタンは CalendarToolbar で1行に（切り替えてもボタンが動かない）。月表示の「大きく」は既定ON
 
 import { useCallback, useEffect, useState } from "react";
 import NavPageHeader from "@/components/NavPageHeader";
@@ -15,10 +16,10 @@ import { jstTodayYmd } from "@/lib/library";
 import { addDays, addMonths, weekStartOf } from "@/lib/calendar-views";
 import {
   BigToggle,
+  CalendarToolbar,
   DayDetail,
   ListView,
   MonthGrid,
-  ViewSwitch,
   WeekNav,
   WeekView,
   groupByYmd,
@@ -44,7 +45,7 @@ function OneOnOneCalendarBody() {
   const [today, setToday] = useState(jstTodayYmd());
   const [reloading, setReloading] = useState(false);
   const [view, setView] = useStoredChoice<CalView>(VIEW_LS_KEY, VIEWS, "month");
-  const [big, setBig] = useStoredChoice(BIG_LS_KEY, ON_OFF, "off");
+  const [big, setBig] = useStoredChoice(BIG_LS_KEY, ON_OFF, "on"); // 246: 既定は「大きく」
   const [offset, setOffset] = useState(0);
   const [weekSunday, setWeekSunday] = useState<string | null>(null);
   const [selectedYmd, setSelectedYmd] = useState<string | null>(null);
@@ -97,33 +98,29 @@ function OneOnOneCalendarBody() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-end gap-2 flex-wrap">
-        <ViewSwitch view={view} onChange={setView} />
-        {view === "month" && (
-          <>
-            <BigToggle on={big === "on"} onChange={(v) => setBig(v ? "on" : "off")} />
-            <div className="flex rounded-full border border-gray-200 overflow-hidden text-sm">
-              <button type="button" onClick={() => setOffset((o) => o - 1)} className="px-3 py-2 text-gray-600 hover:bg-gray-50" aria-label="前の月" data-1on1-prev>
-                ◀
-              </button>
-              <button type="button" onClick={() => setOffset((o) => o + 1)} className="px-3 py-2 text-gray-600 hover:bg-gray-50" aria-label="次の月" data-1on1-next>
-                ▶
-              </button>
-            </div>
-          </>
-        )}
-        {view === "week" && (
-          <WeekNav onPrev={() => setWeekSunday(addDays(sunday, -7))} onNext={() => setWeekSunday(addDays(sunday, 7))} onToday={() => setWeekSunday(null)} />
-        )}
-        <button
-          type="button"
-          onClick={() => load(true)}
-          disabled={reloading}
-          className="text-sm px-3 py-2 border border-gray-200 rounded-full hover:bg-gray-50 disabled:opacity-50 shrink-0"
-        >
-          {reloading ? "更新中…" : "🔄 再読み込み"}
-        </button>
-      </div>
+      <CalendarToolbar
+        view={view}
+        onViewChange={setView}
+        reloading={reloading}
+        onReload={() => load(true)}
+        extra={
+          view === "month" ? (
+            <>
+              <BigToggle on={big === "on"} onChange={(v) => setBig(v ? "on" : "off")} />
+              <div className="flex rounded-full border border-gray-200 overflow-hidden text-sm">
+                <button type="button" onClick={() => setOffset((o) => o - 1)} className="px-3 py-2 text-gray-600 hover:bg-gray-50" aria-label="前の月" data-1on1-prev>
+                  ◀
+                </button>
+                <button type="button" onClick={() => setOffset((o) => o + 1)} className="px-3 py-2 text-gray-600 hover:bg-gray-50" aria-label="次の月" data-1on1-next>
+                  ▶
+                </button>
+              </div>
+            </>
+          ) : view === "week" ? (
+            <WeekNav onPrev={() => setWeekSunday(addDays(sunday, -7))} onNext={() => setWeekSunday(addDays(sunday, 7))} onToday={() => setWeekSunday(null)} />
+          ) : null
+        }
+      />
 
       {view === "list" ? (
         groups.length === 0 ? (

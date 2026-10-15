@@ -223,12 +223,15 @@ export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
 ]);
 
 /**
- * 228: 画面ではなく「メールでも送るか」の切り替え。IMPLEMENTED_FEATURES に入れない（プレビューでONに倒さない）ので、
+ * 228: 画面ではなく「メールでも送るか」の切り替え（246から画面ではないほかの切り替えも）。IMPLEMENTED_FEATURES に入れない（プレビューでONに倒さない）ので、
  * 管理画面で「未実装」の印を付けないための一覧（印が付くと、使えない機能に見えてしまう）。
  */
 export const MAIL_SWITCH_FEATURES: ReadonlySet<FeatureId> = new Set<FeatureId>([
   "presurvey_alert_email",
   "notices_email",
+  // 246: 245の「予定がある時間は1on1を予約できない」も画面ではない切り替え（判定はサーバーの bookSlot）。
+  //   IMPLEMENTED_FEATURES に入れるとプレビューで画面側だけONに見えるので、ここで「未実装」の印だけ外す
+  "director_calendar_busy",
 ]);
 
 // ページの公開設定の管理UI用メタ（指示書124・「📄 ページの公開設定」セクション）
