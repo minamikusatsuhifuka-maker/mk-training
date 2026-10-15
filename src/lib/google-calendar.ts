@@ -196,18 +196,23 @@ function mapDirectorEvent(item: GcalItem): DirectorEvent | null {
   };
 }
 
-// キャッシュ（カレンダーごと: 5分TTL ＋ 取得中Promise共有）
-const caches = new Map<string, { items: GcalItem[]; fetchedAt: number; key: string }>();
+// キャッシュ（カレンダーと期間ごと: 5分TTL ＋ 取得中Promise共有）
+// 260: 表示している月（週）の分だけ読む＝期間ごとに覚える。覚えるのは新しい順に CACHE_MAX 件まで
+const caches = new Map<string, { items: GcalItem[]; fetchedAt: number }>();
 const inFlights = new Map<string, Promise<GcalItem[]>>();
+const CACHE_MAX = 40;
 
-async function fetchItems(config: CalendarConfig, calendarId: string): Promise<GcalItem[]> {
-  // 243: 先月1日〜翌々月末（週表示で前後へ送れるように）。月表示・リストは今までどおり今月と翌月
-  const range = clinicCalendarRange(jstTodayYmd());
-  const rangeKey = `${range.from}~${range.to}`;
+async function fetchItems(
+  config: CalendarConfig,
+  calendarId: string,
+  // 260: 期間を渡さなければ今までどおり 先月1日〜翌々月末（243）
+  range: { from: string; to: string } = clinicCalendarRange(jstTodayYmd())
+): Promise<GcalItem[]> {
+  const cacheKey = `${calendarId}|${range.from}~${range.to}`;
   const now = Date.now();
-  const hit = caches.get(calendarId);
-  if (hit && hit.key === rangeKey && now - hit.fetchedAt < EVENTS_TTL_MS) return hit.items;
-  const running = inFlights.get(calendarId);
+  const hit = caches.get(cacheKey);
+  if (hit && now - hit.fetchedAt < EVENTS_TTL_MS) return hit.items;
+  const running = inFlights.get(cacheKey);
   if (running) return running;
   const p = (async () => {
     try {
@@ -234,23 +239,29 @@ async function fetchItems(config: CalendarConfig, calendarId: string): Promise<G
       }
       const j = (await res.json()) as { items?: unknown };
       const items = Array.isArray(j.items) ? (j.items as GcalItem[]) : [];
-      caches.set(calendarId, { items, fetchedAt: Date.now(), key: rangeKey });
+      caches.delete(cacheKey);
+      caches.set(cacheKey, { items, fetchedAt: Date.now() });
+      while (caches.size > CACHE_MAX) caches.delete(caches.keys().next().value as string);
       return items;
     } finally {
-      inFlights.delete(calendarId);
+      inFlights.delete(cacheKey);
     }
   })();
-  inFlights.set(calendarId, p);
+  inFlights.set(cacheKey, p);
   return p;
 }
 
-export async function fetchCalendarEvents(config: CalendarConfig): Promise<CalendarEvent[]> {
-  return (await fetchItems(config, config.calendarId)).map(mapEvent).filter((e): e is CalendarEvent => e !== null);
+export async function fetchCalendarEvents(config: CalendarConfig, range?: { from: string; to: string }): Promise<CalendarEvent[]> {
+  return (await fetchItems(config, config.calendarId, range)).map(mapEvent).filter((e): e is CalendarEvent => e !== null);
 }
 
-/** 243: 院長の予定（院内カレンダーと同じ読み込みの間隔） */
-export async function fetchDirectorEvents(config: CalendarConfig, calendarId: string): Promise<DirectorEvent[]> {
-  return (await fetchItems(config, calendarId)).map(mapDirectorEvent).filter((e): e is DirectorEvent => e !== null);
+/** 243: 院長の予定（院内カレンダーと同じ読み込みの間隔・260: 同じ期間） */
+export async function fetchDirectorEvents(
+  config: CalendarConfig,
+  calendarId: string,
+  range?: { from: string; to: string }
+): Promise<DirectorEvent[]> {
+  return (await fetchItems(config, calendarId, range)).map(mapDirectorEvent).filter((e): e is DirectorEvent => e !== null);
 }
 
 /**

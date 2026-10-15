@@ -13,7 +13,7 @@ import { isAdminUser } from "@/lib/admin-role";
 import { isTestSeedUser } from "@/lib/test-seed";
 import { serverFeatureEnabled } from "@/lib/staff-growth-server";
 import { jstTodayYmd } from "@/lib/library";
-import { clinicCalendarRange } from "@/lib/calendar-views";
+import { clinicCalendarRange, parseFetchRange } from "@/lib/calendar-views";
 import {
   loadCalendarConfig,
   loadDirectorCalendarId,
@@ -29,13 +29,14 @@ import {
 async function directorPart(
   config: CalendarConfig,
   user: Parameters<typeof isAdminUser>[0],
-  admin: boolean
+  admin: boolean,
+  range: { from: string; to: string }
 ): Promise<{ events?: DirectorEvent[]; detail?: string }> {
   if (!admin && !isTestSeedUser(user) && !(await serverFeatureEnabled("director_calendar"))) return {};
   const calendarId = loadDirectorCalendarId();
   if (!calendarId) return admin ? { detail: `未設定の環境変数: ${DIRECTOR_CALENDAR_ENV_VAR}` } : {};
   try {
-    return { events: await fetchDirectorEvents(config, calendarId) };
+    return { events: await fetchDirectorEvents(config, calendarId, range) };
   } catch (e) {
     return admin ? { detail: e instanceof Error ? e.message : "不明なエラー" } : {};
   }
@@ -46,7 +47,9 @@ export const maxDuration = 60;
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
-export async function GET() {
+// 260: ?from=YYYY-MM-DD&to=YYYY-MM-DD で、表示している月（週）の分だけ読む（今月の前後12か月・4か月以内）。
+//      無い・範囲の外は今までどおり 先月1日〜翌々月末。
+export async function GET(req: Request) {
   const { user } = await getSessionUser();
   if (!user) {
     return NextResponse.json(
@@ -69,13 +72,17 @@ export async function GET() {
     );
   }
 
+  const today = jstTodayYmd();
+  const url = new URL(req.url);
+  const range = parseFetchRange(url.searchParams.get("from"), url.searchParams.get("to"), today) ?? clinicCalendarRange(today);
+
   try {
-    const events = await fetchCalendarEvents(config);
-    const director = await directorPart(config, user, admin);
+    const events = await fetchCalendarEvents(config, range);
+    const director = await directorPart(config, user, admin, range);
     return NextResponse.json(
       {
         events,
-        range: clinicCalendarRange(jstTodayYmd()),
+        range,
         ...(director.events ? { directorEvents: director.events } : {}),
         ...(director.detail ? { directorDetail: director.detail } : {}),
       },

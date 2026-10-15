@@ -4,18 +4,19 @@
 // - 243: 📅 週表示・月表示の「大きく」・日付を押すとその日の予定を全部（部品は components/calendar/CalendarViews.tsx・1on1カレンダーと共通）。
 //   院長のGoogleカレンダーの予定を色を変えて出す（時刻と題名だけ・「非公開」は題名を出さない・判定はサーバー）。
 // - 予定の源泉は Google カレンダー（管理はGoogle側で直接・ポータル側に管理UIは作らない）。
-// - 取得は認証付き /api/calendar のみ（243から先月1日〜翌々月末＝週表示で前後へ送れるように）。表示:
+// - 取得は認証付き /api/calendar のみ。260: 表示している月（週）の分だけ ?from&to で読む（今月の前後12か月まで進める）。
+//   読んだ期間は画面の中で覚える（同じ月へ戻ったときは読み直さない・「再読み込み」で今の期間を読み直す）。表示:
 //   📋 リスト=今日以降のみ（従来どおり）／🗓 月表示=今月＋翌月の2グリッド（121）。
 //   切替は localStorage "mk_calendar_view" に記憶（102/116の流儀・既定は月表示=指示書125）。
 // - 246: 説明は別の行・ボタンは CalendarToolbar で1行に（切り替えてもボタンが動かない）。月表示の「大きく」は既定ON
 // - env未設定・接続失敗はスタッフに「準備中」の穏やかな表示。管理者にのみ詳細
 //   （detail はサーバー側 isAdminUser 判定で応答に含まれる。クライアントは有無だけ見る）。
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import NavPageHeader from "@/components/NavPageHeader";
 import FeatureGate from "@/components/FeatureGate";
 import { jstTodayYmd } from "@/lib/library";
-import { addDays, addMonths, lastDayOfMonth, weekOverlaps, weekStartOf } from "@/lib/calendar-views";
+import { addDays, addMonths, calendarWindow, lastDayOfMonth, monthsRange, weekFetchRange, weekOverlaps, weekStartOf } from "@/lib/calendar-views";
 import {
   BigToggle,
   CalendarToolbar,
@@ -24,6 +25,7 @@ import {
   DirectorLegend,
   ListView,
   MonthGrid,
+  MonthNav,
   WeekNav,
   WeekView,
   groupByYmd,
@@ -44,6 +46,14 @@ type CalendarEvent = {
 type DirectorEvent = { id: string; title: string; start: string; end: string; allDay: boolean };
 
 type LoadState = "loading" | "ready" | "unauthenticated" | "unavailable";
+
+/** 260: 1つの期間を読んだ結果 */
+type Loaded = {
+  events: CalendarEvent[];
+  directorEvents: DirectorEvent[] | null;
+  directorDetail: string;
+};
+const rangeKeyOf = (r: { from: string; to: string }) => `${r.from}~${r.to}`;
 
 const CALENDAR_INTRO =
   "勉強会・研修・院内イベントなどの予定です。予定の追加・変更はGoogleカレンダーで行われます。";
@@ -101,22 +111,39 @@ const directorItem = (ev: DirectorEvent): CalItem => ({
 
 function CalendarPageBody() {
   const [state, setState] = useState<LoadState>("loading");
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [directorEvents, setDirectorEvents] = useState<DirectorEvent[] | null>(null);
-  const [range, setRange] = useState<{ from: string; to: string } | null>(null);
+  // 260: 期間ごとに読んだ結果（"from~to" → 結果）。今の表示の期間がまだ無ければ、読むあいだは直前の結果を出す
+  const [loaded, setLoaded] = useState<Record<string, Loaded>>({});
+  const [lastKey, setLastKey] = useState<string | null>(null);
   const [adminDetail, setAdminDetail] = useState("");
-  const [directorDetail, setDirectorDetail] = useState("");
   const [reloading, setReloading] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const loadedRef = useRef(loaded);
+  loadedRef.current = loaded;
   // 表示切替（📋 リスト / 🗓 月表示 / 📅 週表示）。既定は月表示（指示書125）。選択は localStorage に記憶
   const [view, setView] = useStoredChoice<CalView>(CALENDAR_VIEW_LS_KEY, VIEWS, "month");
   const [big, setBig] = useStoredChoice(CALENDAR_BIG_LS_KEY, ON_OFF, "on"); // 246: 既定は「大きく」
   const [selectedYmd, setSelectedYmd] = useState<string | null>(null);
   const [weekSunday, setWeekSunday] = useState<string | null>(null);
+  // 260: 月表示で、今月から何か月ずらしているか（0＝今月と翌月）
+  const [monthOffset, setMonthOffset] = useState(0);
 
-  const load = useCallback(async (isReload: boolean) => {
+  // 今の表示に要る期間（月表示＝出している2か月・週表示＝その週を含む月・リスト＝今日〜翌月末を含む2か月）
+  const today = jstTodayYmd();
+  const thisY = Number(today.slice(0, 4));
+  const thisM = Number(today.slice(5, 7));
+  const win = calendarWindow(today);
+  const first = addMonths(thisY, thisM, monthOffset);
+  const sunday = weekSunday ?? weekStartOf(today);
+  const need =
+    view === "month" ? monthsRange(first.y, first.m, 2) : view === "week" ? weekFetchRange(sunday) : monthsRange(thisY, thisM, 2);
+  const needKey = rangeKeyOf(need);
+
+  const load = useCallback(async (range: { from: string; to: string }, isReload: boolean) => {
     if (isReload) setReloading(true);
+    setFetching(true);
     try {
-      const res = await fetch("/api/calendar", { cache: "no-store" });
+      const qs = new URLSearchParams({ from: range.from, to: range.to });
+      const res = await fetch(`/api/calendar?${qs.toString()}`, { cache: "no-store" });
       if (res.status === 401) {
         setState("unauthenticated");
         return;
@@ -133,27 +160,36 @@ function CalendarPageBody() {
         events?: CalendarEvent[];
         directorEvents?: DirectorEvent[];
         directorDetail?: string;
-        range?: { from: string; to: string };
       };
-      setEvents(Array.isArray(j.events) ? j.events : []);
-      // 243: 院長の予定（見せない人・つながらないときは来ない → 院内の予定だけ出す）
-      setDirectorEvents(Array.isArray(j.directorEvents) ? j.directorEvents : null);
-      setDirectorDetail(typeof j.directorDetail === "string" ? j.directorDetail : "");
-      setRange(j.range && typeof j.range.from === "string" && typeof j.range.to === "string" ? j.range : null);
+      const key = rangeKeyOf(range);
+      setLoaded((prev) => ({
+        ...prev,
+        [key]: {
+          events: Array.isArray(j.events) ? j.events : [],
+          // 243: 院長の予定（見せない人・つながらないときは来ない → 院内の予定だけ出す）
+          directorEvents: Array.isArray(j.directorEvents) ? j.directorEvents : null,
+          directorDetail: typeof j.directorDetail === "string" ? j.directorDetail : "",
+        },
+      }));
+      setLastKey(key);
       setState("ready");
     } catch {
       setAdminDetail("");
       setState("unavailable");
     } finally {
       if (isReload) setReloading(false);
+      setFetching(false);
     }
   }, []);
 
+  // 表示の期間がまだ読めていなければ読む（読んだ期間は覚えておく）
   useEffect(() => {
+    if (loadedRef.current[needKey]) return;
+    const [from, to] = needKey.split("~");
     void (async () => {
-      await load(false);
+      await load({ from, to }, false);
     })();
-  }, [load]);
+  }, [needKey, load]);
 
   if (state === "loading") {
     return (
@@ -197,14 +233,15 @@ function CalendarPageBody() {
     );
   }
 
-  const today = jstTodayYmd();
+  const data = loaded[needKey] ?? (lastKey ? loaded[lastKey] : undefined);
+  const events = data?.events ?? [];
+  const directorEvents = data?.directorEvents ?? null;
+  const directorDetail = data?.directorDetail ?? "";
   const items: CalItem[] = [...events.map(clinicItem), ...(directorEvents ?? []).map(directorItem)];
   // 日付→予定（終日 → 時刻の順）
   const byYmd = groupByYmd(items);
 
-  // リストは今日〜翌月末（従来どおり・指示書121。APIは週表示のために前後も返す）
-  const thisY = Number(today.slice(0, 4));
-  const thisM = Number(today.slice(5, 7));
+  // リストは今日〜翌月末（従来どおり・指示書121）
   const next = addMonths(thisY, thisM, 1);
   const listEnd = lastDayOfMonth(next.y, next.m);
   const groups = Array.from(byYmd.keys())
@@ -212,11 +249,13 @@ function CalendarPageBody() {
     .sort()
     .map((ymd) => ({ ymd, items: byYmd.get(ymd)! }));
 
-  // 月表示: 今月・翌月の2ヶ月（指示書121）
-  const months: { y: number; m: number }[] = [{ y: thisY, m: thisM }, next];
+  // 月表示: 2ヶ月（指示書121）。260: ◀ ▶ で送る（今月の前後12か月まで）
+  const second = addMonths(first.y, first.m, 1);
+  const months: { y: number; m: number }[] = [first, second];
+  const canPrevMonth = monthsRange(first.y, first.m, 1).from > win.from;
+  const canNextMonth = lastDayOfMonth(second.y, second.m) < win.to;
 
-  // 週表示（243）: 日曜から。◀ ▶ で送り、「今日」で今日のある週に戻る。読んである期間の外へは送らない
-  const sunday = weekSunday ?? weekStartOf(today);
+  // 週表示（243）: 日曜から。◀ ▶ で送り、「今日」で今日のある週に戻る。260: 今月の前後12か月まで送れる
 
   const dayDetail = selectedYmd ? (
     <DayDetail ymd={selectedYmd} today={today} items={byYmd.get(selectedYmd) ?? []} onClose={() => setSelectedYmd(null)} />
@@ -233,21 +272,34 @@ function CalendarPageBody() {
           view={view}
           onViewChange={setView}
           reloading={reloading}
-          onReload={() => load(true)}
+          onReload={() => load(need, true)}
           extra={
             view === "month" ? (
-              <BigToggle on={big === "on"} onChange={(v) => setBig(v ? "on" : "off")} />
+              <>
+                <MonthNav
+                  onPrev={() => setMonthOffset((o) => o - 1)}
+                  onNext={() => setMonthOffset((o) => o + 1)}
+                  onToday={() => setMonthOffset(0)}
+                  canPrev={canPrevMonth}
+                  canNext={canNextMonth}
+                />
+                <BigToggle on={big === "on"} onChange={(v) => setBig(v ? "on" : "off")} />
+              </>
             ) : view === "week" ? (
               <WeekNav
                 onPrev={() => setWeekSunday(addDays(sunday, -7))}
                 onNext={() => setWeekSunday(addDays(sunday, 7))}
                 onToday={() => setWeekSunday(null)}
-                canPrev={weekOverlaps(addDays(sunday, -7), range)}
-                canNext={weekOverlaps(addDays(sunday, 7), range)}
+                canPrev={weekOverlaps(addDays(sunday, -7), win)}
+                canNext={weekOverlaps(addDays(sunday, 7), win)}
               />
             ) : null
           }
         />
+        {/* 260: 先の月を読んでいるあいだ（直前の月の予定を出したまま） */}
+        {fetching && !loaded[needKey] && (
+          <p className="text-xs text-gray-500 animate-pulse" data-cal-fetching>読み込んでいます…</p>
+        )}
       </div>
 
       {/* 243: 院長の予定の色の見本（院長の予定が出ているときだけ）／院長だけに、つながらない理由 */}

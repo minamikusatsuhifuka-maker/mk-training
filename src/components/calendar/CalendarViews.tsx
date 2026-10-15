@@ -605,6 +605,35 @@ export function WeekNav({
   );
 }
 
+/** ◀ 今月 ▶（260: 月表示で月を送る・今月に戻る） */
+export function MonthNav({
+  onPrev,
+  onNext,
+  onToday,
+  canPrev = true,
+  canNext = true,
+}: {
+  onPrev: () => void;
+  onNext: () => void;
+  onToday: () => void;
+  canPrev?: boolean;
+  canNext?: boolean;
+}) {
+  return (
+    <div className="flex rounded-full border border-gray-200 overflow-hidden text-sm">
+      <button type="button" onClick={onPrev} disabled={!canPrev} className={`${segOff} disabled:opacity-40`} aria-label="前の月" data-cal-month-prev>
+        ◀
+      </button>
+      <button type="button" onClick={onToday} className={segOff} data-cal-month-today>
+        今月
+      </button>
+      <button type="button" onClick={onNext} disabled={!canNext} className={`${segOff} disabled:opacity-40`} aria-label="次の月" data-cal-month-next>
+        ▶
+      </button>
+    </div>
+  );
+}
+
 /** 月表示の「大きく」 */
 export function BigToggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
   return (
