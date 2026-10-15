@@ -30,8 +30,10 @@ const LEAVE_CLOSE_MS = 250;
 
 /**
  * 指名のポップアップ（1つだけ開く）。body の直下に出し、画面の端で切れない位置に置く。
- * 256: カーソルを合わせて開いたとき（パソコン）は、行の**右側**・行の高さの所に出す（下の行へ動かす道をふさがない）。
- *   右に入りきらなければ画面の右端の中に収める（行の左側＝項目名のあたりは空けておく）。押して開いたとき（スマホ・キーボード）は今までどおり行の下。
+ * 257: カーソルを合わせて開いたとき（パソコン）は、行の**タイトルの文字の末尾から14px右**・行の上端の14px上に出す
+ *   （タイトルの列はふさがない＝下の行へまっすぐ動かせる。説明の文の上には重なってよい）。
+ *   右に入りきらなければ画面の右端の中に収める。それでもタイトルの文字にかかってしまう狭さのときは、行の下に出す。
+ *   押して開いたとき（スマホ・キーボード）は256のまま行の下。形は縦のチェックリスト（院長が選んだ案C）。
  * 中を一度でも押したら、カーソルが外に出ても閉じない（外を押す・Esc・行をもう一度押すと閉じる）。
  */
 function ItemPopover({
@@ -67,11 +69,13 @@ function ItemPopover({
       const vh = window.innerHeight;
       let left: number;
       let top: number;
-      if (side === "right") {
-        // 行の右側に。入りきらなければ画面の右端の中へ。ただし行の左側（項目名のあたり）は空けておく
-        const keepFree = Math.min(360, b.width * 0.45);
-        left = b.right + 8 + w <= vw - 8 ? b.right + 8 : Math.max(b.left + keepFree, vw - w - 8);
-        top = Math.min(Math.max(8, b.top), Math.max(8, vh - h - 8));
+      const title = anchor.querySelector<HTMLElement>("[data-deleg-title]")?.getBoundingClientRect() ?? null;
+      const titleEnd = title ? title.right : b.left;
+      const rightLeft = Math.min(titleEnd + 14, vw - w - 8);
+      if (side === "right" && rightLeft >= titleEnd + 4) {
+        // タイトルの末尾のすぐ右に（入りきらなければ画面の右端の中へ・タイトルの文字にはかぶせない）
+        left = rightLeft;
+        top = Math.min(Math.max(8, b.top - 14), Math.max(8, vh - h - 8));
       } else {
         left = Math.min(Math.max(8, b.left), Math.max(8, vw - w - 8));
         top = b.bottom + 4;
@@ -126,8 +130,19 @@ function ItemPopover({
         if (e.pointerType === "mouse") onPointerLeave();
       }}
       onPointerDownCapture={onPin}
-      style={{ position: "fixed", left: 0, top: 0, visibility: "hidden", zIndex: 60 }}
-      className={`${side === "right" ? "w-[min(24rem,calc(100vw-16px))]" : "w-[min(30rem,calc(100vw-16px))]"} max-h-[calc(100vh-16px)] overflow-y-auto rounded-xl border border-slate-300 bg-white p-3 shadow-xl`}
+      style={{
+        position: "fixed",
+        left: 0,
+        top: 0,
+        visibility: "hidden",
+        zIndex: 60,
+        width: "min(268px, calc(100vw - 16px))",
+        maxHeight: "calc(100vh - 16px)",
+        border: "1px solid #d6e6e1",
+        borderRadius: 16,
+        boxShadow: "0 14px 34px rgba(24,66,58,0.16)",
+      }}
+      className="flex flex-col bg-white p-3.5"
     >
       {children}
     </div>,
@@ -419,7 +434,7 @@ export function DelegationPanel() {
                     }`}
                   >
                     <p className="min-w-0 flex-1 text-sm text-slate-900">
-                      {it.label}
+                      <span data-deleg-title>{it.label}</span>
                       <span className="ml-2 text-[11px] text-slate-500">{it.reason}</span>
                     </p>
                     <span
@@ -462,44 +477,56 @@ export function DelegationPanel() {
                 }}
                 onClose={closePopover}
               >
-                <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-sm font-semibold text-slate-800">{it.label}</p>
+                {/* 257: 縦のチェックリスト（案C） */}
+                <div className="flex shrink-0 items-center justify-between gap-2">
+                  <p className="text-[13px] font-bold text-teal-700">指名する人</p>
                   <button type="button" onClick={closePopover} className="shrink-0 rounded-md border border-slate-300 px-2 py-0.5 text-[11px] text-slate-700" data-deleg-close>
                     閉じる
                   </button>
                 </div>
-                <p className="mt-0.5 text-[11px] text-slate-500">押すと、その人の指名・解除が切り替わり、すぐに保存されます。</p>
+                <p className="mt-1 shrink-0 text-[12px] leading-snug text-slate-500">押すと、その人の指名・解除が切り替わり、すぐに保存されます。</p>
                 {staff.length === 0 ? (
                   <p className="text-[11px] text-slate-500 mt-2">指名できる幹部（管理者でない有効なアカウント）がいません。</p>
                 ) : (
-                  <div className="flex flex-wrap gap-1.5 mt-2" data-deleg-buttons={it.key}>
+                  // 人数が多くて入りきらないときは、名前の並びの所だけを中で動かす
+                  <ul className="mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto" data-deleg-buttons={it.key}>
                     {staff.map((s) => {
                       const on = it.userIds.includes(s.userId);
                       return (
-                        <button
-                          key={s.userId}
-                          type="button"
-                          disabled={busy}
-                          onClick={() => toggleItemUser(it, s.userId)}
-                          aria-pressed={on}
-                          data-deleg-person={s.userId}
-                          className={`text-xs px-3 py-1.5 rounded-full border min-h-[36px] ${
-                            on ? "border-teal-500 bg-teal-600 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                          }`}
-                        >
-                          {on ? "✓ " : ""}
-                          {labelOf(s)}
-                        </button>
+                        <li key={s.userId}>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => toggleItemUser(it, s.userId)}
+                            aria-pressed={on}
+                            data-deleg-person={s.userId}
+                            className={`flex w-full min-h-[40px] items-center gap-2.5 rounded-lg px-2 text-left text-[13px] disabled:opacity-60 ${
+                              on ? "font-bold text-teal-800" : "text-slate-700 hover:bg-slate-50"
+                            }`}
+                            style={on ? { background: "#e7f4f1" } : undefined}
+                          >
+                            <span
+                              aria-hidden="true"
+                              className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] text-[12px] leading-none ${
+                                on ? "bg-teal-600 text-white" : "border border-slate-300 bg-white"
+                              }`}
+                              data-deleg-check={on ? "on" : "off"}
+                            >
+                              {on ? "✓" : ""}
+                            </span>
+                            <span className="min-w-0 break-words">{labelOf(s)}</span>
+                          </button>
+                        </li>
                       );
                     })}
-                  </div>
+                  </ul>
                 )}
-                <p className="mt-2 min-h-[18px] text-[11px]" aria-live="polite" data-deleg-saved>
+                <p className="mt-2 min-h-[18px] shrink-0 text-[11px]" aria-live="polite" data-deleg-saved>
                   {busy ? <span className="text-slate-500">保存しています…</span> : savedKey === it.key && !error ? <span className="text-teal-800">💾 保存しました（すぐに反映されます）</span> : error ? <span className="text-red-700">{error}</span> : null}
                 </p>
                 {/* 226 §3: ディープリサーチだけ、任された1人あたりの月の上限を決める */}
                 {it.key === "deep-research" && (
-                  <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2" data-dr-limit>
+                  <div className="mt-2 flex shrink-0 flex-wrap items-center gap-2 border-t border-slate-100 pt-2" data-dr-limit>
                     <label className="text-[11px] text-slate-700">
                       任された人1人あたりの月の上限
                       <input
