@@ -14,9 +14,12 @@
 // ・自動保存（保存中・保存済み・失敗を出し、失敗は赤い帯）。版が食い違えば保存せず赤い帯（202 §5）
 //
 // 9マス帳（202 §4）も同じこの画面で開く。中身は入れ子で1レコードに入っている。
+//
+// 249: 中身は NineGridEditor に分けた。▦のポップアップ（GridPeek）でも同じ部品を使う。
+//   段の行き来はリンクではなくボタン（画面ではURLの ?p= も書き換える＝ブックマークは今までどおり使える）
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   GRID_SLOTS,
   MAX_DEPTH,
@@ -94,6 +97,8 @@ function CellEditor({
     // Enterは何もしない（マスでは改行・題では何も起きない）。日本語の変換中のEscは変換の取り消しに任せる
     if (e.key === "Escape" && !e.nativeEvent.isComposing) {
       e.preventDefault();
+      // 249: 1回目のEscは書きかけの取り消しだけ（ポップアップを閉じる2回目と分ける）
+      e.stopPropagation();
       if (settled.current) return;
       settled.current = true;
       settle(initial);
@@ -136,7 +141,7 @@ function GridCellBox({
   editing,
   canDig,
   menuOpen,
-  digHref,
+  onDig,
   draftKey,
   linkedTitle,
   onStartEdit,
@@ -152,7 +157,8 @@ function GridCellBox({
   editing: boolean;
   canDig: boolean;
   menuOpen: boolean;
-  digHref: string;
+  /** 249: そのマスを中央にした下の段へ（リンクではなくボタン） */
+  onDig: () => void;
   draftKey: string;
   linkedTitle: string;
   onStartEdit: () => void;
@@ -191,14 +197,15 @@ function GridCellBox({
         <div className="flex items-center gap-0.5">
           {linkedTitle && <span title={`四象限に出した行：${linkedTitle}`}>🔗</span>}
           {written && canDig && (
-            <Link
-              href={digHref}
+            <button
+              type="button"
+              onClick={onDig}
               data-pm-dig={index}
               title="このマスを中央にした9マスを開く"
               className="rounded border border-teal-300 px-1 text-[10px] font-bold text-teal-700"
             >
               ▦
-            </Link>
+            </button>
           )}
           {written && (
             <button
@@ -279,7 +286,7 @@ function GridCellBox({
   );
 }
 
-// ─── 本体 ───
+// ─── 画面（/admin/priority-matrix/grid/[id]?p=…）───
 
 export function NineGridScreen({
   recordId,
@@ -288,23 +295,10 @@ export function NineGridScreen({
   recordId: string;
   pathParam: string;
 }) {
-  const path = parsePathParam(pathParam);
+  const [path, setPath] = useState<number[]>(() => parsePathParam(pathParam));
   const [record, setRecord] = useState<MatrixRecord | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-  const [state, setState] = useState<SaveState>("");
-  const [editing, setEditing] = useState<number | null>(null);
-  const [menuAt, setMenuAt] = useState<number | null>(null);
-  const [editingCenter, setEditingCenter] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    []
-  );
 
   const load = useCallback(async () => {
     try {
@@ -320,30 +314,6 @@ export function NineGridScreen({
   useEffect(() => {
     void load();
   }, [load]);
-
-  /** 9マス（と題）を保存する。版を添えて送り、食い違えば保存されない（202 §5） */
-  const save = useCallback(
-    async (patch: { cells?: NineCell[]; title?: string }) => {
-      if (!record) return;
-      setState("saving");
-      try {
-        const next =
-          record.kind === "book"
-            ? await updateBook(record.id, patch, record.updatedAt)
-            : await updateTask(record.id, patch, record.updatedAt);
-        setRecord(next);
-        setState("saved");
-        setError("");
-        if (timer.current) clearTimeout(timer.current);
-        timer.current = setTimeout(() => setState(""), SAVED_MARK_MS);
-      } catch (e) {
-        setState("error");
-        setNotice("");
-        setError(e instanceof Error ? e.message : "保存できませんでした");
-      }
-    },
-    [record]
-  );
 
   if (!loaded) {
     return <p className="text-sm text-slate-500">読み込み中…</p>;
@@ -361,6 +331,89 @@ export function NineGridScreen({
     );
   }
 
+  /** 段を移ったら URL の ?p= も合わせる（ブックマーク・再読み込みで同じ段が開く） */
+  const go = (p: number[]) => {
+    setPath(p);
+    try {
+      const url = `/admin/priority-matrix/grid/${encodeURIComponent(record.id)}${p.length ? `?p=${pathToParam(p)}` : ""}`;
+      window.history.replaceState(window.history.state, "", url);
+    } catch {
+      /* URLを書き換えられなくても画面は動く */
+    }
+  };
+
+  return (
+    <div className="max-w-3xl space-y-4">
+      <NineGridEditor record={record} onRecordChange={setRecord} path={path} onPathChange={go} variant="page" />
+      <Link href="/admin/priority-matrix" className="inline-block text-sm text-teal-700 underline">
+        ← 四象限マトリクスへ戻る
+      </Link>
+    </div>
+  );
+}
+
+// ─── 9マスの中身（画面とポップアップで共通・249）───
+
+export function NineGridEditor({
+  record,
+  onRecordChange,
+  path,
+  onPathChange,
+  variant,
+  onTaskCreated,
+  headerRight,
+}: {
+  record: MatrixRecord;
+  /** 保存できたら新しい版を返す（呼び出し側の一覧も差し替える＝版の食い違いを起こさない） */
+  onRecordChange: (next: MatrixRecord) => void;
+  path: number[];
+  onPathChange: (p: number[]) => void;
+  /** page＝専用の画面／popup＝▦のポップアップ */
+  variant: "page" | "popup";
+  /** 「…」から四象限に行を足したとき（一覧を読み直す） */
+  onTaskCreated?: () => void;
+  /** 見出しの右端に置くもの（ポップアップの「閉じる」） */
+  headerRight?: ReactNode;
+}) {
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  const [state, setState] = useState<SaveState>("");
+  const [editing, setEditing] = useState<number | null>(null);
+  const [menuAt, setMenuAt] = useState<number | null>(null);
+  const [editingCenter, setEditingCenter] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    []
+  );
+
+  /** 9マス（と題）を保存する。版を添えて送り、食い違えば保存されない（202 §5） */
+  const save = useCallback(
+    async (patch: { cells?: NineCell[]; title?: string }) => {
+      if (!record) return;
+      setState("saving");
+      try {
+        const next =
+          record.kind === "book"
+            ? await updateBook(record.id, patch, record.updatedAt)
+            : await updateTask(record.id, patch, record.updatedAt);
+        onRecordChange(next);
+        setState("saved");
+        setError("");
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => setState(""), SAVED_MARK_MS);
+      } catch (e) {
+        setState("error");
+        setNotice("");
+        setError(e instanceof Error ? e.message : "保存できませんでした");
+      }
+    },
+    [record, onRecordChange]
+  );
+
   const cells = gridCells(record.cells, path);
   const progress = levelProgress(cells);
   const depth = depthOf(path);
@@ -368,27 +421,27 @@ export function NineGridScreen({
   const centerText =
     path.length === 0 ? record.title : (cellAt(record.cells, path)?.text ?? "");
 
-  const hrefFor = (p: number[]) =>
-    `/admin/priority-matrix/grid/${encodeURIComponent(record.id)}${
-      p.length ? `?p=${pathToParam(p)}` : ""
-    }`;
+  /** 段を移る（書きかけの欄・「…」は閉じる） */
+  const go = (p: number[]) => {
+    setEditing(null);
+    setMenuAt(null);
+    setEditingCenter(false);
+    onPathChange(p);
+  };
 
-  /** たどった道筋（各段に戻れる） */
-  const crumbs: { label: string; href: string | null }[] = [
-    {
-      label: record.kind === "book" ? "9マス帳" : "四象限",
-      href: "/admin/priority-matrix",
-    },
-    { label: record.title, href: path.length === 0 ? null : hrefFor([]) },
+  /** たどった道筋（各段に戻れる）。to が null のものは今いる段 */
+  const crumbs: { label: string; to: number[] | null }[] = [
+    { label: record.title, to: path.length === 0 ? null : [] },
     ...path.map((_, i) => {
       const prefix = path.slice(0, i + 1);
       const cell = cellAt(record.cells, prefix);
       return {
         label: cell?.text.trim() || "（空のマス）",
-        href: i === path.length - 1 ? null : hrefFor(prefix),
+        to: i === path.length - 1 ? null : prefix,
       };
     }),
   ];
+  const popup = variant === "popup";
 
   const commitCell = (index: number, text: string) => {
     setMenuAt(null);
@@ -443,7 +496,8 @@ export function NineGridScreen({
         record.kind === "book"
           ? await updateBook(record.id, { cells: nextCells }, record.updatedAt)
           : await updateTask(record.id, { cells: nextCells }, record.updatedAt);
-      setRecord(next);
+      onRecordChange(next);
+      onTaskCreated?.();
       setState("saved");
       setError("");
       setNotice(`「${text}」を${QUADRANT_META[quadrant].short}に行として追加しました`);
@@ -465,16 +519,29 @@ export function NineGridScreen({
   };
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className={popup ? "space-y-2" : "space-y-4"} data-pm-editor={variant}>
       {/* 道筋（各段に戻れる） */}
       <nav className="flex flex-wrap items-center gap-1 text-xs text-slate-600" data-pm-crumbs>
+        {!popup && (
+          <>
+            <Link href="/admin/priority-matrix" className="text-teal-700 underline underline-offset-2">
+              {record.kind === "book" ? "9マス帳" : "四象限"}
+            </Link>
+            <span className="text-slate-400">›</span>
+          </>
+        )}
         {crumbs.map((c, i) => (
           <span key={i} className="flex items-center gap-1">
             {i > 0 && <span className="text-slate-400">›</span>}
-            {c.href ? (
-              <Link href={c.href} className="text-teal-700 underline underline-offset-2">
+            {c.to ? (
+              <button
+                type="button"
+                onClick={() => go(c.to!)}
+                data-pm-crumb={i}
+                className="text-teal-700 underline underline-offset-2"
+              >
                 {c.label}
-              </Link>
+              </button>
             ) : (
               <span className="font-medium text-slate-800">{c.label}</span>
             )}
@@ -483,17 +550,27 @@ export function NineGridScreen({
       </nav>
 
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-lg font-bold text-slate-800">
-          ▦ 9マス
-          <span className="ml-2 text-xs font-normal text-slate-500">
-            {depth}段目（{MAX_DEPTH}段まで）
-          </span>
-        </h1>
+        {popup ? (
+          <p className="text-sm font-bold text-slate-800">
+            ▦ 9マス
+            <span className="ml-2 text-xs font-normal text-slate-500" data-pm-depth>
+              {depth}段目（{MAX_DEPTH}段まで）
+            </span>
+          </p>
+        ) : (
+          <h1 className="text-lg font-bold text-slate-800">
+            ▦ 9マス
+            <span className="ml-2 text-xs font-normal text-slate-500" data-pm-depth>
+              {depth}段目（{MAX_DEPTH}段まで）
+            </span>
+          </h1>
+        )}
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-slate-600" data-pm-progress>
             {progressLabel(progress)}
           </span>
           <SaveMark state={state} />
+          {headerRight}
         </div>
       </div>
 
@@ -552,7 +629,7 @@ export function NineGridScreen({
               editing={editing === index}
               canDig={dig}
               menuOpen={menuAt === index}
-              digHref={hrefFor([...path, index])}
+              onDig={() => go([...path, index])}
               draftKey={`pm:cell:${record.id}:${pathToParam(path)}:${index}`}
               linkedTitle={cells[index].linkedTaskId ? "追加済み" : ""}
               onStartEdit={() => {
@@ -576,13 +653,9 @@ export function NineGridScreen({
 
       <p className="text-[11px] text-slate-500">
         マスをクリックすると、その場で書けます。Enterで改行でき、マスの外を押すと保存されます
-        （Escで取り消し）。{dig ? "書いてあるマスの「▦」で下の段へ進めます。" : `ここは${MAX_DEPTH}段目なので、これ以上下の段は作れません。`}
-        変えたところはその場で保存されます。
+        （Escで取り消し）。{dig ? "書いてあるマスの「▦」で下の段へ、上の道筋で上の段へ。" : `ここは${MAX_DEPTH}段目なので、これ以上下の段は作れません。`}
+        {popup && "ポップアップの外を押すか「閉じる」で閉じます。"}
       </p>
-
-      <Link href="/admin/priority-matrix" className="inline-block text-sm text-teal-700 underline">
-        ← 四象限マトリクスへ戻る
-      </Link>
     </div>
   );
 }

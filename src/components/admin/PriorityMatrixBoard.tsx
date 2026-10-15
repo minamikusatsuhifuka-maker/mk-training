@@ -54,6 +54,7 @@ import {
   type SortMode,
   type TaskFields,
   type TaskStatus,
+  type MatrixRecord,
 } from "@/lib/priority-matrix";
 import { GridPeek } from "./GridPeek";
 import { PriorityTaskRow } from "./PriorityTaskRow";
@@ -95,6 +96,9 @@ type RowTools = {
   onDelete: (task: PriorityTask) => Promise<void>;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
+  /** 249: ▦のポップアップの9マスで保存できたとき */
+  onGridSaved: (next: MatrixRecord) => void;
+  onGridTaskCreated: () => void;
 };
 
 function TaskRows({ list, tools }: { list: PriorityTask[]; tools: RowTools }) {
@@ -113,6 +117,8 @@ function TaskRows({ list, tools }: { list: PriorityTask[]; tools: RowTools }) {
           onDelete={() => tools.onDelete(t)}
           onDragStart={() => tools.onDragStart(t.id)}
           onDragEnd={tools.onDragEnd}
+          onGridSaved={tools.onGridSaved}
+          onGridTaskCreated={tools.onGridTaskCreated}
         />
       ))}
     </ul>
@@ -527,6 +533,10 @@ export function PriorityMatrixBoard() {
     onDelete: removeTask,
     onDragStart: (id) => setDragId(id),
     onDragEnd: () => setDragId(""),
+    onGridSaved: (next) => {
+      if (next.kind === "task") replaceTask(next);
+    },
+    onGridTaskCreated: () => void reload(),
   };
 
   const listTools: RowTools = {
@@ -585,7 +595,15 @@ export function PriorityMatrixBoard() {
                   {QUADRANT_META[t.quadrant].short}
                 </span>
                 <p className="mt-1 break-words text-xs font-medium text-slate-800">
-                  {t.title} <GridPeek title={t.title} cells={t.cells} dataKey={`focus-${t.id}`} />
+                  {t.title}{" "}
+                  <GridPeek
+                    record={t}
+                    onRecordChange={(next) => {
+                      if (next.kind === "task") replaceTask(next);
+                    }}
+                    onTaskCreated={() => void reload()}
+                    dataKey={`focus-${t.id}`}
+                  />
                 </p>
                 <span className="text-[10px] text-slate-500">
                   {dueLabel(t, today)}・{STATUS_LABEL[t.status]}

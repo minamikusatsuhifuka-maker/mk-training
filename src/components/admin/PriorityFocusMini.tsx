@@ -68,7 +68,13 @@ export function PriorityFocusMini() {
                 {QUADRANT_META[t.quadrant].short}
               </span>{" "}
               <span className="font-medium">{t.title}</span>{" "}
-              <GridPeek title={t.title} cells={t.cells} dataKey={`mini-${t.id}`} />{" "}
+              <GridPeek
+                record={t}
+                onRecordChange={(next) => {
+                  if (next.kind === "task") setTasks((prev) => prev?.map((x) => (x.id === next.id ? next : x)) ?? prev);
+                }}
+                dataKey={`mini-${t.id}`}
+              />{" "}
               <span
                 className={`text-[10px] ${isOverdue(t, today) ? "font-bold text-rose-600" : "text-slate-500"}`}
               >

@@ -10,7 +10,6 @@
 //
 // 図でもリストでも同じこの部品を使う（動きを1か所にする）。
 
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   QUADRANTS,
@@ -23,6 +22,7 @@ import {
   type Quadrant,
   type TaskFields,
   type TaskStatus,
+  type MatrixRecord,
 } from "@/lib/priority-matrix";
 import { GridPeek } from "./GridPeek";
 import { SAVED_MARK_MS, SaveMark, useTextDraft, type SaveState } from "./PriorityPieces";
@@ -38,6 +38,8 @@ export function PriorityTaskRow({
   onDelete,
   onDragStart,
   onDragEnd,
+  onGridSaved,
+  onGridTaskCreated,
 }: {
   task: PriorityTask;
   today: string;
@@ -51,6 +53,10 @@ export function PriorityTaskRow({
   onDelete: () => Promise<void>;
   onDragStart: () => void;
   onDragEnd: () => void;
+  /** 249: ▦のポップアップの9マスで保存できたとき（一覧の1件を差し替える） */
+  onGridSaved: (next: MatrixRecord) => void;
+  /** 249: ポップアップの「…」から四象限に行を足したとき */
+  onGridTaskCreated: () => void;
 }) {
   const [state, setState] = useState<SaveState>("");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -134,8 +140,8 @@ export function PriorityTaskRow({
         >
           {task.title}
         </button>
-        {/* 247 §4: 9マスに書いてあるときだけ「▦」。合わせると中身が出る */}
-        <GridPeek title={task.title} cells={task.cells} dataKey={task.id} />
+        {/* 249: 9マスへの入口はこの「▦」だけ（すべての行に出す・空なら薄い色）。合わせると9マスが開いて書ける */}
+        <GridPeek record={task} onRecordChange={onGridSaved} onTaskCreated={onGridTaskCreated} dataKey={task.id} />
         {task.due && (
           <span
             className={`shrink-0 text-[10px] ${overdue ? "font-bold text-rose-600" : "text-slate-500"}`}
@@ -265,14 +271,8 @@ export function PriorityTaskRow({
             />
           </label>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
-            <Link
-              href={`/admin/priority-matrix/grid/${encodeURIComponent(task.id)}`}
-              data-pm-open-grid={task.id}
-              className="rounded-md border border-teal-300 bg-white px-2 py-1 text-[11px] font-medium text-teal-700"
-            >
-              ▦ 9マスを開く
-            </Link>
+          {/* 249: 「▦ 9マスを開く」はなくした（9マスは行の「▦」から開く） */}
+          <div className="flex flex-wrap items-center justify-end gap-2 pt-0.5">
             <div className="flex items-center gap-2">
               <SaveMark state={state} />
               <button
