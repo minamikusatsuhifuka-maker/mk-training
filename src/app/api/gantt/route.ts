@@ -41,6 +41,7 @@ import {
   type PlanFields,
 } from "@/lib/gantt";
 import { jstTodayYmd } from "@/lib/library";
+import { loadEntries } from "@/lib/ayumi-server";
 
 export const runtime = "nodejs";
 
@@ -102,6 +103,9 @@ export async function GET() {
         fiscalStartMonth,
         teamCandidates: candidates,
         me: auth.user.id,
+        // 253: 「📜 当院の歩みに残す」を出すか・もう残した計画
+        canAyumi: auth.canAyumi,
+        keptPlanIds: auth.canAyumi ? (await loadEntries(auth.admin)).map((e) => e.source?.planId).filter((x): x is string => !!x) : [],
       },
       { headers: NO_STORE }
     );

@@ -155,6 +155,16 @@ export const ADMIN_ITEMS: readonly AdminItem[] = [
     reason: "計画（院の取り組み・行事・採用と教育など）を書くこと。分類の編集は含まない（院長のみ）",
     hidden: true,
   },
+  // 253 §4: 当院の歩み（スタッフの画面 /ayumi）で出来事を足す・直す・消す、ガントチャートから残す、声を消す人。既定は誰もいない。
+  //   入口の文を直すのは院長だけ（委任しても直せない）。判定は ayumi-server の authorizeAyumi。管理画面の中に画面は無い（hidden）。
+  {
+    key: "ayumi",
+    label: "📜 当院の歩み",
+    href: "/ayumi",
+    delegable: true,
+    reason: "当院の歩み（歴史の年表）の出来事を書くこと。入口の文（創業の歴史・精神）の編集は含まない（院長のみ）",
+    hidden: true,
+  },
   { key: "staff-accounts", label: "👤 アカウント招待", href: "/admin/staff-accounts", delegable: false, reason: "アカウント・招待コード・仮パスワード（権限・アカウント）" },
   {
     key: "profile-fields",

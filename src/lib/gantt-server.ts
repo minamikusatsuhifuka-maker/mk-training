@@ -57,6 +57,8 @@ export type GanttAuth = {
   canWrite: boolean;
   /** 分類を足す・直す・消す（院長だけ） */
   canEditCategories: boolean;
+  /** 253: 「📜 当院の歩みに残す」を出す（当院の歩みを書ける人＝院長と「📜 当院の歩み」を任された幹部。歩みのスイッチOFFの間は院長だけ） */
+  canAyumi: boolean;
 };
 
 /** 未ログイン=401、使えない人=404（無いのと同じ） */
@@ -67,9 +69,12 @@ export async function authorizeGantt(): Promise<GanttAuth | { ok: false; status:
   const testSeed = isTestSeedUser(user);
   if (!isAdmin && !testSeed && !(await serverFeatureEnabled(GANTT_FEATURE))) return { ok: false, status: 404 };
   let canWrite = isAdmin;
+  let canAyumi = isAdmin;
   if (!isAdmin) {
     const items = await loadDelegatedItems(user.id);
-    canWrite = items.includes(GANTT_ITEM_KEY) && (await isActiveAccountId(user.id));
+    const active = items.length > 0 && (await isActiveAccountId(user.id));
+    canWrite = active && items.includes(GANTT_ITEM_KEY);
+    canAyumi = active && items.includes("ayumi") && (testSeed || (await serverFeatureEnabled("ayumi")));
   }
   return {
     ok: true,
@@ -79,6 +84,7 @@ export async function authorizeGantt(): Promise<GanttAuth | { ok: false; status:
     testSeed,
     canWrite,
     canEditCategories: isAdmin,
+    canAyumi,
   };
 }
 

@@ -111,6 +111,8 @@ export const MASTER_ITEMS: MasterItem[] = [
   { key: "/calendar", href: "/calendar", label: "🗓 院内カレンダー", categoryId: "work", featureId: "calendar" },
   // ガントチャート（指示書250・いろいろな計画を月・四半期・年で共有。書くのは院長と任された幹部）
   { key: "/gantt", href: "/gantt", label: "📊 ガントチャート", categoryId: "work", featureId: "gantt" },
+  // 当院の歩み（指示書253・歴史の年表。管理画面の売上の「📈 クリニックの歩み」とは別）
+  { key: "/ayumi", href: "/ayumi", label: "📜 当院の歩み", categoryId: "work", featureId: "ayumi" },
   { key: "/medical-fees", href: "/medical-fees", label: "💴 算定・点数表", featureId: "page_medical_fees", categoryId: "work" },
   { key: "/expert", href: "/expert", label: "⭐ エキスパートの働き方", featureId: "page_expert", categoryId: "work" },
   { key: "/growth-builder", href: "/growth-builder", label: "🚀 成長ロードマップ", featureId: "page_growth_builder", categoryId: "work" },

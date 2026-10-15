@@ -15,6 +15,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useStoredChoice } from "@/components/calendar/CalendarViews";
+import { C, FONT_HREF } from "./sakura-theme";
 import { usePageTitle } from "@/lib/use-nav";
 import { jstTodayYmd } from "@/lib/library";
 import {
@@ -49,39 +50,7 @@ import {
   type TaskStatus,
 } from "@/lib/gantt";
 
-// ─── 見本の値 ───
-
-const C = {
-  bg: "linear-gradient(160deg, #FDF8F6 0%, #FBEEF2 45%, #F3EEFA 100%)",
-  ink: "#3F3338",
-  sub: "#7A6A70",
-  hero: "linear-gradient(135deg, #B4536A 0%, #8E5BB5 100%)",
-  heroShadow: "0 8px 20px rgba(142, 91, 181, 0.28)",
-  ruleMonth: "#F4E9EE",
-  ruleHead: "#F0E3E8",
-  pillBg: "rgba(255, 255, 255, 0.75)",
-  pillBorder: "1px solid rgba(240, 209, 218, 0.9)",
-  pillShadow: "0 4px 14px rgba(180, 83, 106, 0.08)",
-  cardBg: "rgba(255, 255, 255, 0.88)",
-  cardBorder: "1px solid rgba(243, 222, 228, 0.9)",
-  cardShadow: "0 18px 44px rgba(142, 91, 181, 0.10), 0 2px 6px rgba(180, 83, 106, 0.05)",
-  currentCol: "linear-gradient(180deg, rgba(252, 232, 238, 0.7) 0%, rgba(240, 232, 250, 0.35) 100%)",
-  currentText: "#B4536A",
-  todayLine: "linear-gradient(180deg, #D9708A 0%, #A98AE0 100%)",
-  statusChip: "linear-gradient(135deg, #FCEEF1 0%, #F2EAFA 100%)",
-  statusText: "#8E3A50",
-  matrixChip: "linear-gradient(135deg, #FDF0C8 0%, #FBE3CF 100%)",
-  matrixText: "#86650F",
-  todayBtn: "linear-gradient(135deg, #FCEEF1 0%, #F1EAFA 100%)",
-  detailHead: "linear-gradient(135deg, #FBE3EA 0%, #EEE4FA 100%)",
-  ring: "#FCE8EE",
-  weekend: "rgba(243, 238, 250, 0.55)",
-  serif: "'Shippori Mincho', serif",
-  sans: "'Zen Kaku Gothic New', sans-serif",
-};
-
-const FONT_HREF =
-  "https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap";
+// ─── 見本の値（sakura-theme.ts に置いた） ───
 
 const VIEWS: readonly GanttView[] = ["month", "quarter", "year"];
 const VIEW_LS_KEY = "mk_gantt_view";
@@ -105,6 +74,9 @@ type GanttData = {
   teamCandidates: TeamMember[];
   /** 見ている人の id */
   me: string;
+  /** 253: 「📜 当院の歩みに残す」を出す・もう残した計画 */
+  canAyumi?: boolean;
+  keptPlanIds?: string[];
   canWrite: boolean;
   canEditCategories: boolean;
   fiscalStartMonth: number;
@@ -287,6 +259,7 @@ function PlanDetail({
   canWrite,
   canEdit,
   isDirector,
+  ayumi,
   onEdit,
   onDelete,
   onClose,
@@ -299,6 +272,8 @@ function PlanDetail({
   /** この計画の「直す」「消す」を出す（サーバーの editableIds） */
   canEdit: boolean;
   isDirector: boolean;
+  /** 253: 「📜 当院の歩みに残す」（当院の歩みを書ける人だけ・null＝出さない） */
+  ayumi: { kept: boolean; busy: boolean; onKeep: () => void } | null;
   onEdit: () => void;
   onDelete: () => void;
   onClose: () => void;
@@ -416,6 +391,26 @@ function PlanDetail({
             </>
           )}
         </p>
+      )}
+      {ayumi && (
+        <div className="px-[18px] pb-2">
+          {ayumi.kept ? (
+            <Link href="/ayumi" className="text-[12px] underline" style={{ color: C.currentText }} data-gantt-ayumi-kept>
+              📜 当院の歩みに残しています
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={ayumi.onKeep}
+              disabled={ayumi.busy}
+              className="min-h-[36px] w-full rounded-full border px-4 text-[13px] disabled:opacity-50"
+              style={{ borderColor: "rgba(240, 209, 218, 0.9)", color: C.statusText, background: C.todayBtn }}
+              data-gantt-ayumi-keep
+            >
+              {ayumi.busy ? "保存しています…" : "📜 当院の歩みに残す"}
+            </button>
+          )}
+        </div>
       )}
       <div className="flex justify-end gap-2 px-[18px] pb-4">
         {canEdit && !fromMatrix && (
@@ -931,6 +926,22 @@ export function GanttBoard() {
   };
 
   const canEditPlan = (p: GanttPlan) => !!data?.editableIds.includes(p.id);
+
+  // 253: ガントチャートの中身（題名・期間・分類・チーム名とメンバー）を写して、当院の歩みの1件をつくる
+  const [keeping, setKeeping] = useState(false);
+  const keepToAyumi = async (p: GanttPlan) => {
+    setKeeping(true);
+    setActionError("");
+    try {
+      await api("/api/ayumi", { method: "POST", body: JSON.stringify({ fromPlanId: p.id }) });
+      setData((d) => (d ? { ...d, keptPlanIds: [...(d.keptPlanIds ?? []), p.id] } : d));
+      setNotice("「📜 当院の歩み」に残しました。想いなどは「📜 当院の歩み」で書き足せます");
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "残せませんでした");
+    } finally {
+      setKeeping(false);
+    }
+  };
   /** 自分の id（メンバーに最初から入れる。サーバーでも必ず入れる） */
   const myId = data?.me ?? "";
 
@@ -1360,6 +1371,11 @@ export function GanttBoard() {
           canWrite={canWrite}
           canEdit={canEditPlan(openedPlan)}
           isDirector={!!data?.canEditCategories}
+          ayumi={
+            data?.canAyumi
+              ? { kept: (data.keptPlanIds ?? []).includes(openedPlan.id), busy: keeping, onKeep: () => void keepToAyumi(openedPlan) }
+              : null
+          }
           onEdit={() => {
             setOpened(null);
             setFormError("");
