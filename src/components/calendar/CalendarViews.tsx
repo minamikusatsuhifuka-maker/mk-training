@@ -5,7 +5,8 @@
 // - 1件 = 時刻＋題名（院内カレンダーは場所も）。tone="director" は院長の予定（色を変える）
 // - 「大きく」と表示の選択は、そのブラウザで覚える（読み書きに失敗しても画面は正しく出る）
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { WEEKDAY_HEADERS, buildMonthWeeks, formatDayHeading, formatWeekRange, weekDays } from "@/lib/calendar-views";
 
 export type CalItem = {
@@ -149,6 +150,7 @@ export function MonthGrid({
   selectedYmd,
   onSelect,
   big,
+  hoverPopover = false,
 }: {
   year: number;
   month: number;
@@ -157,8 +159,11 @@ export function MonthGrid({
   selectedYmd: string | null;
   onSelect: (ymd: string) => void;
   big: boolean;
+  /** 259: パソコンで日にカーソルを合わせて止める（キーボードはフォーカス）と、その日の予定を全部ポップアップで出す（院内カレンダーだけ） */
+  hoverPopover?: boolean;
 }) {
   const weeks = buildMonthWeeks(year, month);
+  const pop = useDayPopover(hoverPopover);
   return (
     <section className="bg-white border border-gray-200 rounded-xl p-3 md:p-4 space-y-2" data-cal-month={`${year}-${month}`} data-cal-big={big ? "on" : "off"}>
       <h2 className="text-sm font-semibold text-gray-800">
@@ -181,6 +186,7 @@ export function MonthGrid({
               type="button"
               disabled={items.length === 0}
               onClick={() => onSelect(ymd)}
+              {...(hoverPopover && items.length > 0 ? pop.bind(ymd, i % 7) : {})}
               className={`bg-white min-h-12 md:min-h-20 p-1 text-left align-top flex flex-col ${ymd === selectedYmd ? "ring-2 ring-teal-500 ring-inset" : ""} ${
                 items.length > 0 ? "hover:bg-teal-50/50" : ""
               }`}
@@ -227,7 +233,234 @@ export function MonthGrid({
           );
         })}
       </div>
+      {pop.open && (
+        <DayPopover
+          ymd={pop.open.ymd}
+          today={today}
+          items={byYmd.get(pop.open.ymd) ?? []}
+          anchor={pop.open.el}
+          col={pop.open.col}
+          onEnter={pop.cancelClose}
+          onLeave={pop.scheduleClose}
+          onClose={pop.close}
+        />
+      )}
     </section>
+  );
+}
+
+// ─── 259: その日の予定のポップアップ（院内カレンダーの月表示） ───────────────────────────
+/** カーソルを止めてから出すまで（通り過ぎただけでは出さない） */
+export const DAY_POPOVER_OPEN_MS = 300;
+/** マスとポップアップの両方から離れてから閉じるまで（間を渡れるように） */
+const DAY_POPOVER_CLOSE_MS = 250;
+
+type OpenDay = { ymd: string; el: HTMLElement; col: number };
+
+/**
+ * マスに付けるイベントと、開いている日。
+ * - マウス：止まって0.3秒で開く。別のマスに0.3秒止まればそのマスへ切り替わる
+ * - キーボード：フォーカスですぐ開く・Esc で閉じる
+ * - 指（タッチ・ペン）では開かない（スマートフォンは、今までどおり押すと下にその日の予定）
+ */
+function useDayPopover(enabled: boolean) {
+  const [open, setOpen] = useState<OpenDay | null>(null);
+  const openTimer = useRef<number | null>(null);
+  const closeTimer = useRef<number | null>(null);
+  const clear = (r: { current: number | null }) => {
+    if (r.current !== null) {
+      window.clearTimeout(r.current);
+      r.current = null;
+    }
+  };
+  const cancelClose = useCallback(() => clear(closeTimer), []);
+  const close = useCallback(() => {
+    clear(openTimer);
+    clear(closeTimer);
+    setOpen(null);
+  }, []);
+  const scheduleClose = useCallback(() => {
+    clear(closeTimer);
+    closeTimer.current = window.setTimeout(() => setOpen(null), DAY_POPOVER_CLOSE_MS);
+  }, []);
+  useEffect(() => () => {
+    clear(openTimer);
+    clear(closeTimer);
+  }, []);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, close]);
+
+  const bind = (ymd: string, col: number) =>
+    enabled
+      ? {
+          onPointerEnter: (e: React.PointerEvent<HTMLElement>) => {
+            if (e.pointerType !== "mouse") return;
+            const el = e.currentTarget;
+            clear(openTimer);
+            // 開いているあいだに別のマスへ移ったら、今のポップアップは残したまま0.3秒待って切り替える（消えてまた出る、をしない）
+            cancelClose();
+            if (open?.ymd === ymd) return;
+            openTimer.current = window.setTimeout(() => {
+              clear(closeTimer);
+              setOpen({ ymd, el, col });
+            }, DAY_POPOVER_OPEN_MS);
+          },
+          onPointerLeave: (e: React.PointerEvent<HTMLElement>) => {
+            if (e.pointerType !== "mouse") return;
+            clear(openTimer);
+            if (open) scheduleClose();
+          },
+          onFocus: (e: React.FocusEvent<HTMLElement>) => {
+            // マウスで押したときのフォーカスでは開かない（キーボードで移ったときだけ）
+            if (!e.currentTarget.matches(":focus-visible")) return;
+            clear(openTimer);
+            clear(closeTimer);
+            setOpen({ ymd, el: e.currentTarget, col });
+          },
+          onBlur: (e: React.FocusEvent<HTMLElement>) => {
+            const next = e.relatedTarget as HTMLElement | null;
+            if (next?.closest?.("[data-cal-day-popover]")) return;
+            if (open?.ymd === ymd) scheduleClose();
+          },
+          "aria-haspopup": "dialog" as const,
+          "aria-expanded": open?.ymd === ymd,
+        }
+      : {};
+
+  return { open, bind, cancelClose, scheduleClose, close };
+}
+
+/**
+ * ポップアップの置き場所（純関数）。マスの右（金・土は左）に、となりのマス1つぶんを空けて出す
+ * ＝となりのマス（上下左右・斜め）へカーソルを動かす道をふさがない。入りきらなければ画面の中に寄せる。
+ * 上はマスの上端にそろえ、下の方の週では上へずらして画面の中に収める。
+ */
+export function placeDayPopover(
+  cell: { left: number; right: number; top: number; width: number },
+  size: { w: number; h: number },
+  view: { w: number; h: number },
+  col: number
+): { left: number; top: number } {
+  const m = 8;
+  const gap = cell.width; // となりのマス1つぶん
+  let left =
+    col >= 5
+      ? cell.left - gap - size.w // 金・土は左へ
+      : cell.right + gap;
+  if (col >= 5 && left < m) left = cell.right + gap; // 左に入らなければ右
+  if (col < 5 && left + size.w > view.w - m) {
+    const alt = cell.left - gap - size.w;
+    left = alt >= m ? alt : view.w - m - size.w; // 右に入らなければ左、それも無理なら画面の右端の中
+  }
+  left = Math.max(m, Math.min(left, view.w - m - size.w));
+  const top = Math.max(m, Math.min(cell.top, view.h - m - size.h));
+  return { left, top };
+}
+
+function DayPopover({
+  ymd,
+  today,
+  items,
+  anchor,
+  col,
+  onEnter,
+  onLeave,
+  onClose,
+}: {
+  ymd: string;
+  today: string;
+  items: CalItem[];
+  anchor: HTMLElement;
+  col: number;
+  onEnter: () => void;
+  onLeave: () => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const place = () => {
+      const c = anchor.getBoundingClientRect();
+      const b = el.getBoundingClientRect();
+      const { left, top } = placeDayPopover(c, { w: b.width, h: b.height }, { w: window.innerWidth, h: window.innerHeight }, col);
+      el.style.left = `${left}px`;
+      el.style.top = `${top}px`;
+      el.style.visibility = "visible";
+    };
+    place();
+    // ページが動いたら、マスについて行く（キーボードで移ったときのページの動きでも消えない）。
+    // マスが画面から出たら閉じる（マスから離れた所に残さない）。ポップアップの中を動かすのは何もしない
+    const onScroll = (e: Event) => {
+      if (e.target instanceof Node && el.contains(e.target)) return;
+      const c = anchor.getBoundingClientRect();
+      if (c.bottom < 0 || c.top > window.innerHeight) onClose();
+      else place();
+    };
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onClose);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onClose);
+    };
+  }, [anchor, col, ymd, items.length, onClose]);
+
+  return createPortal(
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label={formatDayHeading(ymd)}
+      data-cal-day-popover={ymd}
+      onPointerEnter={(e) => e.pointerType === "mouse" && onEnter()}
+      onPointerLeave={(e) => e.pointerType === "mouse" && onLeave()}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) onLeave();
+      }}
+      style={{ position: "fixed", left: 0, top: 0, visibility: "hidden", zIndex: 60, width: "min(300px, calc(100vw - 16px))", maxHeight: "min(440px, calc(100vh - 16px))" }}
+      className="flex flex-col rounded-2xl border border-teal-200 bg-white p-3 shadow-[0_14px_34px_rgba(24,66,58,0.16)]"
+    >
+      <h2 className="mb-2 flex shrink-0 items-center gap-2 text-sm font-semibold text-gray-800">
+        {formatDayHeading(ymd)}
+        {ymd === today && <TodayBadge />}
+      </h2>
+      <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto" data-cal-day-popover-list>
+        {items.map((it) => (
+          <PopoverItem key={it.id} it={it} />
+        ))}
+      </ul>
+    </div>,
+    document.body
+  );
+}
+
+/** ポップアップの1件：時刻（終日）・題名の全文・色の印（院長の予定は文字も添える）。院内の予定は場所も（今の「その日の予定」と同じ） */
+function PopoverItem({ it }: { it: CalItem }) {
+  const director = it.tone === "director";
+  return (
+    <li
+      className={`flex items-start gap-2 rounded-lg border px-2.5 py-1.5 ${director ? "border-violet-200 bg-violet-50" : "border-gray-100 bg-gray-50/60"}`}
+      data-cal-item={director ? "director" : "clinic"}
+    >
+      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dotCls(it)}`} aria-hidden="true" />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2">
+          {it.allDay ? (
+            <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-800">終日</span>
+          ) : (
+            <span className="text-xs tabular-nums text-gray-600">{it.time}</span>
+          )}
+          {director && <span className="text-[10px] font-medium text-violet-700" data-cal-director-tag>{DIRECTOR_LABEL}</span>}
+        </div>
+        <p className={`break-words text-sm ${director ? "text-violet-900" : "text-gray-800"}`}>{it.title}</p>
+        {it.location && <p className="break-words text-xs text-gray-500">📍 {it.location}</p>}
+      </div>
+    </li>
   );
 }
 

@@ -284,6 +284,7 @@ function CalendarPageBody() {
                 byYmd={byYmd}
                 selectedYmd={selectedYmd}
                 big={big === "on"}
+                hoverPopover
                 onSelect={(ymd) =>
                   setSelectedYmd((prev) => (prev === ymd ? null : ymd))
                 }
