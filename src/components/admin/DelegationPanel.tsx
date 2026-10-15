@@ -6,8 +6,14 @@
 // - 226: 「🗓 1on1の日程」と「🔬 ディープリサーチ」も委任できる。
 //   ディープリサーチだけ、任された1人あたりの**月の上限**をここで決める（初期値30・院長は上限なし）
 // 保存は /api/admin/delegation（院長のみ・requireAdmin）。幹部はこの画面にもAPIにも到達できない。
+// 委任の設定の折りたたみとポップアップ（2026-10-15）: 見た目と操作だけの変更。
+//   各項目は1行に折りたたみ（項目名・説明・指名中の人／「指名なし」）、指名はポップアップの名前ボタンで行う。
+//   パソコンはカーソルを合わせると開く（行からポップアップへ動かしても閉じない）。スマホ・タブレットはタップで開閉、
+//   キーボードは Tab で行へ移動して Enter。開くのは1つだけ。🔒の項目は開かない。
+//   保存の仕組み（押すとすぐ /api/admin/delegation に保存）・判定・記録は今までどおり。
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   DEEP_RESEARCH_DEFAULT_LIMIT,
   DEEP_RESEARCH_LIMIT_MAX,
@@ -18,6 +24,102 @@ import {
 
 type Item = { key: string; label: string; href: string; delegable: boolean; reason: string; userIds: string[] };
 type Roster = { userId: string; name: string; isAdmin: boolean; retired: boolean; testSeed?: boolean }[];
+
+/** マウスが行とポップアップの両方から離れてから閉じるまでの猶予（すき間を渡れるように） */
+const LEAVE_CLOSE_MS = 250;
+
+/**
+ * 指名のポップアップ（1つだけ開く）。body の直下に出し、画面の端で切れない位置に置く。
+ * 中を一度でも押したら、カーソルが外に出ても閉じない（外を押す・Esc・行をもう一度押すと閉じる）。
+ */
+function ItemPopover({
+  anchor,
+  label,
+  onPointerEnter,
+  onPointerLeave,
+  onPin,
+  onClose,
+  children,
+}: {
+  anchor: HTMLElement;
+  label: string;
+  onPointerEnter: () => void;
+  onPointerLeave: () => void;
+  onPin: () => void;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const place = () => {
+      const b = anchor.getBoundingClientRect();
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const left = Math.min(Math.max(8, b.left), Math.max(8, vw - w - 8));
+      let top = b.bottom + 4;
+      if (top + h > vh - 8) top = b.top - h - 4 >= 8 ? b.top - h - 4 : Math.max(8, vh - h - 8);
+      el.style.left = `${left}px`;
+      el.style.top = `${top}px`;
+      el.style.visibility = "visible";
+    };
+    place();
+    const ro = new ResizeObserver(place);
+    ro.observe(el);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [anchor]);
+
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node | null;
+      if (t && (ref.current?.contains(t) || anchor.contains(t))) return;
+      onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+        anchor.focus();
+      }
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [anchor, onClose]);
+
+  return createPortal(
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label={`${label} を任せる幹部`}
+      data-deleg-popover
+      onPointerEnter={(e) => {
+        if (e.pointerType === "mouse") onPointerEnter();
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType === "mouse") onPointerLeave();
+      }}
+      onPointerDownCapture={onPin}
+      style={{ position: "fixed", left: 0, top: 0, visibility: "hidden", zIndex: 60 }}
+      className="w-[min(30rem,calc(100vw-16px))] max-h-[calc(100vh-16px)] overflow-y-auto rounded-xl border border-slate-300 bg-white p-3 shadow-xl"
+    >
+      {children}
+    </div>,
+    document.body
+  );
+}
 
 export function DelegationPanel() {
   const [items, setItems] = useState<Item[]>([]);
@@ -31,6 +133,11 @@ export function DelegationPanel() {
   // 226 §3: ディープリサーチの月の上限（任された幹部1人あたり）
   const [drLimit, setDrLimit] = useState(DEEP_RESEARCH_DEFAULT_LIMIT);
   const [drInput, setDrInput] = useState(String(DEEP_RESEARCH_DEFAULT_LIMIT));
+  // 開いているポップアップ（1つだけ）。pinned＝押して開いた／中を押した（カーソルが外れても閉じない）
+  const [openItem, setOpenItem] = useState<{ key: string; el: HTMLElement } | null>(null);
+  const pinned = useRef(false);
+  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [savedKey, setSavedKey] = useState("");
 
   const load = useCallback(async () => {
     setError("");
@@ -124,8 +231,43 @@ export function DelegationPanel() {
 
   const toggleItemUser = (item: Item, userId: string) => {
     const next = item.userIds.includes(userId) ? item.userIds.filter((x) => x !== userId) : [...item.userIds, userId];
-    void save({ items: { [item.key]: next } });
+    setSavedKey("");
+    void save({ items: { [item.key]: next } }).then(() => setSavedKey(item.key));
   };
+
+  // ─── ポップアップの開け閉め ───
+  const cancelLeave = () => {
+    if (leaveTimer.current) clearTimeout(leaveTimer.current);
+    leaveTimer.current = null;
+  };
+  const closePopover = useCallback(() => {
+    if (leaveTimer.current) clearTimeout(leaveTimer.current);
+    leaveTimer.current = null;
+    pinned.current = false;
+    setOpenItem(null);
+    setSavedKey("");
+  }, []);
+  const openPopover = (key: string, el: HTMLElement, pin: boolean) => {
+    // 押して開いた（または中を押した）ポップアップがあるあいだは、ほかの行にカーソルが通っても切り替えない
+    if (!pin && pinned.current && openItem && openItem.key !== key) return;
+    cancelLeave();
+    if (openItem?.key !== key) {
+      // ほかの行のポップアップは閉じて、こちらを開く（開くのは1つだけ）
+      pinned.current = pin;
+      setSavedKey("");
+      setOpenItem({ key, el });
+    } else if (pin) {
+      pinned.current = true;
+    }
+  };
+  const scheduleLeave = () => {
+    if (pinned.current) return;
+    cancelLeave();
+    leaveTimer.current = setTimeout(() => {
+      if (!pinned.current) closePopover();
+    }, LEAVE_CLOSE_MS);
+  };
+  useEffect(() => () => cancelLeave(), []);
 
   const toggleAssignment = (staffId: string) => {
     if (!manager) return;
@@ -221,20 +363,100 @@ export function DelegationPanel() {
         <h2 className="text-sm font-semibold text-slate-800">⚙️ 管理画面：項目ごとに開ける幹部</h2>
         <p className="text-[11px] text-slate-600 leading-relaxed">
           🔒 の項目は院長だけです（権限・アカウント・AI／課金・機微な個人情報・監査の記録）。指名した幹部の管理画面には、指名された項目だけが出ます。
+          各行にカーソルを合わせる（スマートフォンはタップ）と、指名する人を選べます。
         </p>
-        <ul className="space-y-2">
-          {items.map((it) => (
-            <li key={it.key} className={`rounded-lg border p-2 ${it.delegable ? "border-slate-200" : "border-slate-200 bg-slate-50"}`} data-item={it.key} data-locked={it.delegable ? "0" : "1"}>
-              <p className="text-sm text-slate-900">
-                {it.delegable ? "" : "🔒 "}
-                {it.label}
-                <span className="ml-2 text-[11px] text-slate-500">{it.reason}</span>
-              </p>
-              {it.delegable ? (
-                staff.length === 0 ? (
-                  <p className="text-[11px] text-slate-500 mt-1">指名できる幹部（管理者でない有効なアカウント）がいません。</p>
+        <ul className="space-y-1.5">
+          {items.map((it) => {
+            const names = it.userIds.map((id) => {
+              const r = roster.find((x) => x.userId === id);
+              return r ? labelOf(r) : nameOf(id);
+            });
+            const isOpen = openItem?.key === it.key;
+            return (
+              <li key={it.key} data-item={it.key} data-locked={it.delegable ? "0" : "1"}>
+                {it.delegable ? (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-haspopup="dialog"
+                    aria-expanded={isOpen}
+                    data-deleg-row={it.key}
+                    onPointerEnter={(e) => {
+                      if (e.pointerType === "mouse") openPopover(it.key, e.currentTarget, false);
+                    }}
+                    onPointerLeave={(e) => {
+                      if (e.pointerType === "mouse") scheduleLeave();
+                    }}
+                    onClick={(e) => {
+                      // 押したとき：開いていて固定済みなら閉じる。そうでなければ開いて固定（タップ・クリック・Enter）
+                      if (isOpen && pinned.current) closePopover();
+                      else openPopover(it.key, e.currentTarget, true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        if (isOpen && pinned.current) closePopover();
+                        else openPopover(it.key, e.currentTarget, true);
+                      }
+                    }}
+                    className={`flex min-h-[48px] cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${
+                      isOpen ? "border-teal-400 bg-teal-50/60" : "border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <p className="min-w-0 flex-1 text-sm text-slate-900">
+                      {it.label}
+                      <span className="ml-2 text-[11px] text-slate-500">{it.reason}</span>
+                    </p>
+                    <span
+                      className={`shrink-0 text-xs ${names.length ? "font-medium text-teal-800" : "text-slate-400"}`}
+                      data-deleg-names={it.key}
+                    >
+                      {names.length ? names.join("、") : "指名なし"}
+                    </span>
+                    <span aria-hidden="true" className="shrink-0 text-[11px] text-slate-400">
+                      {isOpen ? "▴" : "▾"}
+                    </span>
+                  </div>
                 ) : (
-                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  <div className="flex min-h-[48px] flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2" data-deleg-locked={it.key}>
+                    <p className="min-w-0 flex-1 text-sm text-slate-900">
+                      🔒 {it.label}
+                      <span className="ml-2 text-[11px] text-slate-500">{it.reason}</span>
+                    </p>
+                    <span className="shrink-0 text-[11px] text-slate-500">院長のみ（委任できません）</span>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        {openItem &&
+          (() => {
+            const it = items.find((x) => x.key === openItem.key);
+            if (!it || !it.delegable) return null;
+            return (
+              <ItemPopover
+                anchor={openItem.el}
+                label={it.label}
+                onPointerEnter={cancelLeave}
+                onPointerLeave={scheduleLeave}
+                onPin={() => {
+                  pinned.current = true;
+                  cancelLeave();
+                }}
+                onClose={closePopover}
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-semibold text-slate-800">{it.label}</p>
+                  <button type="button" onClick={closePopover} className="shrink-0 rounded-md border border-slate-300 px-2 py-0.5 text-[11px] text-slate-700" data-deleg-close>
+                    閉じる
+                  </button>
+                </div>
+                <p className="mt-0.5 text-[11px] text-slate-500">押すと、その人の指名・解除が切り替わり、すぐに保存されます。</p>
+                {staff.length === 0 ? (
+                  <p className="text-[11px] text-slate-500 mt-2">指名できる幹部（管理者でない有効なアカウント）がいません。</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5 mt-2" data-deleg-buttons={it.key}>
                     {staff.map((s) => {
                       const on = it.userIds.includes(s.userId);
                       return (
@@ -244,6 +466,7 @@ export function DelegationPanel() {
                           disabled={busy}
                           onClick={() => toggleItemUser(it, s.userId)}
                           aria-pressed={on}
+                          data-deleg-person={s.userId}
                           className={`text-xs px-3 py-1.5 rounded-full border min-h-[36px] ${
                             on ? "border-teal-500 bg-teal-600 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
                           }`}
@@ -254,44 +477,47 @@ export function DelegationPanel() {
                       );
                     })}
                   </div>
-                )
-              ) : (
-                <p className="text-[11px] text-slate-500 mt-1">院長のみ（委任できません）</p>
-              )}
-              {/* 226 §3: ディープリサーチだけ、任された1人あたりの月の上限を決める */}
-              {it.key === "deep-research" && (
-                <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2" data-dr-limit>
-                  <label className="text-[11px] text-slate-700">
-                    任された人1人あたりの月の上限
-                    <input
-                      type="number"
-                      min={DEEP_RESEARCH_LIMIT_MIN}
-                      max={DEEP_RESEARCH_LIMIT_MAX}
-                      value={drInput}
-                      disabled={busy}
-                      onChange={(e) => setDrInput(e.target.value)}
-                      className="ml-2 w-24 rounded-md border border-slate-300 px-2 py-1 text-sm min-h-[36px]"
-                      aria-label="ディープリサーチの月の上限"
-                    />
-                    <span className="ml-1 text-[11px] text-slate-600">回／月</span>
-                  </label>
-                  <button
-                    type="button"
-                    disabled={busy || normalizeLimit(drInput) === drLimit}
-                    onClick={() => void save({ deepResearchLimit: normalizeLimit(drInput) })}
-                    data-dr-limit-save
-                    className="rounded-full border border-teal-500 bg-teal-600 px-3 py-1.5 text-xs text-white min-h-[36px] disabled:opacity-40"
-                  >
-                    上限を保存
-                  </button>
-                  <span className="text-[11px] text-slate-500">
-                    院長は上限なし。0 にすると、任された人は使えません。毎月1日（日本時間）に戻ります。
-                  </span>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+                )}
+                <p className="mt-2 min-h-[18px] text-[11px]" aria-live="polite" data-deleg-saved>
+                  {busy ? <span className="text-slate-500">保存しています…</span> : savedKey === it.key && !error ? <span className="text-teal-800">💾 保存しました（すぐに反映されます）</span> : error ? <span className="text-red-700">{error}</span> : null}
+                </p>
+                {/* 226 §3: ディープリサーチだけ、任された1人あたりの月の上限を決める */}
+                {it.key === "deep-research" && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2" data-dr-limit>
+                    <label className="text-[11px] text-slate-700">
+                      任された人1人あたりの月の上限
+                      <input
+                        type="number"
+                        min={DEEP_RESEARCH_LIMIT_MIN}
+                        max={DEEP_RESEARCH_LIMIT_MAX}
+                        value={drInput}
+                        disabled={busy}
+                        onChange={(e) => setDrInput(e.target.value)}
+                        className="ml-2 w-24 rounded-md border border-slate-300 px-2 py-1 text-sm min-h-[36px]"
+                        aria-label="ディープリサーチの月の上限"
+                      />
+                      <span className="ml-1 text-[11px] text-slate-600">回／月</span>
+                    </label>
+                    <button
+                      type="button"
+                      disabled={busy || normalizeLimit(drInput) === drLimit}
+                      onClick={() => {
+                        setSavedKey("");
+                        void save({ deepResearchLimit: normalizeLimit(drInput) }).then(() => setSavedKey(it.key));
+                      }}
+                      data-dr-limit-save
+                      className="rounded-full border border-teal-500 bg-teal-600 px-3 py-1.5 text-xs text-white min-h-[36px] disabled:opacity-40"
+                    >
+                      上限を保存
+                    </button>
+                    <span className="text-[11px] text-slate-500">
+                      院長は上限なし。0 にすると、任された人は使えません。毎月1日（日本時間）に戻ります。
+                    </span>
+                  </div>
+                )}
+              </ItemPopover>
+            );
+          })()}
       </section>
     </div>
   );
