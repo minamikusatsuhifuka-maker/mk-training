@@ -1,5 +1,6 @@
 "use client";
 
+import { WeeklyStepHomeCard } from "@/components/growth-actions/WeeklyStepHomeCard";
 import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PresurveyAlertBanner, ScheduleReminderBanner } from "@/components/OneOnOneSchedule";
@@ -1025,6 +1026,8 @@ export default function PortalHome() {
         <PresurveyAlertBanner />
         {/* 228: お知らせ・イベント（未読・出欠の締切前の未回答） */}
         <NoticesHomeBanner />
+        {/* 成功の原則：今週の一歩（本人だけ・期間中だけ） */}
+        <WeeklyStepHomeCard />
       </section>
 
       {/* タスク期限アラート（超過/今日が0なら非表示・並び替え対象外） */}

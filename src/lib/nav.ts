@@ -54,6 +54,8 @@ export const MASTER_ITEMS: MasterItem[] = [
   { key: "/one-on-one/calendar", href: "/one-on-one/calendar", label: "🗓 1on1カレンダー", categoryId: "home", featureId: "one_on_one_calendar" },
   // わたしの可能性ノート（指示書179-C・本人の学び／目標／1on1の約束。既定OFF＝説明後に院長がON）
   { key: "/my-growth", href: "/my-growth", label: "🌱 わたしの可能性ノート", categoryId: "home", featureId: "growth_record" },
+  // 成功の原則×行動例・考え方の例（ライブラリ）と、本人だけの「今週の一歩」。ログイン中のスタッフ全員（院長の承認済み）
+  { key: "/growth-actions", href: "/growth-actions", label: "🌱 成長の行動例", categoryId: "home" },
   // 外部リンク（別タブ）。指示書59
   {
     key: "ai-incho",

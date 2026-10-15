@@ -6,7 +6,7 @@
     "dev": "next dev",
     "check:api-auth": "node scripts/check-api-auth.mjs",
     "check-alias": "node scripts/check-alias.mjs",
-    "build": "node scripts/check-api-auth.mjs && node scripts/build-needs-guide.mjs --check && next build",
+    "build": "node scripts/check-api-auth.mjs && node scripts/build-needs-guide.mjs --check && node scripts/build-success-principles.mjs --check && next build",
     "start": "next start",
     "lint": "eslint"
   },

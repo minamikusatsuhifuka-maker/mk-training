@@ -3,12 +3,14 @@
 //
 // 【見られる人】requireAdminItem("people-training")＝管理者（app_metadata.role === "admin"）か、
 //   院長が「⚙ 委任」で人材育成研修を任せた人（＝受講者）。それ以外は proxy でも、ここでも何も返さない（fail-closed）。
+// 【成功の原則】カテゴリー「成功の原則（行動例と1on1の問い）」（docs/success-principles の .md 2つをそのまま・問いと※の行も含む）も返す。
 // 【返すもの】ガイドの本文だけ。スタッフの欲求の値・診断結果は返さない。どのAI処理にも渡さない。
 
 import { NextResponse } from "next/server";
 import { requireAdminItem } from "@/lib/admin-delegation-server";
 import { PEOPLE_TRAINING_ITEM_KEY } from "@/lib/admin-items";
 import { NEEDS_GUIDE_DOCS } from "@/lib/needs-guide-docs-server";
+import { SUCCESS_GUIDE_DOC } from "@/lib/success-principles-data-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,7 +19,7 @@ export async function GET() {
   const auth = await requireAdminItem(PEOPLE_TRAINING_ITEM_KEY);
   if (auth.response) return auth.response;
   return NextResponse.json(
-    { docs: NEEDS_GUIDE_DOCS.filter((d) => d.kind === "guide") },
+    { docs: [...NEEDS_GUIDE_DOCS.filter((d) => d.kind === "guide"), SUCCESS_GUIDE_DOC] },
     { headers: { "Cache-Control": "no-store" } }
   );
 }
