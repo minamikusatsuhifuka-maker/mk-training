@@ -26,6 +26,7 @@ import { normalizeTask } from "./priority-matrix";
 import {
   MATRIX_CATEGORY_ID,
   OTHER_CATEGORY_ID,
+  matrixCategoryOf,
   normalizeCategories,
   normalizeFiscalStart,
   normalizePlan,
@@ -172,7 +173,6 @@ export async function loadMatrixPlans(admin: Admin, categories: GanttCategory[])
     if (isMissingTable(error.message)) return [];
     throw new Error(error.message);
   }
-  const categoryId = categories.some((c) => c.id === MATRIX_CATEGORY_ID) ? MATRIX_CATEGORY_ID : OTHER_CATEGORY_ID;
   const out: GanttPlan[] = [];
   for (const r of (data ?? []) as { owner_id: string; record_key: string; data: unknown }[]) {
     // 四象限を書けるのは院長だけ（requireAdmin）。念のため、院長の行だけを使う
@@ -180,10 +180,45 @@ export async function loadMatrixPlans(admin: Admin, categories: GanttCategory[])
     if (director && r.owner_id !== director) continue;
     const t = normalizeTask(r.record_key, r.data);
     if (!t) continue;
-    const p = planFromMatrixTask(t, categoryId);
+    // 251: 四象限の編集欄で選んだ分類（選んでいなければ「院の取り組み・プロジェクト」・消した分類なら「その他」）
+    const p = planFromMatrixTask(t, matrixCategoryOf(t.ganttCategory, categories));
     if (p) out.push(p);
   }
   return out;
+}
+
+/**
+ * 251: 分類を消したとき、その分類を選んでいた四象限の項目も「その他」にする（四象限の欄も「その他」になる）。
+ *   選んでいない項目（空＝既定の「院の取り組み・プロジェクト」）は、その既定の分類を消したときだけ移す。
+ *   直すのは data.ganttCategory だけ（名前・メモ・9マスなどには触れない）。
+ */
+export async function moveMatrixToOther(admin: Admin, removedIds: string[]): Promise<number> {
+  if (removedIds.length === 0) return 0;
+  const { data, error } = await admin
+    .from(PM_TABLE)
+    .select("owner_id, record_key, data")
+    .eq("content_type", PM_CONTENT_TYPE);
+  if (error) {
+    if (isMissingTable(error.message)) return 0;
+    throw new Error(error.message);
+  }
+  let moved = 0;
+  for (const r of (data ?? []) as { owner_id: string; record_key: string; data: Record<string, unknown> | null }[]) {
+    const d = r.data ?? {};
+    if (d.kind === "book") continue;
+    const chosen = typeof d.ganttCategory === "string" && d.ganttCategory ? d.ganttCategory : MATRIX_CATEGORY_ID;
+    if (!removedIds.includes(chosen)) continue;
+    const now = new Date().toISOString();
+    const { error: e2 } = await admin
+      .from(PM_TABLE)
+      .update({ data: { ...d, ganttCategory: OTHER_CATEGORY_ID, updatedAt: now }, updated_at: now })
+      .eq("owner_id", r.owner_id)
+      .eq("content_type", PM_CONTENT_TYPE)
+      .eq("record_key", r.record_key);
+    if (e2) throw new Error(e2.message);
+    moved += 1;
+  }
+  return moved;
 }
 
 // ─── 年度の始まり（クリニックの歩みと同じ設定） ───

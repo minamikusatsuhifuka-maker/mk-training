@@ -25,6 +25,8 @@ import {
   type MatrixRecord,
 } from "@/lib/priority-matrix";
 import { GridPeek } from "./GridPeek";
+import { useGanttCategories } from "@/lib/gantt-categories-client";
+import { MATRIX_CATEGORY_ID, matrixCategoryOf } from "@/lib/gantt";
 import { SAVED_MARK_MS, SaveMark, useTextDraft, type SaveState } from "./PriorityPieces";
 
 export function PriorityTaskRow({
@@ -59,6 +61,11 @@ export function PriorityTaskRow({
   onGridTaskCreated: () => void;
 }) {
   const [state, setState] = useState<SaveState>("");
+  // 251: ガントチャートの分類（「📊 ガントチャートに出す」にチェックがあり、行を開いているときだけ読む）
+  const ganttCategories = useGanttCategories(expanded && task.gantt);
+  const ganttCategoryValue = ganttCategories
+    ? matrixCategoryOf(task.ganttCategory, ganttCategories)
+    : task.ganttCategory || MATRIX_CATEGORY_ID;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -279,6 +286,26 @@ export function PriorityTaskRow({
                     data-pm-panel-gantt-start
                     className="rounded-md border border-slate-300 px-2 py-1 text-xs"
                   />
+                </label>
+              )}
+              {/* 251: ガントチャートの分類（選び直したらその場で保存・既定は「院の取り組み・プロジェクト」） */}
+              {task.gantt && (
+                <label className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-medium text-slate-600">分類</span>
+                  <select
+                    value={ganttCategoryValue}
+                    disabled={!ganttCategories}
+                    onChange={(e) => void save({ ganttCategory: e.target.value })}
+                    data-pm-panel-gantt-category
+                    className="rounded-md border border-slate-300 px-2 py-1 text-xs disabled:opacity-50"
+                  >
+                    {(ganttCategories ?? []).map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                    {!ganttCategories && <option value={ganttCategoryValue}>読み込んでいます…</option>}
+                  </select>
                 </label>
               )}
             </div>

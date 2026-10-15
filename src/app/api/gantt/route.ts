@@ -19,6 +19,7 @@ import {
   loadMatrixPlans,
   loadPlan,
   loadPlans,
+  moveMatrixToOther,
   movePlansToOther,
   saveCategories,
   savePlan,
@@ -179,7 +180,7 @@ export async function PUT(req: NextRequest) {
     const by = auth.user.email ?? auth.user.id;
     const next = await saveCategories(auth.admin, normalizeCategories(body.categories), by);
     const removed = prev.map((c) => c.id).filter((id) => !next.some((c) => c.id === id));
-    const moved = await movePlansToOther(auth.admin, removed, by);
+    const moved = (await movePlansToOther(auth.admin, removed, by)) + (await moveMatrixToOther(auth.admin, removed));
     return NextResponse.json({ categories: next, moved }, { headers: NO_STORE });
   } catch (e) {
     return fail(e);

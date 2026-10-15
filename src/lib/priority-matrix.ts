@@ -331,6 +331,8 @@ export type PriorityTask = {
   gantt: boolean;
   /** 250 §4: ガントチャートの開始日 YYYY-MM-DD（空＝期限の日だけ） */
   ganttStart: string;
+  /** 251: ガントチャートの分類の id（空＝既定の「院の取り組み・プロジェクト」） */
+  ganttCategory: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -386,6 +388,7 @@ export function normalizeTask(id: string, raw: unknown): PriorityTask | null {
     sourceCellIndex: num(o.sourceCellIndex, -1),
     gantt: bool(o.gantt),
     ganttStart: normalizeDue(o.ganttStart),
+    ganttCategory: str(o.ganttCategory).slice(0, 40),
     createdAt: str(o.createdAt) || now,
     updatedAt: str(o.updatedAt) || now,
   };
@@ -640,6 +643,7 @@ export type TaskFields = Partial<
     | "sourceCellIndex"
     | "gantt"
     | "ganttStart"
+    | "ganttCategory"
   >
 >;
 

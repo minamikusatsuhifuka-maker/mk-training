@@ -119,8 +119,14 @@ export const DEFAULT_CATEGORIES: GanttCategory[] = [
   { id: OTHER_CATEGORY_ID, name: "その他", color: "greige" },
 ];
 
-/** 四象限から出す項目を入れる分類（無ければ「その他」） */
+/** 四象限から出す項目の既定の分類（251: 四象限の編集欄で選べる。選んでいなければこれ） */
 export const MATRIX_CATEGORY_ID = "project";
+
+/** 251: 四象限の項目が入る分類。選んだ分類が無い（消した）ときは「その他」 */
+export function matrixCategoryOf(chosen: string | undefined, categories: Pick<GanttCategory, "id">[]): string {
+  const id = chosen || MATRIX_CATEGORY_ID;
+  return categories.some((c) => c.id === id) ? id : OTHER_CATEGORY_ID;
+}
 
 export const CATEGORY_NAME_MAX = 30;
 export const CATEGORY_MAX = 12;
