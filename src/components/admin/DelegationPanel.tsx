@@ -25,12 +25,15 @@ import {
 type Item = { key: string; label: string; href: string; delegable: boolean; reason: string; userIds: string[] };
 type Roster = { userId: string; name: string; isAdmin: boolean; retired: boolean; testSeed?: boolean }[];
 
+/** 258: ポップアップの左端は、行のタイトルの文字の末尾からこの分だけ右 */
+const TITLE_GAP = 80;
+
 /** マウスが行とポップアップの両方から離れてから閉じるまでの猶予（すき間を渡れるように） */
 const LEAVE_CLOSE_MS = 250;
 
 /**
  * 指名のポップアップ（1つだけ開く）。body の直下に出し、画面の端で切れない位置に置く。
- * 257: カーソルを合わせて開いたとき（パソコン）は、行の**タイトルの文字の末尾から14px右**・行の上端の14px上に出す
+ * 257/258: カーソルを合わせて開いたとき（パソコン）は、行の**タイトルの文字の末尾から80px右**（258で14px→80px）・行の上端の14px上に出す
  *   （タイトルの列はふさがない＝下の行へまっすぐ動かせる。説明の文の上には重なってよい）。
  *   右に入りきらなければ画面の右端の中に収める。それでもタイトルの文字にかかってしまう狭さのときは、行の下に出す。
  *   押して開いたとき（スマホ・キーボード）は256のまま行の下。形は縦のチェックリスト（院長が選んだ案C）。
@@ -71,7 +74,8 @@ function ItemPopover({
       let top: number;
       const title = anchor.querySelector<HTMLElement>("[data-deleg-title]")?.getBoundingClientRect() ?? null;
       const titleEnd = title ? title.right : b.left;
-      const rightLeft = Math.min(titleEnd + 14, vw - w - 8);
+      // 258: タイトルの末尾から80px右（間を動かすあいだも行の上にいるので閉じない）
+      const rightLeft = Math.min(titleEnd + TITLE_GAP, vw - w - 8);
       if (side === "right" && rightLeft >= titleEnd + 4) {
         // タイトルの末尾のすぐ右に（入りきらなければ画面の右端の中へ・タイトルの文字にはかぶせない）
         left = rightLeft;
@@ -136,7 +140,8 @@ function ItemPopover({
         top: 0,
         visibility: "hidden",
         zIndex: 60,
-        width: "min(268px, calc(100vw - 16px))",
+        // 258: 268px → 300px（長い名前がなるべく2行に折れないように）
+        width: "min(300px, calc(100vw - 16px))",
         maxHeight: "calc(100vh - 16px)",
         border: "1px solid #d6e6e1",
         borderRadius: 16,
