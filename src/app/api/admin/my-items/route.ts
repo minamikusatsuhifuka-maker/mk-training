@@ -11,7 +11,7 @@ import {
   loadDelegatedItems,
   loadKarteAssignments,
 } from "@/lib/admin-delegation-server";
-import { ADMIN_ITEMS } from "@/lib/admin-items";
+import { ADMIN_ITEMS, findAdminItem } from "@/lib/admin-items";
 
 export const runtime = "nodejs";
 
@@ -34,10 +34,12 @@ export async function GET() {
     loadDelegatedItems(user.id),
     loadKarteAssignments(user.id),
   ]);
+  // 250: 管理画面の中に画面の無い項目（hidden・例「📊 ガントチャート」）だけを任された人には、管理画面の入口を出さない
+  const inAdmin = items.filter((k) => !findAdminItem(k)?.hidden);
   return NextResponse.json({
     isAdmin: false,
     // 項目が1つでもあれば入口（ダッシュボード）も開ける
-    items: items.length > 0 && !items.includes("dashboard") ? ["dashboard", ...items] : items,
+    items: inAdmin.length > 0 && !inAdmin.includes("dashboard") ? ["dashboard", ...inAdmin] : inAdmin,
     karteAssignments: karte.length,
   });
 }

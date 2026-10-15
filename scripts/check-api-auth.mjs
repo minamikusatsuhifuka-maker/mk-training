@@ -31,6 +31,7 @@ const GUARDS = [
   "authorizeHiring", // 184: 採用資料（院長のみ・委任不可・非許可は404）
   "authorizeEvents", // 128: イベント（閲覧=ログイン済み・投稿=編集者）
   "authorizeNotices", // 228: お知らせ・イベント（ログイン済み・スイッチOFFは院長と検証用だけ・出欠の一覧は限られた人）
+  "authorizeGantt", // 250: ガントチャート（ログイン済み・スイッチOFFは院長と検証用だけ・書くのは院長と任された幹部）
   "CRON_SECRET", // 155: Vercel Cron 用の共有鍵
   "HR_CHAT_KNOWLEDGE_TOKEN", // ai-incho からのサーバー間呼び出し
 ];

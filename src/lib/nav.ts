@@ -109,6 +109,8 @@ export const MASTER_ITEMS: MasterItem[] = [
   { key: "/events", href: "/events", label: "🎪 イベント", categoryId: "work", featureId: "events" },
   // 院内カレンダー（指示書114・Googleカレンダー読み取り・管理はGoogle側）
   { key: "/calendar", href: "/calendar", label: "🗓 院内カレンダー", categoryId: "work", featureId: "calendar" },
+  // ガントチャート（指示書250・いろいろな計画を月・四半期・年で共有。書くのは院長と任された幹部）
+  { key: "/gantt", href: "/gantt", label: "📊 ガントチャート", categoryId: "work", featureId: "gantt" },
   { key: "/medical-fees", href: "/medical-fees", label: "💴 算定・点数表", featureId: "page_medical_fees", categoryId: "work" },
   { key: "/expert", href: "/expert", label: "⭐ エキスパートの働き方", featureId: "page_expert", categoryId: "work" },
   { key: "/growth-builder", href: "/growth-builder", label: "🚀 成長ロードマップ", featureId: "page_growth_builder", categoryId: "work" },

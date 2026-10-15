@@ -327,6 +327,10 @@ export type PriorityTask = {
   /** 9マスのマスから作られた項目のとき、その元（たどれるようにしておく） */
   sourceTaskId: string;
   sourceCellIndex: number;
+  /** 250 §4: ガントチャートに出す（既定は出さない）。出すのは名前・期間（開始日〜期限）・状態だけ */
+  gantt: boolean;
+  /** 250 §4: ガントチャートの開始日 YYYY-MM-DD（空＝期限の日だけ） */
+  ganttStart: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -380,6 +384,8 @@ export function normalizeTask(id: string, raw: unknown): PriorityTask | null {
     cells: normalizeCells(o.cells),
     sourceTaskId: str(o.sourceTaskId),
     sourceCellIndex: num(o.sourceCellIndex, -1),
+    gantt: bool(o.gantt),
+    ganttStart: normalizeDue(o.ganttStart),
     createdAt: str(o.createdAt) || now,
     updatedAt: str(o.updatedAt) || now,
   };
@@ -632,6 +638,8 @@ export type TaskFields = Partial<
     | "cells"
     | "sourceTaskId"
     | "sourceCellIndex"
+    | "gantt"
+    | "ganttStart"
   >
 >;
 

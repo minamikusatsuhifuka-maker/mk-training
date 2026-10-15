@@ -256,6 +256,40 @@ export function PriorityTaskRow({
             )}
           </label>
 
+          {/* 250 §4: ガントチャートに出す（既定は出さない）。出るのは名前・期間（開始日〜期限）・状態だけ */}
+          <div className="space-y-1" data-pm-panel-gantt>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-700">
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={task.gantt}
+                  onChange={(e) => void save({ gantt: e.target.checked })}
+                  data-pm-panel-gantt-check
+                />
+                <span>📊 ガントチャートに出す</span>
+              </label>
+              {task.gantt && (
+                <label className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-medium text-slate-600">開始日</span>
+                  <input
+                    type="date"
+                    value={task.ganttStart}
+                    max={task.due || undefined}
+                    onChange={(e) => void save({ ganttStart: e.target.value })}
+                    data-pm-panel-gantt-start
+                    className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                  />
+                </label>
+              )}
+            </div>
+            {task.gantt && (
+              <p className="text-[10px] text-slate-500" data-pm-panel-gantt-note>
+                ガントチャートには、名前・期間（開始日〜期限）・状態だけが出ます（メモ・9マス・任せる相手は出ません）。
+                {!task.due && !task.ganttStart && "開始日か期限を入れると出ます。"}
+              </p>
+            )}
+          </div>
+
           <label className="block">
             <span className="text-[10px] font-medium text-slate-600">メモ</span>
             <textarea

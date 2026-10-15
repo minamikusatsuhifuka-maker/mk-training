@@ -144,6 +144,17 @@ export const ADMIN_ITEMS: readonly AdminItem[] = [
     delegable: true,
     reason: "院長が指定した幹部向けの研修（欲求別成長支援ガイド STEP3-2）。ここで任せた人が受講者になり、「📘 欲求別成長支援ガイド」も見られる。スタッフの診断結果は含まない",
   },
+  // 250 §3: ガントチャート（スタッフの画面 /gantt）で計画を足す・直す・消す・並べ替えができる人。既定は誰もいない。
+  //   見るのはスタッフ全員。分類を直すのは院長だけ（委任しても分類は直せない）。判定は gantt-server の authorizeGantt。
+  //   管理画面の中に画面は無いので、メニューには出さない（hidden）。
+  {
+    key: "gantt",
+    label: "📊 ガントチャート",
+    href: "/gantt",
+    delegable: true,
+    reason: "計画（院の取り組み・行事・採用と教育など）を書くこと。分類の編集は含まない（院長のみ）",
+    hidden: true,
+  },
   { key: "staff-accounts", label: "👤 アカウント招待", href: "/admin/staff-accounts", delegable: false, reason: "アカウント・招待コード・仮パスワード（権限・アカウント）" },
   {
     key: "profile-fields",

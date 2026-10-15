@@ -277,6 +277,7 @@ function logAction(prev: MatrixRecord, next: MatrixRecord): string {
     if (next.quadrant !== prev.quadrant) return "象限の移動";
     if (next.status !== prev.status) return "状態の変更";
     if (next.focus !== prev.focus) return next.focus ? "★を付けた" : "★を外した";
+    if (next.gantt !== prev.gantt) return next.gantt ? "ガントチャートに出した" : "ガントチャートから外した";
   }
   if (JSON.stringify(prev.cells) !== JSON.stringify(next.cells)) return "9マスの更新";
   return "更新";
