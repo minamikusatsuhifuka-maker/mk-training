@@ -82,6 +82,7 @@ import {
 import { loadDisabledMemberNames } from "@/lib/staff-profiles";
 import { resolveTaskActor } from "@/lib/task-actor";
 import { AssigneeNames } from "@/components/tasks/AssigneeNames";
+import { GanttMyTasks } from "@/components/gantt/GanttTasks";
 
 type ViewKey = "due" | "assignee" | "status" | "team";
 
@@ -981,6 +982,9 @@ export default function TasksPage() {
         description="クリニック全体のタスクを「誰が・何を・いつまで」で見える化"
         badge={`未完了 ${tasks.filter((t) => t.status !== "done").length} 件`}
       />
+
+      {/* 263: 📊 ガントチャートの計画の中で、自分が担当者になっているタスク（見られない人には何も出さない） */}
+      <GanttMyTasks />
 
       {/* セクション（管理画面「ポータル管理→レイアウト」の設定順に描画） */}
       {sectionOrder.map((key) => (

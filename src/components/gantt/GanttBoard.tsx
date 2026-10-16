@@ -11,7 +11,7 @@
 // ・切り替えのボタンは幅を固定（246：表示を変えてもボタンが動かない）
 // ・色・角の丸さ・影は見本（~/Downloads/250-補_見本_ガントチャートA_さくらミルク.html）の値。字はこの画面だけで読み込む
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useStoredChoice } from "@/components/calendar/CalendarViews";
@@ -49,6 +49,8 @@ import {
   type TeamMember,
   type TaskStatus,
 } from "@/lib/gantt";
+import { isOverdue, progressLabel, swapTaskOrder, tasksOfPlan, type GanttTask } from "@/lib/gantt-tasks";
+import { JudgeChip, TaskForm, TaskList, TaskStatusChip, ganttApi, type TaskDraft, type TaskPerms } from "./GanttTasks";
 
 // ─── 見本の値（sakura-theme.ts に置いた） ───
 
@@ -80,24 +82,15 @@ type GanttData = {
   canWrite: boolean;
   canEditCategories: boolean;
   fiscalStartMonth: number;
+  /** 263: 計画の中のタスク・タスクを書ける計画・院長か・どのひとことでも消せるか */
+  tasks: GanttTask[];
+  taskManageIds: string[];
+  isDirector: boolean;
+  canModerate: boolean;
 };
+const TASK_ROW_H = 36;
 
-async function api<T>(input: string, init?: RequestInit): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetch(input, {
-      ...init,
-      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-      credentials: "same-origin",
-      cache: "no-store",
-    });
-  } catch {
-    throw new Error("通信できませんでした。電波・接続を確かめてもう一度お試しください");
-  }
-  const j = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(j.error || `処理に失敗しました (${res.status})`);
-  return j;
-}
+const api = ganttApi;
 
 // ─── 小さな部品 ───
 
@@ -249,6 +242,75 @@ function PlanBar({
   );
 }
 
+// ─── 263: 計画の下のタスクの行（期限の日に小さな◆・完了は✓） ───
+
+function TaskRow({
+  task,
+  color,
+  range,
+  view,
+  open,
+  onOpen,
+}: {
+  task: GanttTask;
+  color: GanttColorKey;
+  range: GanttRange;
+  view: GanttView;
+  open: boolean;
+  onOpen: (el: HTMLElement) => void;
+}) {
+  const pal = GANTT_PALETTES[color];
+  const span = spanIn(range, task.due, task.due);
+  const done = task.status === "done";
+  return (
+    <div className="flex" data-gantt-task-row={task.id}>
+      <div
+        className={`${NAME_COL} sticky left-0 z-10 flex shrink-0 items-center gap-1 pr-2 md:pr-3.5`}
+        style={{ height: TASK_ROW_H, paddingLeft: 30, background: "rgba(255,255,255,0.97)" }}
+      >
+        <span aria-hidden="true" className="h-[6px] w-[6px] shrink-0 rotate-45 rounded-[1px]" style={{ background: pal.dot[0] }} />
+        <span className="min-w-0 flex-1 truncate text-[11px] md:text-[12px]" style={{ color: done ? C.sub : C.ink }} title={task.title}>
+          {done && "✓ "}
+          {task.title}
+        </span>
+        {task.directorJudge && (
+          <span className="hidden md:inline">
+            <JudgeChip small />
+          </span>
+        )}
+      </div>
+      <div className="relative flex-1" style={{ minWidth: TIMELINE_MIN[view], height: TASK_ROW_H }}>
+        {span && (
+          <button
+            type="button"
+            onClick={(e) => onOpen(e.currentTarget)}
+            aria-label={`タスク「${task.title}」（期限 ${shortDate(task.due)}・${STATUS_LABEL[task.status]}${task.directorJudge ? "・院長が判断" : ""}）のくわしい内容`}
+            aria-expanded={open}
+            data-gantt-task-diamond={task.id}
+            data-gantt-task-done={done ? "1" : undefined}
+            className="absolute top-1/2 flex -translate-y-1/2 items-center gap-1.5 rounded-full py-1 pr-2 outline-none focus-visible:ring-2 focus-visible:ring-[#E7A6B8]"
+            style={{ left: `calc(${(span.left + span.width / 2) * 100}% - 5px)` }}
+          >
+            <span
+              className="block h-[10px] w-[10px] shrink-0 rotate-45 rounded-[2px]"
+              style={{
+                background: grad(open ? pal.open : pal.bar, 135),
+                boxShadow: open ? `0 0 0 3px ${C.ring}, 0 4px 10px ${pal.shadow}` : `0 2px 6px ${pal.shadow}`,
+                outline: task.directorJudge ? "1.5px solid #8E5BB5" : undefined,
+                outlineOffset: 1,
+              }}
+            />
+            <span className="whitespace-nowrap text-[10px]" style={{ color: pal.text }}>
+              {done && <span data-gantt-done>✓ </span>}
+              {shortDate(task.due)}
+            </span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── くわしい内容（横棒を押したとき） ───
 
 function PlanDetail({
@@ -260,6 +322,7 @@ function PlanDetail({
   canEdit,
   isDirector,
   ayumi,
+  tasksSlot,
   onEdit,
   onDelete,
   onClose,
@@ -274,6 +337,8 @@ function PlanDetail({
   isDirector: boolean;
   /** 253: 「📜 当院の歩みに残す」（当院の歩みを書ける人だけ・null＝出さない） */
   ayumi: { kept: boolean; busy: boolean; onKeep: () => void } | null;
+  /** 263: 「担当」「状態」の下に出すタスクの一覧 */
+  tasksSlot?: React.ReactNode;
   onEdit: () => void;
   onDelete: () => void;
   onClose: () => void;
@@ -283,21 +348,30 @@ function PlanDetail({
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const b = anchor.getBoundingClientRect();
-    const w = el.offsetWidth;
-    const h = el.offsetHeight;
-    const left = Math.min(Math.max(8, b.left), Math.max(8, window.innerWidth - w - 8));
-    let top = b.bottom + 8;
-    if (top + h > window.innerHeight - 8) top = b.top - h - 8 >= 8 ? b.top - h - 8 : Math.max(8, window.innerHeight - h - 8);
-    el.style.left = `${left}px`;
-    el.style.top = `${top}px`;
-    el.style.visibility = "visible";
+    const place = () => {
+      const b = anchor.getBoundingClientRect();
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      const left = Math.min(Math.max(8, b.left), Math.max(8, window.innerWidth - w - 8));
+      let top = b.bottom + 8;
+      if (top + h > window.innerHeight - 8) top = b.top - h - 8 >= 8 ? b.top - h - 8 : Math.max(8, window.innerHeight - h - 8);
+      el.style.left = `${left}px`;
+      el.style.top = `${top}px`;
+      el.style.visibility = "visible";
+    };
+    place();
+    // 263: タスクを開く・足すと高さが変わるので、置き直す
+    const ro = new ResizeObserver(place);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [anchor]);
 
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
       const t = e.target as Node | null;
       if (t && (ref.current?.contains(t) || anchor.contains(t))) return;
+      // 263: タスクを足す・直す欄（別の重ね画面）を触っているあいだは閉じない
+      if (t instanceof Element && t.closest("[data-gantt-keep-detail]")) return;
       onClose();
     };
     const onKey = (e: KeyboardEvent) => {
@@ -318,14 +392,15 @@ function PlanDetail({
       role="dialog"
       aria-label={`${plan.name} のくわしい内容`}
       data-gantt-detail={plan.id}
-      className="overflow-hidden"
+      className="overflow-y-auto overflow-x-hidden overscroll-contain"
       style={{
         position: "fixed",
         left: 0,
         top: 0,
         visibility: "hidden",
         zIndex: 60,
-        width: "min(300px, calc(100vw - 16px))",
+        width: tasksSlot ? "min(420px, calc(100vw - 16px))" : "min(300px, calc(100vw - 16px))",
+        maxHeight: "calc(100dvh - 16px)",
         background: "rgba(255, 255, 255, 0.96)",
         border: "1px solid rgba(240, 213, 220, 0.9)",
         borderRadius: 20,
@@ -379,6 +454,7 @@ function PlanDetail({
         )}
       </dl>
       )}
+      {tasksSlot}
       {canWrite && fromMatrix && (
         <p className="px-[18px] pb-3 text-[12px]" style={{ color: C.sub }} data-gantt-matrix-note>
           四象限マトリクスの項目です。直すのは四象限マトリクスで行います。
@@ -877,7 +953,11 @@ export function GanttBoard() {
   const [data, setData] = useState<GanttData | null>(null);
   const [loadError, setLoadError] = useState("");
   const [hiddenCats, setHiddenCats] = useState<Set<string>>(new Set());
-  const [opened, setOpened] = useState<{ id: string; el: HTMLElement } | null>(null);
+  const [opened, setOpened] = useState<{ id: string; el: HTMLElement; taskId?: string } | null>(null);
+  // 263: タスクを開いている計画（最初はたたむ）・タスクを足す/直す欄・「院長が判断」の一覧
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [taskForm, setTaskForm] = useState<{ planId: string; editing: GanttTask | null; initial: TaskDraft } | null>(null);
+  const [judgeOpen, setJudgeOpen] = useState(false);
   const [form, setForm] = useState<{ editingId: string | null; initial: Draft } | null>(null);
   const [teamForm, setTeamForm] = useState<{ editingId: string | null; initial: TeamDraft } | null>(null);
   const [formBusy, setFormBusy] = useState(false);
@@ -888,7 +968,14 @@ export function GanttBoard() {
   const load = useCallback(async () => {
     try {
       const j = await api<GanttData>("/api/gantt");
-      setData({ ...j, editableIds: j.editableIds ?? [], teamCandidates: j.teamCandidates ?? [], canAddTeam: !!j.canAddTeam });
+      setData({
+        ...j,
+        editableIds: j.editableIds ?? [],
+        teamCandidates: j.teamCandidates ?? [],
+        canAddTeam: !!j.canAddTeam,
+        tasks: j.tasks ?? [],
+        taskManageIds: j.taskManageIds ?? [],
+      });
       setLoadError("");
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "読み込めませんでした");
@@ -926,6 +1013,94 @@ export function GanttBoard() {
   };
 
   const canEditPlan = (p: GanttPlan) => !!data?.editableIds.includes(p.id);
+
+  // ─── 263: 計画の中のタスク ───
+  const tasks = useMemo(() => data?.tasks ?? [], [data]);
+  const taskPerms = (planId: string): TaskPerms => ({
+    me: data?.me ?? "",
+    manage: !!data?.taskManageIds.includes(planId),
+    isDirector: !!data?.isDirector,
+    canModerate: !!data?.canModerate,
+  });
+  const upsertTask = (t: GanttTask) =>
+    setData((d) => (d ? { ...d, tasks: d.tasks.some((x) => x.id === t.id) ? d.tasks.map((x) => (x.id === t.id ? t : x)) : [...d.tasks, t] } : d));
+  const removeTask = (id: string) => setData((d) => (d ? { ...d, tasks: d.tasks.filter((x) => x.id !== id) } : d));
+  const toggleExpanded = (id: string) =>
+    setExpanded((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  /** 院長：「院長が判断」のタスクで完了していないもの */
+  const judgePending = useMemo(() => tasks.filter((t) => t.directorJudge && t.status !== "done"), [tasks]);
+
+  const openTaskForm = (planId: string, editing: GanttTask | null) => {
+    setFormError("");
+    setTaskForm({
+      planId,
+      editing,
+      initial: editing
+        ? { title: editing.title, assigneeIds: editing.assignees.map((a) => a.id), due: editing.due, directorJudge: editing.directorJudge, status: editing.status, memo: editing.memo }
+        : { title: "", assigneeIds: [], due: "", directorJudge: false, status: "todo", memo: "" },
+    });
+  };
+
+  const saveTask = async (d: TaskDraft) => {
+    if (!taskForm) return;
+    setFormBusy(true);
+    setFormError("");
+    const fields = { title: d.title.trim(), assignees: d.assigneeIds, due: d.due, directorJudge: d.directorJudge, status: d.status, memo: d.memo };
+    try {
+      const j = taskForm.editing
+        ? await ganttApi<{ task: GanttTask }>("/api/gantt/tasks", { method: "PATCH", body: JSON.stringify({ id: taskForm.editing.id, fields }) })
+        : await ganttApi<{ task: GanttTask }>("/api/gantt/tasks", { method: "POST", body: JSON.stringify({ planId: taskForm.planId, fields }) });
+      upsertTask(j.task);
+      setTaskForm(null);
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : "保存できませんでした");
+    } finally {
+      setFormBusy(false);
+    }
+  };
+
+  const reorderTask = async (planId: string, id: string, dir: -1 | 1) => {
+    if (!data) return;
+    const next = swapTaskOrder(data.tasks, id, dir);
+    if (!next) return;
+    setActionError("");
+    setData({ ...data, tasks: data.tasks.map((t) => ({ ...t, order: next.find((n) => n.id === t.id)?.order ?? t.order })) });
+    try {
+      await ganttApi("/api/gantt/tasks", { method: "PATCH", body: JSON.stringify({ planId, reorder: next }) });
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "並べ替えられませんでした");
+      await load();
+    }
+  };
+
+  /** 計画のくわしい内容を開く（棒が今の期間に無いときは、名前の欄から開く） */
+  const openPlanById = (planId: string, taskId?: string) => {
+    const el =
+      document.querySelector<HTMLElement>(`[data-gantt-bar="${CSS.escape(planId)}"]`) ??
+      document.querySelector<HTMLElement>(`[data-gantt-name="${CSS.escape(planId)}"]`);
+    if (!el) return false;
+    el.scrollIntoView({ block: "nearest", inline: "nearest" });
+    setOpened({ id: planId, el, taskId });
+    return true;
+  };
+
+  // 263: 「📋 みんなのタスク」から来たとき（/gantt?plan=…&task=…）は、その計画のくわしい内容を開く
+  const deepLinked = useRef(false);
+  useEffect(() => {
+    if (!data || deepLinked.current) return;
+    deepLinked.current = true;
+    const q = new URLSearchParams(window.location.search);
+    const planId = q.get("plan");
+    if (!planId) return;
+    requestAnimationFrame(() => {
+      if (!openPlanById(planId, q.get("task") ?? undefined)) setActionError("その計画は見つかりませんでした（消されたか、見られない計画です）");
+    });
+  }, [data]);
 
   // 253: ガントチャートの中身（題名・期間・分類・チーム名とメンバー）を写して、当院の歩みの1件をつくる
   const [keeping, setKeeping] = useState(false);
@@ -1191,6 +1366,60 @@ export function GanttBoard() {
           </div>
         )}
 
+        {/* 263: 院長には「院長が判断」のタスクで完了していないものの件数。押すと一覧 */}
+        {data?.isDirector && (
+          <div className="rounded-2xl px-4 py-2.5" style={{ background: "rgba(255,255,255,0.8)", border: C.pillBorder }} data-gantt-judge-panel>
+            <button
+              type="button"
+              onClick={() => setJudgeOpen((v) => !v)}
+              aria-expanded={judgeOpen}
+              className="flex min-h-[40px] flex-wrap items-center gap-2 text-left text-[14px]"
+              data-gantt-judge-count={judgePending.length}
+            >
+              <JudgeChip />
+              <span>
+                のタスク（未完了）<strong className="text-[16px]">{judgePending.length}</strong>件
+              </span>
+              <span aria-hidden="true" style={{ color: C.sub }}>
+                {judgeOpen ? "▾" : "▸"}
+              </span>
+            </button>
+            {judgeOpen && (
+              <ul className="m-0 mt-1.5 list-none space-y-1 p-0" data-gantt-judge-list>
+                {judgePending.length === 0 && (
+                  <li className="text-[13px]" style={{ color: C.sub }}>
+                    ありません
+                  </li>
+                )}
+                {judgePending.map((t) => {
+                  const plan = data.plans.find((p) => p.id === t.planId);
+                  return (
+                    <li key={t.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setJudgeOpen(false);
+                          openPlanById(t.planId, t.id);
+                        }}
+                        className="flex min-h-[40px] w-full flex-wrap items-center gap-x-2 rounded-xl px-2 text-left text-[13px] hover:bg-white"
+                        data-gantt-judge-item={t.id}
+                      >
+                        <TaskStatusChip status={t.status} />
+                        <span className="font-medium">{t.title}</span>
+                        <span className="text-[12px]" style={{ color: C.sub }}>
+                          {plan?.name ?? ""}
+                          {t.due ? ` ・期限 ${shortDate(t.due)}` : ""}
+                          {isOverdue(t, today) ? "（期限切れ）" : ""}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        )}
+
         {notice && (
           <p className="rounded-2xl px-4 py-2 text-[13px]" style={{ background: "rgba(255,255,255,0.8)", color: "#337559" }} role="status" data-gantt-notice>
             {notice}
@@ -1284,12 +1513,31 @@ export function GanttBoard() {
                       </div>
                       {rows.map(({ plan, depth }) => {
                         const fromMatrix = plan.source === "matrix";
+                        const planTasks = tasksOfPlan(tasks, plan.id);
+                        const isOpen = expanded.has(plan.id);
+                        const datedTasks = isOpen ? planTasks.filter((t) => t.due) : [];
                         return (
-                          <div key={plan.id} className="flex" data-gantt-row={plan.id}>
+                          <Fragment key={plan.id}>
+                          <div className="flex" data-gantt-row={plan.id}>
                             <div
                               className={`${NAME_COL} sticky left-0 z-10 flex shrink-0 items-center gap-1.5 pr-2 md:gap-2 md:pr-3.5`}
-                              style={{ height: ROW_H, paddingLeft: depth ? 22 : 12, background: "rgba(255,255,255,0.97)" }}
+                              style={{ height: ROW_H, paddingLeft: planTasks.length ? (depth ? 14 : 4) : depth ? 22 : 12, background: "rgba(255,255,255,0.97)" }}
+                              data-gantt-name={plan.id}
                             >
+                              {/* 263: タスクのある計画は、開く・たたむ（最初はたたむ） */}
+                              {planTasks.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExpanded(plan.id)}
+                                  aria-expanded={isOpen}
+                                  aria-label={`${plan.name}のタスク（${progressLabel(planTasks)}）を${isOpen ? "たたむ" : "開く"}`}
+                                  className="flex h-[28px] w-[20px] shrink-0 items-center justify-center rounded-md text-[11px]"
+                                  style={{ color: C.statusText }}
+                                  data-gantt-expand={plan.id}
+                                >
+                                  {isOpen ? "▾" : "▸"}
+                                </button>
+                              )}
                               {depth === 1 && (
                                 <span aria-hidden="true" className="-mt-1.5 h-[10px] w-[10px] shrink-0 rounded-bl-[4px]" style={{ borderLeft: "1.5px solid #E3C4CB", borderBottom: "1.5px solid #E3C4CB" }} />
                               )}
@@ -1313,6 +1561,11 @@ export function GanttBoard() {
                                 </span>
                               )}
                               <span className="hidden shrink-0 gap-1.5 md:flex">
+                                {planTasks.length > 0 && (
+                                  <span className="whitespace-nowrap text-[11px]" style={{ color: C.sub }} data-gantt-row-progress>
+                                    {progressLabel(planTasks)}
+                                  </span>
+                                )}
                                 {fromMatrix && <Chip kind="matrix">四象限</Chip>}
                                 {/* 「未着手」は札にしない（見本どおり・くわしい内容には出る） */}
                                 {depth === 0 && plan.status !== "todo" && <Chip kind="status">{STATUS_LABEL[plan.status]}</Chip>}
@@ -1336,10 +1589,23 @@ export function GanttBoard() {
                                 range={range}
                                 today={today}
                                 open={opened?.id === plan.id}
-                                onOpen={(el) => setOpened((prev) => (prev?.id === plan.id ? null : { id: plan.id, el }))}
+                                onOpen={(el) => setOpened((prev) => (prev?.id === plan.id && !prev.taskId ? null : { id: plan.id, el }))}
                               />
                             </div>
                           </div>
+                          {/* 263: 開いた計画の下に、期限のあるタスクを1行ずつ（期限の日に◆・完了は✓） */}
+                          {datedTasks.map((t) => (
+                            <TaskRow
+                              key={t.id}
+                              task={t}
+                              color={category.color}
+                              range={range}
+                              view={view}
+                              open={opened?.taskId === t.id}
+                              onOpen={(el) => setOpened((prev) => (prev?.taskId === t.id ? null : { id: plan.id, el, taskId: t.id }))}
+                            />
+                          ))}
+                          </Fragment>
                         );
                       })}
                     </div>
@@ -1395,8 +1661,39 @@ export function GanttBoard() {
               setForm({ editingId: openedPlan.id, initial: draftOf(openedPlan) });
             }
           }}
+          tasksSlot={
+            tasksOfPlan(tasks, openedPlan.id).length > 0 || taskPerms(openedPlan.id).manage ? (
+              <TaskList
+                key={`${openedPlan.id}:${opened.taskId ?? ""}`}
+                planId={openedPlan.id}
+                tasks={tasks}
+                today={today}
+                perms={taskPerms(openedPlan.id)}
+                initialOpenId={opened.taskId}
+                onAdd={() => openTaskForm(openedPlan.id, null)}
+                onEdit={(t) => openTaskForm(openedPlan.id, t)}
+                onSaved={upsertTask}
+                onRemoved={removeTask}
+                onReorder={(id, dir) => void reorderTask(openedPlan.id, id, dir)}
+              />
+            ) : undefined
+          }
           onDelete={() => void removePlan(openedPlan)}
           onClose={() => setOpened(null)}
+        />
+      )}
+      {taskForm && (
+        <TaskForm
+          planName={data?.plans.find((p) => p.id === taskForm.planId)?.name ?? ""}
+          initial={taskForm.initial}
+          editing={!!taskForm.editing}
+          wasJudge={!!taskForm.editing?.directorJudge}
+          candidates={teamCandidatesWithMembers(data?.teamCandidates ?? [], taskForm.editing?.assignees ?? [])}
+          isDirector={!!data?.isDirector}
+          busy={formBusy}
+          error={formError}
+          onSave={(d) => void saveTask(d)}
+          onClose={() => setTaskForm(null)}
         />
       )}
       {form && (

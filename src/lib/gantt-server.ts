@@ -38,6 +38,7 @@ import {
   type GanttCategory,
   type GanttPlan,
 } from "./gantt";
+import { normalizeTask as normalizeGanttTask, type GanttTask } from "./gantt-tasks";
 
 export const GANTT_ITEM_KEY = "gantt";
 export const GANTT_FEATURE = "gantt";
@@ -300,4 +301,69 @@ export function visiblePlans(plans: GanttPlan[], user: Pick<User, "app_metadata"
   if (!hidesTestSeedFor(user)) return plans;
   const hidden = new Set(plans.filter((p) => p.testSeed).map((p) => p.id));
   return plans.filter((p) => !hidden.has(p.id) && !hidden.has(p.parentId));
+}
+
+// ─── 263: 計画の中のタスク ───
+
+export const GANTT_TASK_TYPE = "gantt_task";
+
+export async function loadTasks(admin: Admin): Promise<GanttTask[]> {
+  const { data, error } = await admin.from(GROWTH_TABLE).select("id, data").eq("record_type", GANTT_TASK_TYPE);
+  if (error) {
+    if (isMissingTable(error.message)) return [];
+    throw new Error(error.message);
+  }
+  return ((data ?? []) as { id: string; data: unknown }[])
+    .map((r) => normalizeGanttTask(r.id, r.data))
+    .filter((t): t is GanttTask => t !== null);
+}
+
+export async function loadTask(admin: Admin, id: string): Promise<GanttTask | null> {
+  const { data, error } = await admin
+    .from(GROWTH_TABLE)
+    .select("id, data")
+    .eq("id", id)
+    .eq("record_type", GANTT_TASK_TYPE)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const row = data as { id: string; data: unknown } | null;
+  return row ? normalizeGanttTask(row.id, row.data) : null;
+}
+
+export async function saveTask(admin: Admin, task: GanttTask, by: string): Promise<GanttTask> {
+  const now = new Date().toISOString();
+  const next: GanttTask = { ...task, updatedAt: now };
+  // 検証用の印は、作ったときのまま（直した人で変えない）
+  const { error } = await admin.from(GROWTH_TABLE).upsert({
+    id: next.id,
+    record_type: GANTT_TASK_TYPE,
+    data: { ...next, ...(next.testSeed ? { seed191: true } : {}) },
+    updated_by: by,
+    updated_at: now,
+  });
+  if (error) throw new Error(error.message);
+  return next;
+}
+
+export async function deleteTasks(admin: Admin, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await admin.from(GROWTH_TABLE).delete().in("id", ids).eq("record_type", GANTT_TASK_TYPE);
+  if (error) throw new Error(error.message);
+}
+
+/** 計画を消したとき、中のタスクも消す */
+export async function deleteTasksOfPlans(admin: Admin, planIds: string[]): Promise<void> {
+  if (planIds.length === 0) return;
+  const tasks = await loadTasks(admin);
+  await deleteTasks(admin, tasks.filter((t) => planIds.includes(t.planId)).map((t) => t.id));
+}
+
+/** 見ている人の表示名（計画の「担当」と比べる・ひとことに付ける） */
+export async function myDisplayName(admin: Admin, user: Pick<User, "id" | "email">): Promise<string> {
+  try {
+    const accounts = await loadAccounts(admin);
+    return accounts.find((a) => a.id === user.id)?.name || user.email || "";
+  } catch {
+    return user.email ?? "";
+  }
 }

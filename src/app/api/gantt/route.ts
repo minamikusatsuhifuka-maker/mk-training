@@ -1,6 +1,7 @@
 // 📊 ガントチャート（指示書250・252）
 //
-//   GET                          → { categories, plans, editableIds, canWrite, canAddTeam, canEditCategories, fiscalStartMonth, teamCandidates, me }
+//   GET                          → { categories, plans, editableIds, canWrite, canAddTeam, canEditCategories, fiscalStartMonth, teamCandidates, me,
+//                                    tasks, taskManageIds, isDirector, canModerate }（263: 計画の中のタスク。書くのは /api/gantt/tasks）
 //   POST   { fields }            → 院の計画を足す（書く人）
 //   POST   { kind:"team", fields } → チームプロジェクトを足す（ログインしたスタッフ全員）＋お知らせを1件出す
 //   PATCH  { id, fields }        → 直す（院の計画＝書く人／チームプロジェクト＝作った人・メンバー・書く人）
@@ -15,6 +16,9 @@ import { after, NextResponse, type NextRequest } from "next/server";
 import {
   authorizeGantt,
   deletePlans,
+  deleteTasksOfPlans,
+  loadTasks,
+  myDisplayName,
   loadCategories,
   loadFiscalStart,
   loadMatrixPlans,
@@ -42,6 +46,8 @@ import {
 } from "@/lib/gantt";
 import { jstTodayYmd } from "@/lib/library";
 import { loadEntries } from "@/lib/ayumi-server";
+import { hidesTestSeedFor } from "@/lib/test-seed-hide-server";
+import { canManageTasks, visibleTasksFor } from "@/lib/gantt-tasks";
 
 export const runtime = "nodejs";
 
@@ -84,17 +90,20 @@ export async function GET() {
   if (!auth.ok) return auth.status === 401 ? unauth() : hidden();
   try {
     const categories = await loadCategories(auth.admin);
-    const [plans, matrix, fiscalStartMonth, candidates] = await Promise.all([
+    const [plans, matrix, fiscalStartMonth, candidates, allTasks, myName] = await Promise.all([
       loadPlans(auth.admin),
       loadMatrixPlans(auth.admin, categories),
       loadFiscalStart(),
       teamCandidates(auth.admin, auth.testSeed).catch(() => []),
+      loadTasks(auth.admin),
+      myDisplayName(auth.admin, auth.user),
     ]);
     const mine = visiblePlans(plans, auth.user);
+    const shown = [...mine, ...matrix];
     return NextResponse.json(
       {
         categories,
-        plans: [...mine, ...matrix],
+        plans: shown,
         // 直す・消すが出せる計画（判定はサーバー。画面はこれに従うだけ）
         editableIds: mine.filter((p) => canEditTeam(p, auth.user.id, auth.canWrite)).map((p) => p.id),
         canWrite: auth.canWrite,
@@ -103,6 +112,11 @@ export async function GET() {
         fiscalStartMonth,
         teamCandidates: candidates,
         me: auth.user.id,
+        // 263: 計画の中のタスク（本物のスタッフには検証用のタスク・ひとことを出さない）と、タスクを書ける計画
+        tasks: visibleTasksFor(allTasks, hidesTestSeedFor(auth.user), new Set(shown.map((p) => p.id))),
+        taskManageIds: shown.filter((p) => canManageTasks(p, auth.user.id, myName, auth.canWrite)).map((p) => p.id),
+        isDirector: auth.isAdmin,
+        canModerate: auth.canWrite,
         // 253: 「📜 当院の歩みに残す」を出すか・もう残した計画
         canAyumi: auth.canAyumi,
         keptPlanIds: auth.canAyumi ? (await loadEntries(auth.admin)).map((e) => e.source?.planId).filter((x): x is string => !!x) : [],
@@ -254,7 +268,10 @@ export async function DELETE(req: NextRequest) {
     const plans = await loadPlans(auth.admin);
     const prev = findVisible(plans, id, auth);
     if (!prev || !canEditTeam(prev, auth.user.id, auth.canWrite)) return hidden();
-    await deletePlans(auth.admin, [id, ...plans.filter((p) => p.parentId === id).map((p) => p.id)]);
+    const ids = [id, ...plans.filter((p) => p.parentId === id).map((p) => p.id)];
+    await deletePlans(auth.admin, ids);
+    // 263: 中のタスクも一緒に消す
+    await deleteTasksOfPlans(auth.admin, ids);
     return NextResponse.json({ ok: true }, { headers: NO_STORE });
   } catch (e) {
     return fail(e);
