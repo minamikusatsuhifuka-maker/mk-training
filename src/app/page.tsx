@@ -1045,7 +1045,7 @@ export default function PortalHome() {
             <div className="flex items-center gap-2 flex-shrink-0">
               {taskAlert.overdue > 0 && (
                 <span className="text-xs px-2 py-1 rounded-full font-medium bg-red-50 text-red-700">
-                  期限切れ {taskAlert.overdue}件
+                  超過 {taskAlert.overdue}件
                 </span>
               )}
               {taskAlert.today > 0 && (
