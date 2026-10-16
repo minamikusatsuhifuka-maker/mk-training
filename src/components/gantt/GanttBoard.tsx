@@ -35,6 +35,7 @@ import {
   grad,
   groupPlans,
   periodLabel,
+  planAssigneeLabel,
   rangeFor,
   shortDate,
   spanIn,
@@ -49,7 +50,7 @@ import {
   type TeamMember,
   type TaskStatus,
 } from "@/lib/gantt";
-import { isOverdue, progressLabel, swapTaskOrder, tasksOfPlan, type GanttTask } from "@/lib/gantt-tasks";
+import { OVERDUE_LABEL, isOverdue, progressLabel, swapTaskOrder, tasksOfPlan, type GanttTask } from "@/lib/gantt-tasks";
 import { JudgeChip, TaskForm, TaskList, TaskStatusChip, ganttApi, type TaskDraft, type TaskPerms } from "./GanttTasks";
 
 // ─── 見本の値（sakura-theme.ts に置いた） ───
@@ -438,10 +439,13 @@ function PlanDetail({
         <dd className="m-0">{category.name}</dd>
         <dt style={{ color: C.sub }}>期間</dt>
         <dd className="m-0">{periodLabel(plan.start, plan.end, today)}</dd>
-        {plan.assignee && (
+        {planAssigneeLabel(plan) && (
           <>
             <dt style={{ color: C.sub }}>担当</dt>
-            <dd className="m-0 break-words">{plan.assignee}</dd>
+            {/* 264: 一覧から選んだスタッフの名前と、文字で入れたものを並べる */}
+            <dd className="m-0 break-words" data-gantt-detail-assignee>
+              {planAssigneeLabel(plan)}
+            </dd>
           </>
         )}
         <dt style={{ color: C.sub }}>状態</dt>
@@ -510,13 +514,27 @@ function PlanDetail({
 
 // ─── 計画を足す・直す ───
 
-type Draft = { name: string; categoryId: string; parentId: string; start: string; end: string; oneDay: boolean; assignee: string; status: TaskStatus; memo: string };
+type Draft = {
+  name: string;
+  categoryId: string;
+  parentId: string;
+  start: string;
+  end: string;
+  oneDay: boolean;
+  /** 264: 担当のうち文字で入れたもの（役割など） */
+  assignee: string;
+  /** 264: 担当に選んだスタッフ */
+  assigneeIds: string[];
+  status: TaskStatus;
+  memo: string;
+};
 
 function PlanForm({
   initial,
   editingId,
   categories,
   plans,
+  candidates,
   busy,
   error,
   onSave,
@@ -526,13 +544,18 @@ function PlanForm({
   editingId: string | null;
   categories: GanttCategory[];
   plans: GanttPlan[];
+  /** 264: 担当に選べるスタッフ */
+  candidates: TeamMember[];
   busy: boolean;
   error: string;
   onSave: (d: Draft) => void;
   onClose: () => void;
 }) {
   const [d, setD] = useState<Draft>(initial);
+  const [q, setQ] = useState("");
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
+  const toggleAssignee = (id: string) => set("assigneeIds", d.assigneeIds.includes(id) ? d.assigneeIds.filter((x) => x !== id) : [...d.assigneeIds, id]);
+  const shownCandidates = candidates.filter((c) => !q.trim() || c.name.includes(q.trim()));
   const hasChildren = editingId ? plans.some((p) => p.parentId === editingId) : false;
   const parents = plans.filter((p) => !p.parentId && p.source !== "matrix" && p.kind !== "team" && p.id !== editingId);
   const parent = parents.find((p) => p.id === d.parentId);
@@ -618,10 +641,46 @@ function PlanForm({
             <input type="checkbox" checked={d.oneDay} onChange={(e) => set("oneDay", e.target.checked)} className="h-4 w-4" data-gantt-f-oneday />
             1日だけ（◆で出します）
           </label>
-          <label className={lab} style={{ color: C.sub }}>
-            担当（氏名または役割・任意）
-            <input type="text" value={d.assignee} maxLength={60} onChange={(e) => set("assignee", e.target.value)} className={field} style={fieldStyle} data-gantt-f-assignee />
-          </label>
+          {/* 264: 担当はスタッフの一覧から選ぶ（チームプロジェクトのメンバーと同じ選び方）。役割などは文字でも入れられる */}
+          <fieldset data-gantt-f-assignees>
+            <legend className="text-[12px] font-medium" style={{ color: C.sub }}>
+              担当（{d.assigneeIds.length}人・任意）
+            </legend>
+            {candidates.length > 8 && (
+              <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="名前でさがす" aria-label="名前でさがす" className={field} style={fieldStyle} />
+            )}
+            <div className="mt-1.5 flex max-h-[180px] flex-wrap gap-1.5 overflow-y-auto">
+              {shownCandidates.map((c) => {
+                const on = d.assigneeIds.includes(c.id);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => toggleAssignee(c.id)}
+                    data-gantt-f-assignee-pick={c.id}
+                    className="min-h-[40px] rounded-full border px-3 text-[13px]"
+                    style={{
+                      borderColor: on ? "#E68AA0" : "rgba(240, 209, 218, 0.9)",
+                      background: on ? "linear-gradient(135deg, #FBE1E8 0%, #F6E6F5 100%)" : "#FFFFFF",
+                      color: on ? C.statusText : C.ink,
+                      fontWeight: on ? 700 : 400,
+                    }}
+                  >
+                    {on ? "✓ " : ""}
+                    {c.name}
+                  </button>
+                );
+              })}
+            </div>
+            <label className={`${lab} mt-2`} style={{ color: C.sub }}>
+              役割など（文字で入れる・任意）
+              <input type="text" value={d.assignee} maxLength={60} onChange={(e) => set("assignee", e.target.value)} placeholder="例：看護師、受付" className={field} style={fieldStyle} data-gantt-f-assignee />
+            </label>
+            <span className="mt-1 block text-[11px]" style={{ color: C.sub }}>
+              一覧から選んだ人は、この計画のタスクを足す・直すことができます
+            </span>
+          </fieldset>
           <label className={lab} style={{ color: C.sub }}>
             状態
             <select value={d.status} onChange={(e) => set("status", e.target.value as TaskStatus)} className={field} style={fieldStyle} data-gantt-f-status>
@@ -1159,6 +1218,7 @@ export function GanttBoard() {
     end: today,
     oneDay: false,
     assignee: "",
+    assigneeIds: [],
     status: "todo",
     memo: "",
   });
@@ -1171,6 +1231,7 @@ export function GanttBoard() {
     end: p.end,
     oneDay: p.start === p.end,
     assignee: p.assignee,
+    assigneeIds: (p.assignees ?? []).map((a) => a.id),
     status: p.status,
     memo: p.memo,
   });
@@ -1186,6 +1247,7 @@ export function GanttBoard() {
       start: d.start,
       end: d.oneDay ? d.start : d.end || d.start,
       assignee: d.assignee.trim(),
+      assignees: d.assigneeIds,
       status: d.status,
       memo: d.memo,
     };
@@ -1409,7 +1471,7 @@ export function GanttBoard() {
                         <span className="text-[12px]" style={{ color: C.sub }}>
                           {plan?.name ?? ""}
                           {t.due ? ` ・期限 ${shortDate(t.due)}` : ""}
-                          {isOverdue(t, today) ? "（期限切れ）" : ""}
+                          {isOverdue(t, today) ? `（${OVERDUE_LABEL}）` : ""}
                         </span>
                       </button>
                     </li>
@@ -1702,6 +1764,7 @@ export function GanttBoard() {
           editingId={form.editingId}
           categories={categories}
           plans={data?.plans ?? []}
+          candidates={teamCandidatesWithMembers(data?.teamCandidates ?? [], data?.plans.find((p) => p.id === form.editingId)?.assignees ?? [])}
           busy={formBusy}
           error={formError}
           onSave={(d) => void savePlan(d)}

@@ -30,6 +30,7 @@ import {
   MATRIX_CATEGORY_ID,
   OTHER_CATEGORY_ID,
   matrixCategoryOf,
+  migrateAssigneeText,
   normalizeCategories,
   normalizeFiscalStart,
   normalizePlan,
@@ -125,9 +126,33 @@ export async function loadPlans(admin: Admin): Promise<GanttPlan[]> {
     if (isMissingTable(error.message)) return [];
     throw new Error(error.message);
   }
-  return ((data ?? []) as { id: string; data: unknown }[])
+  const plans = ((data ?? []) as { id: string; data: unknown }[])
     .map((r) => normalizePlan(r.id, r.data))
     .filter((p): p is GanttPlan => p !== null);
+  return migrateAssignees(admin, plans);
+}
+
+/**
+ * 264: まだ「担当を一覧から選ぶ形」で保存していない院の計画は、文字の担当を一覧の表示名と照らして移す（migrateAssigneeText）。
+ *   データは書き換えない（読むたびに同じ結果になる）。その計画を次に保存したときに、移した形で保存される（savePlan）。
+ *   一覧は、本物の計画には本物のスタッフ、検証用の計画には検証用アカウント（237）。一覧が読めないときは移さない（文字のまま）。
+ */
+async function migrateAssignees(admin: Admin, plans: GanttPlan[]): Promise<GanttPlan[]> {
+  const targets = plans.filter((p) => p.kind !== "team" && !p.assigneesSet && p.assignee.trim());
+  if (targets.length === 0) return plans;
+  let accounts: Awaited<ReturnType<typeof loadAccounts>>;
+  try {
+    accounts = await loadAccounts(admin);
+  } catch {
+    return plans;
+  }
+  return plans.map((p) => {
+    if (!targets.includes(p)) return p;
+    const m = migrateAssigneeText(p.assignee, audienceOf(p.testSeed === true, accounts).map((a) => ({ id: a.id, name: a.name })));
+    if (m.assignees.length === 0) return p;
+    const have = p.assignees ?? [];
+    return { ...p, assignee: m.rest, assignees: [...have, ...m.assignees.filter((a) => !have.some((h) => h.id === a.id))] };
+  });
 }
 
 export async function loadPlan(admin: Admin, id: string): Promise<GanttPlan | null> {
@@ -144,7 +169,8 @@ export async function loadPlan(admin: Admin, id: string): Promise<GanttPlan | nu
 
 export async function savePlan(admin: Admin, plan: GanttPlan, by: string): Promise<GanttPlan> {
   const now = new Date().toISOString();
-  const next: GanttPlan = { ...plan, updatedAt: now };
+  // 264: 院の計画は、担当を一覧から選ぶ形で保存したことにする（読むときの移し替えは、これ以後しない）
+  const next: GanttPlan = { ...plan, ...(plan.kind !== "team" ? { assigneesSet: true } : {}), updatedAt: now };
   // 検証用の印は、作ったときのまま（直した人で変えない）
   const { error } = await admin.from(GROWTH_TABLE).upsert({
     id: next.id,

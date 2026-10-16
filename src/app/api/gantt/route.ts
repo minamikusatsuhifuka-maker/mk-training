@@ -18,7 +18,6 @@ import {
   deletePlans,
   deleteTasksOfPlans,
   loadTasks,
-  myDisplayName,
   loadCategories,
   loadFiscalStart,
   loadMatrixPlans,
@@ -63,7 +62,7 @@ function readFields(body: Record<string, unknown>): PlanFields | null {
   if (!f || typeof f !== "object" || Array.isArray(f)) return null;
   const o = f as Record<string, unknown>;
   const out: PlanFields = {};
-  for (const k of ["name", "categoryId", "start", "end", "assignee", "status", "memo", "parentId", "members"] as const) {
+  for (const k of ["name", "categoryId", "start", "end", "assignee", "assignees", "status", "memo", "parentId", "members"] as const) {
     if (k in o) (out as Record<string, unknown>)[k] = o[k];
   }
   return out;
@@ -90,13 +89,12 @@ export async function GET() {
   if (!auth.ok) return auth.status === 401 ? unauth() : hidden();
   try {
     const categories = await loadCategories(auth.admin);
-    const [plans, matrix, fiscalStartMonth, candidates, allTasks, myName] = await Promise.all([
+    const [plans, matrix, fiscalStartMonth, candidates, allTasks] = await Promise.all([
       loadPlans(auth.admin),
       loadMatrixPlans(auth.admin, categories),
       loadFiscalStart(),
       teamCandidates(auth.admin, auth.testSeed).catch(() => []),
       loadTasks(auth.admin),
-      myDisplayName(auth.admin, auth.user),
     ]);
     const mine = visiblePlans(plans, auth.user);
     const shown = [...mine, ...matrix];
@@ -114,7 +112,7 @@ export async function GET() {
         me: auth.user.id,
         // 263: 計画の中のタスク（本物のスタッフには検証用のタスク・ひとことを出さない）と、タスクを書ける計画
         tasks: visibleTasksFor(allTasks, hidesTestSeedFor(auth.user), new Set(shown.map((p) => p.id))),
-        taskManageIds: shown.filter((p) => canManageTasks(p, auth.user.id, myName, auth.canWrite)).map((p) => p.id),
+        taskManageIds: shown.filter((p) => canManageTasks(p, auth.user.id, auth.canWrite)).map((p) => p.id),
         isDirector: auth.isAdmin,
         canModerate: auth.canWrite,
         // 253: 「📜 当院の歩みに残す」を出すか・もう残した計画
@@ -182,7 +180,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ plan: saved, noticeError }, { headers: NO_STORE });
     }
     const categories = await loadCategories(auth.admin);
-    const next = normalizePlan(id, { ...fields, order: 0 });
+    // 264: 担当は一覧から選んだ人（選べるのは、見ている人と同じ側の一覧＝本物には本物・検証用には検証用）
+    const next = normalizePlan(id, { ...fields, assignees: pickMembers(fields.assignees, await teamCandidates(auth.admin, auth.testSeed)), order: 0 });
     if (!next) return bad("名前と開始日を入れてください");
     if (!categories.some((c) => c.id === next.categoryId) || next.categoryId === TEAM_CATEGORY_ID) next.categoryId = OTHER_CATEGORY_ID;
     const problem = checkParent(next, plans);
@@ -242,7 +241,14 @@ export async function PATCH(req: NextRequest) {
       const saved = await savePlan(auth.admin, next, by);
       return NextResponse.json({ plan: saved }, { headers: NO_STORE });
     }
-    const next = normalizePlan(id, { ...prev, ...fields, members: undefined });
+    let assignees = prev.assignees ?? [];
+    if ("assignees" in fields) {
+      const candidates = await teamCandidates(auth.admin, prev.testSeed === true);
+      // 264: 今の担当で一覧に無い人（退職など）は、外さないかぎり名前ごと残す
+      const keep = assignees.filter((a) => !candidates.some((c) => c.id === a.id));
+      assignees = pickMembers(fields.assignees, [...candidates, ...keep]);
+    }
+    const next = normalizePlan(id, { ...prev, ...fields, members: undefined, assignees });
     if (!next) return bad("名前と開始日を入れてください");
     const categories = await loadCategories(auth.admin);
     if (!categories.some((c) => c.id === next.categoryId) || next.categoryId === TEAM_CATEGORY_ID) next.categoryId = OTHER_CATEGORY_ID;

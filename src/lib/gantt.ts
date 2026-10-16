@@ -187,8 +187,12 @@ export type GanttPlan = {
   /** YYYY-MM-DD。1日だけなら start === end */
   start: string;
   end: string;
-  /** 担当（氏名または役割。任意） */
+  /** 担当のうち、文字で入れたもの（役割の名前など。任意）。264: 表示に使うだけで、タスクを書ける人の判定には使わない */
   assignee: string;
+  /** 264: 担当のうち、スタッフの一覧から選んだ人（院の計画だけ。名前は保存したときの表示名＝退職などで一覧から消えても名前は残る） */
+  assignees?: TeamMember[];
+  /** 264: 担当を一覧から選ぶ形で保存済み（無い計画は、読むときに文字の担当を一覧の名前と照らして移す） */
+  assigneesSet?: boolean;
   status: TaskStatus;
   memo: string;
   /** 1段だけの入れ子。上の計画の id（空＝いちばん上の計画） */
@@ -301,14 +305,38 @@ export function normalizePlan(id: string, raw: unknown): GanttPlan | null {
     parentId: typeof o.parentId === "string" ? o.parentId.slice(0, 64) : "",
     order: typeof o.order === "number" && Number.isFinite(o.order) ? o.order : 0,
     ...(o.testSeed === true ? { testSeed: true } : {}),
+    assignees: normalizeMembers(o.assignees),
+    ...(o.assigneesSet === true ? { assigneesSet: true } : {}),
     updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : "",
   };
+}
+
+/**
+ * 264: 文字で入れた担当を、スタッフの一覧の人に移す（今ある計画の担当の欄の移し方）。
+ *   「、」「,」「・」「/」で区切った1つが、一覧の表示名と完全に同じ人が**1人だけ**なら、その人を選んだ形に移す。
+ *   同じ名前の人が2人以上いる（誰か決められない）・いない ものは、文字のまま残す（消さない）。
+ */
+export function migrateAssigneeText(text: string, candidates: TeamMember[]): { assignees: TeamMember[]; rest: string } {
+  const tokens = text.split(/[、,，・/／]+/u).map((t) => t.trim()).filter(Boolean);
+  const moved: TeamMember[] = [];
+  const kept: string[] = [];
+  for (const t of tokens) {
+    const hits = candidates.filter((c) => c.name === t);
+    if (hits.length === 1 && !moved.some((m) => m.id === hits[0].id)) moved.push({ id: hits[0].id, name: hits[0].name });
+    else if (hits.length !== 1) kept.push(t);
+  }
+  return { assignees: moved, rest: moved.length ? kept.join("、") : text };
+}
+
+/** 264: 画面に出す担当（選んだスタッフの名前と、文字で入れたものを並べる） */
+export function planAssigneeLabel(p: Pick<GanttPlan, "assignee" | "assignees">): string {
+  return [...(p.assignees ?? []).map((a) => a.name || "名前未設定"), ...(p.assignee ? [p.assignee] : [])].join("、");
 }
 
 /** 書く人が送ってよい項目（252: チームプロジェクトは members も） */
 export type PlanFields = Partial<
   Pick<GanttPlan, "name" | "categoryId" | "start" | "end" | "assignee" | "status" | "memo" | "parentId" | "members">
->;
+> & { /** 264: 担当に選んだスタッフの id */ assignees?: unknown };
 
 /** 252: 自動のお知らせ（題名と本文）。院長が確かめる文の形 */
 export function teamNoticeText(

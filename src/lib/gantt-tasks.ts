@@ -4,7 +4,7 @@
 // 【保存先】clinic_staff_growth（record_type = gantt_task・1件1行・id = gt-…）。新しい表は作らない。
 //   ひとことはタスクの行の中（comments）に入れる。
 // 【権限（判定はサーバー。ここは判定の式だけ）】
-//   足す・直す・消す・並べ替え … 院長・「📊 ガントチャート」を任された幹部・その計画の担当
+//   足す・直す・消す・並べ替え … 院長・「📊 ガントチャート」を任された幹部・その計画の担当（264: 一覧から選んだ人）
 //                                （チームプロジェクトは作った人とメンバー）＝ canManageTasks
 //   状態を変える・ひとことを書く … 上の人と、そのタスクの担当者 ＝ canTouchTask
 //   自分のひとこと                … 書いた人が直せる・消せる。どのひとことでも消せるのは院長と任された幹部
@@ -141,35 +141,19 @@ export function genCommentId(now = Date.now(), rand = Math.random()): string {
 
 // ─── 権限の式 ───
 
-/** 名前の比べ方（空白・「さん」をのぞく） */
-function nameKey(s: string): string {
-  return s.replace(/[\s　]+/g, "").replace(/(さん|様)$/u, "");
-}
-
 /**
- * 院の計画の「担当」（氏名または役割を書く欄）に、この人の名前が入っているか。
- * 「、」「,」「・」「/」「と」区切りの1つが、名前とそのまま同じなら担当とみなす（「看護師」など役割だけのときは当たらない）。
+ * この計画のタスクを足す・直す・消す・並べ替えができるか（writer＝院長・任された幹部）。
+ * 264: 院の計画の「担当の人」は、スタッフの一覧から選ばれた人だけ（文字で入れた担当は判定に使わない）
  */
-export function isPlanAssignee(assignee: string, myName: string): boolean {
-  const me = nameKey(myName);
-  if (!me || !assignee.trim()) return false;
-  return assignee
-    .split(/[、,，・/／]+|\s+と\s+/u)
-    .map((t) => nameKey(t))
-    .some((t) => t === me);
-}
-
-/** この計画のタスクを足す・直す・消す・並べ替えができるか（writer＝院長・任された幹部） */
 export function canManageTasks(
-  plan: Pick<GanttPlan, "kind" | "createdBy" | "members" | "assignee" | "source">,
+  plan: Pick<GanttPlan, "kind" | "createdBy" | "members" | "assignees" | "source">,
   userId: string,
-  myName: string,
   writer: boolean
 ): boolean {
   if (writer) return true;
   if (plan.source === "matrix") return false;
   if (plan.kind === "team") return plan.createdBy === userId || (plan.members ?? []).some((m) => m.id === userId);
-  return isPlanAssignee(plan.assignee, myName);
+  return (plan.assignees ?? []).some((a) => a.id === userId);
 }
 
 /** 状態を変える・ひとことを書くができるか */
@@ -207,7 +191,8 @@ export function isOverdue(task: Pick<GanttTask, "due" | "status">, today: string
   return !!task.due && task.status !== "done" && task.due < today;
 }
 
-export const OVERDUE_LABEL = "期限切れ";
+/** 264: 今の「📋 みんなのタスク」と同じ言葉にそろえる */
+export const OVERDUE_LABEL = "超過";
 
 /** ひとことは新しい順 */
 export function commentsNewestFirst(comments: TaskComment[]): TaskComment[] {

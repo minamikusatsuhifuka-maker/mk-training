@@ -84,7 +84,7 @@ async function context(auth: GanttAuth): Promise<Ctx> {
   };
 }
 
-const manages = (c: Ctx, plan: GanttPlan) => canManageTasks(plan, c.auth.user.id, c.myName, c.auth.canWrite);
+const manages = (c: Ctx, plan: GanttPlan) => canManageTasks(plan, c.auth.user.id, c.auth.canWrite);
 
 /** 見えるタスクと、その計画（見えなければ null） */
 function findTask(c: Ctx, id: string): { task: GanttTask; plan: GanttPlan } | null {
