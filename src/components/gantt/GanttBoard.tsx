@@ -401,7 +401,7 @@ function PlanDetail({
         zIndex: 60,
         width: tasksSlot ? "min(420px, calc(100vw - 16px))" : "min(300px, calc(100vw - 16px))",
         maxHeight: "calc(100dvh - 16px)",
-        background: "rgba(255, 255, 255, 0.96)",
+        background: tasksSlot ? "#FFFFFF" : "rgba(255, 255, 255, 0.96)",
         border: "1px solid rgba(240, 213, 220, 0.9)",
         borderRadius: 20,
         boxShadow: "0 20px 44px rgba(142, 91, 181, 0.18)",
