@@ -56,6 +56,8 @@ export const MASTER_ITEMS: MasterItem[] = [
   { key: "/my-growth", href: "/my-growth", label: "🌱 わたしの可能性ノート", categoryId: "home", featureId: "growth_record" },
   // 成功の原則×行動例・考え方の例（ライブラリ）と、本人だけの「今週の一歩」。ログイン中のスタッフ全員（院長の承認済み）
   { key: "/growth-actions", href: "/growth-actions", label: "🌱 成長の行動例", categoryId: "home" },
+  // アチーブメントの教え（成功のサイクル・失敗のサイクル／人生の方程式／成功の公式／身につけたい7つの習慣）。静的・ログイン中のスタッフ全員
+  { key: "/achievement", href: "/achievement", label: "🌱 アチーブメントの教え", categoryId: "home" },
   // 外部リンク（別タブ）。指示書59
   {
     key: "ai-incho",
