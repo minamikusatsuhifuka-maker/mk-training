@@ -13,6 +13,8 @@
 // 依存は lib/rwdepc.ts（RWDEPCの表の正本・223 §1-1）だけ。AIへの指示文の欄の名前も表から取る。
 
 import { RWDEPC_TABLE } from "./rwdepc";
+// ウェルネスの視点: 話題に出た面の「候補キー」だけを返させる（中身は書かせない・自動では保存しない）
+import { WELLNESS_KEYS, WELLNESS_LABELS, normalizeWellnessTags, type WellnessKey } from "./wellness";
 
 /** 貼り付け・ファイルから取り込める上限（221 §2-2。1on1は10〜15分の想定） */
 export const TRANSCRIPT_MAX_CHARS = 40000;
@@ -148,6 +150,8 @@ export type TranscriptResult = {
   draft: TranscriptDraft;
   /** 取り扱いに注意が必要な話を除いたか（中身は返さない・221 §3-3） */
   flagged: boolean;
+  /** ウェルネスの8つの面のうち、話題に出た面の候補（下書き。記録者が選んだものだけ保存する） */
+  wellness: WellnessKey[];
 };
 
 /** AIの応答（JSON）を受け取る。壊れていれば null */
@@ -168,6 +172,7 @@ export function parseTranscriptJson(text: string, mode: "quick" | "rwdepc"): Tra
     summary: normalizeTranscriptSummary(o.summary),
     draft: normalizeTranscriptDraft(o.draft, mode),
     flagged: o.flagged === true,
+    wellness: normalizeWellnessTags(o.wellness),
   };
 }
 
@@ -193,6 +198,9 @@ export const TRANSCRIPT_SYSTEM_PROMPT = [
     + "本人が語ったことは、1on1の記録欄（R〜C）にそのまま書く。本人の言葉に等級の名前（G2など）や年数（3年後など）が出てきても、言い換えずそのまま書く。",
   // 欲求の視点（可能性ノート）: 院長の指示書の文のまま。欲求の結果はこのAIに一切渡していない
   "8. まとめには、欲求の種類や性格についての推測・ラベルを書かず、本人が話した内容と合意した次の一歩だけを記載する。",
+  // ウェルネスの視点（指示書 mk_training_karte_wellness_1on1 §4）: 面の名前だけ。点数・評価・中身は書かない
+  `9. wellness には、次の8つの面のうち、本人との話題に出た面の英語キーだけを入れる（${WELLNESS_KEYS.map((k) => `${k}=${WELLNESS_LABELS[k]}`).join("／")}）。`
+    + "中身・点数・評価は書かない。はっきり話題に出た面だけにし、出ていなければ空の配列にする。4の個人的な事情に当たる話でも、面の名前だけは入れてよい。",
   "",
   "【まとめ（summary）】",
   "- flow: 話の流れを3〜5行。箇条書きではなく、行ごとに1文。",
@@ -210,7 +218,7 @@ export const TRANSCRIPT_SYSTEM_PROMPT = [
   "- 選ばれていない形式の欄は、すべて空文字にする。",
   "",
   "【出力】次のJSONだけを返す。コードフェンス・前後の説明は付けない。",
-  '{"summary":{"flow":"","quotes":[],"decided":"","support":""},"draft":{"sections":{"theme":"","kizuki":"","nextStep":""},"rwdepc":{"r":"","w":"","d":"","e":"","p":"","c":""}},"flagged":false}',
+  '{"summary":{"flow":"","quotes":[],"decided":"","support":""},"draft":{"sections":{"theme":"","kizuki":"","nextStep":""},"rwdepc":{"r":"","w":"","d":"","e":"","p":"","c":""}},"flagged":false,"wellness":[]}',
 ].join("\n");
 
 /** 書き起こしに添える指示（形式を伝える） */

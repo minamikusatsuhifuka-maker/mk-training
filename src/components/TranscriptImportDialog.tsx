@@ -14,6 +14,10 @@
 //
 // 【保存の口】既存の1on1ノートと同じ（private_store の content_type "one_on_one"）。
 //   見られる人・約束のつながりは今までどおり。
+//
+// 【ウェルネスの視点（指示書 mk_training_karte_wellness_1on1 §4）】AIが返すのは「話題に出た面」の
+//   候補キーだけ。候補は**選ばれていない状態**で出し、記録者が押して選んだ面だけを、
+//   1on1の記録を保存したあとにその回へ紐づけて保存する（自動では保存しない）。
 
 import { useRef, useState } from "react";
 import { upsertRecord, PrivateStoreError } from "@/lib/private-store-client";
@@ -42,6 +46,15 @@ import {
   type TranscriptSummary,
 } from "@/lib/one-on-one-transcript";
 import { FileDropArea } from "@/components/DropZone";
+import { EMPTY_WELLNESS, WellnessEditor, hasWellness, type WellnessValue } from "@/components/WellnessPerspective";
+import { saveWellnessApi } from "@/lib/wellness-client";
+import {
+  WELLNESS_SECTION_NOTE,
+  WELLNESS_SECTION_TITLE,
+  normalizeWellnessNotes,
+  normalizeWellnessTags,
+  type WellnessKey,
+} from "@/lib/wellness";
 
 type StaffOption = { userId: string; name: string };
 
@@ -90,6 +103,11 @@ export function TranscriptImportDialog({
   const [draft, setDraft] = useState<TranscriptDraft | null>(null);
   /** まだAIの下書きのままの欄（直すと消える・221 §2-4） */
   const [aiFields, setAiFields] = useState<Set<string>>(new Set());
+  /** ウェルネスの視点: AIの候補（選ばれていない）と、記録者が選んだもの */
+  const [wellnessCandidates, setWellnessCandidates] = useState<WellnessKey[]>([]);
+  const [wellness, setWellness] = useState<WellnessValue>(EMPTY_WELLNESS);
+  /** 1on1の記録だけ保存できた回（もう一度押したときに記録を二重に作らない） */
+  const [savedRef, setSavedRef] = useState<{ ownerId: string; recordKey: string } | null>(null);
 
   const options = staffOptions ?? (staff ? [staff] : []);
   const staffName = options.find((o) => o.userId === staffId)?.name ?? staff?.name ?? "";
@@ -126,6 +144,7 @@ export function TranscriptImportDialog({
         draft?: TranscriptDraft;
         flagged?: boolean;
         testSeed?: boolean;
+        wellnessCandidates?: unknown;
         error?: string;
       };
       if (!res.ok || !j.summary || !j.draft) {
@@ -135,6 +154,8 @@ export function TranscriptImportDialog({
       setDraft(j.draft);
       setFlagged(j.flagged === true);
       setTestSeed(j.testSeed === true);
+      setWellnessCandidates(normalizeWellnessTags(j.wellnessCandidates));
+      setWellness(EMPTY_WELLNESS);
       setAiFields(
         new Set([
           "flow", "quotes", "decided", "support",
@@ -172,11 +193,30 @@ export function TranscriptImportDialog({
         createdAt: now,
         updatedAt: now,
       };
-      await upsertRecord("one_on_one", genOneOnOneKey(), {
-        ...data,
-        // 221 §7: 検証用アカウントの回は「🧪 検証用データの一括削除」の対象にする
-        ...(testSeed ? { [SEED_MARK]: true } : {}),
-      });
+      const saved =
+        savedRef ??
+        (await upsertRecord("one_on_one", genOneOnOneKey(), {
+          ...data,
+          // 221 §7: 検証用アカウントの回は「🧪 検証用データの一括削除」の対象にする
+          ...(testSeed ? { [SEED_MARK]: true } : {}),
+        }));
+      if (!savedRef) setSavedRef({ ownerId: saved.ownerId, recordKey: saved.recordKey });
+      // ウェルネスの視点は、記録者が選んだ面があるときだけ（候補のままのものは保存しない）
+      if (hasWellness(wellness)) {
+        try {
+          await saveWellnessApi({
+            userId: staffId,
+            ownerId: saved.ownerId,
+            oneOnOneKey: saved.recordKey,
+            tags: wellness.tags,
+            notes: normalizeWellnessNotes(wellness.notes, wellness.tags),
+          });
+        } catch {
+          onSaved();
+          setError("1on1の記録は保存しました。ウェルネスの視点は保存できませんでした。もう一度「保存する」を押すか、記録の「✏️ 書く」から入れ直してください。");
+          return;
+        }
+      }
       onSaved();
       onClose();
     } catch (e) {
@@ -413,6 +453,12 @@ export function TranscriptImportDialog({
                 </label>
               ))
             )}
+          </section>
+
+          <section className="rounded-lg border border-emerald-200 bg-emerald-50/30 p-2 space-y-2" data-transcript-wellness>
+            <h3 className="text-[12px] font-medium text-emerald-900">{WELLNESS_SECTION_TITLE}（任意）</h3>
+            <p className="text-[11px] text-gray-600">{WELLNESS_SECTION_NOTE}</p>
+            <WellnessEditor value={wellness} onChange={setWellness} disabled={busy} candidates={wellnessCandidates} />
           </section>
 
           <div className="flex flex-wrap gap-2">

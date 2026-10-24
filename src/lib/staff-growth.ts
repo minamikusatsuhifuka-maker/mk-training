@@ -956,6 +956,8 @@ export type TimelineItem = {
   href: string;
   /** 学びの記録なら記録id（編集導線用） */
   learningId?: string;
+  /** 1on1なら、どの回か（private_store の owner_id と record_key）。ウェルネスの視点を回に紐づけるためだけに使う */
+  oneOnOneRef?: { ownerId: string; oneOnOneKey: string };
   /** サーベイ公開の項目だけ（展開表示用） */
   survey?: SurveyView;
 };

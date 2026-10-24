@@ -515,6 +515,7 @@ function buildTimeline(src: Sources, person: RosterPerson): TimelineItem[] {
           st ? `取り組み状況: ${promiseStatusLabel(st.status)}${st.note.trim() ? ` ・ ${st.note}` : ""}` : "取り組み状況: 未記入",
         ].join("\n"),
         href: "/one-on-one",
+        oneOnOneRef: { ownerId: r.owner_id, oneOnOneKey: r.record_key },
       });
       continue;
     }
@@ -544,6 +545,7 @@ function buildTimeline(src: Sources, person: RosterPerson): TimelineItem[] {
       title: `1on1（${other}さんと・${d.mode === "rwdepc" ? "RWDEPC" : "クイックメモ"}）`,
       body: bodyParts.join("\n"),
       href: "/one-on-one",
+      oneOnOneRef: { ownerId: r.owner_id, oneOnOneKey: r.record_key },
     });
   }
 

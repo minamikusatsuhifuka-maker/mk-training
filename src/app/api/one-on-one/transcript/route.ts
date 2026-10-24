@@ -153,6 +153,8 @@ export async function POST(req: Request) {
     summary: { ...parsed.summary, at: new Date().toISOString() },
     draft: parsed.draft,
     flagged: parsed.flagged,
+    // ウェルネスの視点の候補（面のキーだけ。保存はしない＝確認画面で選んだものだけが保存される）
+    wellnessCandidates: parsed.wellness,
     used: quota.used,
     limit: quota.limit,
     model: res.model,

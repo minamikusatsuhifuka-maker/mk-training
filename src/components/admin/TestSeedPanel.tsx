@@ -22,6 +22,7 @@ const COUNT_LABEL: Record<string, string> = {
   goal: "目標",
   feedback: "フィードバック",
   promise: "1on1の約束の取り組み状況",
+  wellness: "1on1のウェルネスの視点",
   schedule: "次回1on1の予定",
   // 205: 1on1の日程調整
   slot_period: "1on1の日程の期間",

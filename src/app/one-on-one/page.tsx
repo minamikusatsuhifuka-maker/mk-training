@@ -68,6 +68,27 @@ import {
   loadProfilesIndex,
   type StaffProfileIndexEntry,
 } from "@/lib/staff-profiles";
+// ウェルネスの視点（院長・担当の幹部だけ。本人には出さない。出すかどうかはサーバーの返事で決める）
+import {
+  EMPTY_WELLNESS,
+  WellnessEditor,
+  WellnessRecordBlock,
+  hasWellness,
+  type WellnessValue,
+} from "@/components/WellnessPerspective";
+import {
+  canWriteWellness,
+  deleteWellnessApi,
+  fetchWellnessApi,
+  saveWellnessApi,
+  type WellnessScope,
+} from "@/lib/wellness-client";
+import {
+  WELLNESS_SECTION_NOTE,
+  WELLNESS_SECTION_TITLE,
+  normalizeWellnessNotes,
+  type WellnessEntry,
+} from "@/lib/wellness";
 
 type LoadState = "loading" | "ready" | "unauthenticated" | "error";
 
@@ -102,6 +123,10 @@ function OneOnOnePageBody() {
   const [submitting, setSubmitting] = useState(false);
   // 221: 書き起こしの取り込みを開いているか
   const [transcriptOpen, setTranscriptOpen] = useState(false);
+  // ウェルネスの視点: 見られる範囲（null＝見られない人）と保存済みの分、新しい記録の下書き
+  const [wellnessScope, setWellnessScope] = useState<WellnessScope | null>(null);
+  const [wellnessEntries, setWellnessEntries] = useState<WellnessEntry[]>([]);
+  const [wellnessDraft, setWellnessDraft] = useState<WellnessValue>(EMPTY_WELLNESS);
 
   // 編集（記録者本人のみ）
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -135,13 +160,17 @@ function OneOnOnePageBody() {
       const idx = await loadProfilesIndex().catch(() => []);
       setProfiles(idx);
       setMyName(idx.find((p) => p.userId === user.id)?.name?.trim() || "名前未設定");
-      const [list, pre] = await Promise.all([
+      const [list, pre, wellness] = await Promise.all([
         listInvolved("one_on_one"),
         // 事前アンケートは機能OFFなら0件（読めなくても1on1ノートは使える）
         listInvolved("one_on_one_presurvey").catch(() => []),
+        // ウェルネスの視点は院長・担当の幹部だけ。それ以外は ok:false で欄ごと出さない
+        fetchWellnessApi(),
       ]);
       setRecords(list);
       setPresurveys(pre);
+      setWellnessScope(wellness.ok ? wellness.scope : null);
+      setWellnessEntries(wellness.ok ? wellness.entries : []);
       setState("ready");
     } catch (e) {
       if (e instanceof PrivateStoreError && e.kind === "unauthenticated") {
@@ -169,6 +198,32 @@ function OneOnOnePageBody() {
   );
 
   const sorted = useMemo(() => sortOneOnOne(records), [records]);
+
+  // ウェルネスの視点の「誰のことか」＝この回の自分ではない方
+  const counterpartOf = useCallback(
+    (record: PrivateRecord) => {
+      const d = normalizeOneOnOneData(record.data);
+      return record.ownerId === myId ? d.participantIds[0] ?? "" : record.ownerId;
+    },
+    [myId]
+  );
+  const wellnessFor = useCallback(
+    (userId: string, record: PrivateRecord) =>
+      wellnessEntries.find(
+        (e) => e.userId === userId && e.ownerId === record.ownerId && e.oneOnOneKey === record.recordKey
+      ),
+    [wellnessEntries]
+  );
+  const putWellnessEntry = useCallback(
+    (key: { userId: string; ownerId: string; oneOnOneKey: string }, entry: WellnessEntry | null) =>
+      setWellnessEntries((prev) => [
+        ...prev.filter(
+          (e) => !(e.userId === key.userId && e.ownerId === key.ownerId && e.oneOnOneKey === key.oneOnOneKey)
+        ),
+        ...(entry ? [entry] : []),
+      ]),
+    []
+  );
 
   // 153: 同じ相手の過去のRWDEPC回を新しい順で返す（③前回の約束・④Wの引き継ぎに使う）
   const pastRwdepcFor = useCallback(
@@ -327,6 +382,21 @@ function OneOnOnePageBody() {
       };
       const saved = await upsertRecord("one_on_one", genOneOnOneKey(), data);
       setRecords((prev) => [saved, ...prev]);
+      // ウェルネスの視点（任意）。記録ができてから、その回に紐づけて保存する
+      if (hasWellness(wellnessDraft) && canWriteWellness(wellnessScope, myId, partnerIdDraft)) {
+        const key = { userId: partnerIdDraft, ownerId: saved.ownerId, oneOnOneKey: saved.recordKey };
+        try {
+          const entry = await saveWellnessApi({
+            ...key,
+            tags: wellnessDraft.tags,
+            notes: normalizeWellnessNotes(wellnessDraft.notes, wellnessDraft.tags),
+          });
+          putWellnessEntry(key, entry);
+        } catch {
+          setError("1on1の記録は保存しました。ウェルネスの視点は保存できなかったので、記録の「✏️ 書く」から入れ直してください。");
+        }
+      }
+      setWellnessDraft(EMPTY_WELLNESS);
       setHeldOnDraft("");
       setPartnerIdDraft("");
       setSectionsDraft(EMPTY_SECTIONS);
@@ -399,6 +469,12 @@ function OneOnOnePageBody() {
     setError("");
     try {
       await deleteRecord("one_on_one", record.recordKey);
+      // その回のウェルネスの視点も消す（失敗しても、消えた回の視点は画面にもAPIにも出ない）
+      const counterpart = counterpartOf(record);
+      if (canWriteWellness(wellnessScope, myId, counterpart)) {
+        void deleteWellnessApi(counterpart, record.ownerId, record.recordKey);
+        putWellnessEntry({ userId: counterpart, ownerId: record.ownerId, oneOnOneKey: record.recordKey }, null);
+      }
       setRecords((prev) =>
         prev.filter((r) => r.recordKey !== record.recordKey)
       );
@@ -604,6 +680,15 @@ function OneOnOnePageBody() {
             onOpenGroupChange={setJitsuOpenGroup}
           />
         </div>
+
+        {/* ウェルネスの視点（任意・院長と担当の幹部だけ。点数・評価の欄は作らない） */}
+        {canWriteWellness(wellnessScope, myId, partnerIdDraft) && (
+          <div className="space-y-1 rounded-xl border border-emerald-200 bg-emerald-50/30 p-3" data-wellness-form>
+            <label className="text-sm font-medium text-gray-800 block">{WELLNESS_SECTION_TITLE}（任意）</label>
+            <p className="text-[11px] text-gray-600">{WELLNESS_SECTION_NOTE}</p>
+            <WellnessEditor value={wellnessDraft} onChange={setWellnessDraft} disabled={submitting} />
+          </div>
+        )}
 
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <span className="text-xs text-gray-500">
@@ -830,6 +915,18 @@ function OneOnOnePageBody() {
                   <>
                     {/* 152: この回でチェックされた実（読み取り専用の要約） */}
                     <JitsuCheckSummary checks={d.jitsuChecks} />
+                    {(() => {
+                      const counterpart = counterpartOf(record);
+                      if (!canWriteWellness(wellnessScope, myId, counterpart)) return null;
+                      const key = { userId: counterpart, ownerId: record.ownerId, oneOnOneKey: record.recordKey };
+                      return (
+                        <WellnessRecordBlock
+                          {...key}
+                          entry={wellnessFor(counterpart, record)}
+                          onSaved={(entry) => putWellnessEntry(key, entry)}
+                        />
+                      );
+                    })()}
                     {hasBody && (
                     <div className="space-y-2">
                       {d.mode === "rwdepc"

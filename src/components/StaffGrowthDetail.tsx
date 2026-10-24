@@ -60,6 +60,10 @@ import {
   learningFormFrom,
 } from "@/components/LearningRecordForm";
 import { LearningRecordList } from "@/components/LearningRecordList";
+// ウェルネスの視点（院長・担当の幹部だけ。読めないとき＝null で欄ごと出さない）
+import { WellnessHistory, WellnessRecordBlock } from "@/components/WellnessPerspective";
+import { fetchWellnessApi } from "@/lib/wellness-client";
+import type { WellnessEntry } from "@/lib/wellness";
 
 // 220 §2-1: 帯と概要に出すぶんだけの軽い読み込み（読めない人には出さない＝null のまま）
 type ScheduleBrief = { date: string; time: string; answered: boolean };
@@ -157,6 +161,8 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
   const [rememberedTab, setTab] = useRememberedTab(GROWTH_TAB_STORAGE_KEY.staff, GROWTH_TABS);
   // 221: 書き起こしの取り込みを開いているか
   const [transcriptOpen, setTranscriptOpen] = useState(false);
+  // ウェルネスの視点（null＝この人のことは見られない）
+  const [wellness, setWellness] = useState<WellnessEntry[] | null>(null);
 
   const load = useCallback(async () => {
     setError("");
@@ -182,6 +188,7 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
         // 220 §2-1: 帯と概要に出すぶんだけ軽く読む。読めない人（幹部など）には出さない
         void fetchScheduleBrief(userId).then(setSchedules);
         void fetchPositionBrief(userId).then(setPosition);
+        void fetchWellnessApi(userId).then((w) => setWellness(w.ok ? w.entries : null));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました");
@@ -611,6 +618,9 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
             )
           )}
 
+          {/* ウェルネスの視点: これまで話した面（直近から・まだ話していない面は薄く） */}
+          {!isProspect && wellness && <WellnessHistory entries={wellness} />}
+
           <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
             <h2 className="text-sm font-medium text-gray-900">🤝 1on1の記録</h2>
             {oneOnOneItems.length === 0 ? (
@@ -632,6 +642,29 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
                       {it.body && (
                         <p className="text-[11px] text-gray-700 whitespace-pre-wrap line-clamp-6">{it.body}</p>
                       )}
+                      {wellness && it.oneOnOneRef && (() => {
+                        const ref = it.oneOnOneRef;
+                        return (
+                          <div className="mt-1.5">
+                            <WellnessRecordBlock
+                              userId={userId}
+                              ownerId={ref.ownerId}
+                              oneOnOneKey={ref.oneOnOneKey}
+                              entry={wellness.find(
+                                (e) => e.ownerId === ref.ownerId && e.oneOnOneKey === ref.oneOnOneKey
+                              )}
+                              onSaved={(entry) =>
+                                setWellness((prev) => [
+                                  ...(prev ?? []).filter(
+                                    (e) => !(e.ownerId === ref.ownerId && e.oneOnOneKey === ref.oneOnOneKey)
+                                  ),
+                                  ...(entry ? [{ ...entry, heldOn: entry.heldOn || it.date }] : []),
+                                ])
+                              }
+                            />
+                          </div>
+                        );
+                      })()}
                     </div>
                   </li>
                 ))}
