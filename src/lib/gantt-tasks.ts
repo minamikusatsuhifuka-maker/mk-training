@@ -13,6 +13,7 @@
 // 【検証用（237）】検証用アカウントが書いたタスク・ひとことは testSeed の印を付け、本物のスタッフには出さない。
 
 import { STATUS_LABEL, TASK_STATUSES, type TaskStatus } from "./priority-matrix";
+import { normalizeHelp, normalizeHelpers, normalizeJudgment, type TaskHelp, type TaskHelper, type TaskJudgment } from "./gantt-connect";
 import type { GanttPlan, TeamMember } from "./gantt";
 
 export const TASK_TITLE_MAX = 100;
@@ -53,6 +54,12 @@ export type GanttTask = {
   order: number;
   createdBy: string;
   testSeed?: boolean;
+  /** 265: 「🙋 手伝ってほしい」（下ろしても中身は残す＝open:false） */
+  help?: TaskHelp;
+  /** 265: 「手伝います」と名乗り出た人（下ろしても記録は残す） */
+  helpers?: TaskHelper[];
+  /** 265: 院長の判断（「院長が判断」のタスクに院長だけが書く） */
+  judgment?: TaskJudgment;
   updatedAt: string;
 };
 
@@ -127,6 +134,10 @@ export function normalizeTask(id: string, raw: unknown): GanttTask | null {
     order: typeof o.order === "number" && Number.isFinite(o.order) ? o.order : 0,
     createdBy: typeof o.createdBy === "string" ? o.createdBy.slice(0, 64) : "",
     ...(o.testSeed === true ? { testSeed: true } : {}),
+    // 265: 通さないと次の保存で消える
+    ...(normalizeHelp(o.help) ? { help: normalizeHelp(o.help) } : {}),
+    ...(normalizeHelpers(o.helpers).length ? { helpers: normalizeHelpers(o.helpers) } : {}),
+    ...(normalizeJudgment(o.judgment) ? { judgment: normalizeJudgment(o.judgment) } : {}),
     updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : "",
   };
 }
@@ -216,7 +227,17 @@ export function swapTaskOrder(tasks: GanttTask[], id: string, dir: -1 | 1): { id
 export function visibleTasksFor(tasks: GanttTask[], hideTestSeed: boolean, visiblePlanIds: Set<string>): GanttTask[] {
   return tasks
     .filter((t) => visiblePlanIds.has(t.planId) && !(hideTestSeed && t.testSeed))
-    .map((t) => (hideTestSeed ? { ...t, comments: t.comments.filter((c) => !c.testSeed) } : t));
+    .map((t) =>
+      hideTestSeed
+        ? {
+            ...t,
+            comments: t.comments.filter((c) => !c.testSeed),
+            // 265: 検証用アカウントの「手伝います」「手伝ってほしい」も出さない
+            ...(t.helpers ? { helpers: t.helpers.filter((h) => !h.testSeed) } : {}),
+            ...(t.help?.testSeed ? { help: undefined } : {}),
+          }
+        : t
+    );
 }
 
 /** 「10/26 14:05」（ひとことの日時・日本時間） */

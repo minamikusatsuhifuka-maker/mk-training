@@ -40,6 +40,20 @@ import {
 } from "./gantt";
 import { normalizeTask as normalizeGanttTask, type GanttTask } from "./gantt-tasks";
 import { canViewGanttWith, goalBriefsOf, type ClinicGoalBrief } from "./plan-goals";
+import { loadTestSeedUsers } from "./test-seed-server";
+import {
+  ALERTS_PER_USER_MAX,
+  ALERT_TYPE,
+  CHEER_TYPE,
+  achievementNoticeText,
+  cheerRowId,
+  genAlertId,
+  normalizeAlert,
+  normalizeCheers,
+  type Cheer,
+  type CheerKind,
+  type GanttAlert,
+} from "./gantt-connect";
 
 /** クリニック目標の保存先（lib/gantt-goals.ts の PORTAL_GANTT_KEY と同じ。あちらはブラウザ用なのでここでは読み込まない） */
 const PORTAL_GANTT_KEY = "portal_gantt";
@@ -397,4 +411,149 @@ export async function myDisplayName(admin: Admin, user: Pick<User, "id" | "email
   } catch {
     return user.email ?? "";
   }
+}
+
+// ─── 265: 応援・アプリ内の知らせ・達成のお知らせ ───
+
+/** 応援（record_type gantt_cheer・1つの計画/タスクに1行）。targetId → 押した人 */
+export async function loadCheers(admin: Admin): Promise<Map<string, Cheer[]>> {
+  const { data, error } = await admin.from(GROWTH_TABLE).select("id, data").eq("record_type", CHEER_TYPE);
+  if (error) {
+    if (isMissingTable(error.message)) return new Map();
+    throw new Error(error.message);
+  }
+  const out = new Map<string, Cheer[]>();
+  for (const r of (data ?? []) as { id: string; data: { targetId?: unknown; users?: unknown } | null }[]) {
+    const targetId = typeof r.data?.targetId === "string" ? r.data.targetId : "";
+    if (targetId) out.set(targetId, normalizeCheers(r.data?.users));
+  }
+  return out;
+}
+
+export async function saveCheers(admin: Admin, targetId: string, kind: CheerKind, users: Cheer[], by: string): Promise<void> {
+  const now = new Date().toISOString();
+  if (users.length === 0) {
+    const { error } = await admin.from(GROWTH_TABLE).delete().eq("id", cheerRowId(targetId)).eq("record_type", CHEER_TYPE);
+    if (error) throw new Error(error.message);
+    return;
+  }
+  const { error } = await admin.from(GROWTH_TABLE).upsert({
+    id: cheerRowId(targetId),
+    record_type: CHEER_TYPE,
+    data: { targetId, kind, users, updatedAt: now, ...(users.every((u) => u.testSeed) ? { seed191: true } : {}) },
+    updated_by: by,
+    updated_at: now,
+  });
+  if (error) throw new Error(error.message);
+}
+
+/** 検証用アカウントの id（知らせを本物のスタッフに出さないため） */
+export async function testSeedIds(): Promise<Set<string>> {
+  return (await loadTestSeedUsers()).ids;
+}
+
+export async function loadAlerts(admin: Admin, userId?: string): Promise<GanttAlert[]> {
+  let q = admin.from(GROWTH_TABLE).select("id, data").eq("record_type", ALERT_TYPE);
+  if (userId) q = q.eq("data->>userId", userId);
+  const { data, error } = await q;
+  if (error) {
+    if (isMissingTable(error.message)) return [];
+    throw new Error(error.message);
+  }
+  return ((data ?? []) as { id: string; data: unknown }[])
+    .map((r) => normalizeAlert(r.id, r.data))
+    .filter((a): a is GanttAlert => a !== null)
+    .sort((a, b) => b.at.localeCompare(a.at));
+}
+
+/** 知らせを配る（1人あて1行）。1人あての数が多くなったら古いものから捨てる */
+export async function deliverAlerts(
+  admin: Admin,
+  userIds: string[],
+  base: Omit<GanttAlert, "id" | "userId" | "at">,
+  by: string
+): Promise<number> {
+  let n = 0;
+  for (const userId of userIds) {
+    const now = new Date().toISOString();
+    const id = genAlertId();
+    const { error } = await admin.from(GROWTH_TABLE).upsert({
+      id,
+      record_type: ALERT_TYPE,
+      data: { ...base, userId, at: now, ...(base.testSeed ? { seed191: true } : {}) },
+      updated_by: by,
+      updated_at: now,
+    });
+    if (error) throw new Error(error.message);
+    n += 1;
+    const mine = await loadAlerts(admin, userId);
+    const old = mine.slice(ALERTS_PER_USER_MAX).map((a) => a.id);
+    if (old.length) await admin.from(GROWTH_TABLE).delete().in("id", old).eq("record_type", ALERT_TYPE);
+  }
+  return n;
+}
+
+/** 自分あての知らせを読んだ印（ids を省くと全部） */
+export async function markAlertsRead(admin: Admin, userId: string, ids?: string[]): Promise<number> {
+  const mine = (await loadAlerts(admin, userId)).filter((a) => !a.readAt && (!ids || ids.includes(a.id)));
+  const now = new Date().toISOString();
+  for (const a of mine) {
+    const { id, ...rest } = a;
+    const { error } = await admin
+      .from(GROWTH_TABLE)
+      .update({ data: { ...rest, readAt: now, ...(a.testSeed ? { seed191: true } : {}) }, updated_at: now })
+      .eq("id", id)
+      .eq("record_type", ALERT_TYPE);
+    if (error) throw new Error(error.message);
+  }
+  return mine.length;
+}
+
+/** 計画・タスクを消したとき、その応援と知らせも消す */
+export async function deleteConnectOf(admin: Admin, planIds: string[], taskIds: string[]): Promise<void> {
+  const targets = [...planIds, ...taskIds].map(cheerRowId);
+  if (targets.length) {
+    const { error } = await admin.from(GROWTH_TABLE).delete().in("id", targets).eq("record_type", CHEER_TYPE);
+    if (error) throw new Error(error.message);
+  }
+  if (planIds.length === 0 && taskIds.length === 0) return;
+  const all = await loadAlerts(admin);
+  const gone = all.filter((a) => planIds.includes(a.planId) || (a.taskId && taskIds.includes(a.taskId))).map((a) => a.id);
+  if (gone.length) {
+    const { error } = await admin.from(GROWTH_TABLE).delete().in("id", gone).eq("record_type", ALERT_TYPE);
+    if (error) throw new Error(error.message);
+  }
+}
+
+/**
+ * 265 §2: 計画・チームプロジェクトが完了になったとき、「📣 お知らせ・イベント」に1件（出す人＝完了にした人）。
+ * アプリ内の知らせ・メールはふつうのお知らせと同じ（メールはスイッチに従う・検証用は送らない）。
+ */
+export async function postAchievementNotice(
+  admin: Admin,
+  plan: GanttPlan,
+  tasks: GanttTask[],
+  author: { id: string; name: string; testSeed: boolean },
+  today: string
+): Promise<Notice> {
+  const now = new Date().toISOString();
+  const text = achievementNoticeText(plan, tasks, author.name, today, `${portalOrigin()}/gantt?plan=${encodeURIComponent(plan.id)}`);
+  const notice: Notice = {
+    id: genNoticeId(),
+    kind: "notice",
+    title: text.title.slice(0, NOTICE_TITLE_MAX),
+    body: text.body.slice(0, NOTICE_BODY_MAX),
+    heldOn: "",
+    heldTime: "",
+    place: "",
+    rsvpDeadline: "",
+    attachments: [],
+    authorId: author.id,
+    authorName: author.name,
+    testSeed: author.testSeed || plan.testSeed === true,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await saveNotice(admin, notice, true);
+  return notice;
 }

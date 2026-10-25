@@ -5,6 +5,7 @@
 //   ＋候補に無い名前の自由入力フォールバック（Enter/追加でチップ化）
 // - 送り主: 自由入力（ログイン中はプロフィール名をプリフィル・空のまま送ると「匿名」＝現仕様維持）
 // - 保存: portal_thankyou に先頭挿入。onSubmitted で保存後の全件を親へ返す（ホーム/専用ページ共用）
+// - 265: 年間計画の完了した計画・タスクから開くときは、宛先（担当者）と本文の書き出し（題名）を入れておく（送る人が直せる）
 
 import { useState, useEffect } from "react";
 import { loadPortalItems, savePortalItems } from "@/lib/portal-store";
@@ -24,10 +25,15 @@ export function ThankyouFormModal({
   open,
   onClose,
   onSubmitted,
+  initialTo,
+  initialMessage,
 }: {
   open: boolean;
   onClose: () => void;
   onSubmitted?: (next: ThankyouItem[]) => void;
+  /** 265: 開いたときに入れておく宛先と本文 */
+  initialTo?: string[];
+  initialMessage?: string;
 }) {
   const [tyToList, setTyToList] = useState<string[]>([]);
   const [tyToInput, setTyToInput] = useState("");
@@ -38,6 +44,13 @@ export function ThankyouFormModal({
 
   // 宛先候補 = メンバー紹介のプロフィール名（五十音順） ∪ スタッフ名簿（登録順）。
   // 正規化名で重複除去。モーダルを開いた時に読み込む。
+  // 265: 開いたときに宛先と本文の書き出しを入れておく
+  useEffect(() => {
+    if (!open) return;
+    if (initialTo?.length) setTyToList(initialTo);
+    if (initialMessage) setTyMessage(initialMessage);
+  }, [open, initialTo, initialMessage]);
+
   useEffect(() => {
     if (!open) return;
     (async () => {

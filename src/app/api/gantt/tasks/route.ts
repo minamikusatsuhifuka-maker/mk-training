@@ -1,4 +1,4 @@
-// 📊 ガントチャートの計画の中のタスク（指示書263）
+// 🏁 年間計画（旧 📊 ガントチャート）の計画の中のタスク（指示書263）
 //
 //   GET    ?mine=1                         → 自分が担当者のタスク（「📋 みんなのタスク」に出す）{ tasks:[…, planName, canTouch], me }
 //   POST   { planId, fields }              → タスクを足す（院長・任された幹部・その計画の担当）
@@ -17,6 +17,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
   authorizeGantt,
+  deleteConnectOf,
   deleteTasks,
   loadCategories,
   loadMatrixPlans,
@@ -321,6 +322,8 @@ export async function DELETE(req: NextRequest) {
     }
     if (!manage) return canTouchTask(task, auth.user.id, false) ? forbid("このタスクを消せるのは、院長・任された幹部・計画の担当です") : hidden();
     await deleteTasks(auth.admin, [task.id]);
+    // 265: 応援と知らせも消す
+    await deleteConnectOf(auth.admin, [], [task.id]);
     return NextResponse.json({ ok: true }, { headers: NO_STORE });
   } catch (e) {
     return fail(e);

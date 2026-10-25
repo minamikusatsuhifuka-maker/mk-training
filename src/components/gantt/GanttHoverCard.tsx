@@ -223,6 +223,7 @@ export function GanttHoverCard({
                 )}
               </span>
             )}
+            {task.help?.open && row("🙋", <span data-gantt-hover-help>手伝ってほしい：{task.help.text}</span>, "help")}
             {task.memo.trim() && row("メモ", <Clamp lines={3} data="memo">{task.memo}</Clamp>)}
           </>
         ) : (

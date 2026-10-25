@@ -13,6 +13,8 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { C } from "./sakura-theme";
+import { CheerButton, HelpSection, JudgmentSection, ThanksButton } from "./GanttConnect";
+import { thanksPrefill } from "@/lib/gantt-connect";
 import { jstTodayYmd } from "@/lib/library";
 import { STATUS_LABEL, TASK_STATUSES, shortDate, type TaskStatus, type TeamMember } from "@/lib/gantt";
 import {
@@ -68,6 +70,20 @@ export function JudgeChip({ small }: { small?: boolean }) {
       data-gantt-judge
     >
       {JUDGE_LABEL}
+    </span>
+  );
+}
+
+/** 265: 「🙋 手伝ってほしい」が出ている印 */
+export function HelpMark() {
+  return (
+    <span
+      className="shrink-0 whitespace-nowrap rounded-full px-[7px] py-[3px] text-[10px] font-bold leading-none"
+      style={{ background: "linear-gradient(135deg, #FDF0C8 0%, #FBE3CF 100%)", color: "#86650F" }}
+      title="手伝ってほしい"
+      data-gantt-help-mark
+    >
+      🙋 手伝ってほしい
     </span>
   );
 }
@@ -129,12 +145,17 @@ export function TaskBody({
   task,
   perms,
   showStatus = true,
+  cheers,
+  onCheers,
   onSaved,
 }: {
   task: GanttTask;
   perms: TaskPerms;
   /** 状態の欄を出す（「📋 みんなのタスク」は行に出すので出さない） */
   showStatus?: boolean;
+  /** 265: 👏 応援（渡したときだけ出す） */
+  cheers?: TeamMember[];
+  onCheers?: (list: TeamMember[]) => void;
   onSaved: (t: GanttTask) => void;
 }) {
   const touch = perms.manage || task.assignees.some((a) => a.id === perms.me);
@@ -162,6 +183,8 @@ export function TaskBody({
   const field = "w-full rounded-xl border bg-white px-3 py-2 text-[13px] outline-none focus:ring-2 focus:ring-[#F2C6D3]";
   return (
     <div className="space-y-2.5 text-[13px]" data-gantt-task-body={task.id}>
+      {/* 265 §4: 院長の判断は、タスクのいちばん上に日時付きで */}
+      <JudgmentSection task={task} isDirector={perms.isDirector} onSaved={onSaved} />
       {task.memo && (
         <div>
           <div className="text-[11px]" style={{ color: C.sub }}>
@@ -177,6 +200,18 @@ export function TaskBody({
           状態
           <StatusSelect task={task} isDirector={perms.isDirector} busy={busy} onChange={(s) => void run(patch({ status: s }))} />
         </label>
+      )}
+      {/* 265 §3: 🙋 手伝ってほしい／手伝います */}
+      <HelpSection task={task} me={perms.me} touch={touch} manage={perms.manage} onSaved={onSaved} />
+      {/* 265 §1: 👏 応援・完了したら 💌 ありがとうカードを送る */}
+      {(cheers || task.status === "done") && (
+        <div className="flex flex-wrap items-start gap-2">
+          {cheers && onCheers && <CheerButton kind="task" targetId={task.id} me={perms.me} cheers={cheers} onChange={onCheers} />}
+          {task.status === "done" && (() => {
+            const pre = thanksPrefill({ kind: "task", task }, perms.me);
+            return <ThanksButton to={pre.to} message={pre.message} />;
+          })()}
+        </div>
       )}
       <div>
         <div className="text-[11px]" style={{ color: C.sub }}>
@@ -306,12 +341,17 @@ export function TaskList({
   onSaved,
   onRemoved,
   onReorder,
+  cheers,
+  onCheers,
 }: {
   planId: string;
   tasks: GanttTask[];
   today: string;
   perms: TaskPerms;
   initialOpenId?: string;
+  /** 265: タスクごとの 👏 応援 */
+  cheers?: Record<string, TeamMember[]>;
+  onCheers?: (taskId: string, list: TeamMember[]) => void;
   onAdd: () => void;
   onEdit: (t: GanttTask) => void;
   onSaved: (t: GanttTask) => void;
@@ -393,6 +433,7 @@ export function TaskList({
                       {t.title}
                     </span>
                     {t.directorJudge && <JudgeChip small />}
+                    {t.help?.open && <HelpMark />}
                   </span>
                   <span className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px]" style={{ color: C.sub }}>
                     <span className="break-words">{t.assignees.length ? t.assignees.map((a) => a.name || "名前未設定").join("、") : "担当者なし"}</span>
@@ -413,7 +454,13 @@ export function TaskList({
               </div>
               {open && (
                 <div className="border-t px-3 pb-3 pt-2" style={{ borderColor: C.ruleHead }}>
-                  <TaskBody task={t} perms={perms} onSaved={onSaved} />
+                  <TaskBody
+                    task={t}
+                    perms={perms}
+                    onSaved={onSaved}
+                    cheers={cheers ? cheers[t.id] ?? [] : undefined}
+                    onCheers={onCheers ? (list) => onCheers(t.id, list) : undefined}
+                  />
                   {perms.manage && (
                     <div className="mt-2 flex justify-end gap-2">
                       <button type="button" onClick={() => onEdit(t)} className="min-h-[36px] rounded-full px-4 text-[12px] font-bold text-white" style={{ background: C.hero }} data-gantt-task-edit={t.id}>
@@ -675,6 +722,7 @@ export function GanttMyTasks() {
                   <span className="flex flex-wrap items-center gap-1.5">
                     <span className="break-words text-[14px] font-medium">{t.title}</span>
                     {t.directorJudge && <JudgeChip small />}
+                    {t.help?.open && <HelpMark />}
                   </span>
                   <span className="mt-0.5 block text-[11px]">
                     <DueText task={t} today={today} />

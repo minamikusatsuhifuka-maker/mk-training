@@ -215,6 +215,8 @@ export type GanttPlan = {
   noticeId?: string;
   /** 268: つながるクリニック目標の id（portal_gantt の目標・空＝つながない）。院の計画とチームプロジェクトで選べる */
   goalId?: string;
+  /** 265: 完了のお知らせを出した（一度完了にして戻し、また完了にしても2回目は出さない） */
+  celebrated?: { at: string; noticeId: string };
   updatedAt: string;
 };
 
@@ -271,6 +273,13 @@ function goalIdOf(v: unknown): { goalId?: string } {
   return typeof v === "string" && /^[\w-]{1,64}$/.test(v) ? { goalId: v } : {};
 }
 
+/** 265: 完了のお知らせを出した印（通さないと次の保存で消えて、2回目が出てしまう） */
+function celebratedOf(v: unknown): { celebrated?: { at: string; noticeId: string } } {
+  const o = (v && typeof v === "object" ? v : null) as Record<string, unknown> | null;
+  if (!o || typeof o.at !== "string" || !o.at) return {};
+  return { celebrated: { at: o.at, noticeId: typeof o.noticeId === "string" ? o.noticeId : "" } };
+}
+
 /** 保存値・送られてきた値を計画に整える。名前・開始日が無いものは成り立たないので null */
 export function normalizePlan(id: string, raw: unknown): GanttPlan | null {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -299,6 +308,7 @@ export function normalizePlan(id: string, raw: unknown): GanttPlan | null {
       createdByName: typeof o.createdByName === "string" ? o.createdByName.slice(0, 60) : "",
       ...(typeof o.noticeId === "string" && o.noticeId ? { noticeId: o.noticeId.slice(0, 64) } : {}),
       ...goalIdOf(o.goalId),
+      ...celebratedOf(o.celebrated),
       updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : "",
     };
   }
@@ -317,6 +327,7 @@ export function normalizePlan(id: string, raw: unknown): GanttPlan | null {
     assignees: normalizeMembers(o.assignees),
     ...(o.assigneesSet === true ? { assigneesSet: true } : {}),
     ...goalIdOf(o.goalId),
+    ...celebratedOf(o.celebrated),
     updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : "",
   };
 }

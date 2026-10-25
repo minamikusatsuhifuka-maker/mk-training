@@ -57,6 +57,8 @@ import { OVERDUE_LABEL, isOverdue, progressLabel, swapTaskOrder, tasksOfPlan, ty
 import { JudgeChip, TaskForm, TaskList, TaskStatusChip, ganttApi, type TaskDraft, type TaskPerms } from "./GanttTasks";
 import { filterPlansByGoal, type ClinicGoalBrief } from "@/lib/plan-goals";
 import { GanttHoverCard, useGanttHover } from "./GanttHoverCard";
+import { CheerButton, GanttAlerts, ThanksButton } from "./GanttConnect";
+import { sortJudgeTasks, thanksPrefill } from "@/lib/gantt-connect";
 
 /** 267: カーソルを合わせたときのポップアップの出し入れ（useGanttHover の bind が返すもの） */
 type HoverProps = ReturnType<ReturnType<typeof useGanttHover>["bind"]>;
@@ -99,6 +101,8 @@ type GanttData = {
   canModerate: boolean;
   /** 268: つながるクリニック目標に選べる目標（id・名前・目的） */
   clinicGoals: ClinicGoalBrief[];
+  /** 265: 👏 応援（計画・タスクの id → 押した人） */
+  cheers: Record<string, TeamMember[]>;
 };
 const TASK_ROW_H = 36;
 
@@ -348,6 +352,12 @@ function TaskRow({
             <span className="whitespace-nowrap text-[10px]" style={{ color: pal.text }}>
               {done && <span data-gantt-done>✓ </span>}
               {shortDate(task.due)}
+              {/* 265: 「🙋 手伝ってほしい」が出ている印（◆の横） */}
+              {task.help?.open && (
+                <span className="ml-1" title="手伝ってほしい" data-gantt-diamond-help>
+                  🙋
+                </span>
+              )}
             </span>
           </button>
         )}
@@ -368,6 +378,7 @@ function PlanDetail({
   isDirector,
   ayumi,
   tasksSlot,
+  connectSlot,
   goal,
   onEdit,
   onDelete,
@@ -387,6 +398,8 @@ function PlanDetail({
   ayumi: { kept: boolean; busy: boolean; onKeep: () => void } | null;
   /** 263: 「担当」「状態」の下に出すタスクの一覧 */
   tasksSlot?: React.ReactNode;
+  /** 265: 👏 応援・💌 ありがとうカードを送る */
+  connectSlot?: React.ReactNode;
   onEdit: () => void;
   onDelete: () => void;
   onClose: () => void;
@@ -535,6 +548,7 @@ function PlanDetail({
         )}
       </dl>
       )}
+      {connectSlot && <div className="px-[18px] pb-3">{connectSlot}</div>}
       {tasksSlot}
       {canWrite && fromMatrix && (
         <p className="px-[18px] pb-3 text-[12px]" style={{ color: C.sub }} data-gantt-matrix-note>
@@ -1124,6 +1138,7 @@ export function GanttBoard() {
         teamCandidates: j.teamCandidates ?? [],
         canAddTeam: !!j.canAddTeam,
         tasks: j.tasks ?? [],
+        cheers: j.cheers ?? {},
         taskManageIds: j.taskManageIds ?? [],
         clinicGoals: j.clinicGoals ?? [],
       });
@@ -1194,7 +1209,9 @@ export function GanttBoard() {
       return n;
     });
   /** 院長：「院長が判断」のタスクで完了していないもの */
-  const judgePending = useMemo(() => tasks.filter((t) => t.directorJudge && t.status !== "done"), [tasks]);
+  // 265 §4: 判断をまだ書いていないものを上に
+  const judgePending = useMemo(() => sortJudgeTasks(tasks.filter((t) => t.directorJudge && t.status !== "done")), [tasks]);
+  const setCheers = (id: string, list: TeamMember[]) => setData((d) => (d ? { ...d, cheers: { ...d.cheers, [id]: list } } : d));
 
   const openTaskForm = (planId: string, editing: GanttTask | null) => {
     setFormError("");
@@ -1469,6 +1486,9 @@ export function GanttBoard() {
             )}
           </div>
         </div>
+
+        {/* 265: 自分あてのアプリ内の知らせ（手伝います・院長の判断） */}
+        <GanttAlerts />
 
         {/* 表示の単位・◀ 今日 ▶（幅を固定＝切り替えても動かない） */}
         <div className="flex flex-wrap items-center gap-3" data-gantt-toolbar>
@@ -1828,6 +1848,18 @@ export function GanttBoard() {
         <PlanDetail
           plan={openedPlan}
           goal={goalOf(openedPlan)}
+          connectSlot={
+            openedPlan.source === "matrix" ? undefined : (
+              <div className="flex flex-wrap items-start gap-2">
+                <CheerButton kind="plan" targetId={openedPlan.id} me={data?.me ?? ""} cheers={data?.cheers[openedPlan.id] ?? []} onChange={(l) => setCheers(openedPlan.id, l)} />
+                {openedPlan.status === "done" &&
+                  (() => {
+                    const pre = thanksPrefill({ kind: "plan", plan: openedPlan }, data?.me ?? "");
+                    return <ThanksButton to={pre.to} message={pre.message} />;
+                  })()}
+              </div>
+            )
+          }
           category={categoryOf(categories, openedPlan.categoryId)}
           today={today}
           anchor={opened.el}
@@ -1873,6 +1905,8 @@ export function GanttBoard() {
                 onSaved={upsertTask}
                 onRemoved={removeTask}
                 onReorder={(id, dir) => void reorderTask(openedPlan.id, id, dir)}
+                cheers={data?.cheers ?? {}}
+                onCheers={setCheers}
               />
             ) : undefined
           }

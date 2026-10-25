@@ -2,10 +2,12 @@
 //
 //   GET                          → { categories, plans, editableIds, canWrite, canAddTeam, canEditCategories, fiscalStartMonth, teamCandidates, me,
 //                                    tasks, taskManageIds, isDirector, canModerate, clinicGoals }（263: 計画の中のタスク。書くのは /api/gantt/tasks）
+//                                  265: cheers＝{ 計画/タスクの id: 押した人[] }（本物のスタッフには検証用の応援を出さない）
 //                                  268: clinicGoals＝つながるクリニック目標に選べる目標（id・名前・目的）。fiscalStartMonth はいつも11（11月始まり）
 //   POST   { fields }            → 院の計画を足す（書く人）
 //   POST   { kind:"team", fields } → チームプロジェクトを足す（ログインしたスタッフ全員）＋お知らせを1件出す
 //   PATCH  { id, fields }        → 直す（院の計画＝書く人／チームプロジェクト＝作った人・メンバー・書く人）
+//                                  265: 状態が初めて「完了」になったら、お知らせを1件出す（2回目からは出さない＝celebrated）
 //   PATCH  { reorder: [{id,order}] } → 並べ替え（書く人）
 //   DELETE ?id=                  → 消す（中の小さな計画も一緒に。権限は PATCH と同じ）
 //   PUT    { categories }        → 分類を保存（院長だけ）。消した分類の計画は「その他」へ移す
@@ -16,8 +18,12 @@
 import { after, NextResponse, type NextRequest } from "next/server";
 import {
   authorizeGantt,
+  deleteConnectOf,
   deletePlans,
   deleteTasksOfPlans,
+  loadCheers,
+  myDisplayName,
+  postAchievementNotice,
   loadTasks,
   loadCategories,
   loadClinicGoalBriefs,
@@ -49,6 +55,7 @@ import { jstTodayYmd } from "@/lib/library";
 import { loadEntries } from "@/lib/ayumi-server";
 import { hidesTestSeedFor } from "@/lib/test-seed-hide-server";
 import { canManageTasks, visibleTasksFor } from "@/lib/gantt-tasks";
+import { visibleCheers } from "@/lib/gantt-connect";
 
 export const runtime = "nodejs";
 
@@ -88,6 +95,31 @@ async function checkGoal(next: GanttPlan): Promise<string | null> {
   return goals.some((g) => g.id === next.goalId) ? null : "そのクリニック目標は見つかりません（消された可能性があります）";
 }
 
+/**
+ * 265 §2: 状態が「完了」になったとき、お知らせを1件（初めての完了のときだけ・失敗しても計画の保存は止めない）。
+ *   タスクの数は、その計画のタスク（本物の計画には検証用のタスクを数えない）。
+ */
+async function celebrateIfDone(auth: GanttAuth, prev: GanttPlan, saved: GanttPlan): Promise<GanttPlan> {
+  if (prev.status === "done" || saved.status !== "done" || saved.celebrated) return saved;
+  try {
+    const tasks = (await loadTasks(auth.admin)).filter((t) => t.planId === saved.id && (saved.testSeed || !t.testSeed));
+    const name = await myDisplayName(auth.admin, auth.user);
+    const notice = await postAchievementNotice(auth.admin, saved, tasks, { id: auth.user.id, name, testSeed: auth.testSeed }, jstTodayYmd());
+    const admin = auth.admin;
+    after(async () => {
+      try {
+        await sendNewNoticeMails(admin, notice);
+      } catch (e) {
+        console.error(`[gantt] 完了のお知らせのメールに失敗: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    });
+    return await savePlan(auth.admin, { ...saved, celebrated: { at: new Date().toISOString(), noticeId: notice.id } }, auth.user.email ?? auth.user.id);
+  } catch (e) {
+    console.error(`[gantt] 完了のお知らせに失敗: ${e instanceof Error ? e.message : String(e)}`);
+    return saved;
+  }
+}
+
 /** 見ている人には見えない計画（本物のスタッフから見た検証用の計画）は、無いものとして扱う */
 function findVisible(plans: GanttPlan[], id: string, auth: GanttAuth): GanttPlan | null {
   return visiblePlans(plans, auth.user).find((p) => p.id === id) ?? null;
@@ -98,15 +130,24 @@ export async function GET() {
   if (!auth.ok) return auth.status === 401 ? unauth() : hidden();
   try {
     const categories = await loadCategories(auth.admin);
-    const [plans, matrix, clinicGoals, candidates, allTasks] = await Promise.all([
+    const [plans, matrix, clinicGoals, candidates, allTasks, cheerMap] = await Promise.all([
       loadPlans(auth.admin),
       loadMatrixPlans(auth.admin, categories),
       loadClinicGoalBriefs().catch(() => []),
       teamCandidates(auth.admin, auth.testSeed).catch(() => []),
       loadTasks(auth.admin),
+      loadCheers(auth.admin),
     ]);
     const mine = visiblePlans(plans, auth.user);
     const shown = [...mine, ...matrix];
+    const shownTasks = visibleTasksFor(allTasks, hidesTestSeedFor(auth.user), new Set(shown.map((p) => p.id)));
+    const targetIds = new Set([...shown.map((p) => p.id), ...shownTasks.map((t) => t.id)]);
+    const cheers: Record<string, { id: string; name: string }[]> = {};
+    for (const [id, list] of cheerMap) {
+      if (!targetIds.has(id)) continue;
+      const v = visibleCheers(list, hidesTestSeedFor(auth.user));
+      if (v.length) cheers[id] = v;
+    }
     return NextResponse.json(
       {
         categories,
@@ -121,7 +162,8 @@ export async function GET() {
         teamCandidates: candidates,
         me: auth.user.id,
         // 263: 計画の中のタスク（本物のスタッフには検証用のタスク・ひとことを出さない）と、タスクを書ける計画
-        tasks: visibleTasksFor(allTasks, hidesTestSeedFor(auth.user), new Set(shown.map((p) => p.id))),
+        tasks: shownTasks,
+        cheers,
         taskManageIds: shown.filter((p) => canManageTasks(p, auth.user.id, auth.canWrite)).map((p) => p.id),
         isDirector: auth.isAdmin,
         canModerate: auth.canWrite,
@@ -255,7 +297,7 @@ export async function PATCH(req: NextRequest) {
         if (goalProblem) return bad(goalProblem);
       }
       // 252 §5: 直したときは知らせない
-      const saved = await savePlan(auth.admin, next, by);
+      const saved = await celebrateIfDone(auth, prev, await savePlan(auth.admin, next, by));
       return NextResponse.json({ plan: saved }, { headers: NO_STORE });
     }
     let assignees = prev.assignees ?? [];
@@ -271,7 +313,7 @@ export async function PATCH(req: NextRequest) {
     if (!categories.some((c) => c.id === next.categoryId) || next.categoryId === TEAM_CATEGORY_ID) next.categoryId = OTHER_CATEGORY_ID;
     const problem = checkParent(next, plans) ?? (next.goalId !== prev.goalId ? await checkGoal(next) : null);
     if (problem) return bad(problem);
-    const saved = await savePlan(auth.admin, next, by);
+    const saved = await celebrateIfDone(auth, prev, await savePlan(auth.admin, next, by));
     // 上の計画の分類を変えたら、中の小さな計画もそろえる
     if (!next.parentId && next.categoryId !== prev.categoryId) {
       for (const c of plans.filter((p) => p.parentId === id)) await savePlan(auth.admin, { ...c, categoryId: next.categoryId }, by);
@@ -292,9 +334,12 @@ export async function DELETE(req: NextRequest) {
     const prev = findVisible(plans, id, auth);
     if (!prev || !canEditTeam(prev, auth.user.id, auth.canWrite)) return hidden();
     const ids = [id, ...plans.filter((p) => p.parentId === id).map((p) => p.id)];
+    const taskIds = (await loadTasks(auth.admin)).filter((t) => ids.includes(t.planId)).map((t) => t.id);
     await deletePlans(auth.admin, ids);
     // 263: 中のタスクも一緒に消す
     await deleteTasksOfPlans(auth.admin, ids);
+    // 265: 応援と知らせも消す
+    await deleteConnectOf(auth.admin, ids, taskIds);
     return NextResponse.json({ ok: true }, { headers: NO_STORE });
   } catch (e) {
     return fail(e);
