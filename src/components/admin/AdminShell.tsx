@@ -7,6 +7,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { RouteSkeleton } from "@/components/RouteSkeleton";
+import { useNavPending } from "@/components/NavFeedback";
 import { FontSwitcher } from "@/components/FontSwitcher";
 import { ADMIN_ITEMS, PEOPLE_TRAINING_ITEM_KEY } from "@/lib/admin-items";
 import { loadPortalObject } from "@/lib/portal-store";
@@ -56,6 +58,7 @@ export function AdminShell({
   allowedKeys: string[];
 }) {
   const pathname = usePathname();
+  const navPending = useNavPending();
   const [menuOpen, setMenuOpen] = useState(false);
   // 149: メンバーノートは指名された人だけに見せる。
   // 許可されていないと probe が 404 を返すので、リンク自体を出さない（存在秘匿）。
@@ -261,7 +264,11 @@ export function AdminShell({
         </aside>
 
         {/* Content */}
-        <main className="flex-1 p-3 md:p-6 overflow-y-auto">{children}</main>
+        <main className="flex-1 p-3 md:p-6 overflow-y-auto">
+          {/* 速度: 押した瞬間にスケルトンへ切り替える（中身は消さずに隠す） */}
+          {navPending && <RouteSkeleton />}
+          <div style={{ display: navPending ? "none" : "contents" }}>{children}</div>
+        </main>
       </div>
     </div>
   );

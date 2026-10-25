@@ -11,6 +11,8 @@
 // このチャンク自体が要求されない。
 
 import { useState } from "react";
+import { RouteSkeleton } from "@/components/RouteSkeleton";
+import { useNavPending } from "@/components/NavFeedback";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { PresurveyNavMark } from "@/components/OneOnOneSchedule";
@@ -49,6 +51,8 @@ export default function AppShellInner({
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const resolvedNav = useResolvedNav();
+  // 速度: 押した瞬間にスケルトンへ切り替える（メニューのリンクの先読みは next/link の標準＝見えたとき・カーソルを合わせたとき）
+  const navPending = useNavPending();
 
   return (
     <div className="flex min-h-full">
@@ -98,7 +102,9 @@ export default function AppShellInner({
         )}
 
         <main className="flex-1 min-w-0 overflow-y-auto p-3 md:p-6">
-          {children}
+          {/* 切り替え中は中身を隠して（消さずに残す）スケルトンを出す。新しい画面になったら戻る */}
+          {navPending && <RouteSkeleton />}
+          <div style={{ display: navPending ? "none" : "contents" }}>{children}</div>
         </main>
       </div>
     </div>
