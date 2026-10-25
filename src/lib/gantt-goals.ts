@@ -16,6 +16,7 @@
 import { loadPortalObject, savePortalObject } from "./portal-store";
 import { getSupabaseBrowserClient } from "./supabase-browser";
 import { isAdminUser } from "./admin-role";
+import { PLAN_FISCAL_START_MONTH } from "./gantt";
 
 export const PORTAL_GANTT_KEY = "portal_gantt";
 
@@ -43,6 +44,9 @@ export type GanttGoal = {
   // 期間の分類の手動上書き（指示書126・任意）。未上書きの目標には保存しない。
   // 表示分類は常に resolveHorizon(start, end, horizonOverride) で計算する
   horizonOverride?: GanttHorizon;
+  // 268: つながった計画があるのに、院長が進み具合を手で直した（「手で入力」の印・「自動に戻す」で外す）。
+  // 手で直していない目標には保存しない。つながった計画がない目標では使わない（progress をそのまま出す）
+  progressManual?: boolean;
 };
 
 export type GanttData = { goals: GanttGoal[]; updatedAt: string };
@@ -94,9 +98,42 @@ export function getGanttGradient(color: string) {
   return GANTT_GRADIENT[color] ?? GANTT_GRADIENT["gantt-blue"];
 }
 
-// 表示する年度タブ（今年から5年）。module 読込時に new Date() しないよう関数化。
+// ─── 年度（268: 年間計画と同じ11月始まり・10月締め。始まる年で呼ぶ＝2026年11月〜2027年10月が「2026年度」） ───
+
+export const GOAL_FISCAL_START_MONTH = PLAN_FISCAL_START_MONTH;
+
+/** その日を含む年度 */
+export function fiscalYearOfDate(d: Date): number {
+  return d.getMonth() + 1 >= GOAL_FISCAL_START_MONTH ? d.getFullYear() : d.getFullYear() - 1;
+}
+
+/** 年度の月の並び（11月・12月・1月…10月） */
+export function fiscalMonthLabels(): string[] {
+  return Array.from({ length: 12 }, (_, i) => MONTH_LABELS[(GOAL_FISCAL_START_MONTH - 1 + i) % 12]);
+}
+
+/** 年度の中で何番目の月か（0＝11月 … 11＝10月） */
+export function fiscalMonthIndex(d: Date): number {
+  return (d.getMonth() - (GOAL_FISCAL_START_MONTH - 1) + 12) % 12;
+}
+
+/** 「2026年度」 */
+export function fiscalYearLabel(fy: number): string {
+  return `${fy}年度`;
+}
+
+/** 「2026年11月〜2027年10月」 */
+export function fiscalYearSpanLabel(fy: number): string {
+  // 終わりの月は始まりの月の前の月（1月始まりなら同じ年の12月）
+  const last = new Date(fy + 1, GOAL_FISCAL_START_MONTH - 2, 1);
+  const endMonth = last.getMonth() + 1;
+  const endYear = last.getFullYear();
+  return `${fy}年${GOAL_FISCAL_START_MONTH}月〜${endYear}年${endMonth}月`;
+}
+
+// 表示する年度タブ（今の年度から5年度）。module 読込時に new Date() しないよう関数化。
 export function ganttYears(now: Date = new Date()): number[] {
-  const y = now.getFullYear();
+  const y = fiscalYearOfDate(now);
   return Array.from({ length: 5 }, (_, i) => y + i);
 }
 
@@ -121,11 +158,11 @@ export function toYmd(d: Date): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-// 年の境界（元日0時ms 〜 翌年元日0時ms）
+// 年度の境界（11月1日0時ms 〜 翌年11月1日0時ms・268）
 function yearBounds(year: number): { startMs: number; endMs: number } {
   return {
-    startMs: new Date(year, 0, 1).getTime(),
-    endMs: new Date(year + 1, 0, 1).getTime(),
+    startMs: new Date(year, GOAL_FISCAL_START_MONTH - 1, 1).getTime(),
+    endMs: new Date(year + 1, GOAL_FISCAL_START_MONTH - 1, 1).getTime(),
   };
 }
 
@@ -138,7 +175,7 @@ function goalEndMsExclusive(goal: GanttGoal): number {
   return d.getTime() + DAY_MS;
 }
 
-// 選択年に表示すべきか（期間が年に重なるか）
+// 選択した年度に表示すべきか（期間が年度に重なるか）
 export function goalOverlapsYear(goal: GanttGoal, year: number): boolean {
   const { startMs, endMs } = yearBounds(year);
   return goalStartMs(goal) < endMs && goalEndMsExclusive(goal) > startMs;
@@ -158,12 +195,12 @@ export function barFractions(
   return { left, width };
 }
 
-// 「今日」の年内位置（0〜1）。選択年と今年が違えば null。
+// 「今日」の年度内位置（0〜1）。選択した年度と今の年度が違えば null。
 export function todayFractionInYear(
   year: number,
   now: Date = new Date()
 ): number | null {
-  if (now.getFullYear() !== year) return null;
+  if (fiscalYearOfDate(now) !== year) return null;
   const { startMs, endMs } = yearBounds(year);
   const todayMid = new Date(
     now.getFullYear(),
@@ -173,9 +210,11 @@ export function todayFractionInYear(
   return (todayMid - startMs) / (endMs - startMs);
 }
 
-// マイルストーンの年内位置（月ベース・概念保持のため現行方式のまま）
-export function milestonePosInYear(month: number): number {
-  return (month + 0.5) / 12;
+// マイルストーンの年度内位置（月ベース・概念保持）。その年度に入らなければ null（268）
+export function milestonePosInFiscalYear(ms: Milestone, fy: number): number | null {
+  const d = new Date(ms.year, ms.month, 1);
+  if (fiscalYearOfDate(d) !== fy) return null;
+  return (fiscalMonthIndex(d) + 0.5) / 12;
 }
 
 export function genGanttId(): string {
@@ -338,6 +377,8 @@ function normalizeGoals(raw: unknown): GanttGoal[] {
         g.horizonOverride === "long"
           ? g.horizonOverride
           : undefined,
+      // 268: 手で直した印も素通しする（通さないと次の保存で消える）
+      progressManual: g.progressManual === true ? true : undefined,
     });
   }
   return out;

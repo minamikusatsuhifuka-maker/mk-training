@@ -273,7 +273,7 @@ export function PriorityTaskRow({
                   onChange={(e) => void save({ gantt: e.target.checked })}
                   data-pm-panel-gantt-check
                 />
-                <span>📊 ガントチャートに出す</span>
+                <span>🏁 年間計画に出す</span>
               </label>
               {task.gantt && (
                 <label className="flex items-center gap-1.5">
@@ -311,7 +311,7 @@ export function PriorityTaskRow({
             </div>
             {task.gantt && (
               <p className="text-[10px] text-slate-500" data-pm-panel-gantt-note>
-                ガントチャートには、名前・期間（開始日〜期限）・状態だけが出ます（メモ・9マス・任せる相手は出ません）。
+                年間計画には、名前・期間（開始日〜期限）・状態だけが出ます（メモ・9マス・任せる相手は出ません）。
                 {!task.due && !task.ganttStart && "開始日か期限を入れると出ます。"}
               </p>
             )}

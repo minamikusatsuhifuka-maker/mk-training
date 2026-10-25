@@ -113,8 +113,8 @@ export const MASTER_ITEMS: MasterItem[] = [
   { key: "/events", href: "/events", label: "🎪 イベント", categoryId: "work", featureId: "events" },
   // 院内カレンダー（指示書114・Googleカレンダー読み取り・管理はGoogle側）
   { key: "/calendar", href: "/calendar", label: "🗓 院内カレンダー", categoryId: "work", featureId: "calendar" },
-  // ガントチャート（指示書250・いろいろな計画を月・四半期・年で共有。書くのは院長と任された幹部）
-  { key: "/gantt", href: "/gantt", label: "📊 ガントチャート", categoryId: "work", featureId: "gantt" },
+  // 年間計画（指示書250で「📊 ガントチャート」として作り、268で「🏁 年間計画」に改めた。URL は /gantt のまま＝ブックマーク・お知らせのリンクが切れない）
+  { key: "/gantt", href: "/gantt", label: "🏁 年間計画", categoryId: "work", featureId: "gantt" },
   // 当院の歩み（指示書253・歴史の年表。管理画面の売上の「📈 クリニックの歩み」とは別）
   { key: "/ayumi", href: "/ayumi", label: "📜 当院の歩み", categoryId: "work", featureId: "ayumi" },
   { key: "/medical-fees", href: "/medical-fees", label: "💴 算定・点数表", featureId: "page_medical_fees", categoryId: "work" },
@@ -422,7 +422,19 @@ export function navLabelOverride(
 ): string {
   if (!isValidConfig(cfg)) return "";
   const it = cfg.items.find((i) => i && i.key === key);
-  return it?.labelOverride?.trim() ?? "";
+  return renameLegacyWords(key, it?.labelOverride?.trim() ?? "");
+}
+
+// 268: 名前を改めた画面は、「🧭 サイドバー構成」で付けてある古い表示名の言葉も新しい名前で出す（保存してある値は書き換えない）。
+//   例：「🏁目標・計画」→「🏁年間計画」（絵文字は付けてあるまま）
+const RENAMED_WORDS: Record<string, [RegExp, string][]> = {
+  "/gantt": [[/目標・計画|ガントチャート/g, "年間計画"]],
+};
+
+export function renameLegacyWords(key: string, label: string): string {
+  let out = label;
+  for (const [re, to] of RENAMED_WORDS[key] ?? []) out = out.replace(re, to);
+  return out;
 }
 
 // config を解決して描画用カテゴリ配列を返す。

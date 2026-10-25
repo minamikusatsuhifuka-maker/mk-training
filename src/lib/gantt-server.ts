@@ -1,8 +1,8 @@
-// 📊 ガントチャート（指示書250）— サーバー専用
+// 🏁 年間計画（指示書250で「📊 ガントチャート」として作り、268で「年間計画」に改めた）— サーバー専用
 //
 // 【判定（250 §3・§5）】
 //   見る      … ログインしたスタッフ全員。スイッチ gantt がOFFの間は院長と検証用アカウントだけ（ほかは無いのと同じ404）
-//   書く      … 院長と、委任の設定で「📊 ガントチャート」（admin item "gantt"）を任された幹部（無効のアカウントは除く）
+//   書く      … 院長と、委任の設定で「🏁 年間計画」（admin item "gantt"）を任された幹部（無効のアカウントは除く）
 //   分類を直す … 院長だけ
 // 【保存先】clinic_staff_growth（新しい表もSQLも足さない）
 //   ・計画   record_type = "gantt_plan"（id = gp-…・1件1行）
@@ -32,7 +32,6 @@ import {
   matrixCategoryOf,
   migrateAssigneeText,
   normalizeCategories,
-  normalizeFiscalStart,
   normalizePlan,
   planFromMatrixTask,
   teamNoticeText,
@@ -40,6 +39,10 @@ import {
   type GanttPlan,
 } from "./gantt";
 import { normalizeTask as normalizeGanttTask, type GanttTask } from "./gantt-tasks";
+import { canViewGanttWith, goalBriefsOf, type ClinicGoalBrief } from "./plan-goals";
+
+/** クリニック目標の保存先（lib/gantt-goals.ts の PORTAL_GANTT_KEY と同じ。あちらはブラウザ用なのでここでは読み込まない） */
+const PORTAL_GANTT_KEY = "portal_gantt";
 
 export const GANTT_ITEM_KEY = "gantt";
 export const GANTT_FEATURE = "gantt";
@@ -63,13 +66,19 @@ export type GanttAuth = {
   canAyumi: boolean;
 };
 
+/** 年間計画を見られるか（院長・検証用アカウントはいつも／ほかの人はスイッチ gantt がONのときだけ。式は lib/plan-goals.ts） */
+export async function canViewGantt(user: Pick<User, "app_metadata">): Promise<boolean> {
+  if (canViewGanttWith(user, false)) return true;
+  return canViewGanttWith(user, await serverFeatureEnabled(GANTT_FEATURE));
+}
+
 /** 未ログイン=401、使えない人=404（無いのと同じ） */
 export async function authorizeGantt(): Promise<GanttAuth | { ok: false; status: 401 | 404 }> {
   const { user } = await getSessionUser();
   if (!user) return { ok: false, status: 401 };
   const isAdmin = isAdminUser(user);
   const testSeed = isTestSeedUser(user);
-  if (!isAdmin && !testSeed && !(await serverFeatureEnabled(GANTT_FEATURE))) return { ok: false, status: 404 };
+  if (!(await canViewGantt(user))) return { ok: false, status: 404 };
   let canWrite = isAdmin;
   let canAyumi = isAdmin;
   if (!isAdmin) {
@@ -258,15 +267,11 @@ export async function moveMatrixToOther(admin: Admin, removedIds: string[]): Pro
   return moved;
 }
 
-// ─── 年度の始まり（クリニックの歩みと同じ設定） ───
+// ─── 268: クリニック目標（content_store の portal_gantt）。年間計画の側では id・名前・目的だけを使う ───
 
-export async function loadFiscalStart(): Promise<number> {
-  try {
-    const row = await serverGetContentRow("portal_metrics");
-    return normalizeFiscalStart((row?.data as { fiscalStartMonth?: unknown } | null)?.fiscalStartMonth);
-  } catch {
-    return 6;
-  }
+export async function loadClinicGoalBriefs(): Promise<ClinicGoalBrief[]> {
+  const row = await serverGetContentRow(PORTAL_GANTT_KEY);
+  return goalBriefsOf(row?.data ?? null);
 }
 
 // ─── 252: チームプロジェクト ───

@@ -1,7 +1,8 @@
-// 📊 ガントチャート（指示書250・252）
+// 🏁 年間計画（指示書250・252で「📊 ガントチャート」として作り、268で「年間計画」に改めた）
 //
 //   GET                          → { categories, plans, editableIds, canWrite, canAddTeam, canEditCategories, fiscalStartMonth, teamCandidates, me,
-//                                    tasks, taskManageIds, isDirector, canModerate }（263: 計画の中のタスク。書くのは /api/gantt/tasks）
+//                                    tasks, taskManageIds, isDirector, canModerate, clinicGoals }（263: 計画の中のタスク。書くのは /api/gantt/tasks）
+//                                  268: clinicGoals＝つながるクリニック目標に選べる目標（id・名前・目的）。fiscalStartMonth はいつも11（11月始まり）
 //   POST   { fields }            → 院の計画を足す（書く人）
 //   POST   { kind:"team", fields } → チームプロジェクトを足す（ログインしたスタッフ全員）＋お知らせを1件出す
 //   PATCH  { id, fields }        → 直す（院の計画＝書く人／チームプロジェクト＝作った人・メンバー・書く人）
@@ -19,7 +20,7 @@ import {
   deleteTasksOfPlans,
   loadTasks,
   loadCategories,
-  loadFiscalStart,
+  loadClinicGoalBriefs,
   loadMatrixPlans,
   loadPlans,
   moveMatrixToOther,
@@ -40,6 +41,7 @@ import {
   genPlanId,
   normalizeCategories,
   normalizePlan,
+  PLAN_FISCAL_START_MONTH,
   type GanttPlan,
   type PlanFields,
 } from "@/lib/gantt";
@@ -62,7 +64,7 @@ function readFields(body: Record<string, unknown>): PlanFields | null {
   if (!f || typeof f !== "object" || Array.isArray(f)) return null;
   const o = f as Record<string, unknown>;
   const out: PlanFields = {};
-  for (const k of ["name", "categoryId", "start", "end", "assignee", "assignees", "status", "memo", "parentId", "members"] as const) {
+  for (const k of ["name", "categoryId", "start", "end", "assignee", "assignees", "status", "memo", "parentId", "members", "goalId"] as const) {
     if (k in o) (out as Record<string, unknown>)[k] = o[k];
   }
   return out;
@@ -79,6 +81,13 @@ function checkParent(next: GanttPlan, plans: GanttPlan[]): string | null {
   return null;
 }
 
+/** 268: つながるクリニック目標は、今ある目標の中から（空＝つながない）。無い目標ならエラーの文を返す */
+async function checkGoal(next: GanttPlan): Promise<string | null> {
+  if (!next.goalId) return null;
+  const goals = await loadClinicGoalBriefs();
+  return goals.some((g) => g.id === next.goalId) ? null : "そのクリニック目標は見つかりません（消された可能性があります）";
+}
+
 /** 見ている人には見えない計画（本物のスタッフから見た検証用の計画）は、無いものとして扱う */
 function findVisible(plans: GanttPlan[], id: string, auth: GanttAuth): GanttPlan | null {
   return visiblePlans(plans, auth.user).find((p) => p.id === id) ?? null;
@@ -89,10 +98,10 @@ export async function GET() {
   if (!auth.ok) return auth.status === 401 ? unauth() : hidden();
   try {
     const categories = await loadCategories(auth.admin);
-    const [plans, matrix, fiscalStartMonth, candidates, allTasks] = await Promise.all([
+    const [plans, matrix, clinicGoals, candidates, allTasks] = await Promise.all([
       loadPlans(auth.admin),
       loadMatrixPlans(auth.admin, categories),
-      loadFiscalStart(),
+      loadClinicGoalBriefs().catch(() => []),
       teamCandidates(auth.admin, auth.testSeed).catch(() => []),
       loadTasks(auth.admin),
     ]);
@@ -107,7 +116,8 @@ export async function GET() {
         canWrite: auth.canWrite,
         canAddTeam: true,
         canEditCategories: auth.canEditCategories,
-        fiscalStartMonth,
+        fiscalStartMonth: PLAN_FISCAL_START_MONTH,
+        clinicGoals,
         teamCandidates: candidates,
         me: auth.user.id,
         // 263: 計画の中のタスク（本物のスタッフには検証用のタスク・ひとことを出さない）と、タスクを書ける計画
@@ -156,6 +166,8 @@ export async function POST(req: NextRequest) {
       });
       if (!next) return bad("チーム名と目標の達成期間を入れてください");
       if (!next.memo.trim()) return bad("プロジェクト概要を入れてください");
+      const goalProblem = await checkGoal(next);
+      if (goalProblem) return bad(goalProblem);
       const siblings = plans.filter((p) => p.categoryId === TEAM_CATEGORY_ID && !p.parentId);
       next.order = siblings.length ? Math.max(...siblings.map((p) => p.order)) + 1 : 0;
       if (auth.testSeed) next.testSeed = true;
@@ -184,7 +196,7 @@ export async function POST(req: NextRequest) {
     const next = normalizePlan(id, { ...fields, assignees: pickMembers(fields.assignees, await teamCandidates(auth.admin, auth.testSeed)), order: 0 });
     if (!next) return bad("名前と開始日を入れてください");
     if (!categories.some((c) => c.id === next.categoryId) || next.categoryId === TEAM_CATEGORY_ID) next.categoryId = OTHER_CATEGORY_ID;
-    const problem = checkParent(next, plans);
+    const problem = checkParent(next, plans) ?? (await checkGoal(next));
     if (problem) return bad(problem);
     // 同じ並びのいちばん下へ
     const siblings = plans.filter((p) => (next.parentId ? p.parentId === next.parentId : !p.parentId && p.categoryId === next.categoryId));
@@ -234,9 +246,14 @@ export async function PATCH(req: NextRequest) {
         end: fields.end ?? prev.end,
         status: fields.status ?? prev.status,
         members,
+        goalId: "goalId" in fields ? fields.goalId : prev.goalId,
       });
       if (!next) return bad("チーム名と目標の達成期間を入れてください");
       if (!next.memo.trim()) return bad("プロジェクト概要を入れてください");
+      if (next.goalId !== prev.goalId) {
+        const goalProblem = await checkGoal(next);
+        if (goalProblem) return bad(goalProblem);
+      }
       // 252 §5: 直したときは知らせない
       const saved = await savePlan(auth.admin, next, by);
       return NextResponse.json({ plan: saved }, { headers: NO_STORE });
@@ -252,7 +269,7 @@ export async function PATCH(req: NextRequest) {
     if (!next) return bad("名前と開始日を入れてください");
     const categories = await loadCategories(auth.admin);
     if (!categories.some((c) => c.id === next.categoryId) || next.categoryId === TEAM_CATEGORY_ID) next.categoryId = OTHER_CATEGORY_ID;
-    const problem = checkParent(next, plans);
+    const problem = checkParent(next, plans) ?? (next.goalId !== prev.goalId ? await checkGoal(next) : null);
     if (problem) return bad(problem);
     const saved = await savePlan(auth.admin, next, by);
     // 上の計画の分類を変えたら、中の小さな計画もそろえる
@@ -269,7 +286,7 @@ export async function DELETE(req: NextRequest) {
   const auth = await authorizeGantt();
   if (!auth.ok) return auth.status === 401 ? unauth() : hidden();
   const id = req.nextUrl.searchParams.get("id") ?? "";
-  if (!id || id.startsWith("pm:")) return auth.canWrite ? bad("この計画はここでは消せません（四象限マトリクスで「ガントチャートに出す」を外してください）") : hidden();
+  if (!id || id.startsWith("pm:")) return auth.canWrite ? bad("この計画はここでは消せません（四象限マトリクスで「年間計画に出す」を外してください）") : hidden();
   try {
     const plans = await loadPlans(auth.admin);
     const prev = findVisible(plans, id, auth);

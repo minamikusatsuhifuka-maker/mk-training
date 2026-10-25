@@ -5,8 +5,12 @@
 // - データは content_store（portal_gantt）。期間は日単位（start/end="YYYY-MM-DD"）。
 // - 編集UI（目標を追加・行クリック編集・編集アイコン・詳細記入）は管理者のみ。
 //   「詳細を確認」ボタンは全員に表示（閲覧専用モーダル）。保存も lib 境界で管理者チェック（gantt-goals.ts）。
+// - 268: 年は年度（11月始まり・10月締め）。目盛りも11月〜10月。
+//   年間計画の計画を目標につなげ、つながった計画の一覧（最初はたたむ・年間計画を見られる人だけ）と、
+//   つながった計画のタスクから出す自動の進み具合（手で直したら「手で入力」・「自動に戻す」）を出す。中身は lib/plan-goals.ts
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { isAdminUser } from "@/lib/admin-role";
 import {
@@ -15,7 +19,6 @@ import {
   GANTT_HORIZONS,
   ganttHorizonMeta,
   resolveHorizon,
-  MONTH_LABELS,
   GANTT_COLOR_OPTIONS,
   GANTT_CATEGORIES,
   getGanttGradient,
@@ -23,7 +26,12 @@ import {
   barFractions,
   goalOverlapsYear,
   todayFractionInYear,
-  milestonePosInYear,
+  milestonePosInFiscalYear,
+  fiscalMonthLabels,
+  fiscalMonthIndex,
+  fiscalYearOfDate,
+  fiscalYearLabel,
+  fiscalYearSpanLabel,
   genGanttId,
   toYmd,
   formatGoalRange,
@@ -31,6 +39,58 @@ import {
   loadGanttGoals,
   saveGanttGoals,
 } from "@/lib/gantt-goals";
+import { STATUS_LABEL } from "@/lib/gantt";
+import {
+  effectiveProgress,
+  percentOf,
+  taskCountLabel,
+  type EffectiveProgress,
+  type GoalProgress,
+  type LinkedPlanRow,
+} from "@/lib/plan-goals";
+import { useGoalLinks } from "@/lib/plan-goals-client";
+
+/** 268: 手で直した進み具合の印 */
+function ManualMark() {
+  return (
+    <span
+      className="text-[9px] sm:text-[10px] font-medium rounded-full px-1.5 border border-amber-200 bg-amber-50 text-amber-800"
+      title="つながった計画からの自動の値ではなく、手で入れた値です"
+      data-goal-manual
+    >
+      手で入力
+    </span>
+  );
+}
+
+/** 「2026/1/15〜2026/7/31」 */
+function ymdRange(start: string, end: string): string {
+  const f = (v: string) => `${Number(v.slice(0, 4))}/${Number(v.slice(5, 7))}/${Number(v.slice(8, 10))}`;
+  return start === end ? f(start) : `${f(start)}〜${f(end)}`;
+}
+
+/** 268: 目標につながった計画の一覧（押すと年間計画のその計画のくわしい内容を開く） */
+function LinkedPlanList({ plans }: { plans: LinkedPlanRow[] }) {
+  return (
+    <ul className="divide-y divide-gray-100" data-goal-plans>
+      {plans.map((p) => (
+        <li key={p.id}>
+          <Link
+            href={`/gantt?plan=${encodeURIComponent(p.id)}`}
+            className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-2 text-xs text-gray-700 hover:bg-teal-50/60"
+            data-goal-plan={p.id}
+          >
+            <span className="font-semibold text-gray-800 min-w-0 break-words">{p.name}</span>
+            {p.assigneeLabel && <span className="text-gray-500">担当：{p.assigneeLabel}</span>}
+            <span className="text-gray-500">{ymdRange(p.start, p.end)}</span>
+            <span className="rounded-full border border-gray-200 px-1.5 text-[10px] text-gray-600">{STATUS_LABEL[p.status]}</span>
+            <span className="text-gray-600" data-goal-plan-count>{taskCountLabel(p)}</span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 type GanttModalMode = { type: "add" } | { type: "edit"; goal: GanttGoal };
 
@@ -71,13 +131,14 @@ const DETAIL_FIELDS: {
 // 目標 追加・編集モーダル（管理者のみ開かれる）
 function GanttEditModal({
   mode,
-  years,
+  auto,
   onSave,
   onDelete,
   onClose,
 }: {
   mode: GanttModalMode;
-  years: number[];
+  /** 268: つながった計画からの自動の進み具合（つながった計画がなければ null） */
+  auto: GoalProgress | null;
   onSave: (g: GanttGoal) => void;
   onDelete?: (id: string) => void;
   onClose: () => void;
@@ -101,6 +162,8 @@ function GanttEditModal({
   const [end, setEnd] = useState(initial?.end ?? defaultEnd);
   const [color, setColor] = useState(initial?.color ?? "gantt-teal");
   const [progress, setProgress] = useState(initial?.progress ?? 0);
+  // 268: つながった計画があるとき、手で直しているか
+  const [manual, setManual] = useState(!!initial?.progressManual);
   const [purpose, setPurpose] = useState(initial?.purpose ?? "");
   const [background, setBackground] = useState(initial?.background ?? "");
   const [significance, setSignificance] = useState(initial?.significance ?? "");
@@ -145,6 +208,8 @@ function GanttEditModal({
       memo: trim(memo),
       // 「自動」選択時は horizonOverride を保存しない（指示書126）
       horizonOverride: horizonOverride || undefined,
+      // 268: 手で直した印は、つながった計画があるときだけ持つ
+      progressManual: auto && manual ? true : undefined,
     });
   };
 
@@ -267,11 +332,43 @@ function GanttEditModal({
               ))}
             </select>
           </div>
-          {isEdit && (
+          {isEdit && auto && !manual && (
+            <div data-goal-edit-auto>
+              <p className="block text-xs font-semibold text-gray-500 mb-1">
+                進捗 ({percentOf(auto)}%・つながった計画から自動)
+              </p>
+              <p className="text-[11px] text-gray-500">
+                {taskCountLabel(auto)}（つながった計画 {auto.planCount}件）
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setProgress(percentOf(auto));
+                  setManual(true);
+                }}
+                className="mt-1 px-3 py-1.5 text-xs font-semibold text-teal-700 bg-white border border-teal-200 rounded-lg hover:bg-teal-50"
+                data-goal-edit-manual
+              >
+                ✏️ 編集
+              </button>
+            </div>
+          )}
+          {isEdit && (!auto || manual) && (
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">
-                進捗 ({progress}%)
+                進捗 ({progress}%){auto && " "}
+                {auto && <ManualMark />}
               </label>
+              {auto && (
+                <button
+                  type="button"
+                  onClick={() => setManual(false)}
+                  className="mb-1 px-3 py-1 text-xs font-semibold text-teal-700 bg-white border border-teal-200 rounded-lg hover:bg-teal-50"
+                  data-goal-edit-auto-back
+                >
+                  自動に戻す
+                </button>
+              )}
               <input
                 type="range"
                 min={0}
@@ -403,14 +500,22 @@ function GanttEditModal({
 // 「詳細を確認」モーダル（全員閲覧・編集UIなし）
 function GanttDetailModal({
   goal,
+  ep,
+  plans,
   isAdmin,
   onClose,
   onEdit,
+  onAutoBack,
 }: {
   goal: GanttGoal;
+  /** 268: 画面に出す進み具合 */
+  ep: EffectiveProgress;
+  /** 268: つながった計画（年間計画を見られない人は null＝出さない） */
+  plans: LinkedPlanRow[] | null;
   isAdmin: boolean;
   onClose: () => void;
   onEdit: (goal: GanttGoal) => void;
+  onAutoBack: (goal: GanttGoal) => void;
 }) {
   const g = getGanttGradient(goal.color);
   const filled = DETAIL_FIELDS.filter((f) => {
@@ -439,9 +544,20 @@ function GanttDetailModal({
                 <span className="text-xs text-gray-400">
                   {formatGoalRange(goal)}
                 </span>
-                <span className="text-xs font-medium text-gray-600">
-                  進捗 {goal.progress}%
+                <span className="text-xs font-medium text-gray-600" data-goal-detail-progress>
+                  進捗 {ep.value}%
                 </span>
+                {ep.mode === "manual" && <ManualMark />}
+                {ep.mode === "manual" && isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => onAutoBack(goal)}
+                    className="text-[11px] font-semibold text-teal-700 underline underline-offset-2"
+                    data-goal-auto-back
+                  >
+                    自動に戻す
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -483,6 +599,16 @@ function GanttDetailModal({
               </div>
             ))
           )}
+          {plans && plans.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 mb-1">
+                つながった計画（{plans.length}件）
+              </p>
+              <div className="rounded-lg border border-gray-100">
+                <LinkedPlanList plans={plans} />
+              </div>
+            </div>
+          )}
           <p className="text-[11px] text-gray-400 pt-3 border-t border-gray-100">
             クリニック全体で同じ目的・目標を共有するためのページです
           </p>
@@ -509,8 +635,40 @@ export default function GanttChart() {
   const [goals, setGoals] = useState<GanttGoal[]>([]);
   const now = useMemo(() => new Date(), []);
   const years = useMemo(() => ganttYears(now), [now]);
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth();
+  // 268: 年は年度（11月始まり）。目盛りも11月〜10月
+  const currentYear = fiscalYearOfDate(now);
+  const currentMonth = fiscalMonthIndex(now);
+  const monthLabels = useMemo(() => fiscalMonthLabels(), []);
+  // 268: つながった計画と自動の進み具合
+  const { links, reload: reloadLinks } = useGoalLinks();
+  const epOf = useCallback(
+    (goal: GanttGoal) => effectiveProgress(goal, links.progress[goal.id]),
+    [links]
+  );
+  const plansOf = useCallback(
+    (goal: GanttGoal): LinkedPlanRow[] | null =>
+      links.canSeePlans ? links.plans.filter((p) => p.goalId === goal.id) : null,
+    [links]
+  );
+  // 年間計画でタスクを完了にして戻ってきたら、進み具合を読み直す
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") reloadLinks();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [reloadLinks]);
+  const [openPlans, setOpenPlans] = useState<Set<string>>(new Set());
+  const togglePlans = (id: string) =>
+    setOpenPlans((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  // 268: 年間計画の「つながるクリニック目標」から来たとき（/goals?goal=…）は、その目標の年度を開き、行へ移る
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const deepLinked = useRef(false);
 
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [ganttModal, setGanttModal] = useState<GanttModalMode | null>(null);
@@ -520,9 +678,34 @@ export default function GanttChart() {
 
   useEffect(() => {
     loadGanttGoals()
-      .then(setGoals)
+      .then((list) => {
+        setGoals(list);
+        if (deepLinked.current) return;
+        deepLinked.current = true;
+        const id = new URLSearchParams(window.location.search).get("goal");
+        const goal = id ? list.find((g) => g.id === id) : undefined;
+        if (!goal) return;
+        // 今の年度に重なればそのまま。重ならなければ、目標が始まる年度（タブの範囲の中へ）
+        if (!goalOverlapsYear(goal, currentYear)) {
+          const fy = fiscalYearOfDate(new Date(`${goal.start}T00:00:00`));
+          const tabs = ganttYears(new Date());
+          setSelectedYear(Math.min(Math.max(fy, tabs[0]), tabs[tabs.length - 1]));
+        }
+        setFocusId(goal.id);
+        setOpenPlans(new Set([goal.id]));
+      })
       .catch(() => {});
-  }, []);
+  }, [currentYear]);
+
+  useEffect(() => {
+    if (!focusId) return;
+    const t = setTimeout(() => {
+      document
+        .querySelector(`[data-goal-row="${CSS.escape(focusId)}"]`)
+        ?.scrollIntoView({ block: "center" });
+    }, 50);
+    return () => clearTimeout(t);
+  }, [focusId, selectedYear]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -605,6 +788,16 @@ export default function GanttChart() {
     return { left: `${left}%`, width: `${width}%` };
   };
 
+  // 268: 「自動に戻す」（手で直した印を外して保存）
+  const handleAutoBack = useCallback(
+    (goal: GanttGoal) => {
+      const next = { ...goal, progressManual: undefined };
+      setDetailGoal((d) => (d && d.id === goal.id ? next : d));
+      handleSaveGoal(next);
+    },
+    [handleSaveGoal]
+  );
+
   // 行クリック（管理者のみ編集モーダル。既存操作＝行クリック編集は変えない）
   const openEdit = (goal: GanttGoal) => {
     if (!isAdmin) return;
@@ -633,10 +826,13 @@ export default function GanttChart() {
                   : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
               }`}
             >
-              {year}年
+              {fiscalYearLabel(year)}
             </button>
           ))}
         </div>
+        <p className="text-xs text-gray-500 w-full sm:w-auto order-last sm:order-none" data-goal-fy-span>
+          {fiscalYearLabel(selectedYear)}（{fiscalYearSpanLabel(selectedYear)}）
+        </p>
         {isAdmin && (
           <button
             type="button"
@@ -700,13 +896,13 @@ export default function GanttChart() {
             className="w-[33vw] sm:w-48 shrink-0 sticky left-0 z-10 bg-white/40 backdrop-blur-sm px-2 sm:px-4 py-3 text-[10px] font-semibold text-gray-500 flex items-center justify-between border-r border-gray-100 cursor-pointer hover:bg-gray-50/40 transition-colors"
             onClick={() => setShowGoalsList(true)}
           >
-            <span className="truncate">目標・計画</span>
+            <span className="truncate">目標</span>
             <span className="text-[10px] text-gray-400 ml-1">
               {visibleGoals.length}件
             </span>
           </div>
           <div className="grid grid-cols-12 min-w-[720px] flex-1">
-            {MONTH_LABELS.map((m, i) => (
+            {monthLabels.map((m, i) => (
               <div
                 key={m}
                 className={`px-1 py-3 text-center text-[10px] sm:text-[11px] font-medium border-l border-gray-50 min-w-[60px] ${
@@ -726,20 +922,23 @@ export default function GanttChart() {
           <div className="px-6 py-10 text-center text-sm text-gray-400">
             {horizonFilter !== "all" && yearGoals.length > 0
               ? "この分類の目標はありません。"
-              : `${selectedYear}年の目標はまだありません。${
+              : `${fiscalYearLabel(selectedYear)}の目標はまだありません。${
                   isAdmin ? "「目標を追加」から作成しましょう。" : ""
                 }`}
           </div>
         )}
         {visibleGoals.map((goal) => {
           const barStyle = getBarStyle(goal);
+          const ep = epOf(goal);
+          const linked = plansOf(goal);
+          const plansOpen = openPlans.has(goal.id);
 
           return (
+            <div key={goal.id} data-goal-row={goal.id}>
             <div
-              key={goal.id}
               className={`flex border-b border-gray-50 group hover:bg-gray-50/30 transition-colors min-w-fit ${
                 isAdmin ? "cursor-pointer" : ""
-              }`}
+              } ${focusId === goal.id ? "ring-2 ring-inset ring-teal-300" : ""}`}
               onClick={() => openEdit(goal)}
             >
               {/* 目標名（sticky固定） */}
@@ -768,9 +967,10 @@ export default function GanttChart() {
                     <span className="text-[9px] sm:text-[10px] text-gray-400">
                       {goal.category}
                     </span>
-                    <span className="text-[9px] sm:text-[10px] font-medium text-gray-500">
-                      {goal.progress}%
+                    <span className="text-[9px] sm:text-[10px] font-medium text-gray-500" data-goal-progress>
+                      {ep.value}%
                     </span>
+                    {ep.mode === "manual" && <ManualMark />}
                   </div>
                   {/* 目的・達成イメージを常時1行表示（指示書79・記入済みのみ・全員に表示） */}
                   {goal.purpose && (
@@ -788,6 +988,21 @@ export default function GanttChart() {
                     >
                       🌟 {goal.achievedState}
                     </p>
+                  )}
+                  {/* 268: つながった計画（年間計画を見られる人だけ・最初はたたむ） */}
+                  {linked && linked.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        togglePlans(goal.id);
+                      }}
+                      aria-expanded={plansOpen}
+                      className="mt-0.5 text-[9px] sm:text-[10px] font-semibold text-teal-700 hover:underline"
+                      data-goal-plans-toggle={goal.id}
+                    >
+                      {plansOpen ? "▾" : "▸"} つながった計画 {linked.length}件
+                    </button>
                   )}
                 </div>
                 <div className="flex items-center shrink-0 ml-1">
@@ -855,7 +1070,7 @@ export default function GanttChart() {
                 )}
 
                 {/* 月グリッド線 */}
-                {MONTH_LABELS.map((_, i) => (
+                {monthLabels.map((_, i) => (
                   <div key={i} className="border-l border-gray-50 min-w-[60px]" />
                 ))}
 
@@ -873,7 +1088,7 @@ export default function GanttChart() {
                         >
                           <div
                             className="absolute inset-y-0 left-0 bg-white/20 rounded-2xl"
-                            style={{ width: `${goal.progress}%` }}
+                            style={{ width: `${ep.value}%` }}
                           />
                           <div className="relative z-10 flex items-center h-full px-3">
                             <span className="text-[10px] font-bold text-white truncate drop-shadow-sm">
@@ -888,8 +1103,9 @@ export default function GanttChart() {
 
                 {/* マイルストーン（月ベース・概念保持） */}
                 {goal.milestones.map((ms, idx) => {
-                  if (ms.year !== selectedYear) return null;
-                  const pos = milestonePosInYear(ms.month) * 100;
+                  const frac = milestonePosInFiscalYear(ms, selectedYear);
+                  if (frac === null) return null;
+                  const pos = frac * 100;
                   const g = getGanttGradient(goal.color);
                   return (
                     <div
@@ -913,6 +1129,13 @@ export default function GanttChart() {
                   );
                 })}
               </div>
+            </div>
+            {/* 268: つながった計画の一覧（押すと年間計画のくわしい内容）。横にずらしても見えるよう左に止める */}
+            {linked && linked.length > 0 && plansOpen && (
+              <div className="sticky left-0 border-b border-gray-100 bg-teal-50/30" data-goal-plans-panel={goal.id}>
+                <LinkedPlanList plans={linked} />
+              </div>
+            )}
             </div>
           );
         })}
@@ -940,6 +1163,9 @@ export default function GanttChart() {
         <p className="text-[11px] text-gray-400 w-full">
           分類は期間から自動判定されます（〜6ヶ月=短期・〜3年=中期・それ以上=長期）。編集で手動変更もできます。
         </p>
+        <p className="text-[11px] text-gray-400 w-full" data-goal-progress-note>
+          進捗は、年間計画でつながった計画のタスクから自動で出します（つながった計画がない目標は、入れた値のままです）。
+        </p>
       </div>
 
       {/* 全目標一覧モーダル */}
@@ -953,7 +1179,7 @@ export default function GanttChart() {
             <div className="bg-gradient-to-r from-teal-50 to-emerald-50 px-6 py-4 flex items-center justify-between shrink-0">
               <div>
                 <h3 className="text-lg font-bold text-gray-700">
-                  全目標・計画一覧
+                  全目標一覧
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">
                   {goals.length}件の目標
@@ -1004,8 +1230,9 @@ export default function GanttChart() {
                           {goal.category}
                         </span>
                         <span className="text-[10px] font-medium text-gray-500">
-                          {goal.progress}%
+                          {epOf(goal).value}%
                         </span>
+                        {epOf(goal).mode === "manual" && <ManualMark />}
                         <span className="text-[10px] text-gray-300">
                           {formatGoalRange(goal)}
                         </span>
@@ -1087,9 +1314,12 @@ export default function GanttChart() {
       {detailGoal && (
         <GanttDetailModal
           goal={detailGoal}
+          ep={epOf(detailGoal)}
+          plans={plansOf(detailGoal)}
           isAdmin={isAdmin}
           onClose={() => setDetailGoal(null)}
           onEdit={openEditFromDetail}
+          onAutoBack={handleAutoBack}
         />
       )}
 
@@ -1097,7 +1327,7 @@ export default function GanttChart() {
       {isAdmin && ganttModal && (
         <GanttEditModal
           mode={ganttModal}
-          years={years}
+          auto={ganttModal.type === "edit" ? links.progress[ganttModal.goal.id] ?? null : null}
           onSave={handleSaveGoal}
           onDelete={ganttModal.type === "edit" ? handleDeleteGoal : undefined}
           onClose={() => setGanttModal(null)}

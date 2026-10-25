@@ -1,11 +1,12 @@
-// 📊 ガントチャート（指示書250・250-補）— 純関数・定義の正本（画面とサーバーの両方から使う）
+// 🏁 年間計画（指示書250・250-補で「📊 ガントチャート」として作り、268で「年間計画」に改めた）— 純関数・定義の正本（画面とサーバーの両方から使う）
 //
-// 【載せるもの】院の取り組み・年間の行事・採用と教育の計画など。四象限マトリクスの項目は「ガントチャートに出す」を
+// 【載せるもの】院の取り組み・年間の行事・採用と教育の計画など。四象限マトリクスの項目は「年間計画に出す」を
 //   チェックしたものだけ（出すのは名前・期間・状態だけ。メモ・9マス・任せる相手・象限は出さない）。
-// 【書く人】院長と、委任の設定で「📊 ガントチャート」を任された幹部。分類を直せるのは院長だけ。判定はサーバー。
+// 【書く人】院長と、委任の設定で「🏁 年間計画」を任された幹部。分類を直せるのは院長だけ。判定はサーバー。
 // 【見る人】ログインしたスタッフ全員（スイッチ gantt がOFFの間は院長と検証用アカウントだけ）。
 // 【保存先】clinic_staff_growth（record_type = gantt_plan ／ gantt_categories）。新しい表は作らない。
-// 【年】年度（クリニックの歩みの「年度の始まり」＝ portal_metrics.fiscalStartMonth・既定6月）で区切る。
+// 【年】年度（268: 法人の決算に合わせて11月始まり・10月締め。始まる年で呼ぶ＝2026年11月〜2027年10月が「2026年度」）で区切る。
+// 【クリニック目標】268: 計画ごとに「つながるクリニック目標」（goalId）を1つ選べる。進み具合の計算は lib/plan-goals.ts。
 
 import { STATUS_LABEL, TASK_STATUSES, type TaskStatus } from "./priority-matrix";
 
@@ -201,7 +202,7 @@ export type GanttPlan = {
   order: number;
   /** 検証用アカウントが作った計画（本物のスタッフには出さない・237） */
   testSeed?: boolean;
-  /** 出どころ。"matrix" は四象限の項目（ガントチャート側では直せない） */
+  /** 出どころ。"matrix" は四象限の項目（年間計画の側では直せない） */
   source?: "matrix";
   /** 252: スタッフのチームプロジェクト（name＝チーム名・memo＝プロジェクト概要・start〜end＝目標の達成期間） */
   kind?: "team";
@@ -212,6 +213,8 @@ export type GanttPlan = {
   createdByName?: string;
   /** 252: 足したときに出したお知らせの id */
   noticeId?: string;
+  /** 268: つながるクリニック目標の id（portal_gantt の目標・空＝つながない）。院の計画とチームプロジェクトで選べる */
+  goalId?: string;
   updatedAt: string;
 };
 
@@ -263,6 +266,11 @@ function isStatus(v: unknown): v is TaskStatus {
   return TASK_STATUSES.some((s) => s.value === v);
 }
 
+/** 268: つながるクリニック目標の id（空・不正なら持たない） */
+function goalIdOf(v: unknown): { goalId?: string } {
+  return typeof v === "string" && /^[\w-]{1,64}$/.test(v) ? { goalId: v } : {};
+}
+
 /** 保存値・送られてきた値を計画に整える。名前・開始日が無いものは成り立たないので null */
 export function normalizePlan(id: string, raw: unknown): GanttPlan | null {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -290,6 +298,7 @@ export function normalizePlan(id: string, raw: unknown): GanttPlan | null {
       createdBy: typeof o.createdBy === "string" ? o.createdBy.slice(0, 64) : "",
       createdByName: typeof o.createdByName === "string" ? o.createdByName.slice(0, 60) : "",
       ...(typeof o.noticeId === "string" && o.noticeId ? { noticeId: o.noticeId.slice(0, 64) } : {}),
+      ...goalIdOf(o.goalId),
       updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : "",
     };
   }
@@ -307,6 +316,7 @@ export function normalizePlan(id: string, raw: unknown): GanttPlan | null {
     ...(o.testSeed === true ? { testSeed: true } : {}),
     assignees: normalizeMembers(o.assignees),
     ...(o.assigneesSet === true ? { assigneesSet: true } : {}),
+    ...goalIdOf(o.goalId),
     updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : "",
   };
 }
@@ -335,7 +345,7 @@ export function planAssigneeLabel(p: Pick<GanttPlan, "assignee" | "assignees">):
 
 /** 書く人が送ってよい項目（252: チームプロジェクトは members も） */
 export type PlanFields = Partial<
-  Pick<GanttPlan, "name" | "categoryId" | "start" | "end" | "assignee" | "status" | "memo" | "parentId" | "members">
+  Pick<GanttPlan, "name" | "categoryId" | "start" | "end" | "assignee" | "status" | "memo" | "parentId" | "members" | "goalId">
 > & { /** 264: 担当に選んだスタッフの id */ assignees?: unknown };
 
 /** 252: 自動のお知らせ（題名と本文）。院長が確かめる文の形 */
@@ -357,7 +367,7 @@ export function teamNoticeText(
       `目標の達成期間：${periodLabel(p.start, p.end, today)}`,
       `メンバー：${members}`,
       "",
-      "📊 ガントチャートで見る：",
+      "🏁 年間計画で見る：",
       ganttUrl,
     ].join("\n"),
   };
@@ -367,7 +377,7 @@ export function genPlanId(now = Date.now(), rand = Math.random()): string {
   return `gp-${now.toString(36)}${Math.floor(rand * 1e8).toString(36)}`;
 }
 
-/** 四象限の項目 → ガントチャートの行（名前・期間・状態だけ） */
+/** 四象限の項目 → 年間計画の行（名前・期間・状態だけ） */
 export function planFromMatrixTask(
   t: { id: string; title: string; due: string; status: TaskStatus; gantt?: boolean; ganttStart?: string; order: number; updatedAt: string },
   categoryId: string
@@ -462,6 +472,9 @@ function firstOf(y: number, m: number): string {
   const mm = ((((m - 1) % 12) + 12) % 12) + 1;
   return `${yy}-${String(mm).padStart(2, "0")}-01`;
 }
+
+/** 268: 年間計画とクリニック目標の年度の始まり（法人の決算に合わせて11月始まり・10月締め） */
+export const PLAN_FISCAL_START_MONTH: number = 11;
 
 /** 年度の始まりの月（1〜12・それ以外は6月） */
 export function normalizeFiscalStart(v: unknown): number {

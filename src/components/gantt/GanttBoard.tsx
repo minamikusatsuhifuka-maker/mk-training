@@ -1,7 +1,9 @@
 "use client";
 
-// 📊 ガントチャートの画面（指示書250・デザインは250-補「さくらミルク（グラデーション）」）
+// 🏁 年間計画の画面（指示書250で「📊 ガントチャート」として作り、268で「年間計画」に改めた・デザインは250-補「さくらミルク（グラデーション）」）
 //
+// ・268: 年度は11月始まり・10月締め（年＝11月〜10月・四半期＝11〜1月／2〜4月／5〜7月／8〜10月）。
+//   計画・チームプロジェクトに「つながるクリニック目標」を選べる。くわしい内容に目標の名前と目的、「クリニック目標」での絞り込み
 // ・左に計画の名前、右に期間の横棒。1日だけのものは◆。表示は 月（列＝日）・四半期（列＝週）・年（列＝月・年度で区切る）
 // ・◀ 今日 ▶ で前後に送る・今日の期間に戻る。今日の位置に縦の線と「今日」の札
 // ・分類ごとに色。分類で絞り込める（色だけで見分けさせない＝分類の名前を必ず出す）
@@ -22,6 +24,7 @@ import {
   GANTT_COLOR_KEYS,
   GANTT_PALETTES,
   OTHER_CATEGORY_ID,
+  PLAN_FISCAL_START_MONTH,
   STATUS_LABEL,
   TEAM_CATEGORY_ID,
   TEAM_NAME_MAX,
@@ -52,6 +55,7 @@ import {
 } from "@/lib/gantt";
 import { OVERDUE_LABEL, isOverdue, progressLabel, swapTaskOrder, tasksOfPlan, type GanttTask } from "@/lib/gantt-tasks";
 import { JudgeChip, TaskForm, TaskList, TaskStatusChip, ganttApi, type TaskDraft, type TaskPerms } from "./GanttTasks";
+import { filterPlansByGoal, type ClinicGoalBrief } from "@/lib/plan-goals";
 
 // ─── 見本の値（sakura-theme.ts に置いた） ───
 
@@ -88,8 +92,30 @@ type GanttData = {
   taskManageIds: string[];
   isDirector: boolean;
   canModerate: boolean;
+  /** 268: つながるクリニック目標に選べる目標（id・名前・目的） */
+  clinicGoals: ClinicGoalBrief[];
 };
 const TASK_ROW_H = 36;
+
+/** 268: 「つながるクリニック目標」を選ぶ欄（院の計画・チームプロジェクトの編集欄で共通） */
+function GoalSelect({ goals, value, onChange, field, fieldStyle, lab }: { goals: ClinicGoalBrief[]; value: string; onChange: (v: string) => void; field: string; fieldStyle: React.CSSProperties; lab: string }) {
+  // 消された目標を選んでいた計画は、選び直すまで「（見つからない目標）」と出す
+  const missing = !!value && !goals.some((g) => g.id === value);
+  return (
+    <label className={lab} style={{ color: C.sub }}>
+      つながるクリニック目標（任意）
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={field} style={fieldStyle} data-gantt-f-goal>
+        <option value="">選ばない</option>
+        {missing && <option value={value}>（見つからない目標）</option>}
+        {goals.map((g) => (
+          <option key={g.id} value={g.id}>
+            {g.title}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 const api = ganttApi;
 
@@ -324,11 +350,14 @@ function PlanDetail({
   isDirector,
   ayumi,
   tasksSlot,
+  goal,
   onEdit,
   onDelete,
   onClose,
 }: {
   plan: GanttPlan;
+  /** 268: つながるクリニック目標（無ければ null） */
+  goal: ClinicGoalBrief | null;
   category: GanttCategory;
   today: string;
   anchor: HTMLElement;
@@ -432,6 +461,21 @@ function PlanDetail({
           <dd className="m-0">{STATUS_LABEL[plan.status]}</dd>
           <dt style={{ color: C.sub }}>作った人</dt>
           <dd className="m-0">{plan.createdByName || "—"}</dd>
+        {goal && (
+          <>
+            <dt style={{ color: C.sub }}>クリニック目標</dt>
+            <dd className="m-0 break-words" data-gantt-detail-goal>
+              <Link href={`/goals?goal=${encodeURIComponent(goal.id)}`} className="underline" style={{ color: C.currentText }} data-gantt-detail-goal-link>
+                🎯 {goal.title}
+              </Link>
+              {goal.purpose && (
+                <span className="mt-0.5 block whitespace-pre-wrap text-[12px]" style={{ color: C.sub }} data-gantt-detail-goal-purpose>
+                  目的：{goal.purpose}
+                </span>
+              )}
+            </dd>
+          </>
+        )}
         </dl>
       ) : (
       <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-[14px] gap-y-1.5 px-[18px] pb-4 pt-[14px] text-[13px]">
@@ -454,6 +498,21 @@ function PlanDetail({
           <>
             <dt style={{ color: C.sub }}>メモ</dt>
             <dd className="m-0 whitespace-pre-wrap break-words">{plan.memo}</dd>
+          </>
+        )}
+        {goal && (
+          <>
+            <dt style={{ color: C.sub }}>クリニック目標</dt>
+            <dd className="m-0 break-words" data-gantt-detail-goal>
+              <Link href={`/goals?goal=${encodeURIComponent(goal.id)}`} className="underline" style={{ color: C.currentText }} data-gantt-detail-goal-link>
+                🎯 {goal.title}
+              </Link>
+              {goal.purpose && (
+                <span className="mt-0.5 block whitespace-pre-wrap text-[12px]" style={{ color: C.sub }} data-gantt-detail-goal-purpose>
+                  目的：{goal.purpose}
+                </span>
+              )}
+            </dd>
           </>
         )}
       </dl>
@@ -527,6 +586,8 @@ type Draft = {
   assigneeIds: string[];
   status: TaskStatus;
   memo: string;
+  /** 268: つながるクリニック目標の id（空＝選ばない） */
+  goalId: string;
 };
 
 function PlanForm({
@@ -535,6 +596,7 @@ function PlanForm({
   categories,
   plans,
   candidates,
+  goals,
   busy,
   error,
   onSave,
@@ -544,6 +606,8 @@ function PlanForm({
   editingId: string | null;
   categories: GanttCategory[];
   plans: GanttPlan[];
+  /** 268: つながるクリニック目標に選べる目標 */
+  goals: ClinicGoalBrief[];
   /** 264: 担当に選べるスタッフ */
   candidates: TeamMember[];
   busy: boolean;
@@ -695,6 +759,7 @@ function PlanForm({
             メモ（任意）
             <textarea value={d.memo} rows={3} maxLength={2000} onChange={(e) => set("memo", e.target.value)} className={field} style={fieldStyle} data-gantt-f-memo />
           </label>
+          <GoalSelect goals={goals} value={d.goalId} onChange={(v) => set("goalId", v)} field={field} fieldStyle={fieldStyle} lab={lab} />
         </div>
         {(error || missing) && (
           <p role="alert" className="mt-3 rounded-xl px-3 py-2 text-[13px]" style={{ background: "#FCEEF1", color: C.statusText }} data-gantt-f-error>
@@ -717,13 +782,14 @@ function PlanForm({
 
 // ─── 252: チームプロジェクトを足す・直す ───
 
-type TeamDraft = { name: string; memo: string; start: string; end: string; memberIds: string[]; status: TaskStatus };
+type TeamDraft = { name: string; memo: string; start: string; end: string; memberIds: string[]; status: TaskStatus; goalId: string };
 
 function TeamForm({
   initial,
   editing,
   candidates,
   myId,
+  goals,
   busy,
   error,
   onSave,
@@ -732,6 +798,8 @@ function TeamForm({
   initial: TeamDraft;
   editing: boolean;
   candidates: TeamMember[];
+  /** 268: つながるクリニック目標に選べる目標 */
+  goals: ClinicGoalBrief[];
   myId: string;
   busy: boolean;
   error: string;
@@ -782,7 +850,7 @@ function TeamForm({
         </h2>
         {!editing && (
           <p className="mb-3 text-[12px]" style={{ color: C.sub }}>
-            保存すると、すぐにガントチャートに出て、「📣 お知らせ・イベント」で全員に知らせます。
+            保存すると、すぐに年間計画に出て、「📣 お知らせ・イベント」で全員に知らせます。
           </p>
         )}
         <div className="space-y-3">
@@ -855,6 +923,7 @@ function TeamForm({
               ))}
             </select>
           </label>
+          <GoalSelect goals={goals} value={d.goalId} onChange={(v) => set("goalId", v)} field={field} fieldStyle={fieldStyle} lab={lab} />
         </div>
         {(error || missing) && (
           <p role="alert" className="mt-3 rounded-xl px-3 py-2 text-[13px]" style={{ background: "#FCEEF1", color: C.statusText }} data-gantt-t-error>
@@ -1006,12 +1075,14 @@ function teamCandidatesWithMembers(candidates: TeamMember[], members: TeamMember
 
 export function GanttBoard() {
   const today = jstTodayYmd();
-  const pageTitle = usePageTitle("/gantt", "📊 ガントチャート").replace(/^\p{Extended_Pictographic}️?\s*/u, "");
+  const pageTitle = usePageTitle("/gantt", "🏁 年間計画").replace(/^\p{Extended_Pictographic}️?\s*/u, "");
   const [view, setView] = useStoredChoice<GanttView>(VIEW_LS_KEY, VIEWS, "year");
   const [offset, setOffset] = useState(0);
   const [data, setData] = useState<GanttData | null>(null);
   const [loadError, setLoadError] = useState("");
   const [hiddenCats, setHiddenCats] = useState<Set<string>>(new Set());
+  // 268: 「クリニック目標」での絞り込み（空＝すべて）
+  const [goalFilter, setGoalFilter] = useState("");
   const [opened, setOpened] = useState<{ id: string; el: HTMLElement; taskId?: string } | null>(null);
   // 263: タスクを開いている計画（最初はたたむ）・タスクを足す/直す欄・「院長が判断」の一覧
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -1034,6 +1105,7 @@ export function GanttBoard() {
         canAddTeam: !!j.canAddTeam,
         tasks: j.tasks ?? [],
         taskManageIds: j.taskManageIds ?? [],
+        clinicGoals: j.clinicGoals ?? [],
       });
       setLoadError("");
     } catch (e) {
@@ -1045,10 +1117,15 @@ export function GanttBoard() {
     void load();
   }, [load]);
 
-  const range = useMemo(() => rangeFor(view, today, offset, data?.fiscalStartMonth ?? 6), [view, today, offset, data?.fiscalStartMonth]);
+  const range = useMemo(() => rangeFor(view, today, offset, data?.fiscalStartMonth ?? PLAN_FISCAL_START_MONTH), [view, today, offset, data?.fiscalStartMonth]);
   const categories = useMemo(() => data?.categories ?? [], [data]);
   const visibleCats = useMemo(() => new Set(categories.map((c) => c.id).filter((id) => !hiddenCats.has(id))), [categories, hiddenCats]);
-  const groups = useMemo(() => groupPlans(data?.plans ?? [], categories, visibleCats), [data, categories, visibleCats]);
+  const clinicGoals = useMemo(() => data?.clinicGoals ?? [], [data]);
+  const groups = useMemo(
+    () => groupPlans(filterPlansByGoal(data?.plans ?? [], goalFilter), categories, visibleCats),
+    [data, categories, visibleCats, goalFilter]
+  );
+  const goalOf = (p: GanttPlan) => (p.goalId ? clinicGoals.find((g) => g.id === p.goalId) ?? null : null);
   const canWrite = !!data?.canWrite;
   const openedPlan = opened ? data?.plans.find((p) => p.id === opened.id) ?? null : null;
 
@@ -1186,13 +1263,14 @@ export function GanttBoard() {
     end: today,
     memberIds: myId ? [myId] : [],
     status: "todo",
+    goalId: goalFilter,
   });
 
   const saveTeam = async (d: TeamDraft) => {
     if (!teamForm) return;
     setFormBusy(true);
     setFormError("");
-    const fields = { name: d.name.trim(), memo: d.memo, start: d.start, end: d.end, status: d.status, members: d.memberIds };
+    const fields = { name: d.name.trim(), memo: d.memo, start: d.start, end: d.end, status: d.status, members: d.memberIds, goalId: d.goalId };
     try {
       if (teamForm.editingId) {
         await api("/api/gantt", { method: "PATCH", body: JSON.stringify({ id: teamForm.editingId, fields }) });
@@ -1221,6 +1299,7 @@ export function GanttBoard() {
     assigneeIds: [],
     status: "todo",
     memo: "",
+    goalId: goalFilter,
   });
 
   const draftOf = (p: GanttPlan): Draft => ({
@@ -1234,6 +1313,7 @@ export function GanttBoard() {
     assigneeIds: (p.assignees ?? []).map((a) => a.id),
     status: p.status,
     memo: p.memo,
+    goalId: p.goalId ?? "",
   });
 
   const savePlan = async (d: Draft) => {
@@ -1250,6 +1330,7 @@ export function GanttBoard() {
       assignees: d.assigneeIds,
       status: d.status,
       memo: d.memo,
+      goalId: d.goalId,
     };
     try {
       if (form.editingId) await api("/api/gantt", { method: "PATCH", body: JSON.stringify({ id: form.editingId, fields }) });
@@ -1428,6 +1509,30 @@ export function GanttBoard() {
           </div>
         )}
 
+        {/* 268: クリニック目標で絞り込む（つながるクリニック目標を選んだ計画と、その中の計画だけを出す） */}
+        {clinicGoals.length > 0 && (
+          <label className="flex flex-wrap items-center gap-2 text-[13px]" style={{ color: C.sub }} data-gantt-goal-filter-label>
+            🎯 クリニック目標で絞り込む
+            <select
+              value={goalFilter}
+              onChange={(e) => {
+                setGoalFilter(e.target.value);
+                setOpened(null);
+              }}
+              className="min-h-[44px] max-w-full rounded-full border bg-white/80 px-4 text-[13px]"
+              style={{ borderColor: "rgba(240, 209, 218, 0.9)", color: C.ink }}
+              data-gantt-goal-filter
+            >
+              <option value="">すべての計画</option>
+              {clinicGoals.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
         {/* 263: 院長には「院長が判断」のタスクで完了していないものの件数。押すと一覧 */}
         {data?.isDirector && (
           <div className="rounded-2xl px-4 py-2.5" style={{ background: "rgba(255,255,255,0.8)", border: C.pillBorder }} data-gantt-judge-panel>
@@ -1545,7 +1650,7 @@ export function GanttBoard() {
                   <div className="flex">
                     <div className={`${NAME_COL} sticky left-0 shrink-0`} style={{ background: "rgba(255,255,255,0.97)" }} />
                     <div className="relative flex-1 py-10 text-center text-[14px]" style={{ minWidth: TIMELINE_MIN[view], color: C.sub }} data-gantt-empty>
-                      {data?.plans.length ? "選んだ分類の計画はありません" : canWrite ? "まだ計画はありません。「＋ 追加」から書けます" : "まだ計画はありません。「＋ チームプロジェクトを追加」から書けます"}
+                      {data?.plans.length ? (goalFilter ? "選んだクリニック目標につながった計画はありません" : "選んだ分類の計画はありません") : canWrite ? "まだ計画はありません。「＋ 追加」から書けます" : "まだ計画はありません。「＋ チームプロジェクトを追加」から書けます"}
                     </div>
                   </div>
                 )}
@@ -1693,6 +1798,7 @@ export function GanttBoard() {
       {openedPlan && opened && (
         <PlanDetail
           plan={openedPlan}
+          goal={goalOf(openedPlan)}
           category={categoryOf(categories, openedPlan.categoryId)}
           today={today}
           anchor={opened.el}
@@ -1717,6 +1823,7 @@ export function GanttBoard() {
                   end: openedPlan.end,
                   memberIds: (openedPlan.members ?? []).map((m) => m.id),
                   status: openedPlan.status,
+                  goalId: openedPlan.goalId ?? "",
                 },
               });
             } else {
@@ -1765,6 +1872,7 @@ export function GanttBoard() {
           categories={categories}
           plans={data?.plans ?? []}
           candidates={teamCandidatesWithMembers(data?.teamCandidates ?? [], data?.plans.find((p) => p.id === form.editingId)?.assignees ?? [])}
+          goals={clinicGoals}
           busy={formBusy}
           error={formError}
           onSave={(d) => void savePlan(d)}
@@ -1777,6 +1885,7 @@ export function GanttBoard() {
           editing={!!teamForm.editingId}
           candidates={teamCandidatesWithMembers(data?.teamCandidates ?? [], data?.plans.find((p) => p.id === teamForm.editingId)?.members ?? [])}
           myId={myId}
+          goals={clinicGoals}
           busy={formBusy}
           error={formError}
           onSave={(d) => void saveTeam(d)}

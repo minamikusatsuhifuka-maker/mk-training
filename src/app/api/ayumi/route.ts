@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
     if (typeof body.fromPlanId === "string") {
       const { plans } = await ganttPlansFor(auth);
       const p = plans.find((x) => x.id === body.fromPlanId);
-      if (!p) return NextResponse.json({ error: "ガントチャートの計画が見つかりません" }, { status: 404, headers: NO_STORE });
+      if (!p) return NextResponse.json({ error: "年間計画の計画が見つかりません" }, { status: 404, headers: NO_STORE });
       const all = await loadEntries(auth.admin);
       const already = all.find((e) => e.source?.planId === p.id);
       if (already) return NextResponse.json({ entry: already, already: true }, { headers: NO_STORE });

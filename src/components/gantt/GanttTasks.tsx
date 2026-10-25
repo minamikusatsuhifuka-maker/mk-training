@@ -648,18 +648,18 @@ export function GanttMyTasks() {
     <section
       className="rounded-[20px] p-4"
       style={{ background: "linear-gradient(160deg, #FDF8F6 0%, #FBEEF2 55%, #F3EEFA 100%)", border: C.cardBorder, boxShadow: "0 8px 22px rgba(142, 91, 181, 0.08)", color: C.ink }}
-      aria-label="📊 ガントチャート"
+      aria-label="🏁 年間計画"
       data-gantt-my-tasks
     >
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="m-0 text-[15px] font-bold">
-          📊 ガントチャート
+          🏁 年間計画
           <span className="ml-2 text-[12px] font-normal" style={{ color: C.sub }}>
             自分が担当者のタスク（未完了 {undone} 件）
           </span>
         </h2>
         <Link href="/gantt" className="text-[12px] underline" style={{ color: C.currentText }}>
-          📊 ガントチャートを開く
+          🏁 年間計画を開く
         </Link>
       </div>
       <ul className="m-0 grid list-none gap-2 p-0 md:grid-cols-2">

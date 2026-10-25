@@ -5,6 +5,7 @@
 // - 「すべて見る →」で /goals（フルガント）へ。
 // - 0件のときはセクションを丸ごと非表示（既存の流儀）。
 // - 閲覧のみ（ホームでは管理者にも編集UIを出さない。編集は /goals で）。
+// - 268: 進捗は /goals と同じ値（つながった計画から自動・手で直した値・つながった計画がなければ入れた値）。
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -15,9 +16,12 @@ import {
   getGanttGradient,
   type GanttGoal,
 } from "@/lib/gantt-goals";
+import { effectiveProgress } from "@/lib/plan-goals";
+import { useGoalLinks } from "@/lib/plan-goals-client";
 
 export function GanttSummarySection() {
   const [active, setActive] = useState<GanttGoal[] | null>(null); // null=読込中
+  const { links } = useGoalLinks();
 
   useEffect(() => {
     loadGanttGoals()
@@ -48,6 +52,7 @@ export function GanttSummarySection() {
       <div className="space-y-2">
         {active.map((goal) => {
           const g = getGanttGradient(goal.color);
+          const progress = effectiveProgress(goal, links.progress[goal.id]).value;
           return (
             <Link
               key={goal.id}
@@ -59,7 +64,7 @@ export function GanttSummarySection() {
                   {goal.title}
                 </p>
                 <span className="text-xs text-gray-500 shrink-0">
-                  {goal.progress}%
+                  {progress}%
                 </span>
               </div>
               <p className="text-[11px] text-gray-500 mt-0.5">
@@ -69,7 +74,7 @@ export function GanttSummarySection() {
               <div className="mt-2 h-2 w-full rounded-full bg-gray-100 overflow-hidden">
                 <div
                   className={`h-full rounded-full bg-gradient-to-r ${g.from} ${g.to}`}
-                  style={{ width: `${goal.progress}%` }}
+                  style={{ width: `${progress}%` }}
                 />
               </div>
             </Link>

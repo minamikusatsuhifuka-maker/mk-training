@@ -149,7 +149,7 @@ export const ADMIN_ITEMS: readonly AdminItem[] = [
   //   管理画面の中に画面は無いので、メニューには出さない（hidden）。
   {
     key: "gantt",
-    label: "📊 ガントチャート",
+    label: "🏁 年間計画",
     href: "/gantt",
     delegable: true,
     reason: "計画（院の取り組み・行事・採用と教育など）を書くこと。分類の編集は含まない（院長のみ）",

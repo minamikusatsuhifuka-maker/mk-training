@@ -606,7 +606,7 @@ function EntryDetail({
         <p className="m-0 text-[12px]" style={{ color: C.sub }} data-ayumi-d-date>
           {periodText(entry.dateFrom, entry.dateTo)}
           {category && <span className="ml-2">・{category.name}</span>}
-          {entry.source && <span className="ml-2" data-ayumi-from-gantt>📊 ガントチャートから</span>}
+          {entry.source && <span className="ml-2" data-ayumi-from-gantt>🏁 年間計画から</span>}
         </p>
         <h2 className="m-0 mt-1 text-[20px] font-bold" style={{ fontFamily: C.serif }}>
           {entry.title}
@@ -893,7 +893,7 @@ export function AyumiBoard() {
         {canWrite && (data?.candidates.length ?? 0) > 0 && (
           <section className="rounded-[28px] p-5" style={card} data-ayumi-candidates>
             <h2 className="m-0 text-[16px] font-bold" style={{ fontFamily: C.serif }}>
-              候補（📊 ガントチャートで終わった計画）
+              候補（🏁 年間計画で終わった計画）
             </h2>
             <p className="mt-1 text-[12px]" style={{ color: C.sub }}>
               完了になった計画と、期間が終わった計画です。残すと、題名・期間・分類（チームプロジェクトはチーム名とメンバーも）を写します。
@@ -1007,7 +1007,7 @@ export function AyumiBoard() {
                               <span className="block text-[12px]" style={{ color: C.sub }}>
                                 {periodText(e.dateFrom, e.dateTo)}
                                 {cat && <span className="ml-1.5" style={{ color: GANTT_PALETTES[cat.color].text }}>・{cat.name}</span>}
-                                {e.source && <span className="ml-1.5" title="ガントチャートから">📊</span>}
+                                {e.source && <span className="ml-1.5" title="年間計画から">🏁</span>}
                               </span>
                               <span className="mt-0.5 block text-[16px] font-bold leading-snug md:text-[17px]" style={{ fontFamily: C.serif }}>
                                 {e.title}
