@@ -9,6 +9,7 @@
 // 【クリニック目標】268: 計画ごとに「つながるクリニック目標」（goalId）を1つ選べる。進み具合の計算は lib/plan-goals.ts。
 
 import { STATUS_LABEL, TASK_STATUSES, type TaskStatus } from "./priority-matrix";
+import { normalizeValues } from "./gantt-rhythm";
 
 export { STATUS_LABEL, TASK_STATUSES, type TaskStatus };
 
@@ -217,6 +218,10 @@ export type GanttPlan = {
   goalId?: string;
   /** 265: 完了のお知らせを出した（一度完了にして戻し、また完了にしても2回目は出さない） */
   celebrated?: { at: string; noticeId: string };
+  /** 266: 理念とのつながり（📜 当院の歩みと同じ言葉。クリニック目標につながっていない計画・チームプロジェクトで出す） */
+  values?: string[];
+  /** 266: 完了にした日時（朝礼の「先週完了」に使う） */
+  doneAt?: string;
   updatedAt: string;
 };
 
@@ -273,6 +278,12 @@ function goalIdOf(v: unknown): { goalId?: string } {
   return typeof v === "string" && /^[\w-]{1,64}$/.test(v) ? { goalId: v } : {};
 }
 
+/** 266: 理念とのつながり（一覧にある言葉だけ・空なら持たない） */
+function valuesOf(v: unknown): { values?: string[] } {
+  const list = normalizeValues(v);
+  return list.length ? { values: list } : {};
+}
+
 /** 265: 完了のお知らせを出した印（通さないと次の保存で消えて、2回目が出てしまう） */
 function celebratedOf(v: unknown): { celebrated?: { at: string; noticeId: string } } {
   const o = (v && typeof v === "object" ? v : null) as Record<string, unknown> | null;
@@ -309,6 +320,8 @@ export function normalizePlan(id: string, raw: unknown): GanttPlan | null {
       ...(typeof o.noticeId === "string" && o.noticeId ? { noticeId: o.noticeId.slice(0, 64) } : {}),
       ...goalIdOf(o.goalId),
       ...celebratedOf(o.celebrated),
+      ...valuesOf(o.values),
+      ...(typeof o.doneAt === "string" && o.doneAt ? { doneAt: o.doneAt } : {}),
       updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : "",
     };
   }
@@ -328,6 +341,8 @@ export function normalizePlan(id: string, raw: unknown): GanttPlan | null {
     ...(o.assigneesSet === true ? { assigneesSet: true } : {}),
     ...goalIdOf(o.goalId),
     ...celebratedOf(o.celebrated),
+    ...valuesOf(o.values),
+    ...(typeof o.doneAt === "string" && o.doneAt ? { doneAt: o.doneAt } : {}),
     updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : "",
   };
 }
@@ -356,7 +371,7 @@ export function planAssigneeLabel(p: Pick<GanttPlan, "assignee" | "assignees">):
 
 /** 書く人が送ってよい項目（252: チームプロジェクトは members も） */
 export type PlanFields = Partial<
-  Pick<GanttPlan, "name" | "categoryId" | "start" | "end" | "assignee" | "status" | "memo" | "parentId" | "members" | "goalId">
+  Pick<GanttPlan, "name" | "categoryId" | "start" | "end" | "assignee" | "status" | "memo" | "parentId" | "members" | "goalId" | "values">
 > & { /** 264: 担当に選んだスタッフの id */ assignees?: unknown };
 
 /** 252: 自動のお知らせ（題名と本文）。院長が確かめる文の形 */

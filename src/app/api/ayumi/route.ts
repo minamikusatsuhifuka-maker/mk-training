@@ -28,7 +28,7 @@ import {
   visibleVoices,
   withPhotoUrls,
 } from "@/lib/ayumi-server";
-import { loadCategories, loadMatrixPlans, loadPlans, visiblePlans } from "@/lib/gantt-server";
+import { loadCategories, loadClinicGoalBriefs, loadMatrixPlans, loadPlans, visiblePlans } from "@/lib/gantt-server";
 import {
   ENTRY_FIELD_KEYS,
   fromGanttDate,
@@ -144,6 +144,9 @@ export async function POST(req: NextRequest) {
       const already = all.find((e) => e.source?.planId === p.id);
       if (already) return NextResponse.json({ entry: already, already: true }, { headers: NO_STORE });
       const team = p.kind === "team";
+      // 266: 理念の札（目標の側、なければ計画の側）と、つながったクリニック目標の目的（「込めた想い・学び」の書き出し・院長があとで直す）
+      const goal = p.goalId ? (await loadClinicGoalBriefs().catch(() => [])).find((g) => g.id === p.goalId) ?? null : null;
+      const values = goal && goal.values.length ? goal.values : p.values ?? [];
       const entry = normalizeEntry(genEntryId(), {
         ...base,
         title: p.name,
@@ -152,6 +155,8 @@ export async function POST(req: NextRequest) {
         categoryId: p.categoryId,
         teamName: team ? p.name : "",
         people: team ? pickPeople(p.members, candidates, p.members ?? []) : [],
+        values,
+        thoughts: goal?.purpose ?? "",
         source: { kind: "gantt", planId: p.id },
       });
       if (!entry) return bad("写せませんでした（題名と日付が要ります）");

@@ -59,6 +59,8 @@ import { filterPlansByGoal, type ClinicGoalBrief } from "@/lib/plan-goals";
 import { GanttHoverCard, useGanttHover } from "./GanttHoverCard";
 import { CheerButton, GanttAlerts, ThanksButton } from "./GanttConnect";
 import { sortJudgeTasks, thanksPrefill } from "@/lib/gantt-connect";
+import { PLAN_VALUE_WORDS, effectiveValues, matchesValue } from "@/lib/gantt-rhythm";
+import { ValueChips, ValuePicker, WeekdaySetting, WeeklySection } from "./GanttRhythm";
 
 /** 267: カーソルを合わせたときのポップアップの出し入れ（useGanttHover の bind が返すもの） */
 type HoverProps = ReturnType<ReturnType<typeof useGanttHover>["bind"]>;
@@ -379,6 +381,7 @@ function PlanDetail({
   ayumi,
   tasksSlot,
   connectSlot,
+  weeklySlot,
   goal,
   onEdit,
   onDelete,
@@ -400,6 +403,8 @@ function PlanDetail({
   tasksSlot?: React.ReactNode;
   /** 265: 👏 応援・💌 ありがとうカードを送る */
   connectSlot?: React.ReactNode;
+  /** 266: 今週のひとこと */
+  weeklySlot?: React.ReactNode;
   onEdit: () => void;
   onDelete: () => void;
   onClose: () => void;
@@ -507,6 +512,14 @@ function PlanDetail({
             </dd>
           </>
         )}
+        {effectiveValues(plan, goal).values.length > 0 && (
+          <>
+            <dt style={{ color: C.sub }}>理念とのつながり</dt>
+            <dd className="m-0" data-gantt-detail-values={effectiveValues(plan, goal).from}>
+              <ValueChips values={effectiveValues(plan, goal).values} />
+            </dd>
+          </>
+        )}
         </dl>
       ) : (
       <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-[14px] gap-y-1.5 px-[18px] pb-4 pt-[14px] text-[13px]">
@@ -546,10 +559,19 @@ function PlanDetail({
             </dd>
           </>
         )}
+        {effectiveValues(plan, goal).values.length > 0 && (
+          <>
+            <dt style={{ color: C.sub }}>理念とのつながり</dt>
+            <dd className="m-0" data-gantt-detail-values={effectiveValues(plan, goal).from}>
+              <ValueChips values={effectiveValues(plan, goal).values} />
+            </dd>
+          </>
+        )}
       </dl>
       )}
       {connectSlot && <div className="px-[18px] pb-3">{connectSlot}</div>}
       {tasksSlot}
+      {weeklySlot}
       {canWrite && fromMatrix && (
         <p className="px-[18px] pb-3 text-[12px]" style={{ color: C.sub }} data-gantt-matrix-note>
           四象限マトリクスの項目です。直すのは四象限マトリクスで行います。
@@ -620,6 +642,8 @@ type Draft = {
   memo: string;
   /** 268: つながるクリニック目標の id（空＝選ばない） */
   goalId: string;
+  /** 266: 理念とのつながり（目標につながっていないときだけ選ぶ） */
+  values: string[];
 };
 
 function PlanForm({
@@ -792,6 +816,14 @@ function PlanForm({
             <textarea value={d.memo} rows={3} maxLength={2000} onChange={(e) => set("memo", e.target.value)} className={field} style={fieldStyle} data-gantt-f-memo />
           </label>
           <GoalSelect goals={goals} value={d.goalId} onChange={(v) => set("goalId", v)} field={field} fieldStyle={fieldStyle} lab={lab} />
+          {/* 266: 理念の札は、クリニック目標につながっていないときだけ付ける（つなげたら目標の側の札を出す・計画の側の札は消さずに残す） */}
+          {d.goalId ? (
+            <p className="m-0 text-[11px]" style={{ color: C.sub }} data-gantt-f-values-goal>
+              クリニック目標につながっているので、目的と理念の札は目標の側のものを出します
+            </p>
+          ) : (
+            <ValuePicker value={d.values} onChange={(v) => set("values", v)} />
+          )}
         </div>
         {(error || missing) && (
           <p role="alert" className="mt-3 rounded-xl px-3 py-2 text-[13px]" style={{ background: "#FCEEF1", color: C.statusText }} data-gantt-f-error>
@@ -814,7 +846,7 @@ function PlanForm({
 
 // ─── 252: チームプロジェクトを足す・直す ───
 
-type TeamDraft = { name: string; memo: string; start: string; end: string; memberIds: string[]; status: TaskStatus; goalId: string };
+type TeamDraft = { name: string; memo: string; start: string; end: string; memberIds: string[]; status: TaskStatus; goalId: string; values: string[] };
 
 function TeamForm({
   initial,
@@ -956,6 +988,14 @@ function TeamForm({
             </select>
           </label>
           <GoalSelect goals={goals} value={d.goalId} onChange={(v) => set("goalId", v)} field={field} fieldStyle={fieldStyle} lab={lab} />
+          {/* 266: 理念の札は、クリニック目標につながっていないときだけ付ける（つなげたら目標の側の札を出す・計画の側の札は消さずに残す） */}
+          {d.goalId ? (
+            <p className="m-0 text-[11px]" style={{ color: C.sub }} data-gantt-f-values-goal>
+              クリニック目標につながっているので、目的と理念の札は目標の側のものを出します
+            </p>
+          ) : (
+            <ValuePicker value={d.values} onChange={(v) => set("values", v)} />
+          )}
         </div>
         {(error || missing) && (
           <p role="alert" className="mt-3 rounded-xl px-3 py-2 text-[13px]" style={{ background: "#FCEEF1", color: C.statusText }} data-gantt-t-error>
@@ -1115,6 +1155,8 @@ export function GanttBoard() {
   const [hiddenCats, setHiddenCats] = useState<Set<string>>(new Set());
   // 268: 「クリニック目標」での絞り込み（空＝すべて）
   const [goalFilter, setGoalFilter] = useState("");
+  // 266: 理念とのつながりでの絞り込み（目標の側の札と、計画の側の札の両方で）
+  const [valueFilter, setValueFilter] = useState("");
   // 267: カーソルを合わせたときのポップアップ（パソコンだけ）
   const { hover, bind: hoverBind } = useGanttHover();
   const [opened, setOpened] = useState<{ id: string; el: HTMLElement; taskId?: string } | null>(null);
@@ -1156,10 +1198,11 @@ export function GanttBoard() {
   const categories = useMemo(() => data?.categories ?? [], [data]);
   const visibleCats = useMemo(() => new Set(categories.map((c) => c.id).filter((id) => !hiddenCats.has(id))), [categories, hiddenCats]);
   const clinicGoals = useMemo(() => data?.clinicGoals ?? [], [data]);
-  const groups = useMemo(
-    () => groupPlans(filterPlansByGoal(data?.plans ?? [], goalFilter), categories, visibleCats),
-    [data, categories, visibleCats, goalFilter]
-  );
+  const groups = useMemo(() => {
+    const goals = data?.clinicGoals ?? [];
+    const byValue = (data?.plans ?? []).filter((p) => matchesValue(p, p.goalId ? goals.find((g) => g.id === p.goalId) : null, valueFilter));
+    return groupPlans(filterPlansByGoal(byValue, goalFilter), categories, visibleCats);
+  }, [data, categories, visibleCats, goalFilter, valueFilter]);
   const goalOf = (p: GanttPlan) => (p.goalId ? clinicGoals.find((g) => g.id === p.goalId) ?? null : null);
   const canWrite = !!data?.canWrite;
   const openedPlan = opened ? data?.plans.find((p) => p.id === opened.id) ?? null : null;
@@ -1306,13 +1349,14 @@ export function GanttBoard() {
     memberIds: myId ? [myId] : [],
     status: "todo",
     goalId: goalFilter,
+    values: [],
   });
 
   const saveTeam = async (d: TeamDraft) => {
     if (!teamForm) return;
     setFormBusy(true);
     setFormError("");
-    const fields = { name: d.name.trim(), memo: d.memo, start: d.start, end: d.end, status: d.status, members: d.memberIds, goalId: d.goalId };
+    const fields = { name: d.name.trim(), memo: d.memo, start: d.start, end: d.end, status: d.status, members: d.memberIds, goalId: d.goalId, values: d.values };
     try {
       if (teamForm.editingId) {
         await api("/api/gantt", { method: "PATCH", body: JSON.stringify({ id: teamForm.editingId, fields }) });
@@ -1342,6 +1386,7 @@ export function GanttBoard() {
     status: "todo",
     memo: "",
     goalId: goalFilter,
+    values: [],
   });
 
   const draftOf = (p: GanttPlan): Draft => ({
@@ -1356,6 +1401,7 @@ export function GanttBoard() {
     status: p.status,
     memo: p.memo,
     goalId: p.goalId ?? "",
+    values: p.values ?? [],
   });
 
   const savePlan = async (d: Draft) => {
@@ -1373,6 +1419,7 @@ export function GanttBoard() {
       status: d.status,
       memo: d.memo,
       goalId: d.goalId,
+      values: d.values,
     };
     try {
       if (form.editingId) await api("/api/gantt", { method: "PATCH", body: JSON.stringify({ id: form.editingId, fields }) });
@@ -1488,7 +1535,7 @@ export function GanttBoard() {
         </div>
 
         {/* 265: 自分あてのアプリ内の知らせ（手伝います・院長の判断） */}
-        <GanttAlerts />
+        <GanttAlerts compact />
 
         {/* 表示の単位・◀ 今日 ▶（幅を固定＝切り替えても動かない） */}
         <div className="flex flex-wrap items-center gap-3" data-gantt-toolbar>
@@ -1577,6 +1624,28 @@ export function GanttBoard() {
             </select>
           </label>
         )}
+
+        {/* 266: 理念とのつながりで絞り込む */}
+        <label className="flex flex-wrap items-center gap-2 text-[13px]" style={{ color: C.sub }} data-gantt-value-filter-label>
+          📜 理念とのつながりで絞り込む
+          <select
+            value={valueFilter}
+            onChange={(e) => {
+              setValueFilter(e.target.value);
+              setOpened(null);
+            }}
+            className="min-h-[44px] max-w-full rounded-full border bg-white/80 px-4 text-[13px]"
+            style={{ borderColor: "rgba(240, 209, 218, 0.9)", color: C.ink }}
+            data-gantt-value-filter
+          >
+            <option value="">すべての計画</option>
+            {PLAN_VALUE_WORDS.map((w) => (
+              <option key={w} value={w}>
+                {w}
+              </option>
+            ))}
+          </select>
+        </label>
 
         {/* 263: 院長には「院長が判断」のタスクで完了していないものの件数。押すと一覧 */}
         {data?.isDirector && (
@@ -1695,7 +1764,7 @@ export function GanttBoard() {
                   <div className="flex">
                     <div className={`${NAME_COL} sticky left-0 shrink-0`} style={{ background: "rgba(255,255,255,0.97)" }} />
                     <div className="relative flex-1 py-10 text-center text-[14px]" style={{ minWidth: TIMELINE_MIN[view], color: C.sub }} data-gantt-empty>
-                      {data?.plans.length ? (goalFilter ? "選んだクリニック目標につながった計画はありません" : "選んだ分類の計画はありません") : canWrite ? "まだ計画はありません。「＋ 追加」から書けます" : "まだ計画はありません。「＋ チームプロジェクトを追加」から書けます"}
+                      {data?.plans.length ? (goalFilter || valueFilter ? "選んだ条件の計画はありません" : "選んだ分類の計画はありません") : canWrite ? "まだ計画はありません。「＋ 追加」から書けます" : "まだ計画はありません。「＋ チームプロジェクトを追加」から書けます"}
                     </div>
                   </div>
                 )}
@@ -1833,6 +1902,9 @@ export function GanttBoard() {
           )}
         </div>
 
+        {/* 266: 今週のひとことの知らせを出す曜日（院長だけ・サーバーが院長以外には返さない） */}
+        {data?.isDirector && <WeekdaySetting />}
+
         {data?.canEditCategories && (
           <CategoryEditor
             categories={categories}
@@ -1848,6 +1920,7 @@ export function GanttBoard() {
         <PlanDetail
           plan={openedPlan}
           goal={goalOf(openedPlan)}
+          weeklySlot={openedPlan.source === "matrix" ? undefined : <WeeklySection planId={openedPlan.id} me={data?.me ?? ""} />}
           connectSlot={
             openedPlan.source === "matrix" ? undefined : (
               <div className="flex flex-wrap items-start gap-2">
@@ -1885,6 +1958,7 @@ export function GanttBoard() {
                   memberIds: (openedPlan.members ?? []).map((m) => m.id),
                   status: openedPlan.status,
                   goalId: openedPlan.goalId ?? "",
+                  values: openedPlan.values ?? [],
                 },
               });
             } else {

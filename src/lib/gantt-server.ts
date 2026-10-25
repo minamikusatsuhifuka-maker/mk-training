@@ -18,7 +18,7 @@ import { isAdminUser } from "./admin-role";
 import { isTestSeedUser } from "./test-seed";
 import { createSupabaseAdminClient } from "./supabase-admin";
 import { GROWTH_TABLE, isMissingTable, serverFeatureEnabled } from "./staff-growth-server";
-import { isActiveAccountId, loadDelegatedItems } from "./admin-delegation-server";
+import { isActiveAccountId, loadDelegatedItems, loadDelegationSnapshot } from "./admin-delegation-server";
 import { hidesTestSeedFor } from "./test-seed-hide-server";
 import { serverGetContentRow } from "./content-store-server";
 import { PM_CONTENT_TYPE, PM_TABLE } from "./priority-matrix-server";
@@ -42,11 +42,27 @@ import { normalizeTask as normalizeGanttTask, type GanttTask } from "./gantt-tas
 import { canViewGanttWith, goalBriefsOf, type ClinicGoalBrief } from "./plan-goals";
 import { loadTestSeedUsers } from "./test-seed-server";
 import {
+  SENT_TYPE,
+  WEEKLY_TYPE,
+  dueSentId,
+  dueStageFor,
+  normalizeWeekday,
+  normalizeWeekly,
+  planNeedsWeekly,
+  sortWeekly,
+  weekMonday,
+  weekdayOf,
+  weeklySentId,
+  weeklyWriters,
+  type WeeklyNote,
+} from "./gantt-rhythm";
+import {
   ALERTS_PER_USER_MAX,
   ALERT_TYPE,
   CHEER_TYPE,
   achievementNoticeText,
   cheerRowId,
+  alertText,
   genAlertId,
   normalizeAlert,
   normalizeCheers,
@@ -556,4 +572,167 @@ export async function postAchievementNotice(
   };
   await saveNotice(admin, notice, true);
   return notice;
+}
+
+// ─── 266: 今週のひとこと・設定・毎朝の知らせ ───
+
+export async function loadWeekly(admin: Admin, filter?: { planId?: string; userId?: string }): Promise<WeeklyNote[]> {
+  let q = admin.from(GROWTH_TABLE).select("id, data").eq("record_type", WEEKLY_TYPE);
+  if (filter?.planId) q = q.eq("data->>planId", filter.planId);
+  if (filter?.userId) q = q.eq("data->>userId", filter.userId);
+  const { data, error } = await q;
+  if (error) {
+    if (isMissingTable(error.message)) return [];
+    throw new Error(error.message);
+  }
+  return sortWeekly(
+    ((data ?? []) as { id: string; data: unknown }[]).map((r) => normalizeWeekly(r.id, r.data)).filter((n): n is WeeklyNote => n !== null)
+  );
+}
+
+export async function saveWeekly(admin: Admin, note: WeeklyNote, by: string): Promise<WeeklyNote> {
+  const now = new Date().toISOString();
+  const { id, ...rest } = note;
+  const { error } = await admin.from(GROWTH_TABLE).upsert({
+    id,
+    record_type: WEEKLY_TYPE,
+    data: { ...rest, ...(note.testSeed ? { seed191: true } : {}) },
+    updated_by: by,
+    updated_at: now,
+  });
+  if (error) throw new Error(error.message);
+  return note;
+}
+
+export async function deleteWeeklyOfPlans(admin: Admin, planIds: string[]): Promise<void> {
+  if (planIds.length === 0) return;
+  const ids = (await loadWeekly(admin)).filter((n) => planIds.includes(n.planId)).map((n) => n.id);
+  if (ids.length === 0) return;
+  const { error } = await admin.from(GROWTH_TABLE).delete().in("id", ids).eq("record_type", WEEKLY_TYPE);
+  if (error) throw new Error(error.message);
+}
+
+const SETTINGS_TYPE = "gantt_settings";
+const SETTINGS_ID = "gantt-settings";
+export type GanttSettings = { reflectionWeekday: number };
+
+export async function loadGanttSettings(admin: Admin): Promise<GanttSettings> {
+  const { data, error } = await admin.from(GROWTH_TABLE).select("data").eq("id", SETTINGS_ID).eq("record_type", SETTINGS_TYPE).maybeSingle();
+  if (error && !isMissingTable(error.message)) throw new Error(error.message);
+  return { reflectionWeekday: normalizeWeekday((data as { data?: { reflectionWeekday?: unknown } } | null)?.data?.reflectionWeekday) };
+}
+
+export async function saveGanttSettings(admin: Admin, s: GanttSettings, by: string): Promise<GanttSettings> {
+  const now = new Date().toISOString();
+  const next = { reflectionWeekday: normalizeWeekday(s.reflectionWeekday) };
+  const { error } = await admin.from(GROWTH_TABLE).upsert({ id: SETTINGS_ID, record_type: SETTINGS_TYPE, data: { ...next, updatedAt: now }, updated_by: by, updated_at: now });
+  if (error) throw new Error(error.message);
+  return next;
+}
+
+/** 送った記録があるか（同じ知らせは1回だけ） */
+async function sentIds(admin: Admin): Promise<Set<string>> {
+  const { data, error } = await admin.from(GROWTH_TABLE).select("id").eq("record_type", SENT_TYPE);
+  if (error) {
+    if (isMissingTable(error.message)) return new Set();
+    throw new Error(error.message);
+  }
+  return new Set(((data ?? []) as { id: string }[]).map((r) => r.id));
+}
+
+async function markSent(admin: Admin, id: string, testSeed: boolean): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await admin.from(GROWTH_TABLE).upsert({
+    id,
+    record_type: SENT_TYPE,
+    data: { at: now, ...(testSeed ? { testSeed: true, seed191: true } : {}) },
+    updated_by: "cron",
+    updated_at: now,
+  });
+  if (error) throw new Error(error.message);
+}
+
+/** 困りごと・知らせの「タスクを書ける人」：院長（DIRECTOR_USER_ID）と「🏁 年間計画」を任された幹部 */
+export async function ganttWriterIds(): Promise<string[]> {
+  const director = (process.env.DIRECTOR_USER_ID ?? "").trim();
+  let delegated: string[] = [];
+  try {
+    delegated = (await loadDelegationSnapshot()).items[GANTT_ITEM_KEY] ?? [];
+  } catch {
+    delegated = [];
+  }
+  return [...new Set([director, ...delegated].filter(Boolean))];
+}
+
+export type GanttDailyOutcome = { due: number; weekly: number; skippedWeekly: boolean };
+
+/**
+ * 266: 毎朝8時の定期実行（📣 お知らせの定期実行に足した）。
+ *   ・期限の3日前・当日の知らせ（タスクの担当者）
+ *   ・今週のひとことの知らせ（院長が決めた曜日だけ・その週にまだ書いていない計画の担当・メンバー）
+ *   testOnly＝検証用の計画・タスクだけを扱う（確かめのために手で動かすとき。本物のスタッフに知らせを出さない）
+ *   forceWeekly＝曜日に関係なく今週のひとことの知らせも見る（testOnly のときだけ）
+ */
+export async function runGanttDaily(admin: Admin, today: string, opts: { testOnly?: boolean; forceWeekly?: boolean } = {}): Promise<GanttDailyOutcome> {
+  const testOnly = !!opts.testOnly;
+  const [plansAll, tasksAll, sent, settings] = await Promise.all([loadPlans(admin), loadTasks(admin), sentIds(admin), loadGanttSettings(admin)]);
+  const plans = plansAll.filter((p) => !testOnly || p.testSeed);
+  const planById = new Map(plans.map((p) => [p.id, p]));
+  let due = 0;
+  for (const t of tasksAll) {
+    if (testOnly && !t.testSeed) continue;
+    const plan = planById.get(t.planId);
+    if (!plan) continue;
+    const stage = dueStageFor(t, today);
+    if (!stage) continue;
+    const sid = dueSentId(t.id, stage, t.due);
+    if (sent.has(sid)) continue;
+    const ids = t.assignees.map((a) => a.id);
+    if (ids.length) {
+      due += await deliverAlerts(
+        admin,
+        ids,
+        { kind: stage, planId: plan.id, taskId: t.id, text: alertText(stage, { actorName: "", taskTitle: t.title, planName: plan.name, due: t.due }), ...(t.testSeed ? { testSeed: true } : {}) },
+        "cron"
+      );
+    }
+    await markSent(admin, sid, t.testSeed === true);
+  }
+  const weeklyDay = weekdayOf(today) === settings.reflectionWeekday || (testOnly && !!opts.forceWeekly);
+  let weekly = 0;
+  if (weeklyDay) {
+    const monday = weekMonday(today);
+    const notes = await loadWeekly(admin);
+    for (const plan of plans) {
+      if (!planNeedsWeekly(plan, today)) continue;
+      for (const w of weeklyWriters(plan)) {
+        if (notes.some((n) => n.planId === plan.id && n.userId === w.id && n.week === monday)) continue;
+        const sid = weeklySentId(plan.id, w.id, monday);
+        if (sent.has(sid)) continue;
+        weekly += await deliverAlerts(
+          admin,
+          [w.id],
+          { kind: "weekly", planId: plan.id, taskId: "", text: alertText("weekly", { actorName: "", taskTitle: "", planName: plan.name }), ...(plan.testSeed ? { testSeed: true } : {}) },
+          "cron"
+        );
+        await markSent(admin, sid, plan.testSeed === true);
+      }
+    }
+  }
+  return { due, weekly, skippedWeekly: !weeklyDay };
+}
+
+/** 266: 計画・タスクを消したとき、その知らせを送った記録も消す（id に計画・タスクの id が入っている） */
+export async function deleteSentOf(admin: Admin, planIds: string[], taskIds: string[]): Promise<void> {
+  if (planIds.length === 0 && taskIds.length === 0) return;
+  const { data, error } = await admin.from(GROWTH_TABLE).select("id").eq("record_type", SENT_TYPE);
+  if (error) {
+    if (isMissingTable(error.message)) return;
+    throw new Error(error.message);
+  }
+  const keys = [...taskIds.map((id) => `gas-${id}-`), ...planIds.map((id) => `gas-weekly-${id}-`)];
+  const gone = ((data ?? []) as { id: string }[]).map((r) => r.id).filter((id) => keys.some((k) => id.startsWith(k)));
+  if (gone.length === 0) return;
+  const { error: e2 } = await admin.from(GROWTH_TABLE).delete().in("id", gone).eq("record_type", SENT_TYPE);
+  if (e2) throw new Error(e2.message);
 }

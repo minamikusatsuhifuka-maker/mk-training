@@ -10,6 +10,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import NavPageHeader from "@/components/NavPageHeader";
 import FeatureGate from "@/components/FeatureGate";
+import { GanttMorning } from "@/components/gantt/GanttRhythm";
 import { useNewsReactions, ReactionBar } from "@/components/NewsReactions";
 import { resolveReactorName } from "@/lib/news-reactions";
 import {
@@ -226,6 +227,9 @@ function ChoreiPageBody() {
           </p>
         )}
       </div>
+
+      {/* 266 §3: 年間計画の「今週の計画」（年間計画で見られるものだけ・見られない人には何も出さない） */}
+      <GanttMorning />
 
       {/* 指示書108の指定文言（そのまま使用） */}
       <p className="text-sm text-gray-600 leading-relaxed bg-orange-50/60 border border-orange-100 rounded-xl px-4 py-3">

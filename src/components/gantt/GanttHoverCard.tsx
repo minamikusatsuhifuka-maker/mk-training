@@ -17,6 +17,8 @@ import { GANTT_PALETTES, STATUS_LABEL, grad, periodLabel, planAssigneeLabel, sho
 import { OVERDUE_LABEL, isOverdue, progressLabel, type GanttTask } from "@/lib/gantt-tasks";
 import type { ClinicGoalBrief } from "@/lib/plan-goals";
 import { JudgeChip } from "./GanttTasks";
+import { ValueChips } from "./GanttRhythm";
+import { effectiveValues } from "@/lib/gantt-rhythm";
 
 export type HoverTarget = { kind: "plan"; planId: string } | { kind: "task"; planId: string; taskId: string };
 
@@ -235,6 +237,7 @@ export function GanttHoverCard({
             {row("状態", STATUS_LABEL[plan.status])}
             {planTasks.length > 0 && row("タスク", progressLabel(planTasks), "progress")}
             {goal && row("クリニック目標", <>🎯 {goal.title}{goal.purpose && <Clamp lines={2} data="purpose">{goal.purpose}</Clamp>}</>, "goal")}
+            {effectiveValues(plan, goal).values.length > 0 && row("理念とのつながり", <ValueChips values={effectiveValues(plan, goal).values} />, "values")}
             {plan.memo.trim() && row(plan.kind === "team" ? "プロジェクト概要" : "メモ", <Clamp lines={3} data="memo">{plan.memo}</Clamp>)}
           </>
         )}

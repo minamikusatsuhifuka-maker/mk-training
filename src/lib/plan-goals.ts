@@ -12,6 +12,7 @@ import type { User } from "@supabase/supabase-js";
 import { isAdminUser } from "./admin-role";
 import { isTestSeedUser } from "./test-seed";
 import { STATUS_LABEL, type GanttPlan, type TaskStatus } from "./gantt";
+import { normalizeValues } from "./gantt-rhythm";
 import type { GanttTask } from "./gantt-tasks";
 
 /**
@@ -23,7 +24,7 @@ export function canViewGanttWith(user: Pick<User, "app_metadata">, featureOn: bo
 }
 
 /** クリニック目標のうち、年間計画の側で使う分（名前と目的だけ） */
-export type ClinicGoalBrief = { id: string; title: string; purpose: string };
+export type ClinicGoalBrief = { id: string; title: string; purpose: string; /** 266: 理念とのつながり */ values: string[] };
 
 /** portal_gantt（クリニック目標の保存値）から、id・名前・目的だけを取り出す */
 export function goalBriefsOf(raw: unknown): ClinicGoalBrief[] {
@@ -33,7 +34,7 @@ export function goalBriefsOf(raw: unknown): ClinicGoalBrief[] {
   for (const g of list as Record<string, unknown>[]) {
     if (!g || typeof g !== "object") continue;
     if (typeof g.id !== "string" || typeof g.title !== "string" || !g.id || out.some((x) => x.id === g.id)) continue;
-    out.push({ id: g.id, title: g.title, purpose: typeof g.purpose === "string" ? g.purpose.trim() : "" });
+    out.push({ id: g.id, title: g.title, purpose: typeof g.purpose === "string" ? g.purpose.trim() : "", values: normalizeValues(g.values) });
   }
   return out;
 }

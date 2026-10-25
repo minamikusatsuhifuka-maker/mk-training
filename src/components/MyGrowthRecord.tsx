@@ -3,6 +3,7 @@ import Link from "next/link";
 import { RwdepcInfo } from "@/components/RwdepcInfo";
 // 220 §3: 「可能性ノート」と同じタブの並びにそろえる
 import { GrowthTabsBar, useRememberedTab } from "@/components/GrowthTabsBar";
+import { WeeklyReflections } from "@/components/gantt/GanttRhythm";
 import { GROWTH_TABS, GROWTH_TAB_STORAGE_KEY, resolveGrowthTab, visibleGrowthTabs, type GrowthTabKey } from "@/lib/growth-tabs";
 
 // 本人ページ「わたしの可能性ノート」（指示書179 C）
@@ -481,6 +482,8 @@ export function MyGrowthRecord() {
       ) : (
         // 🤝 1on1（1on1の約束と取り組み状況）
         <div className="space-y-2" data-tab-panel="one_on_one">
+        {/* 266 §4: 年間計画の今週のひとこと（自分の分・最近4週間） */}
+        <WeeklyReflections />
         <PromisesSection
           promises={promises}
           busy={busy}

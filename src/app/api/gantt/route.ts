@@ -19,6 +19,8 @@ import { after, NextResponse, type NextRequest } from "next/server";
 import {
   authorizeGantt,
   deleteConnectOf,
+  deleteWeeklyOfPlans,
+  deleteSentOf,
   deletePlans,
   deleteTasksOfPlans,
   loadCheers,
@@ -56,6 +58,7 @@ import { loadEntries } from "@/lib/ayumi-server";
 import { hidesTestSeedFor } from "@/lib/test-seed-hide-server";
 import { canManageTasks, visibleTasksFor } from "@/lib/gantt-tasks";
 import { visibleCheers } from "@/lib/gantt-connect";
+import { nextDoneAt } from "@/lib/gantt-rhythm";
 
 export const runtime = "nodejs";
 
@@ -71,7 +74,7 @@ function readFields(body: Record<string, unknown>): PlanFields | null {
   if (!f || typeof f !== "object" || Array.isArray(f)) return null;
   const o = f as Record<string, unknown>;
   const out: PlanFields = {};
-  for (const k of ["name", "categoryId", "start", "end", "assignee", "assignees", "status", "memo", "parentId", "members", "goalId"] as const) {
+  for (const k of ["name", "categoryId", "start", "end", "assignee", "assignees", "status", "memo", "parentId", "members", "goalId", "values"] as const) {
     if (k in o) (out as Record<string, unknown>)[k] = o[k];
   }
   return out;
@@ -200,6 +203,7 @@ export async function POST(req: NextRequest) {
       if (!members.some((m) => m.id === auth.user.id)) members.unshift({ id: auth.user.id, name: myName });
       const next = normalizePlan(id, {
         ...fields,
+        ...(fields.status === "done" ? { doneAt: new Date().toISOString() } : {}),
         kind: "team",
         members,
         createdBy: auth.user.id,
@@ -235,7 +239,12 @@ export async function POST(req: NextRequest) {
     }
     const categories = await loadCategories(auth.admin);
     // 264: 担当は一覧から選んだ人（選べるのは、見ている人と同じ側の一覧＝本物には本物・検証用には検証用）
-    const next = normalizePlan(id, { ...fields, assignees: pickMembers(fields.assignees, await teamCandidates(auth.admin, auth.testSeed)), order: 0 });
+    const next = normalizePlan(id, {
+      ...fields,
+      ...(fields.status === "done" ? { doneAt: new Date().toISOString() } : {}),
+      assignees: pickMembers(fields.assignees, await teamCandidates(auth.admin, auth.testSeed)),
+      order: 0,
+    });
     if (!next) return bad("名前と開始日を入れてください");
     if (!categories.some((c) => c.id === next.categoryId) || next.categoryId === TEAM_CATEGORY_ID) next.categoryId = OTHER_CATEGORY_ID;
     const problem = checkParent(next, plans) ?? (await checkGoal(next));
@@ -289,6 +298,8 @@ export async function PATCH(req: NextRequest) {
         status: fields.status ?? prev.status,
         members,
         goalId: "goalId" in fields ? fields.goalId : prev.goalId,
+        values: "values" in fields ? fields.values : prev.values,
+        doneAt: nextDoneAt(prev.status, fields.status ?? prev.status, prev.doneAt, new Date().toISOString()),
       });
       if (!next) return bad("チーム名と目標の達成期間を入れてください");
       if (!next.memo.trim()) return bad("プロジェクト概要を入れてください");
@@ -307,7 +318,13 @@ export async function PATCH(req: NextRequest) {
       const keep = assignees.filter((a) => !candidates.some((c) => c.id === a.id));
       assignees = pickMembers(fields.assignees, [...candidates, ...keep]);
     }
-    const next = normalizePlan(id, { ...prev, ...fields, members: undefined, assignees });
+    const next = normalizePlan(id, {
+      ...prev,
+      ...fields,
+      members: undefined,
+      assignees,
+      doneAt: nextDoneAt(prev.status, fields.status ?? prev.status, prev.doneAt, new Date().toISOString()),
+    });
     if (!next) return bad("名前と開始日を入れてください");
     const categories = await loadCategories(auth.admin);
     if (!categories.some((c) => c.id === next.categoryId) || next.categoryId === TEAM_CATEGORY_ID) next.categoryId = OTHER_CATEGORY_ID;
@@ -340,6 +357,9 @@ export async function DELETE(req: NextRequest) {
     await deleteTasksOfPlans(auth.admin, ids);
     // 265: 応援と知らせも消す
     await deleteConnectOf(auth.admin, ids, taskIds);
+    // 266: 今週のひとことも消す
+    await deleteWeeklyOfPlans(auth.admin, ids);
+    await deleteSentOf(auth.admin, ids, taskIds);
     return NextResponse.json({ ok: true }, { headers: NO_STORE });
   } catch (e) {
     return fail(e);

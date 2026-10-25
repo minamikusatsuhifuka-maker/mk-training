@@ -60,6 +60,8 @@ export type GanttTask = {
   helpers?: TaskHelper[];
   /** 265: 院長の判断（「院長が判断」のタスクに院長だけが書く） */
   judgment?: TaskJudgment;
+  /** 266: 完了にした日時（朝礼の「先週完了」に使う） */
+  doneAt?: string;
   updatedAt: string;
 };
 
@@ -138,6 +140,7 @@ export function normalizeTask(id: string, raw: unknown): GanttTask | null {
     ...(normalizeHelp(o.help) ? { help: normalizeHelp(o.help) } : {}),
     ...(normalizeHelpers(o.helpers).length ? { helpers: normalizeHelpers(o.helpers) } : {}),
     ...(normalizeJudgment(o.judgment) ? { judgment: normalizeJudgment(o.judgment) } : {}),
+    ...(typeof o.doneAt === "string" && o.doneAt ? { doneAt: o.doneAt } : {}),
     updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : "",
   };
 }

@@ -17,6 +17,7 @@ import { loadPortalObject, savePortalObject } from "./portal-store";
 import { getSupabaseBrowserClient } from "./supabase-browser";
 import { isAdminUser } from "./admin-role";
 import { PLAN_FISCAL_START_MONTH } from "./gantt";
+import { normalizeValues } from "./gantt-rhythm";
 
 export const PORTAL_GANTT_KEY = "portal_gantt";
 
@@ -47,6 +48,8 @@ export type GanttGoal = {
   // 268: つながった計画があるのに、院長が進み具合を手で直した（「手で入力」の印・「自動に戻す」で外す）。
   // 手で直していない目標には保存しない。つながった計画がない目標では使わない（progress をそのまま出す）
   progressManual?: boolean;
+  // 266: 理念とのつながり（📜 当院の歩みと同じ言葉・任意）。計画の目的と理念の札はクリニック目標の側に一本化
+  values?: string[];
 };
 
 export type GanttData = { goals: GanttGoal[]; updatedAt: string };
@@ -379,6 +382,8 @@ function normalizeGoals(raw: unknown): GanttGoal[] {
           : undefined,
       // 268: 手で直した印も素通しする（通さないと次の保存で消える）
       progressManual: g.progressManual === true ? true : undefined,
+      // 266: 理念の札も素通しする（一覧にある言葉だけ）
+      values: normalizeValues(g.values).length ? normalizeValues(g.values) : undefined,
     });
   }
   return out;

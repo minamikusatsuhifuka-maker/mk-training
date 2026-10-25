@@ -18,6 +18,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   authorizeGantt,
   deleteConnectOf,
+  deleteSentOf,
   deleteTasks,
   loadCategories,
   loadMatrixPlans,
@@ -32,6 +33,7 @@ import {
 } from "@/lib/gantt-server";
 import { hidesTestSeedFor } from "@/lib/test-seed-hide-server";
 import type { GanttPlan } from "@/lib/gantt";
+import { nextDoneAt } from "@/lib/gantt-rhythm";
 import {
   COMMENTS_PER_TASK_MAX,
   TASKS_PER_PLAN_MAX,
@@ -175,6 +177,7 @@ export async function POST(req: NextRequest) {
       order: siblings.length ? Math.max(...siblings.map((t) => t.order)) + 1 : 0,
       createdBy: auth.user.id,
       ...(testSeed ? { testSeed: true } : {}),
+      ...(status === "done" ? { doneAt: new Date().toISOString() } : {}),
     });
     if (!next) return bad("題名を入れてください");
     const saved = await saveTask(auth.admin, next, c.by);
@@ -263,7 +266,8 @@ export async function PATCH(req: NextRequest) {
       if (!isTaskStatus(body.status)) return bad("不正なリクエストです");
       const problem = statusChangeProblem(task, body.status, auth.isAdmin);
       if (problem) return forbid(problem);
-      const saved = await saveTask(auth.admin, { ...task, status: body.status }, c.by);
+      // 266: 完了にした日時（朝礼の「先週完了」）
+      const saved = await saveTask(auth.admin, { ...task, status: body.status, doneAt: nextDoneAt(task.status, body.status, task.doneAt, new Date().toISOString()) }, c.by);
       return NextResponse.json({ task: out(c, saved) }, { headers: NO_STORE });
     }
 
@@ -291,6 +295,7 @@ export async function PATCH(req: NextRequest) {
       status,
       directorJudge: judge,
       assignees,
+      doneAt: nextDoneAt(task.status, status, task.doneAt, new Date().toISOString()),
     });
     if (!next) return bad("題名を入れてください");
     const saved = await saveTask(auth.admin, next, c.by);
@@ -324,6 +329,7 @@ export async function DELETE(req: NextRequest) {
     await deleteTasks(auth.admin, [task.id]);
     // 265: 応援と知らせも消す
     await deleteConnectOf(auth.admin, [], [task.id]);
+    await deleteSentOf(auth.admin, [], [task.id]);
     return NextResponse.json({ ok: true }, { headers: NO_STORE });
   } catch (e) {
     return fail(e);

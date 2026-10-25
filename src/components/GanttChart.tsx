@@ -49,6 +49,21 @@ import {
   type LinkedPlanRow,
 } from "@/lib/plan-goals";
 import { useGoalLinks } from "@/lib/plan-goals-client";
+import { VALUE_GROUPS } from "@/lib/gantt-rhythm";
+
+/** 266: 理念とのつながりの札（📜 当院の歩みと同じ言葉） */
+function GoalValueChips({ values }: { values: string[] }) {
+  if (values.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1" data-goal-values>
+      {values.map((w) => (
+        <span key={w} className="text-[11px] rounded-full bg-teal-50 text-teal-800 border border-teal-100 px-2 py-0.5">
+          {w}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 /** 268: 手で直した進み具合の印 */
 function ManualMark() {
@@ -164,6 +179,8 @@ function GanttEditModal({
   const [progress, setProgress] = useState(initial?.progress ?? 0);
   // 268: つながった計画があるとき、手で直しているか
   const [manual, setManual] = useState(!!initial?.progressManual);
+  // 266: 理念とのつながり（目的と理念の札はクリニック目標の側に一本化）
+  const [values, setValues] = useState<string[]>(initial?.values ?? []);
   const [purpose, setPurpose] = useState(initial?.purpose ?? "");
   const [background, setBackground] = useState(initial?.background ?? "");
   const [significance, setSignificance] = useState(initial?.significance ?? "");
@@ -210,6 +227,7 @@ function GanttEditModal({
       horizonOverride: horizonOverride || undefined,
       // 268: 手で直した印は、つながった計画があるときだけ持つ
       progressManual: auto && manual ? true : undefined,
+      values: values.length ? values : undefined,
     });
   };
 
@@ -402,6 +420,34 @@ function GanttEditModal({
                 );
               })}
             </div>
+          </div>
+
+          {/* 266: 理念とのつながり（いくつでも・任意）。つながった年間計画のくわしい内容にも出る */}
+          <div data-goal-f-values>
+            <p className="block text-xs font-semibold text-gray-500 mb-1">理念とのつながり（いくつでも・任意）</p>
+            {VALUE_GROUPS.map((g) => (
+              <div key={g.label} className="mt-1.5">
+                <p className="text-[11px] text-gray-400">{g.label}</p>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {g.words.map((w) => {
+                    const on = values.includes(w);
+                    return (
+                      <button
+                        key={w}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => setValues((prev) => (prev.includes(w) ? prev.filter((x) => x !== w) : [...prev, w]))}
+                        className={`px-3 py-1.5 rounded-lg text-xs transition-all ${on ? "bg-teal-500 text-white font-bold shadow-sm" : "bg-gray-50 text-gray-600 hover:bg-gray-100"}`}
+                        data-goal-f-value={w}
+                      >
+                        {on ? "✓ " : ""}
+                        {w}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* 詳細5項目（任意） */}
@@ -598,6 +644,12 @@ function GanttDetailModal({
                 </p>
               </div>
             ))
+          )}
+          {(goal.values ?? []).length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 mb-1">理念とのつながり</p>
+              <GoalValueChips values={goal.values ?? []} />
+            </div>
           )}
           {plans && plans.length > 0 && (
             <div>

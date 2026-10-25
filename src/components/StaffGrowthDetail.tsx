@@ -62,6 +62,7 @@ import {
 import { LearningRecordList } from "@/components/LearningRecordList";
 // ウェルネスの視点（院長・担当の幹部だけ。読めないとき＝null で欄ごと出さない）
 import { WellnessHistory, WellnessRecordBlock } from "@/components/WellnessPerspective";
+import { WeeklyReflections } from "@/components/gantt/GanttRhythm";
 import { fetchWellnessApi } from "@/lib/wellness-client";
 import type { WellnessEntry } from "@/lib/wellness";
 
@@ -620,6 +621,9 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
 
           {/* ウェルネスの視点: これまで話した面（直近から・まだ話していない面は薄く） */}
           {!isProspect && wellness && <WellnessHistory entries={wellness} />}
+
+          {/* 266 §4: 1on1とのつながり — 年間計画の今週のひとこと（最近4週間・見られる人は可能性ノートの決まりどおり） */}
+          {!isProspect && <WeeklyReflections userId={userId} />}
 
           <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
             <h2 className="text-sm font-medium text-gray-900">🤝 1on1の記録</h2>

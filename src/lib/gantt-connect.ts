@@ -143,7 +143,7 @@ export const ALERT_TYPE = "gantt_alert";
 /** 1人あてに残す知らせの数（古いものから捨てる） */
 export const ALERTS_PER_USER_MAX = 50;
 
-export type AlertKind = "help_offer" | "judgment" | "judgment_edit";
+export type AlertKind = "help_offer" | "judgment" | "judgment_edit" | "due_d3" | "due_d0" | "weekly" | "trouble";
 
 export type GanttAlert = {
   id: string;
@@ -182,8 +182,13 @@ export function normalizeAlert(id: string, raw: unknown): GanttAlert | null {
 }
 
 /** 知らせの文（院長が確かめる文の形） */
-export function alertText(kind: AlertKind, a: { actorName: string; taskTitle: string; planName: string }): string {
+export function alertText(kind: AlertKind, a: { actorName: string; taskTitle: string; planName: string; due?: string }): string {
   const who = a.actorName || "スタッフ";
+  // 266
+  if (kind === "due_d3") return `⏰ タスク「${a.taskTitle}」（${a.planName}）の期限は3日後（${a.due ? `${Number(a.due.slice(5, 7))}/${Number(a.due.slice(8, 10))}` : ""}）です`;
+  if (kind === "due_d0") return `⏰ タスク「${a.taskTitle}」（${a.planName}）の期限は今日です`;
+  if (kind === "weekly") return `📝 「${a.planName}」の今週のひとことが、まだ書かれていません`;
+  if (kind === "trouble") return `🆘 ${who}さんが、「${a.planName}」の今週のひとことに困りごとを書きました`;
   if (kind === "help_offer") return `🙋 ${who}さんが、タスク「${a.taskTitle}」（${a.planName}）を「手伝います」と名乗り出ました`;
   if (kind === "judgment") return `🧭 タスク「${a.taskTitle}」（${a.planName}）に、院長の判断が書かれました`;
   return `🧭 タスク「${a.taskTitle}」（${a.planName}）の院長の判断が直されました`;
