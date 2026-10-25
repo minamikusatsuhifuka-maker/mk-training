@@ -10,7 +10,7 @@
 // ＝ proxy.ts が返す「/login への307リダイレクト」が先読みされ、
 // クライアント側のルーターキャッシュに記録される。
 //
-// このアプリには loading.tsx が1つも無い。Next.js の「Prefetching」の表では
+// （当時）このアプリには loading.tsx が1つも無かった（速度の指示書で app/loading.tsx を置いた。ログイン前後に画面ごと読み込み直す決まりはそのまま）。Next.js の「Prefetching」の表では
 // この場合の Client Cache TTL は **Until app reload（アプリを読み込み直すまで）**。
 // つまり一度記録された「/ はログイン画面へ」という判定が、そのタブが生きている間
 // ずっと残り続ける。
