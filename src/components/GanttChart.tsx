@@ -6,6 +6,7 @@
 // - 編集UI（目標を追加・行クリック編集・編集アイコン・詳細記入）は管理者のみ。
 //   「詳細を確認」ボタンは全員に表示（閲覧専用モーダル）。保存も lib 境界で管理者チェック（gantt-goals.ts）。
 // - 268: 年は年度（11月始まり・10月締め）。目盛りも11月〜10月。
+// - 269: 年度をまたぐ目標は、終わる月（始まる月）まで目盛りをのばし、横に送って見られる（年度の外はうすく・境目に年度の名前・前後最大24か月）。
 //   年間計画の計画を目標につなげ、つながった計画の一覧（最初はたたむ・年間計画を見られる人だけ）と、
 //   つながった計画のタスクから出す自動の進み具合（手で直したら「手で入力」・「自動に戻す」）を出す。中身は lib/plan-goals.ts
 
@@ -23,12 +24,11 @@ import {
   GANTT_CATEGORIES,
   getGanttGradient,
   ganttYears,
-  barFractions,
   goalOverlapsYear,
-  todayFractionInYear,
-  milestonePosInFiscalYear,
-  fiscalMonthLabels,
-  fiscalMonthIndex,
+  goalTimeline,
+  barFractionsIn,
+  todayFractionIn,
+  milestonePosIn,
   fiscalYearOfDate,
   fiscalYearLabel,
   fiscalYearSpanLabel,
@@ -689,8 +689,6 @@ export default function GanttChart() {
   const years = useMemo(() => ganttYears(now), [now]);
   // 268: 年は年度（11月始まり）。目盛りも11月〜10月
   const currentYear = fiscalYearOfDate(now);
-  const currentMonth = fiscalMonthIndex(now);
-  const monthLabels = useMemo(() => fiscalMonthLabels(), []);
   // 268: つながった計画と自動の進み具合
   const { links, reload: reloadLinks } = useGoalLinks();
   const epOf = useCallback(
@@ -764,11 +762,6 @@ export default function GanttChart() {
     setTimeout(() => setToast(null), 2000);
   }, []);
 
-  // 今日の正確な位置（選択年内の割合 0〜1・日単位）
-  const todayPosition = useMemo(
-    () => todayFractionInYear(selectedYear, now),
-    [selectedYear, now]
-  );
 
   // 選択年に表示すべき goal をフィルタ
   const yearGoals = useMemo(
@@ -798,6 +791,21 @@ export default function GanttChart() {
           ),
     [yearGoals, horizonFilter]
   );
+
+  // 269: 選んだ年度に入っている目標が年度をまたぐときは、終わる月（始まる月）まで目盛りをのばす（前後それぞれ最大24か月）
+  const timeline = useMemo(() => goalTimeline(selectedYear, visibleGoals), [selectedYear, visibleGoals]);
+  const monthCols = `repeat(${timeline.months.length}, minmax(60px, 1fr))`;
+  const timelineMinW = timeline.months.length * 60;
+  // 今日の正確な位置（目盛りの中の割合 0〜1・日単位）
+  const todayPosition = useMemo(() => todayFractionIn(timeline, now), [timeline, now]);
+  // 最初は選んだ年度の11月を左端に（11月・12月が隠れないように）
+  const chartScrollRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = chartScrollRef.current;
+    const first = el?.querySelector<HTMLElement>("[data-goal-month]");
+    if (!el || !first) return;
+    el.scrollLeft = timeline.fyStartIndex * first.offsetWidth;
+  }, [selectedYear, timeline.fyStartIndex, timeline.months.length]);
 
   const persist = useCallback(
     async (next: GanttGoal[]) => {
@@ -836,7 +844,7 @@ export default function GanttChart() {
 
   // goal のバー位置（日単位・選択年に対する割合）
   const getBarStyle = (goal: GanttGoal) => {
-    const { left, width } = barFractions(goal, selectedYear);
+    const { left, width } = barFractionsIn(goal, timeline);
     return { left: `${left}%`, width: `${width}%` };
   };
 
@@ -941,11 +949,11 @@ export default function GanttChart() {
       </div>
 
       {/* ガントチャート本体 */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+      <div ref={chartScrollRef} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto" data-goal-chart-scroll>
         {/* ヘッダー */}
         <div className="flex border-b border-gray-100 min-w-fit">
           <div
-            className="w-[33vw] sm:w-48 shrink-0 sticky left-0 z-10 bg-white/40 backdrop-blur-sm px-2 sm:px-4 py-3 text-[10px] font-semibold text-gray-500 flex items-center justify-between border-r border-gray-100 cursor-pointer hover:bg-gray-50/40 transition-colors"
+            className="w-[33vw] sm:w-48 shrink-0 sticky left-0 z-40 bg-white px-2 sm:px-4 py-3 text-[10px] font-semibold text-gray-500 flex items-center justify-between border-r border-gray-100 cursor-pointer hover:bg-gray-50/40 transition-colors"
             onClick={() => setShowGoalsList(true)}
           >
             <span className="truncate">目標</span>
@@ -953,19 +961,30 @@ export default function GanttChart() {
               {visibleGoals.length}件
             </span>
           </div>
-          <div className="grid grid-cols-12 min-w-[720px] flex-1">
-            {monthLabels.map((m, i) => (
-              <div
-                key={m}
-                className={`px-1 py-3 text-center text-[10px] sm:text-[11px] font-medium border-l border-gray-50 min-w-[60px] ${
-                  selectedYear === currentYear && i === currentMonth
-                    ? "bg-gray-50 text-gray-700 font-bold"
-                    : "text-gray-400"
-                }`}
-              >
-                {m}
-              </div>
-            ))}
+          <div className="grid flex-1" style={{ gridTemplateColumns: monthCols, minWidth: timelineMinW }}>
+            {timeline.months.map((m) => {
+              const isNow = m.year === now.getFullYear() && m.month === now.getMonth();
+              return (
+                <div
+                  key={`${m.year}-${m.month}`}
+                  className={`relative px-1 pt-4 pb-2 text-center text-[10px] sm:text-[11px] font-medium min-w-[60px] ${
+                    m.fyMark ? "border-l-2 border-dashed border-violet-300" : "border-l border-gray-50"
+                  } ${isNow ? "bg-gray-50 text-gray-700 font-bold" : m.outside ? "bg-gray-50/70 text-gray-300" : "text-gray-400"}`}
+                  data-goal-month={`${m.year}-${m.month + 1}`}
+                  data-goal-month-outside={m.outside ? "1" : undefined}
+                >
+                  {m.fyMark && (
+                    <span className="absolute left-1 top-0.5 whitespace-nowrap rounded-full bg-violet-50 px-1.5 text-[9px] font-bold text-violet-700" data-goal-fy-mark={m.fyMark}>
+                      {m.fyMark}
+                    </span>
+                  )}
+                  {m.yearMark && !m.fyMark && (
+                    <span className="absolute left-1 top-0.5 text-[9px] text-violet-600">{m.yearMark}</span>
+                  )}
+                  {m.label}
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -995,7 +1014,7 @@ export default function GanttChart() {
             >
               {/* 目標名（sticky固定） */}
               <div
-                className="w-[33vw] sm:w-48 shrink-0 sticky left-0 z-10 bg-white/40 backdrop-blur-sm group-hover:bg-gray-50/40 px-2 sm:px-4 py-3 flex items-center justify-between border-r border-gray-100 transition-colors"
+                className="w-[33vw] sm:w-48 shrink-0 sticky left-0 z-40 bg-white group-hover:bg-gray-50 px-2 sm:px-4 py-3 flex items-center justify-between border-r border-gray-100 transition-colors"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="min-w-0 flex-1">
@@ -1113,7 +1132,7 @@ export default function GanttChart() {
               </div>
 
               {/* バーエリア（横スクロール対象） */}
-              <div className="relative grid grid-cols-12 py-3 min-w-[720px] flex-1">
+              <div className="relative grid py-3 flex-1" style={{ gridTemplateColumns: monthCols, minWidth: timelineMinW }}>
                 {todayPosition !== null && (
                   <div
                     className="absolute top-0 bottom-0 w-0.5 bg-gray-500 z-30"
@@ -1122,8 +1141,11 @@ export default function GanttChart() {
                 )}
 
                 {/* 月グリッド線 */}
-                {monthLabels.map((_, i) => (
-                  <div key={i} className="border-l border-gray-50 min-w-[60px]" />
+                {timeline.months.map((m) => (
+                  <div
+                    key={`${m.year}-${m.month}`}
+                    className={`min-w-[60px] ${m.fyMark ? "border-l-2 border-dashed border-violet-200" : "border-l border-gray-50"} ${m.outside ? "bg-gray-50/60" : ""}`}
+                  />
                 ))}
 
                 {/* 期間バー */}
@@ -1142,10 +1164,16 @@ export default function GanttChart() {
                             className="absolute inset-y-0 left-0 bg-white/20 rounded-2xl"
                             style={{ width: `${ep.value}%` }}
                           />
-                          <div className="relative z-10 flex items-center h-full px-3">
+                          <div className="relative z-10 flex items-center h-full px-3 gap-2">
                             <span className="text-[10px] font-bold text-white truncate drop-shadow-sm">
                               {goal.title}
                             </span>
+                            {/* 269: のばす上限で切ったときは、終わる月を出す */}
+                            {barFractionsIn(goal, timeline).cutEnd && (
+                              <span className="ml-auto shrink-0 text-[9px] font-bold text-white drop-shadow-sm" data-goal-cap>
+                                → {goal.end.slice(0, 4)}年{Number(goal.end.slice(5, 7))}月まで
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1155,7 +1183,7 @@ export default function GanttChart() {
 
                 {/* マイルストーン（月ベース・概念保持） */}
                 {goal.milestones.map((ms, idx) => {
-                  const frac = milestonePosInFiscalYear(ms, selectedYear);
+                  const frac = milestonePosIn(ms, timeline);
                   if (frac === null) return null;
                   const pos = frac * 100;
                   const g = getGanttGradient(goal.color);

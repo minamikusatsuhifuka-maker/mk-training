@@ -40,6 +40,9 @@ import {
   periodLabel,
   planAssigneeLabel,
   rangeFor,
+  extendYearRange,
+  ymLabel,
+  type ExtendedYearRange,
   shortDate,
   spanIn,
   swapOrder,
@@ -178,8 +181,9 @@ function TimelineBackdrop({ range, today, showTodayLine }: { range: GanttRange; 
             style={{
               left: `${s.left * 100}%`,
               width: `${s.width * 100}%`,
-              borderLeft: i === 0 ? undefined : `1px solid ${C.ruleMonth}`,
-              background: col.current ? C.currentCol : col.weekend ? C.weekend : undefined,
+              // 269: 年度の境目は太めの線・年度の外の月はうすい色
+              borderLeft: i === 0 ? undefined : col.fyMark ? "2px dashed rgba(169, 138, 224, 0.75)" : `1px solid ${C.ruleMonth}`,
+              background: col.current ? C.currentCol : col.outside ? "rgba(236, 232, 236, 0.55)" : col.weekend ? C.weekend : undefined,
             }}
           />
         );
@@ -201,8 +205,11 @@ function PlanBar({
   open,
   today,
   hoverProps,
+  capLabel,
   onOpen,
 }: {
+  /** 269: のばす上限で切った棒の端に出す「→ ○年○月まで」 */
+  capLabel?: string;
   plan: GanttPlan;
   depth: 0 | 1;
   color: GanttColorKey;
@@ -270,6 +277,11 @@ function PlanBar({
             : "inset 0 1px 0 rgba(255, 255, 255, 0.8)",
       }}
     >
+      {capLabel && (
+        <span className="absolute right-2 top-1/2 -translate-y-1/2 whitespace-nowrap text-[10px] font-bold" style={{ color: pal.text }} data-gantt-cap>
+          {capLabel}
+        </span>
+      )}
       {/* 252 §3: 完了になったら横棒に✓ */}
       {plan.status === "done" && (
         <span
@@ -295,8 +307,11 @@ function TaskRow({
   open,
   nameHover,
   diamondHover,
+  minWidth,
   onOpen,
 }: {
+  /** 269: 横棒の部分の最小の幅（年表示はのばした月の数に合わせる） */
+  minWidth?: number;
   task: GanttTask;
   color: GanttColorKey;
   range: GanttRange;
@@ -329,7 +344,7 @@ function TaskRow({
           </span>
         )}
       </div>
-      <div className="relative flex-1" style={{ minWidth: TIMELINE_MIN[view], height: TASK_ROW_H }}>
+      <div className="relative flex-1" style={{ minWidth: minWidth ?? TIMELINE_MIN[view], height: TASK_ROW_H }}>
         {span && (
           <button
             type="button"
@@ -1194,7 +1209,7 @@ export function GanttBoard() {
     void load();
   }, [load]);
 
-  const range = useMemo(() => rangeFor(view, today, offset, data?.fiscalStartMonth ?? PLAN_FISCAL_START_MONTH), [view, today, offset, data?.fiscalStartMonth]);
+  const baseRange = useMemo(() => rangeFor(view, today, offset, data?.fiscalStartMonth ?? PLAN_FISCAL_START_MONTH), [view, today, offset, data?.fiscalStartMonth]);
   const categories = useMemo(() => data?.categories ?? [], [data]);
   const visibleCats = useMemo(() => new Set(categories.map((c) => c.id).filter((id) => !hiddenCats.has(id))), [categories, hiddenCats]);
   const clinicGoals = useMemo(() => data?.clinicGoals ?? [], [data]);
@@ -1203,6 +1218,18 @@ export function GanttBoard() {
     const byValue = (data?.plans ?? []).filter((p) => matchesValue(p, p.goalId ? goals.find((g) => g.id === p.goalId) : null, valueFilter));
     return groupPlans(filterPlansByGoal(byValue, goalFilter), categories, visibleCats);
   }, [data, categories, visibleCats, goalFilter, valueFilter]);
+  // 269: 年表示は、出している計画のうち年度をまたぐものの始まる月〜終わる月まで、前後にのばす（最大24か月）。月・四半期は今のまま
+  const range: GanttRange & Partial<ExtendedYearRange> = useMemo(
+    () =>
+      view === "year"
+        ? extendYearRange(baseRange, groups.flatMap((g) => g.rows.map((r) => r.plan)), data?.fiscalStartMonth ?? PLAN_FISCAL_START_MONTH, today)
+        : baseRange,
+    [view, baseRange, groups, data?.fiscalStartMonth, today]
+  );
+  /** 横棒の部分の最小の幅（年表示はのばした月の数に合わせて広げる） */
+  const timelineMin = view === "year" ? Math.round((TIMELINE_MIN.year * range.columns.length) / 12) : TIMELINE_MIN[view];
+  /** 「今日」を押した回数（押したら今日の位置へ動かす） */
+  const [todayTick, setTodayTick] = useState(0);
   const goalOf = (p: GanttPlan) => (p.goalId ? clinicGoals.find((g) => g.id === p.goalId) ?? null : null);
   const canWrite = !!data?.canWrite;
   const openedPlan = opened ? data?.plans.find((p) => p.id === opened.id) ?? null : null;
@@ -1210,23 +1237,31 @@ export function GanttBoard() {
   // 横にずらして見る画面（スマホなど）では、今日の位置が見えるところまで自動でずらす
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const hasData = !!data;
+  // 269: 年度の11月の位置と今日の位置（数で持つ＝データを読み直しただけでは横の位置を動かさない）
+  const fyLeft = range.view === "year" && range.fyFrom ? columnSpan(range, { from: range.fyFrom, until: range.fyFrom }).left : 0;
+  const todayFrac = todayIn(range, today);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const nameW = el.querySelector<HTMLElement>("[data-gantt-namehead]")?.offsetWidth ?? 0;
     // 267: 図そのものが入りきらないときだけずらす（右端の「今日」の札や日付の文字が少しはみ出すだけなら、ずらさずに左端から見せる）
-    if (nameW + TIMELINE_MIN[range.view] <= el.clientWidth) {
+    if (nameW + timelineMin <= el.clientWidth) {
       el.scrollLeft = 0;
       return;
     }
-    const t = todayIn(range, today);
-    const timelineW = el.scrollWidth - nameW;
+    const timelineW = Math.max(timelineMin, el.scrollWidth - nameW);
     const visibleW = el.clientWidth - nameW;
-    el.scrollLeft = t === null ? 0 : Math.max(0, t * timelineW - visibleW / 3);
-  }, [range, today, hasData]);
+    // 269: 年表示は、最初は表示している年度の11月を左端に（「今日」を押したときだけ今日へ）
+    if (view === "year" && todayTick === 0) {
+      el.scrollLeft = Math.max(0, fyLeft * timelineW);
+      return;
+    }
+    el.scrollLeft = todayFrac === null ? 0 : Math.max(0, todayFrac * timelineW - visibleW / 3);
+  }, [view, fyLeft, todayFrac, hasData, timelineMin, todayTick]);
 
   const changeView = (v: GanttView) => {
     setView(v);
+    setTodayTick(0);
     setOffset(0);
     setOpened(null);
   };
@@ -1564,13 +1599,13 @@ export function GanttBoard() {
             })}
           </div>
           <div className="flex items-center gap-0.5 rounded-full p-1" style={pill}>
-            <button type="button" aria-label={range.prevLabel} onClick={() => { setOffset((o) => o - 1); setOpened(null); }} className="flex h-[44px] w-[44px] items-center justify-center rounded-full" data-gantt-prev>
+            <button type="button" aria-label={range.prevLabel} onClick={() => { setOffset((o) => o - 1); setTodayTick(0); setOpened(null); }} className="flex h-[44px] w-[44px] items-center justify-center rounded-full" data-gantt-prev>
               <Chevron dir="left" />
             </button>
-            <button type="button" onClick={() => { setOffset(0); setOpened(null); }} className="min-h-[44px] w-[64px] rounded-full text-[14px]" style={{ background: C.todayBtn, color: C.statusText }} data-gantt-today>
+            <button type="button" onClick={() => { setOffset(0); setTodayTick((n) => n + 1); setOpened(null); }} className="min-h-[44px] w-[64px] rounded-full text-[14px]" style={{ background: C.todayBtn, color: C.statusText }} data-gantt-today>
               今日
             </button>
-            <button type="button" aria-label={range.nextLabel} onClick={() => { setOffset((o) => o + 1); setOpened(null); }} className="flex h-[44px] w-[44px] items-center justify-center rounded-full" data-gantt-next>
+            <button type="button" aria-label={range.nextLabel} onClick={() => { setOffset((o) => o + 1); setTodayTick(0); setOpened(null); }} className="flex h-[44px] w-[44px] items-center justify-center rounded-full" data-gantt-next>
               <Chevron dir="right" />
             </button>
           </div>
@@ -1726,7 +1761,7 @@ export function GanttBoard() {
                   <div className={`${NAME_COL} sticky left-0 z-20 flex shrink-0 items-end pb-2.5 pl-3 text-[12px]`} style={{ color: C.sub, background: "rgba(255,255,255,0.97)", height: 56 }} data-gantt-namehead>
                     計画
                   </div>
-                  <div className="relative flex-1" style={{ minWidth: TIMELINE_MIN[view], height: 56 }}>
+                  <div className="relative flex-1" style={{ minWidth: timelineMin, height: 56 }}>
                     {range.columns.map((col) => {
                       const s = columnSpan(range, col);
                       return (
@@ -1736,18 +1771,32 @@ export function GanttBoard() {
                           style={{
                             left: `${s.left * 100}%`,
                             width: `${s.width * 100}%`,
-                            color: col.current ? C.currentText : col.weekend ? "#9A8A90" : C.sub,
+                            color: col.current ? C.currentText : col.outside ? "#B7AAB0" : col.weekend ? "#9A8A90" : C.sub,
                             fontWeight: col.current ? 700 : 400,
                             fontSize: view === "month" ? 11 : 12,
                           }}
                           data-gantt-col={col.from}
                           data-gantt-col-current={col.current ? "1" : undefined}
+                          data-gantt-col-outside={col.outside ? "1" : undefined}
                         >
                           {col.yearMark && <span className="text-[10px]" style={{ color: "#8E5BB5" }}>{col.yearMark}</span>}
                           {col.label}
                         </div>
                       );
                     })}
+                    {/* 269: 年度の境目に次の年度の名前を小さく（線は TimelineBackdrop が全行に引く） */}
+                    {range.columns.map((col) =>
+                      col.fyMark ? (
+                        <span
+                          key={`fy-${col.from}`}
+                          className="absolute top-1 whitespace-nowrap rounded-full px-2 py-[1px] text-[10px] font-bold"
+                          style={{ left: `calc(${columnSpan(range, col).left * 100}% + 4px)`, color: "#8E5BB5", background: "rgba(243, 236, 250, 0.95)" }}
+                          data-gantt-fy-mark={col.fyMark}
+                        >
+                          {col.fyMark}
+                        </span>
+                      ) : null
+                    )}
                     {todayIn(range, today) !== null && (
                       <div
                         className="absolute top-1 z-10 -translate-x-1/2 whitespace-nowrap rounded-full px-2.5 py-[3px] text-[11px] font-bold text-white"
@@ -1763,7 +1812,7 @@ export function GanttBoard() {
                 {groups.length === 0 && (
                   <div className="flex">
                     <div className={`${NAME_COL} sticky left-0 shrink-0`} style={{ background: "rgba(255,255,255,0.97)" }} />
-                    <div className="relative flex-1 py-10 text-center text-[14px]" style={{ minWidth: TIMELINE_MIN[view], color: C.sub }} data-gantt-empty>
+                    <div className="relative flex-1 py-10 text-center text-[14px]" style={{ minWidth: timelineMin, color: C.sub }} data-gantt-empty>
                       {data?.plans.length ? (goalFilter || valueFilter ? "選んだ条件の計画はありません" : "選んだ分類の計画はありません") : canWrite ? "まだ計画はありません。「＋ 追加」から書けます" : "まだ計画はありません。「＋ チームプロジェクトを追加」から書けます"}
                     </div>
                   </div>
@@ -1790,7 +1839,7 @@ export function GanttBoard() {
                             {category.name}
                           </span>
                         </div>
-                        <div className="relative flex-1" style={{ minWidth: TIMELINE_MIN[view], height: CAT_ROW_H }} />
+                        <div className="relative flex-1" style={{ minWidth: timelineMin, height: CAT_ROW_H }} />
                       </div>
                       {rows.map(({ plan, depth }) => {
                         const fromMatrix = plan.source === "matrix";
@@ -1863,7 +1912,7 @@ export function GanttBoard() {
                                 </span>
                               )}
                             </div>
-                            <div className="relative flex-1" style={{ minWidth: TIMELINE_MIN[view], height: ROW_H }}>
+                            <div className="relative flex-1" style={{ minWidth: timelineMin, height: ROW_H }}>
                               <PlanBar
                                 plan={plan}
                                 depth={depth}
@@ -1872,6 +1921,7 @@ export function GanttBoard() {
                                 today={today}
                                 open={opened?.id === plan.id}
                                 hoverProps={hoverBind({ kind: "plan", planId: plan.id }, plan.start === plan.end ? "cell" : "pointer")}
+                                capLabel={range.cappedUntil && plan.end >= range.until ? `→ ${ymLabel(plan.end)}まで` : undefined}
                                 onOpen={(el) => setOpened((prev) => (prev?.id === plan.id && !prev.taskId ? null : { id: plan.id, el }))}
                               />
                             </div>
@@ -1885,6 +1935,7 @@ export function GanttBoard() {
                               range={range}
                               view={view}
                               open={opened?.taskId === t.id}
+                              minWidth={timelineMin}
                               nameHover={hoverBind({ kind: "task", planId: plan.id, taskId: t.id })}
                               diamondHover={hoverBind({ kind: "task", planId: plan.id, taskId: t.id })}
                               onOpen={(el) => setOpened((prev) => (prev?.taskId === t.id ? null : { id: plan.id, el, taskId: t.id }))}

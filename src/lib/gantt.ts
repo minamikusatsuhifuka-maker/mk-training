@@ -537,6 +537,10 @@ export type GanttColumn = {
   current: boolean;
   /** 土日（月表示だけ） */
   weekend?: boolean;
+  /** 269: 表示している年度の外の月（年表示で前後にのばした所）。うすい色にする */
+  outside?: boolean;
+  /** 269: 年度の境目（この列から次の年度）。上に年度の名前を小さく出す（例：「2026年度」） */
+  fyMark?: string;
 };
 
 /** offset＝今日のある期間からいくつ前後に送ったか */
@@ -628,6 +632,67 @@ export function rangeFor(view: GanttView, today: string, offset: number, fiscalS
     nextLabel: "次の四半期",
     columns,
   };
+}
+
+// ─── 269: 年度をまたぐ計画は、終わる月（始まる月）まで年表示をのばす ───
+
+/** 年度の前後にのばせる上限（か月） */
+export const YEAR_EXTEND_MAX_MONTHS = 24;
+
+export type ExtendedYearRange = GanttRange & {
+  /** 表示している年度そのものの最初の日と最後の次の日（のばす前） */
+  fyFrom: string;
+  fyUntil: string;
+  /** 上限で切った所（その先にまだ続く計画がある）。棒の端に「→ ○年○月まで」を出すのに使う */
+  cappedUntil: boolean;
+  cappedFrom: boolean;
+};
+
+/**
+ * 年表示の範囲を、その年度に入っている計画のうち、いちばん早く始まるものの始まる月から、いちばん遅く終わるものの終わる月までにのばす。
+ *   のばすのは年度の前後それぞれ最大24か月。年度をまたぐものが無ければ、年度（11月〜10月）のまま。
+ *   列は月ごと。年度の外の列は outside、年度の境目（11月の列・最初の列を除く）は fyMark に年度の名前、1月の列は yearMark に年。
+ */
+export function extendYearRange(range: GanttRange, periods: { start: string; end: string }[], fiscalStart: number, today: string): ExtendedYearRange {
+  const fyFrom = range.from;
+  const fyUntil = range.until;
+  const inside = periods.filter((p) => p.start < fyUntil && p.end >= fyFrom);
+  const minFrom = firstOf(ymOf(fyFrom).y, ymOf(fyFrom).m - YEAR_EXTEND_MAX_MONTHS);
+  const maxUntil = firstOf(ymOf(fyUntil).y, ymOf(fyUntil).m + YEAR_EXTEND_MAX_MONTHS);
+  let from = fyFrom;
+  let until = fyUntil;
+  for (const p of inside) {
+    const s = firstOf(ymOf(p.start).y, ymOf(p.start).m);
+    const e = firstOf(ymOf(p.end).y, ymOf(p.end).m + 1);
+    if (s < from) from = s;
+    if (e > until) until = e;
+  }
+  const cappedFrom = from < minFrom;
+  const cappedUntil = until > maxUntil;
+  if (cappedFrom) from = minFrom;
+  if (cappedUntil) until = maxUntil;
+  if (from === fyFrom && until === fyUntil) return { ...range, fyFrom, fyUntil, cappedFrom: false, cappedUntil: false };
+  const columns: GanttColumn[] = [];
+  for (let cf = from, i = 0; cf < until; i++) {
+    const c = ymOf(cf);
+    const next = firstOf(c.y, c.m + 1);
+    columns.push({
+      from: cf,
+      until: next,
+      label: `${c.m}月`,
+      yearMark: i > 0 && c.m === 1 ? String(c.y) : undefined,
+      current: today >= cf && today < next,
+      outside: cf < fyFrom || cf >= fyUntil,
+      fyMark: i > 0 && c.m === fiscalStart ? `${fiscalYearOf(cf, fiscalStart)}年度` : undefined,
+    });
+    cf = next;
+  }
+  return { ...range, from, until, columns, fyFrom, fyUntil, cappedFrom, cappedUntil };
+}
+
+/** 「2027年3月」（上限で切った棒の端に出す） */
+export function ymLabel(ymd: string): string {
+  return `${Number(ymd.slice(0, 4))}年${Number(ymd.slice(5, 7))}月`;
 }
 
 /** 期間の中の位置（0〜1）。範囲の外は切る。重ならなければ null */

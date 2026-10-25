@@ -213,6 +213,91 @@ export function todayFractionInYear(
   return (todayMid - startMs) / (endMs - startMs);
 }
 
+// ─── 269: 年度をまたぐ目標は、終わる月（始まる月）まで目盛りをのばす（前後それぞれ最大24か月） ───
+
+export const GOAL_EXTEND_MAX_MONTHS = 24;
+
+export type GoalMonth = {
+  year: number;
+  /** 0＝1月 … 11＝12月 */
+  month: number;
+  label: string;
+  /** 年度の外の月（うすい色） */
+  outside: boolean;
+  /** 年度の境目（この月から次の年度）。上に年度の名前を小さく出す */
+  fyMark?: string;
+  /** 年が変わる所で年を出す */
+  yearMark?: string;
+};
+
+export type GoalTimeline = {
+  months: GoalMonth[];
+  startMs: number;
+  endMs: number;
+  /** 表示している年度の11月の列の番号（最初の横の位置に使う） */
+  fyStartIndex: number;
+  /** 上限で切った（その先にまだ続く目標がある） */
+  cappedUntil: boolean;
+};
+
+/** 選んだ年度に入っている目標の、いちばん早く始まる月〜いちばん遅く終わる月まで（年度より短くはしない） */
+export function goalTimeline(fy: number, goals: GanttGoal[]): GoalTimeline {
+  const fs = GOAL_FISCAL_START_MONTH - 1;
+  const fyStart = new Date(fy, fs, 1);
+  const fyEnd = new Date(fy + 1, fs, 1);
+  let from = fyStart;
+  let until = fyEnd;
+  for (const g of goals.filter((x) => goalOverlapsYear(x, fy))) {
+    const s = parseYmd(g.start);
+    const e = parseYmd(g.end) ?? s;
+    if (s && s < from) from = new Date(s.getFullYear(), s.getMonth(), 1);
+    if (e) {
+      const next = new Date(e.getFullYear(), e.getMonth() + 1, 1);
+      if (next > until) until = next;
+    }
+  }
+  const minFrom = new Date(fy, fs - GOAL_EXTEND_MAX_MONTHS, 1);
+  const maxUntil = new Date(fy + 1, fs + GOAL_EXTEND_MAX_MONTHS, 1);
+  if (from < minFrom) from = minFrom;
+  const cappedUntil = until > maxUntil;
+  if (cappedUntil) until = maxUntil;
+  const months: GoalMonth[] = [];
+  let fyStartIndex = 0;
+  for (let d = new Date(from), i = 0; d < until; i++, d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+    if (d.getTime() === fyStart.getTime()) fyStartIndex = i;
+    months.push({
+      year: d.getFullYear(),
+      month: d.getMonth(),
+      label: MONTH_LABELS[d.getMonth()],
+      outside: d < fyStart || d >= fyEnd,
+      fyMark: i > 0 && d.getMonth() === fs ? fiscalYearLabel(fiscalYearOfDate(d)) : undefined,
+      yearMark: i > 0 && d.getMonth() === 0 ? String(d.getFullYear()) : undefined,
+    });
+  }
+  return { months, startMs: from.getTime(), endMs: until.getTime(), fyStartIndex, cappedUntil };
+}
+
+/** 目盛りの中のバーの位置（%） */
+export function barFractionsIn(goal: GanttGoal, t: Pick<GoalTimeline, "startMs" | "endMs">): { left: number; width: number; cutEnd: boolean } {
+  const span = t.endMs - t.startMs;
+  const s = Math.max(goalStartMs(goal), t.startMs);
+  const e = Math.min(goalEndMsExclusive(goal), t.endMs);
+  return { left: ((s - t.startMs) / span) * 100, width: (Math.max(0, e - s) / span) * 100, cutEnd: goalEndMsExclusive(goal) > t.endMs };
+}
+
+/** 今日の位置（0〜1・目盛りの外なら null） */
+export function todayFractionIn(t: Pick<GoalTimeline, "startMs" | "endMs">, now: Date = new Date()): number | null {
+  const mid = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (mid < t.startMs || mid >= t.endMs) return null;
+  return (mid - t.startMs) / (t.endMs - t.startMs);
+}
+
+/** マイルストーンの目盛りの中の位置（0〜1・外なら null） */
+export function milestonePosIn(ms: Milestone, t: GoalTimeline): number | null {
+  const i = t.months.findIndex((m) => m.year === ms.year && m.month === ms.month);
+  return i < 0 ? null : (i + 0.5) / t.months.length;
+}
+
 // マイルストーンの年度内位置（月ベース・概念保持）。その年度に入らなければ null（268）
 export function milestonePosInFiscalYear(ms: Milestone, fy: number): number | null {
   const d = new Date(ms.year, ms.month, 1);
