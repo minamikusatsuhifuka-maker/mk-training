@@ -56,6 +56,10 @@ import {
 import { OVERDUE_LABEL, isOverdue, progressLabel, swapTaskOrder, tasksOfPlan, type GanttTask } from "@/lib/gantt-tasks";
 import { JudgeChip, TaskForm, TaskList, TaskStatusChip, ganttApi, type TaskDraft, type TaskPerms } from "./GanttTasks";
 import { filterPlansByGoal, type ClinicGoalBrief } from "@/lib/plan-goals";
+import { GanttHoverCard, useGanttHover } from "./GanttHoverCard";
+
+/** 267: カーソルを合わせたときのポップアップの出し入れ（useGanttHover の bind が返すもの） */
+type HoverProps = ReturnType<ReturnType<typeof useGanttHover>["bind"]>;
 
 // ─── 見本の値（sakura-theme.ts に置いた） ───
 
@@ -64,7 +68,8 @@ const VIEW_LS_KEY = "mk_gantt_view";
 
 /** 名前の列の幅（スマホ／PC）と、横棒の部分の最小の幅（表示ごと） */
 const NAME_COL = "w-[132px] md:w-[260px]";
-const TIMELINE_MIN: Record<GanttView, number> = { year: 720, quarter: 760, month: 930 };
+// 年は 640（267: パソコンの幅で11月〜10月がずらさずに全部見えるように。720 だと入りきらず、今日の月へ自動でずらして11月・12月が隠れていた）
+const TIMELINE_MIN: Record<GanttView, number> = { year: 640, quarter: 760, month: 930 };
 const CAT_ROW_H = 44;
 const ROW_H = 48;
 
@@ -189,6 +194,7 @@ function PlanBar({
   range,
   open,
   today,
+  hoverProps,
   onOpen,
 }: {
   plan: GanttPlan;
@@ -197,6 +203,8 @@ function PlanBar({
   range: GanttRange;
   open: boolean;
   today: string;
+  /** 267: カーソルを合わせたときのポップアップ */
+  hoverProps?: HoverProps;
   onOpen: (el: HTMLElement) => void;
 }) {
   const pal = GANTT_PALETTES[color];
@@ -208,6 +216,7 @@ function PlanBar({
     return (
       <button
         type="button"
+        {...hoverProps}
         onClick={(e) => onOpen(e.currentTarget)}
         aria-label={label}
         aria-expanded={open}
@@ -235,6 +244,7 @@ function PlanBar({
   return (
     <button
       type="button"
+      {...hoverProps}
       onClick={(e) => onOpen(e.currentTarget)}
       aria-label={label}
       aria-expanded={open}
@@ -277,6 +287,8 @@ function TaskRow({
   range,
   view,
   open,
+  nameHover,
+  diamondHover,
   onOpen,
 }: {
   task: GanttTask;
@@ -284,6 +296,9 @@ function TaskRow({
   range: GanttRange;
   view: GanttView;
   open: boolean;
+  /** 267: 名前の欄と◆にカーソルを合わせたときのポップアップ */
+  nameHover?: HoverProps;
+  diamondHover?: HoverProps;
   onOpen: (el: HTMLElement) => void;
 }) {
   const pal = GANTT_PALETTES[color];
@@ -294,9 +309,11 @@ function TaskRow({
       <div
         className={`${NAME_COL} sticky left-0 z-10 flex shrink-0 items-center gap-1 pr-2 md:pr-3.5`}
         style={{ height: TASK_ROW_H, paddingLeft: 30, background: "rgba(255,255,255,0.97)" }}
+        {...nameHover}
+        data-gantt-task-name={task.id}
       >
         <span aria-hidden="true" className="h-[6px] w-[6px] shrink-0 rotate-45 rounded-[1px]" style={{ background: pal.dot[0] }} />
-        <span className="min-w-0 flex-1 truncate text-[11px] md:text-[12px]" style={{ color: done ? C.sub : C.ink }} title={task.title}>
+        <span tabIndex={0} className="min-w-0 flex-1 truncate rounded text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-[#E7A6B8] md:text-[12px]" style={{ color: done ? C.sub : C.ink }}>
           {done && "✓ "}
           {task.title}
         </span>
@@ -310,6 +327,7 @@ function TaskRow({
         {span && (
           <button
             type="button"
+            {...diamondHover}
             onClick={(e) => onOpen(e.currentTarget)}
             aria-label={`タスク「${task.title}」（期限 ${shortDate(task.due)}・${STATUS_LABEL[task.status]}${task.directorJudge ? "・院長が判断" : ""}）のくわしい内容`}
             aria-expanded={open}
@@ -1083,6 +1101,8 @@ export function GanttBoard() {
   const [hiddenCats, setHiddenCats] = useState<Set<string>>(new Set());
   // 268: 「クリニック目標」での絞り込み（空＝すべて）
   const [goalFilter, setGoalFilter] = useState("");
+  // 267: カーソルを合わせたときのポップアップ（パソコンだけ）
+  const { hover, bind: hoverBind } = useGanttHover();
   const [opened, setOpened] = useState<{ id: string; el: HTMLElement; taskId?: string } | null>(null);
   // 263: タスクを開いている計画（最初はたたむ）・タスクを足す/直す欄・「院長が判断」の一覧
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -1134,9 +1154,14 @@ export function GanttBoard() {
   const hasData = !!data;
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el || el.scrollWidth <= el.clientWidth) return;
-    const t = todayIn(range, today);
+    if (!el) return;
     const nameW = el.querySelector<HTMLElement>("[data-gantt-namehead]")?.offsetWidth ?? 0;
+    // 267: 図そのものが入りきらないときだけずらす（右端の「今日」の札や日付の文字が少しはみ出すだけなら、ずらさずに左端から見せる）
+    if (nameW + TIMELINE_MIN[range.view] <= el.clientWidth) {
+      el.scrollLeft = 0;
+      return;
+    }
+    const t = todayIn(range, today);
     const timelineW = el.scrollWidth - nameW;
     const visibleW = el.clientWidth - nameW;
     el.scrollLeft = t === null ? 0 : Math.max(0, t * timelineW - visibleW / 3);
@@ -1690,6 +1715,7 @@ export function GanttBoard() {
                               className={`${NAME_COL} sticky left-0 z-10 flex shrink-0 items-center gap-1.5 pr-2 md:gap-2 md:pr-3.5`}
                               style={{ height: ROW_H, paddingLeft: planTasks.length ? (depth ? 14 : 4) : depth ? 22 : 12, background: "rgba(255,255,255,0.97)" }}
                               data-gantt-name={plan.id}
+                              {...hoverBind({ kind: "plan", planId: plan.id })}
                             >
                               {/* 263: タスクのある計画は、開く・たたむ（最初はたたむ） */}
                               {planTasks.length > 0 && (
@@ -1710,7 +1736,7 @@ export function GanttBoard() {
                               )}
                               {plan.kind === "team" ? (
                                 // 252 §3: チーム名と、プロジェクト概要の最初の1行（はみ出す分は「…」）
-                                <span className="min-w-0 flex-1 leading-tight" title={`${plan.name}\n${plan.memo}`}>
+                                <span tabIndex={0} className="min-w-0 flex-1 rounded leading-tight outline-none focus-visible:ring-2 focus-visible:ring-[#E7A6B8]">
                                   <span className="block truncate text-[12px] font-medium md:text-[14px]" style={{ color: C.ink }}>
                                     {plan.name}
                                   </span>
@@ -1720,9 +1746,9 @@ export function GanttBoard() {
                                 </span>
                               ) : (
                                 <span
-                                  className={`min-w-0 flex-1 leading-tight [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden break-all ${depth ? "text-[12px] md:text-[13px]" : "text-[12px] font-medium md:text-[14px]"}`}
+                                  tabIndex={0}
+                                  className={`min-w-0 flex-1 rounded leading-tight outline-none focus-visible:ring-2 focus-visible:ring-[#E7A6B8] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden break-all ${depth ? "text-[12px] md:text-[13px]" : "text-[12px] font-medium md:text-[14px]"}`}
                                   style={{ color: depth ? C.sub : C.ink }}
-                                  title={plan.name}
                                 >
                                   {plan.name}
                                 </span>
@@ -1756,6 +1782,7 @@ export function GanttBoard() {
                                 range={range}
                                 today={today}
                                 open={opened?.id === plan.id}
+                                hoverProps={hoverBind({ kind: "plan", planId: plan.id }, plan.start === plan.end ? "cell" : "pointer")}
                                 onOpen={(el) => setOpened((prev) => (prev?.id === plan.id && !prev.taskId ? null : { id: plan.id, el }))}
                               />
                             </div>
@@ -1769,6 +1796,8 @@ export function GanttBoard() {
                               range={range}
                               view={view}
                               open={opened?.taskId === t.id}
+                              nameHover={hoverBind({ kind: "task", planId: plan.id, taskId: t.id })}
+                              diamondHover={hoverBind({ kind: "task", planId: plan.id, taskId: t.id })}
                               onOpen={(el) => setOpened((prev) => (prev?.taskId === t.id ? null : { id: plan.id, el, taskId: t.id }))}
                             />
                           ))}
@@ -1879,6 +1908,25 @@ export function GanttBoard() {
           onClose={() => setForm(null)}
         />
       )}
+      {/* 267: カーソルを合わせたときのポップアップ（見られる計画・タスクだけ＝画面が持っているものだけ） */}
+      {hover &&
+        (() => {
+          const plan = data?.plans.find((p) => p.id === hover.target.planId);
+          if (!plan) return null;
+          const task = hover.target.kind === "task" ? (() => { const id = hover.target.taskId; return tasks.find((x) => x.id === id) ?? null; })() : null;
+          if (hover.target.kind === "task" && !task) return null;
+          return (
+            <GanttHoverCard
+              hover={hover}
+              plan={plan}
+              task={task}
+              category={categoryOf(categories, plan.categoryId)}
+              planTasks={tasksOfPlan(tasks, plan.id)}
+              goal={goalOf(plan)}
+              today={today}
+            />
+          );
+        })()}
       {teamForm && (
         <TeamForm
           initial={teamForm.initial}
