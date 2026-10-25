@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
+
 export default function PrintLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-white">
       <div className="no-print p-4 bg-slate-100 flex items-center justify-between border-b">
-        <a href="/" className="text-sm text-teal hover:underline">← 元のページに戻る</a>
+        <Link href="/" className="text-sm text-teal hover:underline">← 元のページに戻る</Link>
         <button
           type="button"
           onClick={() => window.print()}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 // 145: anon 直アクセスを廃止し認証必須APIへ
 import { getContentRow } from "@/lib/content-store-core";
 import { getContent, saveContent, CONTENT_KEYS } from "@/lib/content-store";
@@ -205,9 +206,9 @@ export default function QuizGeneratorPage() {
             ) : docs.length === 0 ? (
               <p className="text-sm text-gray-600 mt-1">
                 有効な資料がありません。
-                <a href="/admin/knowledge" className="text-teal-600 underline ml-1">
+                <Link href="/admin/knowledge" className="text-teal-600 underline ml-1">
                   知識ベースに追加
-                </a>
+                </Link>
               </p>
             ) : (
               <select
