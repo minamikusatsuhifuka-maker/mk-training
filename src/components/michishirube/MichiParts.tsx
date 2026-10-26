@@ -31,9 +31,12 @@ export function StepTable({
   steps,
   whenLabel,
   aside,
+  cardsOnly,
 }: {
   steps: MichiStep[];
   whenLabel: string;
+  /** 幅の狭い所（可能性ノートの中）では、パソコンでもカードで並べる */
+  cardsOnly?: boolean;
   /** 1行ごとに右に足す欄（道しるべタブの状態など） */
   aside?: { head: string; cell: (s: MichiStep) => ReactNode };
 }) {
@@ -41,7 +44,7 @@ export function StepTable({
   if (steps.length === 0) return <p className="text-xs text-muted-foreground">ステップはありません。</p>;
   return (
     <>
-      <div className="hidden md:block overflow-x-auto">
+      <div className={cardsOnly ? "hidden" : "hidden md:block overflow-x-auto"}>
         <table className="w-full border-collapse text-[13px] leading-relaxed" data-michi-steps>
           <thead>
             <tr>
@@ -75,7 +78,7 @@ export function StepTable({
           </tbody>
         </table>
       </div>
-      <ul className="md:hidden space-y-2" data-michi-step-cards>
+      <ul className={`${cardsOnly ? "" : "md:hidden "}space-y-2`} data-michi-step-cards>
         {steps.map((s) => (
           <li key={s.id} className="rounded-xl border border-slate-200 bg-white p-3 space-y-1.5" data-step-id={s.id}>
             <div className="flex items-center gap-2 text-xs">
@@ -105,16 +108,18 @@ export function LearnTable({
   rows,
   whenLabel,
   aside,
+  cardsOnly,
 }: {
   rows: MichiLearn[];
   whenLabel: string;
+  cardsOnly?: boolean;
   aside?: { head: string; cell: (l: MichiLearn) => ReactNode };
 }) {
   const hasWhen = rows.some((r) => r.when);
   if (rows.length === 0) return <p className="text-xs text-muted-foreground">学びのステップはありません。</p>;
   return (
     <>
-      <div className="hidden md:block overflow-x-auto">
+      <div className={cardsOnly ? "hidden" : "hidden md:block overflow-x-auto"}>
         <table className="w-full border-collapse text-[13px] leading-relaxed" data-michi-learn>
           <thead>
             <tr>
@@ -142,7 +147,7 @@ export function LearnTable({
           </tbody>
         </table>
       </div>
-      <ul className="md:hidden space-y-2" data-michi-learn-cards>
+      <ul className={`${cardsOnly ? "" : "md:hidden "}space-y-2`} data-michi-learn-cards>
         {rows.map((r) => (
           <li key={r.id} className="rounded-xl border border-slate-200 bg-white p-3 space-y-1.5" data-learn-id={r.id}>
             <div className="flex items-center gap-2 text-xs">

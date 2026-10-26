@@ -196,6 +196,7 @@ export function MichiProgressTab({ userId }: { userId?: string }) {
             <StepTable
               steps={cur.steps}
               whenLabel={cur.whenLabel}
+              cardsOnly
               aside={{ head: "進み具合", cell: (s) => <StepCell key={s.id} step={s} view={view} busy={busy} run={run} /> }}
             />
           </section>
@@ -264,6 +265,7 @@ export function MichiProgressTab({ userId }: { userId?: string }) {
             <LearnTable
               rows={cur.learnings}
               whenLabel={cur.learnWhenLabel}
+              cardsOnly
               aside={{ head: "学ぶ・実践・分かち合う", cell: (l) => <LearnCell key={l.id} row={l} view={view} busy={busy} run={run} /> }}
             />
           </section>
@@ -276,7 +278,7 @@ export function MichiProgressTab({ userId }: { userId?: string }) {
               </button>
               {showNext && (
                 <div className="space-y-2 opacity-90" data-michi-next>
-                  <StepTable steps={view.next.steps} whenLabel={view.next.whenLabel} />
+                  <StepTable steps={view.next.steps} whenLabel={view.next.whenLabel} cardsOnly />
                 </div>
               )}
             </section>
