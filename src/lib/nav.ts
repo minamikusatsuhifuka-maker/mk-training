@@ -23,6 +23,11 @@ export type MasterItem = {
   categoryId: string;
   external?: true;
   featureId?: PortalFlagId;
+  /**
+   * 270: 院長が作ったグループ（id は保存の中にしかない）のうち、この名前のグループがあれば、
+   * まだ置き場所が決まっていないときはそこに出す（無ければ categoryId）。院長がサイドバー構成で動かせば、そちらに従う。
+   */
+  preferCategoryLabel?: string;
 };
 
 export const MASTER_CATEGORIES: MasterCategory[] = [
@@ -58,6 +63,8 @@ export const MASTER_ITEMS: MasterItem[] = [
   { key: "/growth-actions", href: "/growth-actions", label: "🌱 成長の行動例", categoryId: "home" },
   // アチーブメントの教え（成功のサイクル・失敗のサイクル／人生の方程式／成功の公式／身につけたい7つの習慣）。静的・ログイン中のスタッフ全員
   { key: "/achievement", href: "/achievement", label: "🌱 アチーブメントの教え", categoryId: "home" },
+  // 270: 成長の道しるべ（8段のはしご・段ごとのステップ・技能の4段階・学びの地図）。既定OFF＝院長と検証用アカウントだけ
+  { key: "/michishirube", href: "/michishirube", label: "🧭 成長の道しるべ", categoryId: "home", featureId: "michishirube", preferCategoryLabel: "自己成長" },
   // 外部リンク（別タブ）。指示書59
   {
     key: "ai-incho",
@@ -273,6 +280,12 @@ export function categoryLabelOf(
 // - マスターに無い古いキーは捨てる
 // - 存在しないカテゴリを指す項目は「未分類」へ退避
 // - order を各カテゴリ内で連番に振り直す
+/** 270: preferCategoryLabel と同じ名前のグループ（あれば）の id */
+function preferredCategoryId(m: MasterItem, cats: readonly { id: string; label: string }[]): string | null {
+  if (!m.preferCategoryLabel) return null;
+  return cats.find((c) => c.label.trim() === m.preferCategoryLabel)?.id ?? null;
+}
+
 export function normalizeConfig(cfg: NavConfig | null | undefined): NavConfig {
   const base = isValidConfig(cfg) ? cfg : buildDefaultConfig();
 
@@ -293,7 +306,7 @@ export function normalizeConfig(cfg: NavConfig | null | undefined): NavConfig {
   let needUncat = false;
   const items: NavItemConfig[] = MASTER_ITEMS.map((m, i) => {
     const e = existing.get(m.key);
-    let categoryId = e?.categoryId ?? m.categoryId;
+    let categoryId = e?.categoryId ?? preferredCategoryId(m, categories) ?? m.categoryId;
     if (!catIds.has(categoryId)) {
       categoryId = UNCATEGORIZED_ID;
       needUncat = true;
@@ -499,7 +512,10 @@ export function resolveNav(
       } else {
         // config に無い新規ページ → 既定カテゴリ末尾に自動表示（無ければ未分類）
         const order = 100000 + (masterIndex.get(m.key) ?? 0);
-        if (visibleCatIds.has(m.categoryId)) {
+        const preferred = preferredCategoryId(m, visibleCats);
+        if (preferred) {
+          pushTo(preferred, resolved, order);
+        } else if (visibleCatIds.has(m.categoryId)) {
           pushTo(m.categoryId, resolved, order);
         } else {
           needsUncategorized = true;

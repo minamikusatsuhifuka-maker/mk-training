@@ -71,6 +71,7 @@ export const DEFAULT_ADMIN_MENU_GROUPS: readonly AdminMenuGroup[] = [
       "notice-attendance",
       "x:needs-guide",
       "people-training",
+      "michishirube",
     ],
   },
   { id: "g-org", label: "🏛 組織・理念", items: ["knowledge-system", "ai-background", "x:retro", "priority-matrix"] },

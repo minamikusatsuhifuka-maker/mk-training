@@ -165,6 +165,15 @@ export const ADMIN_ITEMS: readonly AdminItem[] = [
     reason: "当院の歩み（歴史の年表）の出来事を書くこと。入口の文（創業の歴史・精神）の編集は含まない（院長のみ）",
     hidden: true,
   },
+  // 270 §2-2: 成長の道しるべの中身（ステップ・技能の業務一覧・学びのステップ・学びの地図・【院長が直す】の印）を直す人。既定は誰もいない。
+  //   判定は requireAdminItem（この画面と /api/admin/michishirube）。保存は clinic_staff_growth（content_store のキーは持たない）。
+  {
+    key: "michishirube",
+    label: "🧭 成長の道しるべ（中身）",
+    href: "/admin/michishirube",
+    delegable: true,
+    reason: "成長の道しるべ（段ごとのステップ・技能の業務一覧・学び）の中身の編集。スタッフ一人ひとりの進み具合は含まない",
+  },
   { key: "staff-accounts", label: "👤 アカウント招待", href: "/admin/staff-accounts", delegable: false, reason: "アカウント・招待コード・仮パスワード（権限・アカウント）" },
   {
     key: "profile-fields",
@@ -237,6 +246,8 @@ const API_ITEM_MAP: Record<string, string> = {
   "notice-attendance": "notice-attendance",
   // 人材育成研修とガイド（院長・管理者＋受講者に指定された人）
   "people-training": PEOPLE_TRAINING_ITEM_KEY,
+  // 270: 成長の道しるべの中身（院長＋任された人）
+  michishirube: "michishirube",
 };
 
 export function adminItemKeyForApiPath(pathname: string): string | null {
