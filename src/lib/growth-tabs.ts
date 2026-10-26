@@ -12,6 +12,7 @@ export type GrowthTabKey =
   | "feedback"
   | "learning"
   | "position"
+  | "michishirube"
   | "presurvey"
   | "basic";
 
@@ -25,6 +26,8 @@ export const GROWTH_TABS: GrowthTab[] = [
   { key: "feedback", label: "🌟 フィードバック", short: "フィードバック" },
   { key: "learning", label: "📚 学び", short: "学び" },
   { key: "position", label: "🧭 現在地", short: "現在地" },
+  // 270 §3: 成長の道しるべ（今いる段・ステップ・技能の4段階・学びの3点セット）。スイッチ michishirube に従う（出すかは呼ぶ側が API の答えで決める）
+  { key: "michishirube", label: "🧭 道しるべ", short: "道しるべ" },
   { key: "presurvey", label: "📝 アンケート", short: "アンケート" },
   { key: "basic", label: "🔒 基本情報", short: "基本情報" },
 ];

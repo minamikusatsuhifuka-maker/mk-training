@@ -9,6 +9,8 @@
 // - 197-補: 相手が答えた事前アンケートを、RWDEPの各欄の隣に読み取り専用で出す
 //   （願望=3・4・5 → 行動=6 → 自己評価=7 → 計画=8 → 支援=9／1・2は画面の上部）。
 
+// 270 §3-6・§3-7: 今月のテーマ（道しるべのステップ）と、本人の今いる段・確認を待っているステップの印
+import { MichiThemeLabel, MichiThemePicker } from "@/components/michishirube/MichiProgressTab";
 import { useState, useEffect, useCallback, useMemo } from "react";
 // 221: 書き起こしの取り込み（AIのまとめ＋記録欄の下書き）
 import { TranscriptImportDialog } from "@/components/TranscriptImportDialog";
@@ -127,6 +129,9 @@ function OneOnOnePageBody() {
   const [wellnessScope, setWellnessScope] = useState<WellnessScope | null>(null);
   const [wellnessEntries, setWellnessEntries] = useState<WellnessEntry[]>([]);
   const [wellnessDraft, setWellnessDraft] = useState<WellnessValue>(EMPTY_WELLNESS);
+  // 270: 今月のテーマ（道しるべのステップ id・選ばないときは空）
+  const [themeDraft, setThemeDraft] = useState("");
+  const [editTheme, setEditTheme] = useState("");
 
   // 編集（記録者本人のみ）
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -377,6 +382,7 @@ function OneOnOnePageBody() {
         jitsuChecks: jitsuDraft,
         rwdepc: rwdepcDraft,
         summary: emptyTranscriptSummary(), // 221: 手で書いた回にはまとめが無い
+        themeStepId: themeDraft,
         createdAt: now,
         updatedAt: now,
       };
@@ -397,6 +403,7 @@ function OneOnOnePageBody() {
         }
       }
       setWellnessDraft(EMPTY_WELLNESS);
+      setThemeDraft("");
       setHeldOnDraft("");
       setPartnerIdDraft("");
       setSectionsDraft(EMPTY_SECTIONS);
@@ -423,6 +430,7 @@ function OneOnOnePageBody() {
     setEditJitsu(d.jitsuChecks);
     setEditMode(d.mode);
     setEditRwdepc(d.rwdepc);
+    setEditTheme(d.themeStepId);
     setEditJitsuOpenGroup(null);
   };
 
@@ -443,6 +451,7 @@ function OneOnOnePageBody() {
         jitsuChecks: editJitsu,
         mode: editMode,
         rwdepc: editRwdepc,
+        themeStepId: editTheme,
         updatedAt: new Date().toISOString(),
       };
       const saved = await upsertRecord("one_on_one", record.recordKey, next);
@@ -592,6 +601,9 @@ function OneOnOnePageBody() {
           </label>
         </div>
         <p className="text-xs text-gray-500">{PARTNER_NOTE}</p>
+
+        {/* 270: 本人の今いる段・確認を待っているステップと、今月のテーマ（道しるべが見られないときは出ない） */}
+        <MichiThemePicker partnerId={partnerIdDraft} value={themeDraft} onChange={setThemeDraft} disabled={submitting} />
 
         {/* 153: 記録の形式を選ぶ（既存の自由形式＝クイックメモとして温存） */}
         {/* 223 §1-3: 選択肢の横に ⓘ（RWDEPCの表を出す） */}
@@ -825,6 +837,7 @@ function OneOnOnePageBody() {
                         ))}
                       </select>
                     </div>
+                    <MichiThemePicker partnerId={editPartnerId} value={editTheme} onChange={setEditTheme} disabled={savingEdit} />
                     {editMode === "quick" &&
                       presurveyNodes(editPartnerId, editHeldOn)?.all}
                     {editMode === "quick" ? (
@@ -913,6 +926,8 @@ function OneOnOnePageBody() {
                   </div>
                 ) : (
                   <>
+                    {/* 270: 今月のテーマ（道しるべのステップ） */}
+                    {d.themeStepId && <MichiThemeLabel stepId={d.themeStepId} />}
                     {/* 152: この回でチェックされた実（読み取り専用の要約） */}
                     <JitsuCheckSummary checks={d.jitsuChecks} />
                     {(() => {

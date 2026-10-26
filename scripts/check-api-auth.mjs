@@ -32,6 +32,7 @@ const GUARDS = [
   "authorizeEvents", // 128: イベント（閲覧=ログイン済み・投稿=編集者）
   "authorizeNotices", // 228: お知らせ・イベント（ログイン済み・スイッチOFFは院長と検証用だけ・出欠の一覧は限られた人）
   "authorizeGantt", // 250: ガントチャート（ログイン済み・スイッチOFFは院長と検証用だけ・書くのは院長と任された幹部）
+  "authorizeMichiProgress", // 270 第2部: 可能性ノートの道しるべ（authorizeGrowth＋スイッチ・本人／院長／担当の幹部・非許可は404）
   "authorizeMichiView", // 270: 成長の道しるべ（ログイン済み・スイッチOFFは院長と検証用だけ）
   "authorizeAyumi", // 253: 当院の歩み（ログイン済み・スイッチOFFは院長と検証用だけ・書くのは院長と任された幹部・声は本人）
   "CRON_SECRET", // 155: Vercel Cron 用の共有鍵

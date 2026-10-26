@@ -5,6 +5,8 @@ import { RwdepcInfo } from "@/components/RwdepcInfo";
 import { GrowthTabsBar, useRememberedTab } from "@/components/GrowthTabsBar";
 import { WeeklyReflections } from "@/components/gantt/GanttRhythm";
 import { GROWTH_TABS, GROWTH_TAB_STORAGE_KEY, resolveGrowthTab, visibleGrowthTabs, type GrowthTabKey } from "@/lib/growth-tabs";
+// 270 第2部: 🧭 道しるべタブ（見られるかはサーバーの答えで決める）
+import { MichiBrief, MichiHalfGoalsList, MichiProgressTab, fetchMichiView } from "@/components/michishirube/MichiProgressTab";
 
 // 本人ページ「わたしの可能性ノート」（指示書179 C）
 // 表示するタブは growth-tabs.ts の GROWTH_TABS から「🔒 基本情報」を外した7つ（220 §3・227 §1）。
@@ -65,6 +67,17 @@ import {
 
 export function MyGrowthRecord() {
   const [rememberedTab, setTab] = useRememberedTab(GROWTH_TAB_STORAGE_KEY.my, GROWTH_TABS);
+  // 270: 🧭 道しるべタブを出すか（スイッチの判定はサーバー。404なら出さない）
+  const [michiOk, setMichiOk] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void fetchMichiView().then((v) => {
+      if (alive) setMichiOk(!!v);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
   // 197 A: 現在地の受講日から「学びの記録」へ移る（別タブなので切り替える）
   useEffect(() => {
     const open = () => setTab("learning");
@@ -300,7 +313,7 @@ export function MyGrowthRecord() {
   }
 
   // 220 §3: 院長が見る画面と同じ並び。本人には「基本情報」は無い
-  const baseTabs = visibleGrowthTabs({ basic: false });
+  const baseTabs = visibleGrowthTabs({ basic: false, michishirube: michiOk });
   const tabs = baseTabs.map((t) =>
     t.key === "feedback" && unseenCount > 0 ? { ...t, label: `${t.label}（新着 ${unseenCount}）` } : t
   );
@@ -457,6 +470,8 @@ export function MyGrowthRecord() {
           />
         </section>
       ) : tab === "goals" ? (
+        <div className="space-y-2" data-tab-panel="goals">
+        {michiOk && <MichiHalfGoalsList />}
         <GoalsStaged
           mode="owner"
           goals={goals}
@@ -469,6 +484,9 @@ export function MyGrowthRecord() {
           onDelete={goalHandlers.onDelete}
           onPace={goalHandlers.onPace}
         />
+        </div>
+      ) : tab === "michishirube" ? (
+        <MichiProgressTab />
       ) : tab === "position" ? (
         <CurrentPositionCard mode="owner" />
       ) : tab === "feedback" ? (
@@ -482,6 +500,7 @@ export function MyGrowthRecord() {
       ) : (
         // 🤝 1on1（1on1の約束と取り組み状況）
         <div className="space-y-2" data-tab-panel="one_on_one">
+        {michiOk && <MichiBrief onOpen={() => setTab("michishirube")} />}
         {/* 266 §4: 年間計画の今週のひとこと（自分の分・最近4週間） */}
         <WeeklyReflections />
         <PromisesSection

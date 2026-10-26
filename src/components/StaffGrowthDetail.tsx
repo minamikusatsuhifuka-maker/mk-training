@@ -36,6 +36,8 @@ import { NeedsPerspectiveSection } from "@/components/NeedsPerspectiveSection";
 // 220: タブの帯・開いていたタブの記憶
 import { GrowthTabsBar, useRememberedTab } from "@/components/GrowthTabsBar";
 import { GROWTH_TABS, GROWTH_TAB_STORAGE_KEY, resolveGrowthTab, visibleGrowthTabs } from "@/lib/growth-tabs";
+// 270 第2部: 🧭 道しるべタブ（見られるかはサーバーの答えで決める）
+import { MichiBrief, MichiHalfGoalsList, MichiProgressTab, fetchMichiView } from "@/components/michishirube/MichiProgressTab";
 import { transitionLabel } from "@/lib/growth-matrix";
 import { formatMonthDayW } from "@/lib/one-on-one-schedule";
 // 221: 書き起こしの取り込み
@@ -164,6 +166,17 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   // ウェルネスの視点（null＝この人のことは見られない）
   const [wellness, setWellness] = useState<WellnessEntry[] | null>(null);
+  // 270: 🧭 道しるべタブを出すか（スイッチと担当の判定はサーバー。404なら出さない）
+  const [michiOk, setMichiOk] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void fetchMichiView(userId).then((v) => {
+      if (alive) setMichiOk(!!v);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [userId]);
 
   const load = useCallback(async () => {
     setError("");
@@ -297,6 +310,7 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
   const tabs = visibleGrowthTabs({
     position: showPosition,
     presurvey: presurveyAccess,
+    michishirube: michiOk && !isProspect,
     basic: isAdmin,
   });
   const tab = resolveGrowthTab(rememberedTab, tabs);
@@ -541,7 +555,8 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
       )}
 
       {tab === "goals" && (
-        <div data-tab-panel="goals">
+        <div data-tab-panel="goals" className="space-y-2">
+          {michiOk && !isProspect && <MichiHalfGoalsList userId={userId} />}
       {/* 185: 段階的な目標（本人が書く。院長・担当幹部は機会・支援・コメント・合意だけ） */}
       <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2" data-goals-section>
         <h2 className="text-sm font-medium text-gray-900">🎯 本人の目標（目的 → 3年後 → 年間 → 半期 → 月 → 週）</h2>
@@ -581,6 +596,7 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
       {/* 220 §2-2: 1on1（221の書き起こしの取り込みはこのタブに入る） */}
       {tab === "one_on_one" && (
         <div className="space-y-3" data-tab-panel="one_on_one">
+          {michiOk && !isProspect && <MichiBrief userId={userId} onOpen={() => setTab("michishirube")} />}
           <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-sm font-medium text-gray-900">🗓 次回1on1の予定</h2>
@@ -760,6 +776,9 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
       </section>
         </div>
       )}
+
+      {/* 270 第2部: 🧭 道しるべ（今いる段・ステップ・技能の4段階・学びの3点セット） */}
+      {tab === "michishirube" && michiOk && !isProspect && <MichiProgressTab userId={userId} />}
 
       {/* 190 D: 現在地（成長マトリクス）— 院長のみ（担当幹部には出さない）。入職予定者には出さない */}
       {tab === "position" && showPosition && (

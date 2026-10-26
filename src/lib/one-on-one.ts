@@ -50,6 +50,11 @@ export type OneOnOneData = {
    * 見られる人は記録そのものと同じ（本人・ペア相手・管理者）。
    */
   summary: TranscriptSummary;
+  /**
+   * 270 §3-6: 今月のテーマ（成長の道しるべのステップの id。例 "2-01"）。選ばない回・古い記録は空。
+   * 見られる人は記録そのものと同じ（本人・ペア相手・管理者）。
+   */
+  themeStepId: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -74,6 +79,7 @@ export function emptyOneOnOneData(): OneOnOneData {
     jitsuChecks: [],
     rwdepc: { ...EMPTY_RWDEPC },
     summary: emptyTranscriptSummary(),
+    themeStepId: "",
     createdAt: "",
     updatedAt: "",
   };
@@ -106,6 +112,8 @@ export function normalizeOneOnOneData(raw: unknown): OneOnOneData {
     rwdepc: normalizeRwdepc(g.rwdepc),
     // 221: 古い記録には無い＝空のまま
     summary: normalizeTranscriptSummary(g.summary),
+    // 270: 古い記録には無い＝空のまま
+    themeStepId: /^[A-Za-z0-9+_.-]{1,40}$/.test(str(g.themeStepId)) ? str(g.themeStepId) : "",
     createdAt,
     updatedAt: str(g.updatedAt) || createdAt,
   };

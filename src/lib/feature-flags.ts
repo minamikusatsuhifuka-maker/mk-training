@@ -162,7 +162,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
 
 // 227 §1: 本人に見えるタブ（「🔒 基本情報」は本人には出ない）を、画面の表記どおり並べた文字列。
 //   書き写さず growth-tabs.ts（正本）から作る＝タブが変われば⚙ 機能の説明も一緒に変わる。
-const MY_GROWTH_TABS_TEXT = visibleGrowthTabs({ basic: false })
+const MY_GROWTH_TABS_TEXT = visibleGrowthTabs({ basic: false, michishirube: false }) // 270: 道しるべは別のスイッチ
   .map((t) => t.label)
   .join("・");
 
