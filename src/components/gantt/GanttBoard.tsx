@@ -74,7 +74,8 @@ const VIEWS: readonly GanttView[] = ["month", "quarter", "year"];
 const VIEW_LS_KEY = "mk_gantt_view";
 
 /** 名前の列の幅（スマホ／PC）と、横棒の部分の最小の幅（表示ごと） */
-const NAME_COL = "w-[132px] md:w-[260px]";
+// 271: 文字の大きさに合わせて広がるよう rem（標準で 132px／260px）
+const NAME_COL = "w-[8.25rem] md:w-[16.25rem]";
 // 年は 640（267: パソコンの幅で11月〜10月がずらさずに全部見えるように。720 だと入りきらず、今日の月へ自動でずらして11月・12月が隠れていた）
 const TIMELINE_MIN: Record<GanttView, number> = { year: 640, quarter: 760, month: 930 };
 const CAT_ROW_H = 44;

@@ -77,7 +77,7 @@ export default function AppShellInner({
         {/* Mobile overlay */}
         {menuOpen && (
           <div className="md:hidden fixed inset-0 z-50 flex">
-            <div className="w-[260px] bg-white h-full overflow-y-auto shadow-xl">
+            <div className="w-[16.25rem] max-w-[85vw] bg-white h-full overflow-y-auto shadow-xl">
               <div className="px-4 py-5 border-b">
                 <h1 className="text-lg font-bold text-teal">南草津皮フ科</h1>
                 <p className="text-xs text-muted-foreground">スタッフ研修</p>

@@ -126,12 +126,50 @@
   --teal-light: #e6f7f1;
 }
 
-/* 139: フォント切替（localStorage "app_font" → layout.tsx の初期化スクリプトが data-font を設定） */
+/* 139: フォント切替（layout.tsx の初期化スクリプトが data-font を設定。271: Cookie mk_font → 端末の控え の順） */
 html[data-font="biz"] {
   --app-font: var(--font-biz-udp);
 }
 html[data-font="rounded"] {
   --app-font: var(--font-mplus-rounded);
+}
+
+/* 271: 文字の大きさ（小・標準・大・特大＝90%・100%・112.5%・125%）。標準は属性を付けない＝今までのまま。
+   rem で書いた文字・余白は html の大きさで一緒に伸び縮みする（ボタン・カード・表の中で文字だけがはみ出さない）。
+   px で書いた文字（text-[11px] など）は下で同じ倍率をかける。印刷には当てない。
+   ブレークポイント（sm/md/lg）は CSS の決まりで初期の16pxで測る＝大きさを変えても画面の組み方は変わらない。 */
+@media screen {
+  html[data-text-size="sm"] { --app-text-scale: 0.9; }
+  html[data-text-size="lg"] { --app-text-scale: 1.125; }
+  html[data-text-size="xl"] { --app-text-scale: 1.25; }
+  html[data-text-size] { font-size: calc(100% * var(--app-text-scale)); }
+  html[data-text-size] .text-\[9px\] { font-size: calc(9px * var(--app-text-scale)); }
+  html[data-text-size] .text-\[10px\] { font-size: calc(10px * var(--app-text-scale)); }
+  html[data-text-size] .text-\[11px\] { font-size: calc(11px * var(--app-text-scale)); }
+  html[data-text-size] .text-\[12px\] { font-size: calc(12px * var(--app-text-scale)); }
+  html[data-text-size] .text-\[13px\] { font-size: calc(13px * var(--app-text-scale)); }
+  html[data-text-size] .text-\[14px\] { font-size: calc(14px * var(--app-text-scale)); }
+  html[data-text-size] .text-\[15px\] { font-size: calc(15px * var(--app-text-scale)); }
+  html[data-text-size] .text-\[16px\] { font-size: calc(16px * var(--app-text-scale)); }
+  html[data-text-size] .text-\[17px\] { font-size: calc(17px * var(--app-text-scale)); }
+  html[data-text-size] .text-\[18px\] { font-size: calc(18px * var(--app-text-scale)); }
+  html[data-text-size] .text-\[20px\] { font-size: calc(20px * var(--app-text-scale)); }
+  html[data-text-size] .text-\[22px\] { font-size: calc(22px * var(--app-text-scale)); }
+  html[data-text-size] .text-\[26px\] { font-size: calc(26px * var(--app-text-scale)); }
+  html[data-text-size] .text-\[32px\] { font-size: calc(32px * var(--app-text-scale)); }
+  @media (width >= 40rem) {
+    html[data-text-size] .sm\:text-\[10px\] { font-size: calc(10px * var(--app-text-scale)); }
+    html[data-text-size] .sm\:text-\[11px\] { font-size: calc(11px * var(--app-text-scale)); }
+  }
+  @media (width >= 48rem) {
+    html[data-text-size] .md\:text-\[10px\] { font-size: calc(10px * var(--app-text-scale)); }
+    html[data-text-size] .md\:text-\[12px\] { font-size: calc(12px * var(--app-text-scale)); }
+    html[data-text-size] .md\:text-\[13px\] { font-size: calc(13px * var(--app-text-scale)); }
+    html[data-text-size] .md\:text-\[14px\] { font-size: calc(14px * var(--app-text-scale)); }
+    html[data-text-size] .md\:text-\[17px\] { font-size: calc(17px * var(--app-text-scale)); }
+    html[data-text-size] .md\:text-\[18px\] { font-size: calc(18px * var(--app-text-scale)); }
+    html[data-text-size] .md\:text-\[32px\] { font-size: calc(32px * var(--app-text-scale)); }
+  }
 }
 
 /* FontSwitcher のボタンを各フォント自身でプレビュー表示するためのユーティリティ */

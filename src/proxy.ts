@@ -34,6 +34,9 @@ import {
   findAdminItem,
 } from "@/lib/admin-items";
 import { delegatedItemsOf } from "@/lib/admin-delegation-server";
+// 271: その人に使うフォント（本人の選択 → 院長の既定）を Cookie で渡し、最初の描画から同じにする
+import { fontToken, resolveFontPref } from "@/lib/font-pref";
+import { FONT_COOKIE, FONT_COOKIE_OPTIONS, fontPrefOfUser, loadFontDefaultCached } from "@/lib/font-pref-server";
 
 /** rewrite 先。実在しないパスなら何でもよいが、固定にして応答を1種類に揃える */
 const HIDDEN_PATH = "/__not_found__";
@@ -155,6 +158,8 @@ export async function proxy(request: NextRequest) {
   const response = NextResponse.next();
   const { pathname, search } = request.nextUrl;
   const isApi = pathname === "/api" || pathname.startsWith("/api/");
+  // 271: ページのときだけ院長の既定を読む（60秒の取り置き。セッションの判定と同時に進める）
+  const fontDefault = isApi ? null : loadFontDefaultCached().catch(() => null);
 
   let user = null;
   try {
@@ -185,6 +190,15 @@ export async function proxy(request: NextRequest) {
       "[proxy] セッション判定に失敗しました:",
       e instanceof Error ? e.message : e
     );
+  }
+
+  // 271: ページを返すときは、その人に使うフォントを Cookie に入れる（違うときだけ）。
+  // ログインしていない画面は院長の既定。中身はフォントの種類と大きさだけ（秘密を含まない）。
+  if (fontDefault) {
+    const token = fontToken(resolveFontPref(fontPrefOfUser(user), await fontDefault));
+    if (request.cookies.get(FONT_COOKIE)?.value !== token) {
+      response.cookies.set(FONT_COOKIE, token, FONT_COOKIE_OPTIONS);
+    }
   }
 
   // API（161）: 明示した例外以外は、未ログインなら一律401でここで止める。

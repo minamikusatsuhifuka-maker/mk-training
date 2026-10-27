@@ -6184,6 +6184,20 @@ export default function AdminPortalPage() {
       {/* ⚙ 機能（46R: 機能スイッチの集約＋質問プール編集） */}
       {tab === "features" && (
         <div className="space-y-8">
+          {/* 271: 全員の既定のフォントは委任できるよう独立した画面（このタブは院長だけ）。ここからも行けるようにする */}
+          <a
+            href="/admin/font-default"
+            className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 hover:bg-teal-50"
+            data-font-default-link
+          >
+            <span>
+              <span className="block text-sm font-semibold text-gray-800">🔤 全員の既定のフォント</span>
+              <span className="block text-xs text-gray-500 mt-0.5">
+                フォントの種類と文字の大きさの既定を決めます（自分で選んでいない人と、ログインの画面に使います）
+              </span>
+            </span>
+            <span className="text-xs text-teal-700 whitespace-nowrap">開く →</span>
+          </a>
           <section className="space-y-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-800">

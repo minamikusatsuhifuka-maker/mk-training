@@ -24,6 +24,8 @@ const ADMIN_ONLY_KEYS = new Set<string>([
   // 166: クイックアクセスの表示項目・並び順／サイドメニューの既定開閉
   "portal_quick_access",
   "portal_sidebar_mode",
+  // 271: 全員の既定のフォント（書くのは /api/admin/font-default だけ＝下の SERVER_WRITE_ONLY_KEYS）
+  "portal_font_default",
   // AI 設定
   "gemini_model_setting",
   "ai_background_context",
@@ -102,7 +104,8 @@ export function isServerOnlyContentKey(key: string): boolean {
 // 読むのは全員可だが、書くのは専用の管理者APIだけ（指示書172）。
 // /api/content-store 経由の書き込みを管理者にも許すと、操作ログ（172-4）を残さずに変えられてしまう。
 // 書き込みは lib/value-keywords-server.ts（設定の保存とログの追記を必ず対で行う）だけ。
-const SERVER_WRITE_ONLY_KEYS = new Set<string>(["value_keywords_config"]);
+// 271: portal_font_default も同じ（直した日時と人を残すため、/api/admin/font-default だけが書く）。
+const SERVER_WRITE_ONLY_KEYS = new Set<string>(["value_keywords_config", "portal_font_default"]);
 
 export function isServerWriteOnlyContentKey(key: string): boolean {
   return SERVER_WRITE_ONLY_KEYS.has(key);

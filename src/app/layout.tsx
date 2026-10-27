@@ -5,9 +5,10 @@ import { AppShell } from "@/components/AppShell";
 import PageAccessGate from "@/components/PageAccessGate";
 import { TerminalIdleLogout } from "@/components/TerminalIdleLogout";
 import { FetchCacheInstaller } from "@/components/FetchCacheInstaller";
+import { fontInitScript } from "@/lib/font-pref";
 import "./globals.css";
 
-// 139: おすすめフォント3種（切替は FontSwitcher・保存は localStorage "app_font"）。
+// 139: おすすめフォント3種（切替は FontSwitcher）。271: 文字の大きさ・院長の既定・アカウントに残す（lib/font-pref.ts）。
 // next/font はセルフホスト＋font-display:swap＝読み込み失敗時はシステムフォントへ自動フォールバック。
 const notoSansJP = Noto_Sans_JP({
   variable: "--font-noto-sans-jp",
@@ -27,8 +28,10 @@ const mPlusRounded = M_PLUS_Rounded_1c({
   weight: ["400", "500", "700"],
 });
 
-// 保存済みフォントを最初の描画前に <html data-font> へ反映（FOUC防止）
-const FONT_INIT_SCRIPT = `try{var f=localStorage.getItem("app_font");if(f==="biz"||f==="rounded"){document.documentElement.setAttribute("data-font",f)}}catch(e){}`;
+// その人に使うフォントと文字の大きさを最初の描画前に <html data-font data-text-size> へ反映（FOUC防止）。
+// 271: proxy.ts が入れる Cookie（アカウントの選択 → 院長の既定）を先に読む。
+// html の属性は描画前にこのスクリプトが入れるので、サーバーの html と違っても警告を出さない（suppressHydrationWarning）
+const FONT_INIT_SCRIPT = fontInitScript();
 
 export const metadata: Metadata = {
   title: "南草津皮フ科 スタッフ研修アプリ",
@@ -56,6 +59,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
+      suppressHydrationWarning
       lang="ja"
       className={`${notoSansJP.variable} ${bizUDPGothic.variable} ${mPlusRounded.variable} h-full antialiased`}
     >

@@ -39,7 +39,7 @@ export function Sidebar() {
   const { isOpen, toggle } = useSidebarAccordion(navSections, pathname);
 
   return (
-    <aside className="w-[220px] shrink-0 border-r border-border bg-[var(--sidebar)] flex flex-col h-screen sticky top-0">
+    <aside className="w-[13.75rem] shrink-0 border-r border-border bg-[var(--sidebar)] flex flex-col h-screen sticky top-0">
       <div className="px-5 py-6">
         <Link href="/" className="block">
           <h1 className="text-lg font-bold text-teal">南草津皮フ科</h1>

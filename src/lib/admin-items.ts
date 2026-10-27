@@ -174,6 +174,15 @@ export const ADMIN_ITEMS: readonly AdminItem[] = [
     delegable: true,
     reason: "成長の道しるべ（段ごとのステップ・技能の業務一覧・学び）の中身の編集。スタッフ一人ひとりの進み具合は含まない",
   },
+  // 271 §2: 全員の既定のフォント（種類と大きさ）を決める人。既定は誰もいない。
+  //   「⚙ 機能」タブは院長だけ（委任できない）ので、任せられるよう独立した画面にした。保存は /api/admin/font-default だけ。
+  {
+    key: "font-default",
+    label: "🔤 全員の既定のフォント",
+    href: "/admin/font-default",
+    delegable: true,
+    reason: "画面の見た目（フォントの種類と文字の大きさ）の既定。一人ひとりの選択は含まない（本人だけが変えられる）",
+  },
   { key: "staff-accounts", label: "👤 アカウント招待", href: "/admin/staff-accounts", delegable: false, reason: "アカウント・招待コード・仮パスワード（権限・アカウント）" },
   {
     key: "profile-fields",
@@ -248,6 +257,8 @@ const API_ITEM_MAP: Record<string, string> = {
   "people-training": PEOPLE_TRAINING_ITEM_KEY,
   // 270: 成長の道しるべの中身（院長＋任された人）
   michishirube: "michishirube",
+  // 271: 全員の既定のフォント（院長＋任された人）
+  "font-default": "font-default",
 };
 
 export function adminItemKeyForApiPath(pathname: string): string | null {

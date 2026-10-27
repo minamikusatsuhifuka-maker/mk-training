@@ -44,6 +44,7 @@ export const DEFAULT_ADMIN_MENU_GROUPS: readonly AdminMenuGroup[] = [
     label: "🏠 運営・ポータル",
     items: [
       "portal",
+      "font-default",
       "nav",
       "staff-members",
       "task-categories",

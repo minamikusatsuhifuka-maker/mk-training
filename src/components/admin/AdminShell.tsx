@@ -233,9 +233,9 @@ export function AdminShell({
           <span className="text-base md:text-lg font-bold">南草津皮フ科 管理画面</span>
         </div>
         <div className="flex items-center gap-4">
-          {/* フォント切り替え（139・デスクトップのみ。モバイルは☰内） */}
-          <div className="hidden md:block w-[230px]">
-            <FontSwitcher dark showLabel={false} />
+          {/* フォント切り替え（139・271 種類と大きさを横に並べる。デスクトップのみ。モバイルは☰内） */}
+          <div className="hidden md:block">
+            <FontSwitcher dark showLabel={false} inline />
           </div>
           <Link
             href="/"
