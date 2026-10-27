@@ -595,21 +595,24 @@ export function WeekView({ sunday, today, byYmd }: { sunday: string; today: stri
   );
 }
 
-const segOn = "px-3 py-2 bg-teal-600 text-white";
-const segOff = "px-3 py-2 text-gray-600 hover:bg-gray-50";
+// 271: 文字を大きくしても「リスト」「今月」などが途中で折り返さない
+const segOn = "whitespace-nowrap px-3 py-2 bg-teal-600 text-white";
+const segOff = "whitespace-nowrap px-3 py-2 text-gray-600 hover:bg-gray-50";
 
 /** 📋 リスト／🗓 月表示／📅 週表示 */
 export function ViewSwitch({ view, onChange }: { view: CalView; onChange: (v: CalView) => void }) {
-  const b = (v: CalView, label: string) => (
+  // 271: スマートフォンで文字を「大」「特大」にしたときは、絵文字を外して1行に収める（globals.css の .cal-seg-emoji）
+  const b = (v: CalView, emoji: string, label: string) => (
     <button type="button" onClick={() => onChange(v)} className={view === v ? segOn : segOff} aria-pressed={view === v} data-cal-view={v}>
+      <span className="cal-seg-emoji">{emoji} </span>
       {label}
     </button>
   );
   return (
     <div className="flex rounded-full border border-gray-200 overflow-hidden text-sm">
-      {b("list", "📋 リスト")}
-      {b("month", "🗓 月表示")}
-      {b("week", "📅 週表示")}
+      {b("list", "📋", "リスト")}
+      {b("month", "🗓", "月表示")}
+      {b("week", "📅", "週表示")}
     </div>
   );
 }

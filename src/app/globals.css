@@ -157,6 +157,11 @@ html[data-font="rounded"] {
   html[data-text-size] .text-\[22px\] { font-size: calc(22px * var(--app-text-scale)); }
   html[data-text-size] .text-\[26px\] { font-size: calc(26px * var(--app-text-scale)); }
   html[data-text-size] .text-\[32px\] { font-size: calc(32px * var(--app-text-scale)); }
+  /* 院内カレンダーの「📋 リスト／🗓 月表示／📅 週表示」：スマートフォンで大・特大のときは絵文字を外して1行に収める */
+  @media (width < 40rem) {
+    html[data-text-size="lg"] .cal-seg-emoji,
+    html[data-text-size="xl"] .cal-seg-emoji { display: none; }
+  }
   @media (width >= 40rem) {
     html[data-text-size] .sm\:text-\[10px\] { font-size: calc(10px * var(--app-text-scale)); }
     html[data-text-size] .sm\:text-\[11px\] { font-size: calc(11px * var(--app-text-scale)); }

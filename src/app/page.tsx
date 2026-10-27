@@ -581,12 +581,13 @@ export default function PortalHome() {
         ref={newsSectionRef}
         className="px-4 py-5 border-b border-gray-100 scroll-mt-16"
       >
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xs font-medium text-gray-800 uppercase tracking-wider">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          {/* 271: 文字を大きくしても見出しを折り返さない（右のボタンの側で折り返す） */}
+          <h2 className="shrink-0 whitespace-nowrap text-xs font-medium text-gray-800 uppercase tracking-wider">
             お知らせ
           </h2>
           {/* 130: 投稿導線の視認性向上（ボタン拡大+最濃階調+影）。flex-wrapは375pxはみ出し防止 */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex min-w-0 items-center justify-end gap-2 flex-wrap">
             <span className="text-xs text-gray-600">
               {news.length}件表示中
             </span>
