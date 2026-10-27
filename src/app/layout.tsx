@@ -5,6 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import PageAccessGate from "@/components/PageAccessGate";
 import { TerminalIdleLogout } from "@/components/TerminalIdleLogout";
 import { FetchCacheInstaller } from "@/components/FetchCacheInstaller";
+import { FontRestore } from "@/components/FontRestore";
 import { fontInitScript } from "@/lib/font-pref";
 import "./globals.css";
 
@@ -65,6 +66,7 @@ export default function RootLayout({
     >
       <body className="min-h-full">
         <script dangerouslySetInnerHTML={{ __html: FONT_INIT_SCRIPT }} />
+        <FontRestore />
         <AuthProvider>
           {/* 192 D: 院内端末（鍵あり・スイッチON）だけ、無操作で自動ログアウト。それ以外は何もしない */}
           <FetchCacheInstaller />
