@@ -133,6 +133,16 @@ html[data-font="biz"] {
 html[data-font="rounded"] {
   --app-font: var(--font-mplus-rounded);
 }
+/* 272: くっきり見やすい3つ */
+html[data-font="zen"] {
+  --app-font: var(--font-zen-kaku);
+}
+html[data-font="plex"] {
+  --app-font: var(--font-ibm-plex-jp);
+}
+html[data-font="mplus"] {
+  --app-font: var(--font-mplus-1p);
+}
 
 /* 271: 文字の大きさ（小・標準・大・特大＝90%・100%・112.5%・125%）。標準は属性を付けない＝今までのまま。
    rem で書いた文字・余白は html の大きさで一緒に伸び縮みする（ボタン・カード・表の中で文字だけがはみ出さない）。
@@ -182,7 +192,8 @@ html[data-font="rounded"] {
   }
 }
 
-/* FontSwitcher のボタンを各フォント自身でプレビュー表示するためのユーティリティ */
+/* 各フォント自身で見本を出すためのユーティリティ（272: 使うと、その書体のファイルを読み込む。
+   いつも出ているボタンには付けない＝カーソルを合わせた・長押ししたときの名前の吹き出しと、管理画面の見本だけ） */
 .font-preview-noto {
   font-family: var(--font-noto-sans-jp), sans-serif;
 }
@@ -191,6 +202,15 @@ html[data-font="rounded"] {
 }
 .font-preview-rounded {
   font-family: var(--font-mplus-rounded), sans-serif;
+}
+.font-preview-zen {
+  font-family: var(--font-zen-kaku), sans-serif;
+}
+.font-preview-plex {
+  font-family: var(--font-ibm-plex-jp), sans-serif;
+}
+.font-preview-mplus {
+  font-family: var(--font-mplus-1p), sans-serif;
 }
 
 @layer base {

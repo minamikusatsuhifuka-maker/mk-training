@@ -1,6 +1,6 @@
 "use client";
 
-// 🔤 全員の既定のフォント（指示書271 §2）— 院長＋委任の設定で任された人
+// 🔤 全員の既定のフォント（指示書271 §2・272で6つに）— 院長＋委任の設定で任された人
 // 自分でフォントを選んでいない人と、ログインの画面などログインしていない画面に使う。
 // 最初の既定は「あ標準・標準」（今までと同じ）。「💾 保存」を押すまで誰の画面も変わらない。直した日時と人を残す。
 // ページの到達可否は proxy.ts（/admin/<項目>）、APIは requireAdminItem が判定する。
@@ -16,12 +16,6 @@ import {
 } from "@/lib/font-pref";
 
 type Def = (FontPref & { updatedAt?: string; updatedByName?: string }) | null;
-
-const FONT_VAR: Record<FontPref["font"], string> = {
-  noto: "var(--font-noto-sans-jp)",
-  biz: "var(--font-biz-udp)",
-  rounded: "var(--font-mplus-rounded)",
-};
 
 function fmt(iso?: string) {
   if (!iso) return "";
@@ -102,7 +96,7 @@ export default function FontDefaultAdminPage() {
                 <button
                   key={c.id}
                   type="button"
-                  className={`${chip(draft.font === c.id)} ${c.preview}`}
+                  className={chip(draft.font === c.id)}
                   aria-pressed={draft.font === c.id}
                   onClick={() => setDraft({ ...draft, font: c.id })}
                 >
@@ -133,14 +127,18 @@ export default function FontDefaultAdminPage() {
           <div className="space-y-1">
             <p className="text-xs text-slate-500">見本</p>
             <div
-              className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-slate-800 leading-relaxed"
+              // 272: 見本だけを選んだフォントで出す（6つのボタンを各フォントで出すと全部を読み込むため）
+              className={`rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-slate-800 leading-relaxed ${
+                FONT_CHOICES.find((c) => c.id === draft.font)?.preview ?? ""
+              }`}
               style={{
-                fontFamily: `${FONT_VAR[draft.font]}, sans-serif`,
                 fontSize: `${16 * (SIZE_CHOICES.find((c) => c.id === draft.size)?.scale ?? 1)}px`,
               }}
               data-font-default-sample
             >
               南草津皮フ科 スタッフ研修　あいうえお　アイウエオ　0123456789
+              <br />
+              <b>太字：安全な医療を提供する</b>
             </div>
           </div>
 

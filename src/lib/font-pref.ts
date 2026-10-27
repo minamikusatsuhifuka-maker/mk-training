@@ -1,4 +1,4 @@
-// 🔤 フォントの設定（指示書139・271）— 純関数・依存なし（クライアント・サーバー・proxy で共用）
+// 🔤 フォントの設定（指示書139・271・272）— 純関数・依存なし（クライアント・サーバー・proxy で共用）
 //
 // 【どのフォントが使われるか（271 §2）】
 //   1. 本人が自分で選んでいれば、本人の選択（アカウントの user_metadata.app_font に残す＝端末をまたいで同じ）
@@ -9,7 +9,8 @@
 //   layout.tsx の初期化スクリプトが最初の描画の前に Cookie → 端末に残した値（FONT_LOCAL_KEY）の順で読み、
 //   <html data-font data-text-size> に入れる。ログインしていない画面は院長の既定。
 
-export const FONT_IDS = ["noto", "biz", "rounded"] as const;
+// 272: 丸みの少ない、くっきり見やすい3つを今の3つの後ろに足した（6つ）
+export const FONT_IDS = ["noto", "biz", "rounded", "zen", "plex", "mplus"] as const;
 export type FontId = (typeof FONT_IDS)[number];
 
 export const SIZE_IDS = ["sm", "md", "lg", "xl"] as const;
@@ -21,6 +22,9 @@ export const FONT_CHOICES: readonly { id: FontId; label: string; desc: string; p
   { id: "noto", label: "標準", desc: "Noto Sans JP", preview: "font-preview-noto" },
   { id: "biz", label: "UD", desc: "BIZ UDPゴシック", preview: "font-preview-biz" },
   { id: "rounded", label: "まる", desc: "M PLUS Rounded 1c", preview: "font-preview-rounded" },
+  { id: "zen", label: "くっきり", desc: "Zen Kaku Gothic New", preview: "font-preview-zen" },
+  { id: "plex", label: "シャープ", desc: "IBM Plex Sans JP", preview: "font-preview-plex" },
+  { id: "mplus", label: "すっきり", desc: "M PLUS 1p", preview: "font-preview-mplus" },
 ];
 
 /** 文字の大きさ（271 §1）。scale は画面全体の文字の倍率（globals.css の html[data-text-size]） */
