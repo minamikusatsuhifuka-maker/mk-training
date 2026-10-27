@@ -161,6 +161,11 @@ html[data-font="rounded"] {
   @media (width < 40rem) {
     html[data-text-size="lg"] .cal-seg-emoji,
     html[data-text-size="xl"] .cal-seg-emoji { display: none; }
+    /* 「◀ 今月 ▶」の右が切れないよう、「🔄 再読み込み」を次の行へ回す */
+    html[data-text-size="lg"] [data-cal-toolbar],
+    html[data-text-size="xl"] [data-cal-toolbar] { grid-template-columns: minmax(0, 1fr); }
+    html[data-text-size="lg"] [data-cal-reload],
+    html[data-text-size="xl"] [data-cal-reload] { grid-column: 1; grid-row: 3; justify-self: start; }
   }
   @media (width >= 40rem) {
     html[data-text-size] .sm\:text-\[10px\] { font-size: calc(10px * var(--app-text-scale)); }
