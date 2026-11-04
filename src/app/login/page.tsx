@@ -16,7 +16,8 @@ import { reloadTo } from "@/lib/auth-navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { TerminalPinLogin } from "@/components/TerminalPinLogin";
+import { TerminalPinLogin, useTerminalPinAvailable } from "@/components/TerminalPinLogin";
+import { TERMINAL_NOTICE } from "@/lib/terminal-auth";
 
 /**
  * ログイン後の遷移先。`?next=` が付いていればそこへ戻す。
@@ -31,10 +32,9 @@ function nextPath(): string {
 
 function LoginForm() {
   const [mode, setMode] = useState<"login" | "reset">("login");
-  // 192: 院内端末（鍵あり・スイッチON）では番号ログインを先に出す。「パスワードでログインする」で従来の入力へ
-  const [usePassword, setUsePassword] = useState(false);
-  const [pinAvailable, setPinAvailable] = useState(false);
-  const showPassword = !pinAvailable || usePassword;
+  // 275: どの端末でも最初はメールアドレスとパスワード。院内端末（鍵あり・スイッチON）では、下から番号ログインを選べる
+  const [usePin, setUsePin] = useState(false);
+  const pinAvailable = useTerminalPinAvailable();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -93,9 +93,11 @@ function LoginForm() {
           </p>
         </div>
 
-        {mode === "login" && !usePassword && <TerminalPinLogin onSuccess={() => reloadTo(nextPath())} onUsePassword={() => setUsePassword(true)} onAvailable={setPinAvailable} />}
-        {mode === "login" ? (
-          <form onSubmit={handleLogin} className={`space-y-3 ${showPassword ? "" : "hidden"}`} data-password-login data-shown={showPassword ? "1" : "0"}>
+        {mode === "login" && usePin ? (
+          <TerminalPinLogin onSuccess={() => reloadTo(nextPath())} onUsePassword={() => setUsePin(false)} />
+        ) : mode === "login" ? (
+          <>
+          <form onSubmit={handleLogin} className="space-y-3" data-password-login>
             <div className="space-y-1">
               <Label htmlFor="login-email">メールアドレス</Label>
               <Input
@@ -134,10 +136,30 @@ function LoginForm() {
               パスワードをお忘れですか？
             </button>
           </form>
+          {pinAvailable && (
+            <div className="border-t border-slate-200 pt-3 space-y-1" data-terminal-pin-option>
+              <button
+                type="button"
+                onClick={() => {
+                  setUsePin(true);
+                  setError("");
+                }}
+                className="w-full h-10 rounded-md border border-teal-300 bg-teal-50/60 text-sm text-teal-900 hover:bg-teal-100"
+              >
+                🖥 院内端末の番号でログイン
+              </button>
+              <p className="text-[11px] text-muted-foreground text-center" data-terminal-notice>{TERMINAL_NOTICE}</p>
+            </div>
+          )}
+          </>
         ) : (
           <form onSubmit={handleReset} className="space-y-3">
             <p className="text-xs text-muted-foreground">
               登録済みメールアドレスに、パスワード再設定用のリンクを送ります。
+            </p>
+            {/* 275: 再設定のリンクは申し込んだブラウザにある控え（PKCE）と組みで使う。別のブラウザではリンクが無効になる */}
+            <p className="text-xs text-muted-foreground" data-reset-same-browser>
+              届いたメールは、この画面と同じブラウザで開いてください。別のブラウザや端末で開くと、リンクが使えません。
             </p>
             <div className="space-y-1">
               <Label htmlFor="reset-email">メールアドレス</Label>

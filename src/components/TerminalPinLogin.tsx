@@ -1,41 +1,38 @@
 "use client";
 // 院内端末ログイン（番号）（指示書192 C-1）— ログイン画面の部品
-//   端末の鍵がある登録済み端末で、かつ管理画面のスイッチがON（192-補）のときだけ表示（/api/auth/pin-login GET が available を返す）。
+//   端末の鍵がある登録済み端末で、かつ管理画面のスイッチがON（192-補）のときだけ選べる（/api/auth/pin-login GET が available を返す）。
+//   275: 番号の画面がパスワードの代わりに出ないよう、最初は必ずパスワードの欄を出す。この部品は「院内端末の番号でログイン」を選んだときだけ出す。
 //   メール欄・番号欄ともブラウザに保存・自動入力させない（autocomplete=off・type=text＋数字入力＋文字を伏せる CSS＝パスワード管理に拾わせない）。
 //   照合はサーバーだけ。番号はこの画面に残さない（送信後に空にする）。
 
 import { useEffect, useState } from "react";
 import { PIN_MAX, PIN_MIN, PIN_UNSET_HINT, TERMINAL_NOTICE } from "@/lib/terminal-auth";
 
-export function TerminalPinLogin({ onSuccess, onUsePassword, onAvailable }: { onSuccess: () => void; onUsePassword: () => void; onAvailable?: (available: boolean) => void }) {
-  const [available, setAvailable] = useState<boolean | null>(null);
-  const [email, setEmail] = useState("");
-  const [pin, setPin] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
+/** この端末で番号ログインを選べるか。分かるまでと失敗したときは false＝パスワードだけの画面のまま。 */
+export function useTerminalPinAvailable(): boolean {
+  const [available, setAvailable] = useState(false);
   useEffect(() => {
     let alive = true;
     fetch("/api/auth/pin-login", { cache: "no-store", credentials: "same-origin" })
       .then((r) => (r.ok ? r.json() : { available: false }))
       .then((j: { available?: boolean }) => {
-        if (!alive) return;
-        setAvailable(j.available === true);
-        onAvailable?.(j.available === true);
+        if (alive) setAvailable(j.available === true);
       })
       .catch(() => {
-        if (!alive) return;
-        setAvailable(false);
-        onAvailable?.(false);
+        if (alive) setAvailable(false);
       });
     return () => {
       alive = false;
     };
-    // onAvailable は初回だけ知らせればよい
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  return available;
+}
 
-  if (!available) return null;
+export function TerminalPinLogin({ onSuccess, onUsePassword }: { onSuccess: () => void; onUsePassword: () => void }) {
+  const [email, setEmail] = useState("");
+  const [pin, setPin] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,7 +104,7 @@ export function TerminalPinLogin({ onSuccess, onUsePassword, onAvailable }: { on
       </button>
       <p className="text-[11px] text-muted-foreground" data-terminal-hint>{PIN_UNSET_HINT}</p>
       <button type="button" onClick={onUsePassword} className="block w-full text-center text-xs text-muted-foreground hover:text-foreground underline underline-offset-2" data-terminal-use-password>
-        パスワードでログインする
+        メールアドレスとパスワードでログイン
       </button>
     </form>
   );

@@ -109,6 +109,9 @@ export default function ResetPasswordPage() {
               </Link>
               から「パスワードをお忘れですか？」で再設定メールを送るか、管理者に再招待を依頼してください。
             </p>
+            <p className="text-xs text-muted-foreground" data-reset-same-browser>
+              再設定のメールを、申し込んだときと別のブラウザや端末で開いた場合もこの表示になります。同じブラウザで開き直してください。
+            </p>
           </div>
         )}
 

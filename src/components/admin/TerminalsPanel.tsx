@@ -96,7 +96,7 @@ export function TerminalsPanel() {
         <h2 className="text-sm font-medium text-gray-900">1. 番号ログインを開始する — 現在 <strong data-pin-switch-state>{on ? "ON（開始中）" : "OFF（これまでどおり）"}</strong></h2>
         {on ? (
           <div className="space-y-1">
-            <p className="text-[11px] text-gray-700">ONのあいだ、登録済み端末のログイン画面に「院内端末ログイン（番号）」が出て、院内端末は無操作 {data.setting.idleMinutes}分で自動ログアウトします。マイプロフィールに番号の設定が出ます。</p>
+            <p className="text-[11px] text-gray-700">ONのあいだ、登録済み端末のログイン画面のパスワードの欄の下に「院内端末の番号でログイン」が出て、院内端末は無操作 {data.setting.idleMinutes}分で自動ログアウトします。マイプロフィールに番号の設定が出ます。</p>
             <button type="button" disabled={busy} onClick={() => { if (confirm("番号ログインを停止します（即時）。登録済み端末でもパスワードのみになります。よろしいですか？")) void run(async () => { await post({ action: "disable" }); return "番号ログインを停止しました（OFF）"; }); }} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-full text-sm min-h-[44px] disabled:opacity-40" data-pin-disable>
               ⏹ 番号ログインを停止する（OFF・即時）
             </button>
