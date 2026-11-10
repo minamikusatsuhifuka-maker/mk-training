@@ -16,6 +16,7 @@ import {
   ADMIN_MENU_GROUPS_KEY,
   ADMIN_MENU_UPDATED_EVENT,
   EXTRA_MENU_ITEMS,
+  NEEDS_OVERVIEW_MENU_KEY,
   groupOfHref,
   normalizeAdminMenuConfig,
   resolveAdminMenu,
@@ -49,9 +50,12 @@ const extra = (key: string): MenuItemLike => EXTRA_MENU_ITEMS.find((i) => i.key 
 export function AdminShell({
   children,
   isAdmin,
+  isDirector = false,
   allowedKeys,
 }: {
   children: React.ReactNode;
+  /** 276: 院長（DIRECTOR_USER_ID）か。院長だけの項目（🧭 欲求の一覧）を出す。判定はサーバー（layout） */
+  isDirector?: boolean;
   /** 183: app_metadata の管理者か（false＝委任された幹部） */
   isAdmin: boolean;
   /** 183: 出してよい項目key */
@@ -133,6 +137,8 @@ export function AdminShell({
           ...(isAdmin ? [extra("x:courses")] : []),
         ]
       : []),
+    // 276: 🧭 欲求の一覧（院長だけ・委任できない）
+    ...(isDirector ? [extra(NEEDS_OVERVIEW_MENU_KEY)] : []),
     // 欲求別成長支援ガイド：院長・管理者と、人材育成研修の受講者（その項目を任された人）
     ...(allowedKeys.includes(PEOPLE_TRAINING_ITEM_KEY) ? [extra("x:needs-guide")] : []),
   ];

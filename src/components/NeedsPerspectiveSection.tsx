@@ -56,7 +56,7 @@ function GuideCard({ item, side }: { item: NeedsGuideItem; side: "high" | "low" 
   );
 }
 
-function ItemList({ keys, side, label }: { keys: string[]; side: "high" | "low"; label: string }) {
+export function ItemList({ keys, side, label }: { keys: string[]; side: "high" | "low"; label: string }) {
   const [open, setOpen] = useState<string | null>(null);
   return (
     <div className="space-y-1" data-needs-list={side}>

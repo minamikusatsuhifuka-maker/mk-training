@@ -35,6 +35,7 @@ const GUARDS = [
   "authorizeMichiProgress", // 270 第2部: 可能性ノートの道しるべ（authorizeGrowth＋スイッチ・本人／院長／担当の幹部・非許可は404）
   "authorizeMichiView", // 270: 成長の道しるべ（ログイン済み・スイッチOFFは院長と検証用だけ）
   "authorizeAyumi", // 253: 当院の歩み（ログイン済み・スイッチOFFは院長と検証用だけ・書くのは院長と任された幹部・声は本人）
+  "authorizeNeedsOverview", // 276: 欲求の一覧（院長＝DIRECTOR_USER_ID だけ・ほかの管理者も委任された幹部も404）
   "CRON_SECRET", // 155: Vercel Cron 用の共有鍵
   "HR_CHAT_KNOWLEDGE_TOKEN", // ai-incho からのサーバー間呼び出し
 ];
@@ -75,6 +76,7 @@ const ADMIN_GUARDS = [
   "authorizeDirectorRetrospective",
   "authorizeGrowth",
   "authorizeHiring",
+  "authorizeNeedsOverview", // 276: 院長だけ（isDirectorUser＝管理者で、かつ DIRECTOR_USER_ID と一致）
   "isAdminUser",
 ];
 const ADMIN_SELF_ROUTES = new Set(["admin/my-items"]);

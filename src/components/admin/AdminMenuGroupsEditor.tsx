@@ -26,6 +26,7 @@ import {
   normalizeAdminMenuConfig,
   renameGroup,
   type AdminMenuConfig,
+  DIRECTOR_ONLY_MENU_KEYS,
   type MenuItemLike,
 } from "@/lib/admin-menu-groups";
 
@@ -34,6 +35,16 @@ const ALL_ITEMS: MenuItemLike[] = [
   ...ADMIN_ITEMS.filter((i) => !i.hidden && i.key !== TOP_MENU_KEY).map((i) => ({ key: i.key, label: i.label, href: i.href })),
   ...EXTRA_MENU_ITEMS,
 ];
+/** 276: 院長だけの項目（🧭 欲求の一覧）は、院長でない人の編集画面には出さない（院長かどうかはサーバーに聞く） */
+const NON_DIRECTOR_ITEMS = ALL_ITEMS.filter((i) => !DIRECTOR_ONLY_MENU_KEYS.includes(i.key));
+async function itemsForViewer(): Promise<MenuItemLike[]> {
+  try {
+    const r = await fetch("/api/admin/needs-overview?probe=1", { credentials: "same-origin", cache: "no-store" });
+    return r.ok ? ALL_ITEMS : NON_DIRECTOR_ITEMS;
+  } catch {
+    return NON_DIRECTOR_ITEMS;
+  }
+}
 const labelOf = (key: string) => ALL_ITEMS.find((i) => i.key === key)?.label ?? key;
 
 export function AdminMenuGroupsEditor() {
@@ -50,8 +61,8 @@ export function AdminMenuGroupsEditor() {
       .then((j: { isAdmin?: boolean }) => {
         if (!alive || j.isAdmin !== true) return;
         setIsAdmin(true);
-        return loadPortalObject<unknown>(ADMIN_MENU_GROUPS_KEY, null).then(
-          (raw) => alive && setCfg(editableGroups(normalizeAdminMenuConfig(raw), ALL_ITEMS))
+        return Promise.all([loadPortalObject<unknown>(ADMIN_MENU_GROUPS_KEY, null), itemsForViewer()]).then(
+          ([raw, items]) => alive && setCfg(editableGroups(normalizeAdminMenuConfig(raw), items))
         );
       })
       .catch(() => {

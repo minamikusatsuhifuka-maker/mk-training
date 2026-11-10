@@ -7,6 +7,7 @@
 // - 学びの記録は管理者がここから追加・編集できる（B-4）
 // 家族構成はここに出さない（APIも返さない）。
 
+import { NeedsOverviewLink } from "@/components/admin/needs-overview/NeedsOverviewLink";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -597,6 +598,12 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
       {tab === "one_on_one" && (
         <div className="space-y-3" data-tab-panel="one_on_one">
           {michiOk && !isProspect && <MichiBrief userId={userId} onOpen={() => setTab("michishirube")} />}
+          {/* 276 §4: 院長が見ているときだけ */}
+          {!isProspect && (
+            <div className="flex justify-end">
+              <NeedsOverviewLink userId={userId} />
+            </div>
+          )}
           <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-sm font-medium text-gray-900">🗓 次回1on1の予定</h2>

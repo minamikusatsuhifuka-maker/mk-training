@@ -21,6 +21,7 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { isActiveAccountId, loadDelegatedItems } from "@/lib/admin-delegation-server";
 import { ADMIN_ITEMS } from "@/lib/admin-items";
 import { BootstrapAdminCard } from "@/components/admin/BootstrapAdminCard";
+import { isDirectorUser } from "@/lib/people-training-server";
 
 // セッション（cookie）依存のため常に動的レンダリング
 export const dynamic = "force-dynamic";
@@ -59,7 +60,7 @@ export default async function AdminLayout({
 
   if (user && isAdminUser(user)) {
     return (
-      <AdminShell isAdmin allowedKeys={ADMIN_ITEMS.map((i) => i.key)}>
+      <AdminShell isAdmin isDirector={isDirectorUser(user)} allowedKeys={ADMIN_ITEMS.map((i) => i.key)}>
         {children}
       </AdminShell>
     );

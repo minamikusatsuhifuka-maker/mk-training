@@ -16,6 +16,8 @@ export const OTHER_GROUP_ID = "other";
 export const OTHER_GROUP_LABEL = "その他";
 /** グループに入れず、いちばん上に置く項目 */
 export const TOP_MENU_KEY = "dashboard";
+/** 276: 🧭 欲求の一覧（院長だけ） */
+export const NEEDS_OVERVIEW_MENU_KEY = "x:needs-overview";
 
 /**
  * ADMIN_ITEMS 以外に、左のメニューに出る項目（権限を確かめてから出すもの）。key は振り分けの保存に使う目印。
@@ -32,7 +34,18 @@ export const EXTRA_MENU_ITEMS: readonly { key: string; label: string; href: stri
   { key: "x:courses", label: "🗂 講座マスタ・AI下書き設定", href: "/staff-growth/courses" },
   // 院長・管理者と、人材育成研修の受講者に指定された人（判定は /api/admin/people-training/guide）
   { key: "x:needs-guide", label: "📘 欲求別成長支援ガイド", href: "/admin/people-training/guide" },
+  // 276: 院長だけ（委任できない・ADMIN_ITEMS に入れない＝委任の一覧に出ない）。判定は /admin/needs-overview と /api/admin/needs-overview
+  { key: NEEDS_OVERVIEW_MENU_KEY, label: "🧭 欲求の一覧", href: "/admin/needs-overview" },
 ];
+
+/** 276: 院長だけに出す左のメニュー（ほかの管理者・委任された幹部には、メニューにもサイドバー構成の画面にも出さない） */
+export const DIRECTOR_ONLY_MENU_KEYS: readonly string[] = [NEEDS_OVERVIEW_MENU_KEY];
+
+/**
+ * 276: まだどのグループにも置かれていない項目を、はじめはこの項目のすぐ後ろに置く（院長がサイドバー構成で動かせる）。
+ * 保存済みの振り分け（本番の院長の設定）に後から足した項目が「その他」に落ちないようにするため。
+ */
+export const DEFAULT_PLACE_AFTER: Readonly<Record<string, string>> = { [NEEDS_OVERVIEW_MENU_KEY]: "x:staff-growth" };
 
 export type AdminMenuGroup = { id: string; label: string; items: string[] };
 export type AdminMenuConfig = { groups: AdminMenuGroup[]; updatedAt?: string };
@@ -65,6 +78,7 @@ export const DEFAULT_ADMIN_MENU_GROUPS: readonly AdminMenuGroup[] = [
       "presurvey-answers",
       "one-on-one-slots",
       "x:staff-growth",
+      NEEDS_OVERVIEW_MENU_KEY,
       "x:courses",
       "x:member-notes",
       "expert",
@@ -88,6 +102,20 @@ export const DEFAULT_ADMIN_MENU_GROUPS: readonly AdminMenuGroup[] = [
 
 const GROUP_ID_RE = /^[a-z0-9-]{1,40}$/;
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+
+/** 276: どこにも置かれていない項目を、DEFAULT_PLACE_AFTER の項目のすぐ後ろへ入れる（目印が無ければ何もしない） */
+function placeByDefault(groups: { items: string[] }[], key: string): boolean {
+  const anchor = DEFAULT_PLACE_AFTER[key];
+  if (!anchor) return false;
+  for (const g of groups) {
+    const at = g.items.indexOf(anchor);
+    if (at >= 0) {
+      g.items.splice(at + 1, 0, key);
+      return true;
+    }
+  }
+  return false;
+}
 
 /** 保存値を整える（壊れていたら、はじめの振り分け）。「その他」は必ず1つあり、同じ項目は1か所にだけ入る */
 export function normalizeAdminMenuConfig(raw: unknown): AdminMenuConfig {
@@ -115,6 +143,8 @@ export function normalizeAdminMenuConfig(raw: unknown): AdminMenuConfig {
     groups.push({ id, label, items });
   }
   if (!groups.some((g) => g.id === OTHER_GROUP_ID)) groups.push({ id: OTHER_GROUP_ID, label: OTHER_GROUP_LABEL, items: [] });
+  // 276: 後から足した項目は、保存済みの振り分けでも目印の後ろに置く
+  for (const key of Object.keys(DEFAULT_PLACE_AFTER)) if (!seenItems.has(key)) placeByDefault(groups, key);
   return { groups };
 }
 

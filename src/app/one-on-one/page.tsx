@@ -11,6 +11,7 @@
 
 // 270 §3-6・§3-7: 今月のテーマ（道しるべのステップ）と、本人の今いる段・確認を待っているステップの印
 import { MichiThemeLabel, MichiThemePicker } from "@/components/michishirube/MichiProgressTab";
+import { NeedsOverviewLink } from "@/components/admin/needs-overview/NeedsOverviewLink";
 import { useState, useEffect, useCallback, useMemo } from "react";
 // 221: 書き起こしの取り込み（AIのまとめ＋記録欄の下書き）
 import { TranscriptImportDialog } from "@/components/TranscriptImportDialog";
@@ -928,6 +929,8 @@ function OneOnOnePageBody() {
                   <>
                     {/* 270: 今月のテーマ（道しるべのステップ） */}
                     {d.themeStepId && <MichiThemeLabel stepId={d.themeStepId} />}
+                    {/* 276 §4: 院長が見ているときだけ（この回の相手の欲求） */}
+                    <NeedsOverviewLink userId={counterpartOf(record)} />
                     {/* 152: この回でチェックされた実（読み取り専用の要約） */}
                     <JitsuCheckSummary checks={d.jitsuChecks} />
                     {(() => {
