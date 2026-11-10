@@ -81,6 +81,8 @@ const ADMIN_ONLY_CONTENT_KEYS = new Set<string>([
 // 読み書きは lib/menu-access-server.ts（service-role）と、それを使う管理者専用APIだけ。
 const SERVER_ONLY_KEYS = new Set<string>([
   "menu_access",
+  // 277: 院長は欲求サーベイの資料とデータを見る（ONにできるのは院長だけ＝/api/admin/needs-overview だけが書く）
+  "needs_director_view",
   // 172: 価値観キーワードの操作ログ（管理者だけが閲覧。/api/admin/value-keywords/logs 経由のみ）
   "value_keywords_log",
   // 196: クリニックの歩み CSV 取り込みの操作ログ（/api/admin/clinic-metrics-import 経由のみ）
@@ -95,7 +97,8 @@ const SERVER_ONLY_KEYS = new Set<string>([
 // 前方一致のサーバー専用キー（指示書182）。
 // survey_history:<userId> はサーベイの履歴（本人の過去の結果・画像）。読み書きは
 // lib/survey-history-server.ts と /api/profile/survey（本人）・育成カルテ（管理者・公開分のみ）だけ。
-const SERVER_ONLY_PREFIXES = ["survey_history:"];
+// 277: 院長は欲求サーベイの資料とデータを見る（スイッチ・文・確認の記録）。読み書きは needs-director-view-server.ts だけ
+const SERVER_ONLY_PREFIXES = ["survey_history:", "needs_director_ack:"];
 
 export function isServerOnlyContentKey(key: string): boolean {
   return SERVER_ONLY_KEYS.has(key) || SERVER_ONLY_PREFIXES.some((p) => key.startsWith(p));

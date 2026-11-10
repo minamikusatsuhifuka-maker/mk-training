@@ -28,7 +28,18 @@ function Diff({ n }: { n: number | undefined }) {
   );
 }
 
-export function NeedsPersonDetail({ userId, person, onClose }: { userId: string; person: NeedsPersonRow | undefined; onClose: () => void }) {
+export function NeedsPersonDetail({
+  userId,
+  person,
+  onClose,
+  fullView = false,
+}: {
+  userId: string;
+  person: NeedsPersonRow | undefined;
+  onClose: () => void;
+  /** 277: スイッチが ON（公開設定にかかわらず見ている） */
+  fullView?: boolean;
+}) {
   const [snaps, setSnaps] = useState<Snapshot[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [prevIdx, setPrevIdx] = useState(1);
@@ -168,7 +179,9 @@ export function NeedsPersonDetail({ userId, person, onClose }: { userId: string;
                 </table>
               </div>
             ) : (
-              <p className="text-[12px] text-gray-600">15項目は、本人が「詳細（詳細15項目の欲求値）も公開」を選んだときだけ見られます。</p>
+              <p className="text-[12px] text-gray-600">
+                {fullView ? "15項目の値はまだ入っていません。" : "15項目は、本人が「詳細（詳細15項目の欲求値）も公開」を選んだときだけ見られます。"}
+              </p>
             )}
 
             {cur.strong.length > 0 && (

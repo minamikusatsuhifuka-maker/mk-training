@@ -1,5 +1,6 @@
 "use client";
 
+import { NeedsDirectorViewCard } from "@/components/admin/needs-overview/NeedsDirectorViewCard";
 import { useEffect, useState } from "react";
 import { PORTAL_TABS_ADMIN_ONLY } from "@/lib/admin-items";
 import { DateTimeSelect } from "@/components/TimeSelect";
@@ -6749,6 +6750,8 @@ export default function AdminPortalPage() {
                 URLを直接開いても「準備中」と表示されます。既定はすべてOFFです。
               </p>
             </div>
+            {/* 277: 院長だけのスイッチ（保存先も判定も別。院長でなければ欄ごと出ない） */}
+            <NeedsDirectorViewCard />
             {/* 117: 1行3〜4列のグリッド配置（行内で高さはgrid既定のstretchで揃う） */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {FEATURE_META.map((m) => (

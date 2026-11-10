@@ -49,7 +49,6 @@ import {
   NEED_LABELS,
   NEEDS_GROUPS,
   NEED_GROUP_STYLE,
-  SURVEY_VISIBILITY_OPTIONS,
   clampNeedValue,
   isPdfAsset,
   type NeedKey,
@@ -62,6 +61,14 @@ import {
   type SurveyHistoryEntry,
 } from "@/lib/survey-history";
 import { NeedsRadarChart } from "@/components/NeedsRadarChart";
+import { NeedsDirectorNoticeInline, useNeedsDirectorView } from "@/components/NeedsDirectorNotice";
+import {
+  PROFILE_ADMIN_NOTE_OFF,
+  PROFILE_ADMIN_NOTE_ON,
+  PROFILE_FOCUS_NOTE_OFF,
+  PROFILE_FOCUS_NOTE_ON,
+  directorViewOptions,
+} from "@/lib/needs-director-view";
 import {
   DEFAULT_VALUE_KEYWORDS_CONFIG,
   loadValueKeywordsConfig,
@@ -122,6 +129,8 @@ export default function ProfilePage() {
   const [surveyDetails, setSurveyDetails] = useState<
     Record<string, NeedDetailValues>
   >({});
+  // 277: 院長は欲求サーベイの資料とデータを見る（ON の間だけ公開設定の説明文が変わる）
+  const [directorView] = useNeedsDirectorView();
   const [surveyVisibility, setSurveyVisibility] =
     useState<SurveyVisibility>("private");
   // 182: 履歴と「選択肢が増えた」案内（本人のみ・/api/profile/survey）
@@ -1238,6 +1247,13 @@ export default function ProfilePage() {
             🧭 5つの基本的欲求サーベイ
           </h2>
         </div>
+        {/* 277: 院長が「院長は欲求サーベイの資料とデータを見る」を ON にしている間だけ、上に短い文とお知らせを出す */}
+        {directorView?.on && directorView.texts && (
+          <p className="rounded-md border border-indigo-200 bg-indigo-50/60 p-2 text-xs leading-relaxed text-indigo-950" data-survey-director-banner>
+            {directorView.texts.banner}
+          </p>
+        )}
+        <NeedsDirectorNoticeInline />
         {/* 182 A-5: 「公開」のままで新しい選択肢を見ていない人にだけ1回出す（見たらサーバーに印を残す） */}
         {showSurveyNotice && (
           <div
@@ -1258,7 +1274,7 @@ export default function ProfilePage() {
         {/* 182 A-1/A-4: 公開設定は3択。各選択肢の横に「何が誰に見えるか」を書く（164の説明を引き継ぐ） */}
         <fieldset className="space-y-1.5" data-survey-visibility>
           <legend className="text-xs font-medium text-gray-800">公開設定（保存は「💾 保存」で確定）</legend>
-          {SURVEY_VISIBILITY_OPTIONS.map((opt) => (
+          {directorViewOptions(directorView?.on ? directorView.texts : null).map((opt) => (
             <label
               key={opt.value}
               className={`flex items-start gap-2 rounded-md border p-2 cursor-pointer min-h-[44px] ${
@@ -1286,8 +1302,8 @@ export default function ProfilePage() {
           選択理論の「5つの基本的欲求」サーベイ結果を共有できます。お互いの違いを知り、関わり方を工夫するために使うものです。
           数値は相互理解のためのもので、評価や優劣付けには使いません。
           <br />
-          <strong>管理者にも、選んだ設定と同じ範囲だけが見えます。</strong>
-          <strong>「注力」「現況」の値は、どの設定でも自分以外には見えません。</strong>
+          <strong data-survey-admin-note>{directorView?.on ? PROFILE_ADMIN_NOTE_ON : PROFILE_ADMIN_NOTE_OFF}</strong>
+          <strong>{directorView?.on ? PROFILE_FOCUS_NOTE_ON : PROFILE_FOCUS_NOTE_OFF}</strong>
           <br />
           <strong>いつでも変更でき、変更は保存するとすぐに反映されます。</strong>
           非公開に戻すと、その時点から他の人には見えなくなります（過去の結果も含めて）。

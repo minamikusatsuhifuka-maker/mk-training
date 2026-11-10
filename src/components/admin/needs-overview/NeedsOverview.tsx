@@ -35,6 +35,8 @@ import {
 import { NeedsPersonDetail } from "./NeedsPersonDetail";
 
 type ListResp = {
+  /** 277: 「🧭 院長は欲求サーベイの資料とデータを見る」が ON */
+  fullView?: boolean;
   people: NeedsPersonRow[];
   roles: { id: string; label: string }[];
   levels: { id: string; name: string }[];
@@ -201,7 +203,16 @@ export function NeedsOverview() {
         <h1 className="text-lg font-bold text-gray-900">🧭 欲求の一覧</h1>
         <p className="text-[12px] leading-relaxed text-gray-600">
           院長だけが見られる画面です（委任はできません）。育成の面談や方針の相談で、5つの基本的欲求に配慮するために使います。
-          本人の公開設定どおりの値だけを出しています（非公開の人・まだ入れていない人は「{NEEDS_EMPTY_LABEL}」）。15項目は「詳細（詳細15項目の欲求値）も公開」の人だけです。
+          {data.fullView ? (
+            <span data-full-view="1">
+              「🧭 院長は欲求サーベイの資料とデータを見る」がONなので、公開設定にかかわらず全員の5つ・15項目と原本を出しています（まだ入れていない人は「{NEEDS_EMPTY_LABEL}」）。「注力」「現況」は原本で確かめてください。
+            </span>
+          ) : (
+            <span data-full-view="0">
+              本人の公開設定どおりの値だけを出しています（非公開の人・まだ入れていない人は「{NEEDS_EMPTY_LABEL}」）。15項目は「詳細（詳細15項目の欲求値）も公開」の人だけです。
+              公開設定にかかわらず見るには「⚙ 機能」の「🧭 院長は欲求サーベイの資料とデータを見る」（スタッフに知らせてからON）。
+            </span>
+          )}
         </p>
       </div>
 
@@ -280,6 +291,7 @@ export function NeedsOverview() {
           key={detailUser}
           userId={detailUser}
           person={detailPerson}
+          fullView={!!data.fullView}
           onClose={() => go({ user: null })}
         />
       )}

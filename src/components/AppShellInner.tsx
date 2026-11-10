@@ -12,6 +12,7 @@
 
 import { useState } from "react";
 import { RouteSkeleton } from "@/components/RouteSkeleton";
+import { NeedsDirectorNoticeDialog } from "@/components/NeedsDirectorNotice";
 import { useNavPending } from "@/components/NavFeedback";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -106,6 +107,8 @@ export default function AppShellInner({
           {navPending && <RouteSkeleton />}
           <div style={{ display: navPending ? "none" : "contents" }}>{children}</div>
         </main>
+        {/* 277 §4: 欲求サーベイの見え方のお知らせ（院長が ON にした回ごとに、確認するまで） */}
+        <NeedsDirectorNoticeDialog />
       </div>
     </div>
   );
