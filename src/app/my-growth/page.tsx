@@ -1,6 +1,6 @@
 "use client";
 
-// 本人ページ「わたしの可能性ノート」（指示書179 C）
+// 本人ページ「私の個人シート」（指示書179 C → スタッフ個人シート mk_training_staff_sheet_1 で名前を変更）
 // 機能フラグ growth_record（既定OFF）。OFFの間はメニューに出ず、直URLは「準備中」。
 // API側（authorizeGrowth）も非管理者にはフラグONのときだけ応答する＝画面だけの制御ではない。
 
@@ -15,7 +15,7 @@ export default function MyGrowthPage() {
       <div className="max-w-3xl mx-auto">
         <NavPageHeader
           navKey="/my-growth"
-          title="🌱 わたしの可能性ノート"
+          title="📄 私の個人シート"
         />
         {/* 225 §2: 見出しのすぐ下に、コーポレートブック 院長メッセージの一文を1行で出す。
             院長・幹部が見る「可能性ノート」には出さない（この画面＝本人だけ）。

@@ -14,7 +14,6 @@ import {
   TIMELINE_KIND_LABEL,
   formatDates,
   formatDiff,
-  promiseStatusLabel,
   type Goal,
   type GrowthPace,
   tenureLabel,
@@ -40,10 +39,11 @@ import { GROWTH_TABS, GROWTH_TAB_STORAGE_KEY, resolveGrowthTab, visibleGrowthTab
 // 270 第2部: 🧭 道しるべタブ（見られるかはサーバーの答えで決める）
 import { MichiBrief, MichiHalfGoalsList, MichiProgressTab, fetchMichiView } from "@/components/michishirube/MichiProgressTab";
 import { transitionLabel } from "@/lib/growth-matrix";
-import { formatMonthDayW } from "@/lib/one-on-one-schedule";
 // 221: 書き起こしの取り込み
 import { TranscriptImportDialog } from "@/components/TranscriptImportDialog";
-import { RwdepcInfo } from "@/components/RwdepcInfo";
+// スタッフ個人シート §3・§4: 最初の3つと、本人には出さない面談メモ（メンバーノート）
+import { StaffSheetTop } from "@/components/StaffSheetTop";
+import { SheetMemberNotePanel } from "@/components/SheetMemberNotePanel";
 import { TRANSCRIPT_ENTRY_LABEL } from "@/lib/one-on-one-transcript";
 import { fetchGoalsApi, fetchPromisesApi, supportGoalApi, type PromiseItem } from "@/lib/staff-growth-client";
 import {
@@ -70,7 +70,7 @@ import { fetchWellnessApi } from "@/lib/wellness-client";
 import type { WellnessEntry } from "@/lib/wellness";
 
 // 220 §2-1: 帯と概要に出すぶんだけの軽い読み込み（読めない人には出さない＝null のまま）
-type ScheduleBrief = { date: string; time: string; answered: boolean };
+type ScheduleBrief = { id: string; date: string; time: string; answered: boolean; state: string; partnerName: string };
 type PositionBrief = {
   grade: string;
   careerLine: string;
@@ -86,11 +86,16 @@ async function fetchScheduleBrief(userId: string): Promise<ScheduleBrief[] | nul
       credentials: "same-origin",
     });
     if (!res.ok) return null;
-    const j = (await res.json()) as { schedules?: { date?: string; time?: string; answered?: boolean }[] };
+    const j = (await res.json()) as {
+      schedules?: { id?: string; date?: string; time?: string; answered?: boolean; state?: string; partnerName?: string; partnerIsDirector?: boolean }[];
+    };
     return (j.schedules ?? []).map((x) => ({
+      id: typeof x.id === "string" ? x.id : "",
       date: typeof x.date === "string" ? x.date : "",
       time: typeof x.time === "string" ? x.time : "",
       answered: x.answered === true,
+      state: typeof x.state === "string" ? x.state : "",
+      partnerName: x.partnerIsDirector ? "院長" : typeof x.partnerName === "string" ? x.partnerName : "",
     }));
   } catch {
     return null;
@@ -297,7 +302,7 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
     );
   }
 
-  const { entry, latestPromise, recentLearning, timeline, today } = detail;
+  const { entry, recentLearning, timeline, today } = detail;
   const isAdmin = detail.isAdmin !== false; // 183: false＝担当の幹部（閲覧のみ）
   const isProspect = !!entry.prospect; // 187/188 6: アカウント作成前
   // 214 §3: 「アンケート」タブを出すか（サーバーの判定をそのまま使う）。入職予定者には出さない
@@ -330,7 +335,7 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
     <div className="max-w-3xl mx-auto p-3 sm:p-4 space-y-3">
       <div className="flex items-center justify-between gap-2">
         <Link href="/staff-growth" className="text-xs text-teal-800 underline underline-offset-2">
-          ← 可能性ノート 一覧
+          ← スタッフ個人シート 一覧
         </Link>
         {/* 195: 印刷用の表示（項目を選んで印刷） */}
         <Link href={`/staff-growth/${encodeURIComponent(userId)}/print`} className="text-xs px-3 py-1.5 border border-gray-300 text-gray-700 rounded-full hover:bg-gray-50 min-h-[32px] inline-flex items-center" data-print-link>
@@ -365,45 +370,6 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
           {position?.careerLine && <>{" ・ "}{position.careerLine}</>}
         </p>
 
-        {/* 220 §2-1: いつも見える「次回1on1」と「最新の約束」 */}
-        {!isProspect && (
-          <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <div className="rounded-lg border border-gray-200 p-2" data-head-schedule>
-              {/* 223-補: 見出しの横に「RWDEPC ⓘ」（予定が無いときも出す） */}
-              <p className="text-[11px] font-medium text-gray-700 flex flex-wrap items-center gap-1">
-                🗓 次回1on1
-                <span className="font-normal text-gray-500">
-                  <RwdepcInfo className="text-[11px]" />
-                </span>
-              </p>
-              {nextSchedule ? (
-                <p className="text-[12px] text-gray-900">
-                  {formatMonthDayW(nextSchedule.date)}
-                  {nextSchedule.time && ` ${nextSchedule.time}`}
-                  <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${nextSchedule.answered ? "bg-teal-50 text-teal-800" : "bg-amber-50 text-amber-800"}`}>
-                    事前アンケート {nextSchedule.answered ? "提出済み" : "未提出"}
-                  </span>
-                </p>
-              ) : (
-                <p className="text-[11px] text-gray-500">{schedules === null ? "—" : "予定はまだありません"}</p>
-              )}
-            </div>
-            <div className="rounded-lg border border-gray-200 p-2" data-head-promise>
-              <p className="text-[11px] font-medium text-gray-700">🤝 最新の約束</p>
-              {latestPromise ? (
-                <>
-                  <p className="text-[12px] text-gray-900 line-clamp-2 whitespace-pre-wrap">{latestPromise.text}</p>
-                  <p className="text-[10px] text-gray-500">
-                    {latestPromise.date.replaceAll("-", "/")} ・ {latestPromise.partnerName}さんと
-                    {latestPromise.status && ` ・ 本人: ${promiseStatusLabel(latestPromise.status)}`}
-                  </p>
-                </>
-              ) : (
-                <p className="text-[11px] text-gray-500">約束が書かれた1on1はまだありません。</p>
-              )}
-            </div>
-          </div>
-        )}
       </header>
 
       {error && (
@@ -419,6 +385,23 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
           採用資料の登録・AI整理・連絡先の反映ができます。アカウントができたら一覧から紐づけてください。
         </p>
       )}
+
+      {/* スタッフ個人シート §3: 最初に見る3つ（220 §2-1 の帯「次回1on1」「最新の約束」はここへ移した） */}
+      {!isProspect && (
+        <StaffSheetTop
+          mode="staff"
+          today={today}
+          schedule={schedules === null ? undefined : nextSchedule && nextSchedule.date >= today ? nextSchedule : null}
+          presurveyEnabled
+          presurveyAccess={presurveyAccess}
+          goals={goals}
+          promises={promises}
+          onOpenTab={setTab}
+        />
+      )}
+
+      {/* スタッフ個人シート §4: 面談メモ（メンバーノートの強み・メモ）。見られる人だけ（メンバーノートの閲覧者の設定）。本人には出さない */}
+      {!isProspect && <SheetMemberNotePanel userId={userId} />}
 
       {/* 欲求の視点（院長・担当の幹部だけ。初期は閉じる。見られるかはサーバーが判定し、404なら区画ごと出ない） */}
       {!isProspect && <NeedsPerspectiveSection userId={userId} />}

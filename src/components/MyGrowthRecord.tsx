@@ -8,7 +8,7 @@ import { GROWTH_TABS, GROWTH_TAB_STORAGE_KEY, resolveGrowthTab, visibleGrowthTab
 // 270 第2部: 🧭 道しるべタブ（見られるかはサーバーの答えで決める）
 import { MichiBrief, MichiHalfGoalsList, MichiProgressTab, fetchMichiView } from "@/components/michishirube/MichiProgressTab";
 
-// 本人ページ「わたしの可能性ノート」（指示書179 C）
+// 本人ページ「私の個人シート」（指示書179 C → スタッフ個人シート mk_training_staff_sheet_1 で名前と最初の画面を変更）
 // 表示するタブは growth-tabs.ts の GROWTH_TABS から「🔒 基本情報」を外した7つ（220 §3・227 §1）。
 // 院長メモ・適性検査・履歴書・家族構成は**この画面に存在しない**（APIも返さない）。
 // 機能フラグ growth_record（既定OFF）で守られている（ページ側 FeatureGate ＋ API側 authorizeGrowth）。
@@ -56,7 +56,11 @@ import { GoalsStaged, weeklyLinksFromPromises, type WeeklyLink } from "@/compone
 import { FeedbackPanel } from "@/components/FeedbackPanel";
 import { CurrentPositionCard } from "@/components/CurrentPositionCard";
 import { OPEN_LEARNING_EVENT } from "@/components/GrowthRequirementsTable";
-import { MyNextOneOnOne } from "@/components/OneOnOneSchedule";
+// スタッフ個人シート §3: 最初の3つ（次の1on1と今する操作／今月取り組みたいこと／前回の面談で決めたこと）
+import { StaffSheetTop, type SheetSchedule } from "@/components/StaffSheetTop";
+import { useMySchedules } from "@/lib/one-on-one-schedule-client";
+import { useFeatureFlags } from "@/lib/use-feature-flags";
+import { jstTodayYmd } from "@/lib/library";
 import {
   fetchFeedbackApi,
   saveGrowthPrefApi,
@@ -66,6 +70,10 @@ import {
 // 220 §3: タブの種類は lib/growth-tabs.ts に一本化（院長が見る画面と同じ並び）
 
 export function MyGrowthRecord() {
+  // スタッフ個人シート §3-1: 次の1on1（院長・担当が登録した予定／本人が予約した枠）と事前アンケートの状態
+  const mySchedules = useMySchedules();
+  const { flags } = useFeatureFlags();
+  const today = jstTodayYmd();
   const [rememberedTab, setTab] = useRememberedTab(GROWTH_TAB_STORAGE_KEY.my, GROWTH_TABS);
   // 270: 🧭 道しるべタブを出すか（スイッチの判定はサーバー。404なら出さない）
   const [michiOk, setMichiOk] = useState(false);
@@ -301,7 +309,7 @@ export function MyGrowthRecord() {
     return (
       <div className="max-w-2xl mx-auto p-4">
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
-          <p className="text-sm font-medium text-gray-900">🌱 わたしの可能性ノートの準備がまだ終わっていません</p>
+          <p className="text-sm font-medium text-gray-900">🌱 私の個人シートの準備がまだ終わっていません</p>
           <p className="text-xs text-gray-700 mt-2 leading-relaxed">
             データの保存先がまだ作られていません。院長にお伝えください
             （管理者向け: <code className="mx-1">~/Downloads/179_スタッフ育成カルテ_テーブル作成.sql</code>
@@ -330,10 +338,41 @@ export function MyGrowthRecord() {
         自分の学びと目標は自分で書き、院長と担当の方も見ることができます。ほかのスタッフの記録は見られません。
       </p>
 
-      {/* 197 B-2: 次回1on1（院長・担当幹部が登録した予定）と事前アンケートへの導線 */}
-      <MyNextOneOnOne />
+      {/* スタッフ個人シート §3: 最初に見る3つ（197 B-2 の「次回1on1」もここに含めた） */}
+      {loaded && (
+        <StaffSheetTop
+          mode="self"
+          today={mySchedules?.today || today}
+          schedule={mySchedules === null ? undefined : toSheetSchedule(mySchedules.mine[0])}
+          presurveyEnabled={mySchedules?.alertsEnabled === true}
+          bookingEnabled={flags.one_on_one_booking === true}
+          goals={goals}
+          promises={promises}
+          onOpenTab={setTab}
+          onPromiseStatus={async (p, status) => {
+            try {
+              const { status: saved } = await savePromiseStatusApi({
+                oneOnOneKey: p.oneOnOneKey,
+                ownerId: p.ownerId,
+                status,
+                note: p.note,
+              });
+              setPromises((prev) =>
+                prev.map((x) =>
+                  x.oneOnOneKey === p.oneOnOneKey && x.ownerId === p.ownerId
+                    ? { ...x, status: saved.status, note: saved.note, updatedAt: saved.updatedAt }
+                    : x
+                )
+              );
+              flash("💾 取り組み状況を保存しました");
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "保存に失敗しました");
+            }
+          }}
+        />
+      )}
 
-      <GrowthTabsBar tabs={tabs} current={tab} onChange={setTab} label="わたしの可能性ノートの表示切替" />
+      <GrowthTabsBar tabs={tabs} current={tab} onChange={setTab} label="私の個人シートの表示切替" />
       {/* 195: 印刷用の表示（自分の記録だけ） */}
       <div className="flex justify-end">
         <Link href="/my-growth/print" className="text-xs px-3 py-1.5 border border-gray-300 text-gray-700 rounded-full hover:bg-gray-50 min-h-[32px] inline-flex items-center" data-print-link>
@@ -673,4 +712,19 @@ function MyCard({
       {children}
     </div>
   );
+}
+
+/** スタッフ個人シート §3-1: 予定（ScheduleView）を最初の画面の形にする。無ければ null */
+function toSheetSchedule(
+  v: { id: string; date: string; time: string; partnerName: string; partnerIsDirector: boolean; answered: boolean; state: string } | undefined
+): SheetSchedule | null {
+  if (!v) return null;
+  return {
+    id: v.id,
+    date: v.date,
+    time: v.time,
+    partnerName: v.partnerIsDirector ? "院長" : v.partnerName,
+    answered: v.answered,
+    state: v.state,
+  };
 }

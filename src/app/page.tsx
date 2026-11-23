@@ -1,6 +1,7 @@
 "use client";
 
 import { WeeklyStepHomeCard } from "@/components/growth-actions/WeeklyStepHomeCard";
+import { MySheetHomeCard } from "@/components/MySheetHomeCard";
 import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PresurveyAlertBanner, ScheduleReminderBanner } from "@/components/OneOnOneSchedule";
@@ -1032,6 +1033,10 @@ export default function PortalHome() {
         <GanttAlerts compact />
         {/* 成功の原則：今週の一歩（本人だけ・期間中だけ） */}
         <WeeklyStepHomeCard />
+        {/* スタッフ個人シート §1: 私の個人シートの入口（シートを開ける人だけ） */}
+        <div className="mt-2 empty:hidden">
+          <MySheetHomeCard />
+        </div>
       </section>
 
       {/* タスク期限アラート（超過/今日が0なら非表示・並び替え対象外） */}

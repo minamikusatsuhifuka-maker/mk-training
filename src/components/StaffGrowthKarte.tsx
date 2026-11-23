@@ -132,7 +132,7 @@ export function StaffGrowthKarte() {
     <div className="max-w-4xl mx-auto p-3 sm:p-4 space-y-3">
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">🌱 可能性ノート</h1>
+          <h1 className="text-lg font-bold text-gray-900">📄 スタッフ個人シート</h1>
           {isAdmin ? (
             <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">
               1on1・学びの記録・メンバーノート・自己評価・公開されたサーベイ・権限委譲を、人ごとに時系列で見る画面です。

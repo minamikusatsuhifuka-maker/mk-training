@@ -30,7 +30,7 @@ export const EXTRA_MENU_ITEMS: readonly { key: string; label: string; href: stri
   { key: "x:staff-contacts", label: "📇 スタッフ連絡先", href: "/staff-contacts" },
   { key: "x:staff-contacts-settings", label: "⚙️ スタッフ連絡先の設定", href: "/staff-contacts/settings" },
   { key: "x:retro", label: "🧭 院長の振り返り記録", href: "/director-retrospective" },
-  { key: "x:staff-growth", label: "🌱 可能性ノート", href: "/staff-growth" },
+  { key: "x:staff-growth", label: "📄 スタッフ個人シート", href: "/staff-growth" },
   { key: "x:courses", label: "🗂 講座マスタ・AI下書き設定", href: "/staff-growth/courses" },
   // 院長・管理者と、人材育成研修の受講者に指定された人（判定は /api/admin/people-training/guide）
   { key: "x:needs-guide", label: "📘 欲求別成長支援ガイド", href: "/admin/people-training/guide" },
