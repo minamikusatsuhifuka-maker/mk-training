@@ -18,19 +18,29 @@ export type GrowthTabKey =
 
 export type GrowthTab = { key: GrowthTabKey; label: string; short: string };
 
-/** 並びはこの順で固定（220 §2-2） */
+/**
+ * 並びはこの順で固定（220 §2-2 → 第3便で5つに束ねた）。
+ * 中身・見られる人は変えず、**入口の数を減らしただけ**:
+ * - 目標と成長 = 目標＋道しるべ（スイッチ michishirube に従う）＋現在地（院長だけ）
+ * - 1on1・面談 = 1on1＋事前アンケート＋フィードバック
+ * - 基本情報・連絡先 = 連絡先（院長と指名された人）＋採用資料・経歴（院長だけ）
+ * 各区画を見られる人の判定は今までのまま（区画側・サーバー側で行う）。
+ */
 export const GROWTH_TABS: GrowthTab[] = [
   { key: "overview", label: "📋 概要", short: "概要" },
-  { key: "goals", label: "🎯 目標", short: "目標" },
-  { key: "one_on_one", label: "🤝 1on1", short: "1on1" },
-  { key: "feedback", label: "🌟 フィードバック", short: "フィードバック" },
-  { key: "learning", label: "📚 学び", short: "学び" },
-  { key: "position", label: "🧭 現在地", short: "現在地" },
-  // 270 §3: 成長の道しるべ（今いる段・ステップ・技能の4段階・学びの3点セット）。スイッチ michishirube に従う（出すかは呼ぶ側が API の答えで決める）
-  { key: "michishirube", label: "🧭 道しるべ", short: "道しるべ" },
-  { key: "presurvey", label: "📝 アンケート", short: "アンケート" },
-  { key: "basic", label: "🔒 基本情報", short: "基本情報" },
+  { key: "basic", label: "📇 基本情報・連絡先", short: "基本情報" },
+  { key: "goals", label: "🎯 目標と成長", short: "目標と成長" },
+  { key: "one_on_one", label: "🤝 1on1・面談", short: "1on1" },
+  { key: "learning", label: "📚 研修・学び", short: "研修・学び" },
 ];
+
+/** 旧タブ（端末に覚えた値・画面内の「もっと見る」）→ 束ねた先 */
+export const GROWTH_TAB_ALIAS: Partial<Record<GrowthTabKey, GrowthTabKey>> = {
+  position: "goals",
+  michishirube: "goals",
+  presurvey: "one_on_one",
+  feedback: "one_on_one",
+};
 
 export function growthTabLabel(key: GrowthTabKey): string {
   return GROWTH_TABS.find((t) => t.key === key)?.label ?? key;
@@ -49,7 +59,9 @@ export function resolveGrowthTab(
   remembered: string,
   tabs: readonly GrowthTab[]
 ): GrowthTabKey {
-  const hit = tabs.find((t) => t.key === remembered);
+  // 端末が旧タブ名（道しるべ・現在地・アンケート・フィードバック）を覚えていたら、束ねた先に読み替える
+  const mapped = GROWTH_TAB_ALIAS[remembered as GrowthTabKey] ?? remembered;
+  const hit = tabs.find((t) => t.key === mapped);
   return hit ? hit.key : (tabs[0]?.key ?? "overview");
 }
 

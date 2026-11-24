@@ -49,11 +49,12 @@ export default function StaffMembersAdminPage() {
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [noAccess, setNoAccess] = useState(false);
 
   const reloadRoster = useCallback(() => {
     // 404（名簿の管理だけを任された人など）のときはリンク・状態を出さない（従来どおり）
     fetch("/api/growth/roster", { cache: "no-store", credentials: "same-origin" })
-      .then((r) => (r.ok ? (r.json() as Promise<RosterPayload>) : ({ members: [] } as RosterPayload)))
+      .then((r) => (r.ok ? (r.json() as Promise<RosterPayload>) : ({ members: [], noAccess: true } as RosterPayload & { noAccess?: boolean })))
       .then((j) => {
         setRoster(new Map((j.members ?? []).map((m) => [m.name, m])));
         setExtra({
@@ -61,6 +62,7 @@ export default function StaffMembersAdminPage() {
           unregisteredAccounts: j.unregisteredAccounts,
           profilelessAccountCount: j.profilelessAccountCount,
         });
+        setNoAccess((j as { noAccess?: boolean }).noAccess === true);
       })
       .catch(() => {});
   }, []);
@@ -163,11 +165,14 @@ export default function StaffMembersAdminPage() {
           スタッフの名簿（タスクの担当者候補・個人シートへの入口）です。名前を押すと、その人のスタッフ個人シートが開きます（見られる人の名前だけ）。
         </p>
         <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+          スタッフの一覧と各シートを開くのは
+          <Link href="/staff-growth" className="text-teal-700 underline underline-offset-2 mx-0.5">📄 スタッフ個人シート</Link>。
           氏名の追加・変更はここで。住所・電話・緊急連絡先・入職日は
           <Link href="/staff-contacts" className="text-teal-700 underline underline-offset-2 mx-0.5">📇 スタッフ連絡先</Link>、
           アカウントの招待・無効化（退職）は
           <Link href="/admin/staff-accounts" className="text-teal-700 underline underline-offset-2 mx-0.5">👤 アカウント招待</Link>、
           職種は本人のプロフィールで登録します（管理者は書き換えません）。
+          📇 スタッフ連絡先を開けるのは院長と指名された人だけです（それ以外の人には404が出ます。指名は連絡先画面の「⚙ 設定」から）。
         </p>
       </div>
 
@@ -189,6 +194,11 @@ export default function StaffMembersAdminPage() {
           </Button>
         </div>
 
+        {noAccess && (
+          <p className="text-xs rounded-md bg-slate-50 border border-slate-200 text-slate-600 px-3 py-2">
+            シートへのリンク・アカウントとの連携状態・入職日・「名簿に未登録のアカウント」は、院長（と担当を任された幹部の範囲）にだけ表示されます。
+          </p>
+        )}
         {message && (
           <p className="text-xs rounded-md bg-amber-50 border border-amber-200 text-amber-900 px-3 py-2">{message}</p>
         )}

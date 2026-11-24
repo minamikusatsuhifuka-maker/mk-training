@@ -315,10 +315,7 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
   // 220 §2-2: 見られるタブだけを出す（現在地・基本情報は院長のみ／アンケートはサーバーの判定）
   const showPosition = isAdmin && !isProspect;
   const tabs = visibleGrowthTabs({
-    position: showPosition,
-    presurvey: presurveyAccess,
-    michishirube: michiOk && !isProspect,
-    basic: isAdmin,
+    basic: isAdmin || !!detail.contactAccess,
   });
   const tab = resolveGrowthTab(rememberedTab, tabs);
 
@@ -438,7 +435,7 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
               )}
             </OverviewCard>
 
-            <OverviewCard title="🌟 フィードバック" onMore={() => setTab("feedback")}>
+            <OverviewCard title="🌟 フィードバック" onMore={() => setTab("one_on_one")}>
               {latestFeedback ? (
                 <p className="text-[12px] text-gray-900 line-clamp-2">
                   <span className="text-[11px] text-gray-500 mr-1">{latestFeedback.date.replaceAll("-", "/")}</span>
@@ -462,7 +459,7 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
             </OverviewCard>
 
             {showPosition && (
-              <OverviewCard title="🧭 現在地" onMore={() => setTab("position")}>
+              <OverviewCard title="🧭 現在地" onMore={() => setTab("goals")}>
                 <p className="text-[12px] text-gray-900">
                   合意した位置: <strong>{position?.agreed ? `${position.agreed.s} × ${position.agreed.m}` : "未記録"}</strong>
                 </p>
@@ -473,7 +470,7 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
             )}
 
             {presurveyAccess && (
-              <OverviewCard title="📝 アンケート" onMore={() => setTab("presurvey")}>
+              <OverviewCard title="📝 アンケート" onMore={() => setTab("one_on_one")}>
                 {nextSchedule ? (
                   <>
                     <p className="text-[11px] text-gray-500">1on1 {nextSchedule.date.replaceAll("-", "/")}</p>
@@ -581,7 +578,7 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
       {/* 220 §2-2: 1on1（221の書き起こしの取り込みはこのタブに入る） */}
       {tab === "one_on_one" && (
         <div className="space-y-3" data-tab-panel="one_on_one">
-          {michiOk && !isProspect && <MichiBrief userId={userId} onOpen={() => setTab("michishirube")} />}
+          {michiOk && !isProspect && <MichiBrief userId={userId} onOpen={() => setTab("goals")} />}
           {/* 276 §4: 院長が見ているときだけ */}
           {!isProspect && (
             <div className="flex justify-end">
@@ -685,7 +682,7 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
         </div>
       )}
 
-      {tab === "feedback" && (
+      {tab === "one_on_one" && (  /* 🌟 フィードバック（1on1・面談タブ内） */
         <div data-tab-panel="feedback">
       {/* 185: フィードバックの記録（院長=全件／担当幹部=自分の記録だけ。本人にも見える） */}
       <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
@@ -769,17 +766,17 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
       )}
 
       {/* 270 第2部: 🧭 道しるべ（今いる段・ステップ・技能の4段階・学びの3点セット） */}
-      {tab === "michishirube" && michiOk && !isProspect && <MichiProgressTab userId={userId} />}
+      {tab === "goals" && michiOk && !isProspect && <MichiProgressTab userId={userId} />}
 
       {/* 190 D: 現在地（成長マトリクス）— 院長のみ（担当幹部には出さない）。入職予定者には出さない */}
-      {tab === "position" && showPosition && (
+      {tab === "goals" && showPosition && (  /* 🧭 現在地（目標と成長タブ内・院長だけ） */
         <div data-tab-panel="position">
           <CurrentPositionCard userId={userId} mode="director" />
         </div>
       )}
 
       {/* 214 §1: アンケート（最新の回答＋これまでの回答＋横並びの比較） */}
-      {tab === "presurvey" && presurveyAccess && (
+      {tab === "one_on_one" && presurveyAccess && (  /* 📝 事前アンケート（1on1・面談タブ内） */
         <section className="space-y-2" data-tab-panel="presurvey" data-karte-presurvey>
           <h2 className="text-sm font-medium text-gray-900">📝 1on1の事前アンケート</h2>
           <p className="text-[11px] text-gray-500">
@@ -791,6 +788,17 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
       )}
 
       {/* 184/188: 採用資料・経歴・入職時の想い・適性検査（院長のみ） */}
+      {/* 第3便 §basic: 📇 連絡先（院長と、連絡先を見られる指名の人）。実物の閲覧・編集は /staff-contacts（サーバー側で判定） */}
+      {tab === "basic" && detail.contactAccess && (
+        <section className="rounded-xl border border-gray-200 bg-white p-4 space-y-2" data-tab-panel="basic-contact">
+          <h2 className="text-sm font-medium text-gray-900">📇 連絡先（住所・電話・緊急連絡先）</h2>
+          <p className="text-xs text-gray-600">
+            この場で少しだけ見る → 名前の横の「📇」。登録・修正 →
+            <Link href="/staff-contacts" className="text-teal-700 underline underline-offset-2 mx-1">📇 スタッフ連絡先</Link>
+            （開けるのは院長と指名された人だけ。それ以外の人には404が出ます）
+          </p>
+        </section>
+      )}
       {tab === "basic" && isAdmin && (
         <div className="space-y-3" data-tab-panel="basic">
       {/* 184: 採用資料・経歴・入職時の想い（院長のみ。幹部モードでは描画しない＝APIも404） */}

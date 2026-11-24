@@ -3,6 +3,7 @@
 // メンバー紹介（閲覧は誰でも可・ログイン不要）
 // 一覧: staff_profiles_index ／ 詳細: staff_profile:<userId>（クリックで読み込み）
 
+import { formatPersonName } from "@/lib/staff-sheet";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -95,7 +96,8 @@ import {
 // name がメールアドレスのままのユーザー対策: 画面上は @ 前のローカル部のみ表示する
 // （データ自体の修正は本人の /profile 編集に委ねる。メールを意図的に表示する要素は置かない）
 function displayName(name: string): string {
-  return name.includes("@") ? name.split("@")[0] : name;
+  // メール形式はメール前半だけ、日本語氏名は姓名の間のスペースを入れない形（第3便の表示統一）
+  return formatPersonName(name.includes("@") ? name.split("@")[0] : name);
 }
 
 // fieldId→ラベル用アイコン（未知の項目は Sparkles）
@@ -387,7 +389,7 @@ export default function MembersPage() {
               >
                 {/* ヘッダー: アバター＋名前ブロック */}
                 <div className="flex items-center gap-3.5">
-                  <Avatar url={m.avatarUrl} name={m.name} colors={c} size="card" />
+                  <Avatar url={m.avatarUrl} name={displayName(m.name)} colors={c} size="card" />
                   <div className="min-w-0">
                     {cardConfig.showKana && m.kana && (
                       <p className="text-xs text-gray-400 truncate">{m.kana}</p>
@@ -524,7 +526,7 @@ export default function MembersPage() {
           <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="sr-only">
-                {selected.name} のプロフィール
+                {displayName(selected.name)} のプロフィール
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">

@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { formatPersonName } from "@/lib/staff-sheet";
 import {
   EMPTY_KARTE_FILTER,
   TIMELINE_KIND_LABEL,
@@ -134,11 +135,20 @@ export function StaffGrowthKarte() {
         <div>
           <h1 className="text-lg font-bold text-gray-900">📄 スタッフ個人シート</h1>
           {isAdmin ? (
+            <>
             <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">
-              1on1・学びの記録・メンバーノート・自己評価・公開されたサーベイ・権限委譲を、人ごとに時系列で見る画面です。
-              <strong>元の画面で見られないものは、ここでも見えません</strong>（非公開のサーベイは管理者にも出ません）。
-              家族構成はこの画面には出しません。
+              <strong>ここでできること</strong>：スタッフの名前を押すと、その人の個人シート（📇 基本情報・連絡先／🎯 目標と成長／🤝 1on1・面談／📚 研修・学び）が開きます。
+              入職予定の人の登録とアカウントへの紐づけもここで行います。
+              <strong>元の画面で見られないものは、ここでも見えません</strong>（非公開のサーベイは管理者にも出ません）。家族構成はこの画面には出しません。
             </p>
+            <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">
+              タスクの担当者候補（名簿）と氏名の変更は
+              <Link href="/admin/staff-members" className="text-teal-700 underline underline-offset-2 mx-0.5">👥 スタッフ管理</Link>、
+              住所・電話・緊急連絡先は
+              <Link href="/staff-contacts" className="text-teal-700 underline underline-offset-2 mx-0.5">📇 スタッフ連絡先</Link>
+              （院長と指名された人だけ）で。
+            </p>
+            </>
           ) : (
             <p className="text-[11px] text-gray-600 mt-1 leading-relaxed" data-delegate-note>
               院長から担当を指定されたスタッフの可能性ノートを<strong>閲覧</strong>できます（追加・編集はできません）。
@@ -326,7 +336,7 @@ export function StaffGrowthKarte() {
                 return (
                   <li key={e.userId} className={`rounded-lg border bg-white p-2 space-y-1 ${pr.stale ? "border-amber-400" : "border-gray-200"}`} data-prospect data-stale={pr.stale ? "1" : "0"} data-status={pr.status}>
                     <p className="text-sm text-gray-900">
-                      <Link href={`/staff-growth/${encodeURIComponent(e.userId)}`} className="underline underline-offset-2 text-teal-800">{e.name}</Link>
+                      <Link href={`/staff-growth/${encodeURIComponent(e.userId)}`} className="underline underline-offset-2 text-teal-800">{formatPersonName(e.name)}</Link>
                       <span className="ml-2 text-[11px] text-gray-600">{pr.expectedJoinOn ? `入職予定 ${pr.expectedJoinOn.replaceAll("-", "/")}` : "入職予定日 未設定"}</span>
                       {pr.status === "declined" && <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded border border-gray-300 bg-gray-50 text-gray-600">入職しなかった</span>}
                       {pr.stale && <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900" data-stale-mark>⚠ 入職予定日から60日以上・要確認</span>}
@@ -411,7 +421,7 @@ export function StaffGrowthKarte() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="min-w-0">
-                      <span className="text-sm font-medium text-gray-900">{e.name}</span>
+                      <span className="text-sm font-medium text-gray-900">{formatPersonName(e.name)}</span>
                       {e.roleLabel && (
                         <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700">
                           {e.roleLabel}

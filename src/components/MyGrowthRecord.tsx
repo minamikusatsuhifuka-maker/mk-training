@@ -321,7 +321,7 @@ export function MyGrowthRecord() {
   }
 
   // 220 §3: 院長が見る画面と同じ並び。本人には「基本情報」は無い
-  const baseTabs = visibleGrowthTabs({ basic: false, michishirube: michiOk });
+  const baseTabs = visibleGrowthTabs({ basic: false }); // 道しるべ・現在地・アンケート・フィードバックは束ねた先のタブ内（第3便）
   const tabs = baseTabs.map((t) =>
     t.key === "feedback" && unseenCount > 0 ? { ...t, label: `${t.label}（新着 ${unseenCount}）` } : t
   );
@@ -412,7 +412,7 @@ export function MyGrowthRecord() {
               </>
             )}
           </MyCard>
-          <MyCard title="🌟 フィードバック" onMore={() => setTab("feedback")}>
+          <MyCard title="🌟 フィードバック" onMore={() => setTab("one_on_one")}>
             {feedbackAll.length === 0 ? (
               <p className="text-[11px] text-gray-500">まだ記録がありません。</p>
             ) : (
@@ -433,24 +433,13 @@ export function MyGrowthRecord() {
               </p>
             )}
           </MyCard>
-          <MyCard title="🧭 現在地" onMore={() => setTab("position")}>
+          <MyCard title="🧭 現在地" onMore={() => setTab("goals")}>
             <p className="text-[11px] text-gray-600">成長マトリクスの位置と、必須の学びの進み具合を見られます。</p>
           </MyCard>
-          <MyCard title="📝 アンケート" onMore={() => setTab("presurvey")}>
+          <MyCard title="📝 アンケート" onMore={() => setTab("one_on_one")}>
             <p className="text-[11px] text-gray-600">次の1on1の事前アンケートに答えられます。</p>
           </MyCard>
         </div>
-      ) : tab === "presurvey" ? (
-        // 本人に見せる範囲は今までのまま（回答そのものは1on1の事前アンケートの画面で見る・220 §3）
-        <section className="space-y-2" data-tab-panel="presurvey">
-          <p className="text-[11px] text-gray-600 leading-relaxed">
-            1on1の事前アンケートは、次の1on1の予定が登録されると答えられます。
-            第1部（働く目的と目標）は、この画面の「🎯 目標」と同じものです。
-          </p>
-          <Link href="/one-on-one/presurvey" className="inline-flex items-center px-4 py-2 bg-teal-600 text-white rounded-full text-sm hover:bg-teal-700 min-h-[44px]">
-            📝 事前アンケートの画面へ
-          </Link>
-        </section>
       ) : tab === "learning" ? (
         <section className="space-y-3">
           {editing === "new" ? (
@@ -523,23 +512,14 @@ export function MyGrowthRecord() {
           onDelete={goalHandlers.onDelete}
           onPace={goalHandlers.onPace}
         />
-        </div>
-      ) : tab === "michishirube" ? (
-        <MichiProgressTab />
-      ) : tab === "position" ? (
+        {/* 🧭 道しるべ（スイッチONのときだけ）と 🧭 現在地 — 「目標と成長」に束ねた（第3便） */}
+        {michiOk && <MichiProgressTab />}
         <CurrentPositionCard mode="owner" />
-      ) : tab === "feedback" ? (
-        <section className="space-y-2">
-          <p className="text-[11px] text-gray-600 leading-relaxed">
-            院長・担当幹部からの<strong>ポジティブフィードバック（もらった承認）</strong>と、対面で話し合ったあとに記録された
-            <strong>ギャップフィードバック</strong>（①事実・②すり合わせ・③改善計画・その後）です。反応や改善計画の進捗はあなたが書けます。
-          </p>
-          <FeedbackPanel mode="owner" onLoaded={(list) => setFeedbackAll(list)} />
-        </section>
+        </div>
       ) : (
-        // 🤝 1on1（1on1の約束と取り組み状況）
+        // 🤝 1on1・面談（1on1の約束・事前アンケート・フィードバック — 第3便で束ねた）
         <div className="space-y-2" data-tab-panel="one_on_one">
-        {michiOk && <MichiBrief onOpen={() => setTab("michishirube")} />}
+        {michiOk && <MichiBrief onOpen={() => setTab("goals")} />}
         {/* 266 §4: 年間計画の今週のひとこと（自分の分・最近4週間） */}
         <WeeklyReflections />
         <PromisesSection
@@ -570,6 +550,29 @@ export function MyGrowthRecord() {
             }
           }}
         />
+        <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2" data-tab-panel="presurvey">
+          <h3 className="text-sm font-medium text-gray-900">📝 1on1の事前アンケート</h3>
+          {/* 本人に見せる範囲は今までのまま（回答そのものは1on1の事前アンケートの画面で見る・220 §3） */}
+        <div>
+          <p className="text-[11px] text-gray-600 leading-relaxed">
+            1on1の事前アンケートは、次の1on1の予定が登録されると答えられます。
+            第1部（働く目的と目標）は、この画面の「🎯 目標」と同じものです。
+          </p>
+          <Link href="/one-on-one/presurvey" className="inline-flex items-center px-4 py-2 bg-teal-600 text-white rounded-full text-sm hover:bg-teal-700 min-h-[44px]">
+            📝 事前アンケートの画面へ
+          </Link>
+        </div>
+              </section>
+        <section className="rounded-xl border border-gray-200 bg-white p-3 space-y-2" data-tab-panel="feedback">
+          <h3 className="text-sm font-medium text-gray-900">🌟 フィードバックの記録</h3>
+        <div>
+          <p className="text-[11px] text-gray-600 leading-relaxed">
+            院長・担当幹部からの<strong>ポジティブフィードバック（もらった承認）</strong>と、対面で話し合ったあとに記録された
+            <strong>ギャップフィードバック</strong>（①事実・②すり合わせ・③改善計画・その後）です。反応や改善計画の進捗はあなたが書けます。
+          </p>
+          <FeedbackPanel mode="owner" onLoaded={(list) => setFeedbackAll(list)} />
+        </div>
+              </section>
         </div>
       )}
     </div>

@@ -32,6 +32,8 @@ export type MasterItem = {
 
 export const MASTER_CATEGORIES: MasterCategory[] = [
   { id: "home", label: "ホーム" },
+  // 第3便 §4: 目的別の整理 — 成長・1on1まわり（個人シート・行動例・教え・道しるべ）をひとまとまりに
+  { id: "growth", label: "成長・1on1" },
   { id: "philosophy", label: "理念・想い" },
   { id: "medical", label: "医療知識" },
   { id: "beauty", label: "当院の美容" },
@@ -58,13 +60,13 @@ export const MASTER_ITEMS: MasterItem[] = [
   // 240: 1on1カレンダー（確定した予約の日時と名前だけ・スタッフ全員）
   { key: "/one-on-one/calendar", href: "/one-on-one/calendar", label: "🗓 1on1カレンダー", categoryId: "home", featureId: "one_on_one_calendar" },
   // わたしの可能性ノート（指示書179-C・本人の学び／目標／1on1の約束。既定OFF＝説明後に院長がON）
-  { key: "/my-growth", href: "/my-growth", label: "📄 私の個人シート", categoryId: "home", featureId: "growth_record" },
+  { key: "/my-growth", href: "/my-growth", label: "📄 私の個人シート", categoryId: "growth", featureId: "growth_record", preferCategoryLabel: "成長・1on1" },
   // 成功の原則×行動例・考え方の例（ライブラリ）と、本人だけの「今週の一歩」。ログイン中のスタッフ全員（院長の承認済み）
-  { key: "/growth-actions", href: "/growth-actions", label: "🌱 成長の行動例", categoryId: "home" },
+  { key: "/growth-actions", href: "/growth-actions", label: "🌱 成長の行動例", categoryId: "growth", preferCategoryLabel: "成長・1on1" },
   // アチーブメントの教え（成功のサイクル・失敗のサイクル／人生の方程式／成功の公式／身につけたい7つの習慣）。静的・ログイン中のスタッフ全員
-  { key: "/achievement", href: "/achievement", label: "🌱 アチーブメントの教え", categoryId: "home" },
+  { key: "/achievement", href: "/achievement", label: "🌱 アチーブメントの教え", categoryId: "growth", preferCategoryLabel: "成長・1on1" },
   // 270: 成長の道しるべ（8段のはしご・段ごとのステップ・技能の4段階・学びの地図）。既定OFF＝院長と検証用アカウントだけ
-  { key: "/michishirube", href: "/michishirube", label: "🧭 成長の道しるべ", categoryId: "home", featureId: "michishirube", preferCategoryLabel: "自己成長" },
+  { key: "/michishirube", href: "/michishirube", label: "🧭 成長の道しるべ", categoryId: "growth", featureId: "michishirube", preferCategoryLabel: "自己成長" },
   // 外部リンク（別タブ）。指示書59
   {
     key: "ai-incho",
