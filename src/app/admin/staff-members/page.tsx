@@ -20,6 +20,8 @@ import {
   addStaffMemberCanonical,
   renameStaffMemberEverywhere,
   saveStaffMembers,
+  loadTasks,
+  loadTaskArchive,
 } from "@/lib/staff-tasks";
 import { canonicalRosterName, formatPersonName } from "@/lib/staff-sheet";
 
@@ -93,13 +95,34 @@ export default function StaffMembersAdminPage() {
     setInput("");
   };
 
+  // 第4便: 削除の前に、この名前が担当になっているタスクが無いかを数えて見せる
+  // （テスト名の整理で「関連がなければ削除・あれば内容を示す」を1回の操作でできるように）
   const remove = async (name: string) => {
-    if (!window.confirm(`「${formatPersonName(name)}」を名簿から外しますか？\n（過去のタスク・記録は消えません。担当者候補と、この一覧から外れるだけです）`)) return;
+    setSaving(true);
+    let related = 0;
+    let checked = true;
+    try {
+      const [tasks, archive] = await Promise.all([loadTasks(), loadTaskArchive()]);
+      const hit = (t: { assignee: string; assignees?: string[]; roles?: Record<string, "leader" | "sub"> }) =>
+        t.assignee === name || (t.assignees ?? []).includes(name) || (!!t.roles && Object.prototype.hasOwnProperty.call(t.roles, name));
+      related = tasks.filter(hit).length + archive.filter(hit).length;
+    } catch {
+      checked = false;
+    }
+    setSaving(false);
+    const shown = formatPersonName(name);
+    const msg = !checked
+      ? `「${shown}」を名簿から外しますか？\n（タスクの確認に失敗しました。過去の記録は消えません）`
+      : related === 0
+        ? `「${shown}」を名簿から外しますか？\n\nこの名前が担当のタスクはありません（アーカイブ含め0件）。シートや記録には影響しません。`
+        : `「${shown}」が担当のタスクが ${related} 件あります（アーカイブ含む）。\n名簿から外しても記録は消えず、タスクの担当名もそのまま残ります。\n\n※実在スタッフの名前の直しなら、削除ではなく ✏️変更 を使ってください（記録ごと新しい名前に付け替わります）。\n\n名簿から外しますか？`;
+    if (!window.confirm(msg)) return;
     const next = members.filter((m) => m !== name);
     setMembers(next);
     setSaving(true);
     await saveStaffMembers(next);
     setSaving(false);
+    setMessage(checked && related > 0 ? `「${shown}」を名簿から外しました（担当タスク${related}件の記録はそのまま残っています）` : `「${shown}」を名簿から外しました`);
   };
 
   const startEdit = (name: string) => {

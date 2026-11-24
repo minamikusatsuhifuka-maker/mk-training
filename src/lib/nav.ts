@@ -601,3 +601,132 @@ export function gatedKeysOutsideGroups(resolved: ResolvedCategory[]): GatedItem[
   for (const c of resolved) for (const it of c.items) if (it.gated) placed.add(it.key);
   return GATED_ITEMS.filter((g) => !placed.has(g.key));
 }
+
+// ─── 第4便：目的別の「おすすめの配置」（院長が1タップで適用できる推奨メニュー構成） ───
+//
+// 「何をしたいとき、どこを押すか」でカテゴリを分ける。項目は1つも消さない（移動と並びだけ）。
+// 適用しても、表示名の上書き・外部リンク・項目の非表示設定は今のまま引き継ぐ。
+// 適用は管理画面「🧭 サイドバー構成」のボタン＝押すのは院長（ここでは定義だけ）。
+
+export const RECOMMENDED_CATEGORIES: { id: string; label: string }[] = [
+  { id: "home", label: "🏠 ホーム・お知らせ" },
+  { id: "daily", label: "📋 きょうの仕事（共有・報告）" },
+  { id: "growth", label: "🌱 成長・1on1（自分のシート）" },
+  { id: "learn", label: "📚 まなび・研修" },
+  { id: "medical", label: "🩺 医療の知識（調べる）" },
+  { id: "beauty", label: "✨ 美容の知識（調べる）" },
+  { id: "clinic", label: "🧭 理念・当院の計画" },
+  { id: "manage", label: "🛠 スタッフ運営（院長・任された人）" },
+];
+
+/** 項目キー → おすすめのカテゴリ（並びはこの配列の順）。マスターと任された人の項目を全部置く */
+export const RECOMMENDED_PLACEMENT: Record<string, string[]> = {
+  home: ["/", "/notices", "/members", "/calendar", "/news-history", "ai-incho"],
+  daily: ["/tasks", "/operations", "/chorei", "/hiyari-report", "/kizuki", "/thanks", "/events"],
+  growth: [
+    "/my-growth",
+    "/onboarding",
+    "/one-on-one",
+    "/one-on-one/presurvey",
+    "/one-on-one/booking",
+    "/one-on-one/calendar",
+    "/self-review",
+    "/growth-actions",
+    "/achievement",
+    "/michishirube",
+    "/growth-builder",
+    "/expert",
+  ],
+  learn: [
+    "/library",
+    "library-manual",
+    "/manual-drafts",
+    "/benkyokai",
+    "/quiz",
+    "/progress",
+    "/ai-chat",
+    "/case-study",
+    "/roleplay",
+    "/reception",
+    "/clerk",
+    "/counselor",
+  ],
+  medical: [
+    "/knowledge",
+    "/diseases",
+    "/drugs",
+    "/contraindications",
+    "/pregnancy",
+    "/interactions",
+    "/biologics",
+    "/age-restrictions",
+    "/medical-fees",
+  ],
+  beauty: ["/cosmetic", "/skincare", "/counseling"],
+  clinic: ["/philosophy", "/quotes", "/corporate-book", "/hr", "/goals", "/gantt", "/ayumi"],
+  manage: [
+    "/staff-growth",
+    "/staff-contacts",
+    "/doc-tasks",
+    "/admin/people-training/guide",
+    "/admin/people-training",
+    "/director-retrospective",
+  ],
+};
+
+/**
+ * 今の構成に「おすすめの配置」をあてる純関数。
+ * 引き継ぐもの: 表示名の上書き（labelOverride）・項目の非表示（hidden）・外部リンク（links）。
+ * 変えるもの: カテゴリの分け方と並び順だけ。
+ * おすすめに無い項目（将来増えた項目）は、マスターの既定カテゴリ…ではなく home の末尾に置いて見失わない。
+ */
+export function applyRecommendedNav(cfg: NavConfig | null | undefined): NavConfig {
+  const base = normalizeConfig(cfg);
+  const overrides = new Map(base.items.map((i) => [i.key, i] as const));
+
+  const categories: NavCategory[] = RECOMMENDED_CATEGORIES.map((c, i) => ({
+    id: c.id,
+    label: c.label,
+    order: i,
+    hidden: false,
+  }));
+
+  const placed = new Set<string>();
+  const items: NavItemConfig[] = [];
+  for (const cat of RECOMMENDED_CATEGORIES) {
+    const keys = RECOMMENDED_PLACEMENT[cat.id] ?? [];
+    keys.forEach((key, i) => {
+      // マスターにも任された人の一覧にも無いキーは置かない（孤児を作らない）
+      if (!masterIndex.has(key) && !isGatedKey(key)) return;
+      placed.add(key);
+      const prev = overrides.get(key);
+      items.push({
+        key,
+        categoryId: cat.id,
+        order: (i + 1) * 10,
+        hidden: !!prev?.hidden && !isGatedKey(key), // 任された人の項目は非表示の仕組みがない
+        ...(prev?.labelOverride ? { labelOverride: prev.labelOverride } : {}),
+      });
+    });
+  }
+  // おすすめ表に無いマスター項目（将来の追加分）: home の末尾へ
+  MASTER_ITEMS.forEach((m, i) => {
+    if (placed.has(m.key)) return;
+    const prev = overrides.get(m.key);
+    items.push({
+      key: m.key,
+      categoryId: "home",
+      order: 5000 + i,
+      hidden: !!prev?.hidden,
+      ...(prev?.labelOverride ? { labelOverride: prev.labelOverride } : {}),
+    });
+  });
+
+  // 外部リンク: そのまま引き継ぎ。置き場のカテゴリが無くなったものは home の末尾へ
+  const catIds = new Set(categories.map((c) => c.id));
+  const links = (base.links ?? []).map((l, i) =>
+    catIds.has(l.categoryId) ? l : { ...l, categoryId: "home", order: 9000 + i }
+  );
+
+  return { categories, items, ...(links.length > 0 ? { links } : {}) };
+}

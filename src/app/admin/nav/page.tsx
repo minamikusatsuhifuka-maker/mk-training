@@ -24,6 +24,7 @@ import {
   linkKeyOf,
   linkLabelOf,
   normalizeConfig,
+  applyRecommendedNav,
   type NavConfig,
   type NavLink,
 } from "@/lib/nav";
@@ -597,6 +598,13 @@ export default function AdminNavPage() {
   };
 
   // --- global ops ---
+  // 第4便: 目的別の「おすすめの配置」を編集中の状態にあてる（保存はまだ。💾 保存を押すまでスタッフ側は変わらない）
+  const applyRecommended = () => {
+    if (!confirm("メニューを目的別の「おすすめの配置」に並べ替えます。\n\n・項目は消えません（移動と並びだけ）\n・表示名の上書き・外部リンク・非表示の設定は引き継ぎます\n・この場で確認してから「💾 保存」を押すまで、スタッフ側は変わりません\n\nよろしいですか？")) return;
+    const next = configToEdit(applyRecommendedNav(editToConfig(state)));
+    update(next);
+    flash("おすすめの配置にしました。確認して「💾 保存」を押してください（それまで反映されません）");
+  };
   const importCurrent = () => {
     // 171: 既定の取り込みでも、管理画面から登録した外部リンクは残す
     const next = keepLinks(configToEdit(buildDefaultConfig()), state);
@@ -673,6 +681,7 @@ export default function AdminNavPage() {
       )}
 
       <div className="flex flex-wrap gap-2">
+        <Button size="sm" onClick={applyRecommended} className="bg-teal-600 hover:bg-teal-700" data-nav-recommended>🧭 おすすめの配置に整える（目的別）</Button>
         <Button variant="outline" size="sm" onClick={importCurrent}>現在の構成を初期値として取り込む</Button>
         <Button variant="outline" size="sm" onClick={applyDefaultPlacement}>⟲ 既定の配置を反映（表示/名前設定は維持）</Button>
         <Button variant="outline" size="sm" onClick={resetToDefault}>既定に戻す</Button>
