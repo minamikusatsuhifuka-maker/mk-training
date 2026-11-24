@@ -90,7 +90,7 @@ export const ADMIN_ITEMS: readonly AdminItem[] = [
   { key: "interactions", label: "⚡ 相互作用管理", href: "/admin/interactions", delegable: true, reason: "研修コンテンツ", contentKeys: ["drug_interactions"] },
   { key: "medical-fees", label: "💴 算定点数管理", href: "/admin/medical-fees", delegable: true, reason: "研修コンテンツ", contentKeys: ["medical_fees"] },
   { key: "operations", label: "📋 業務チェック管理", href: "/admin/operations", delegable: true, reason: "業務手順", contentPrefixes: ["operations_"] },
-  { key: "staff-members", label: "👥 スタッフ名簿", href: "/admin/staff-members", delegable: true, reason: "タスクの担当者候補（氏名のみ・連絡先は含まない）", contentKeys: ["staff_members"] },
+  { key: "staff-members", label: "👥 スタッフ管理", href: "/admin/staff-members", delegable: true, reason: "名簿（タスクの担当者候補・個人シートの入口）と氏名の変更（氏名のみ・連絡先は含まない）", contentKeys: ["staff_members"] },
   { key: "task-categories", label: "🏷️ タスクカテゴリ管理", href: "/admin/task-categories", delegable: true, reason: "タスクの分類", contentKeys: ["task_category_config"] },
   // 197: 1on1の事前アンケートの質問。1on1は「個人の記録」の系統なので院長のみ（183 B-2・/admin/portal の🤝1on1タブと同じ扱い）
   {

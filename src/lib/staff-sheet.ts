@@ -94,3 +94,87 @@ export function matchRosterNames(
       return { name, userId: [...ids][0], ambiguous: false };
     });
 }
+
+// ─── 第2便：氏名の表示統一と、名簿名の変更（指示書 mk_training_staff_sheet_2）───
+
+/** 日本語の文字（ひらがな・カタカナ・漢字・長音）を含むか */
+export function hasJapanese(s: string): boolean {
+  return /[぀-ヿ㐀-鿿豈-﫿ー々〆]/u.test(s);
+}
+
+/**
+ * 氏名の表示統一：日本語氏名は姓名の間のスペース（全角・半角）を入れない形にそろえる。
+ * ローマ字などスペースが意味を持つ名前はそのまま（前後の空白だけ落とす）。
+ * 保存データは変えず、**表示するときにこれを通す**（既存記録との関連を壊さないため）。
+ */
+export function formatPersonName(name: string): string {
+  const t = (name ?? "").normalize("NFKC").trim();
+  if (!t) return "";
+  return hasJapanese(t) ? t.replace(/[\s　]+/g, "") : t.replace(/[\s　]+/g, " ");
+}
+
+/** 名簿に**保存する**名前の形（表示統一と同じ規則。追加・変更のときに通す） */
+export function canonicalRosterName(name: string): string {
+  return formatPersonName(name);
+}
+
+type TaskAssigneeLike = {
+  assignee: string;
+  assignees?: string[];
+  roles?: Record<string, "leader" | "sub">;
+};
+
+/**
+ * タスクの担当者名を oldName → newName に付け替える（本体・アーカイブ共通の純関数）。
+ * 担当は名前の文字列で保存されているため、名簿の氏名を変えるときは**これで記録との関連を保つ**。
+ * 変更があったタスクだけ新しいオブジェクトにし、変更件数も返す。
+ */
+export function renameTaskAssignees<T extends TaskAssigneeLike>(
+  tasks: readonly T[],
+  oldName: string,
+  newName: string
+): { tasks: T[]; changed: number } {
+  let changed = 0;
+  const out = tasks.map((t) => {
+    const hitSingle = t.assignee === oldName;
+    const hitList = Array.isArray(t.assignees) && t.assignees.includes(oldName);
+    const hitRole = !!t.roles && Object.prototype.hasOwnProperty.call(t.roles, oldName);
+    if (!hitSingle && !hitList && !hitRole) return t;
+    changed += 1;
+    const next: T = { ...t };
+    if (hitSingle) next.assignee = newName;
+    if (hitList) {
+      const seen = new Set<string>();
+      next.assignees = (t.assignees ?? [])
+        .map((n) => (n === oldName ? newName : n))
+        .filter((n) => (seen.has(n) ? false : (seen.add(n), true)));
+    }
+    if (hitRole && t.roles) {
+      const roles: Record<string, "leader" | "sub"> = {};
+      for (const [k, v] of Object.entries(t.roles)) roles[k === oldName ? newName : k] = v;
+      next.roles = roles;
+    }
+    return next;
+  });
+  return { tasks: out, changed };
+}
+
+/**
+ * 名簿の氏名変更の計画。新しい名前が（正規化して）既存の別名とぶつかるときは失敗にする
+ * ＝**同姓同名や別人を自動で統合しない**（院長の決定）。
+ */
+export function planRosterRename(
+  members: readonly string[],
+  oldName: string,
+  newName: string
+): { ok: true; members: string[]; canonical: string } | { ok: false; reason: string } {
+  const canonical = canonicalRosterName(newName);
+  if (!canonical) return { ok: false, reason: "新しい名前が空です" };
+  if (!members.includes(oldName)) return { ok: false, reason: "元の名前が名簿にありません" };
+  if (canonical === oldName) return { ok: false, reason: "名前が変わっていません" };
+  const clash = members.some(
+    (m) => m !== oldName && normalizePersonName(m) === normalizePersonName(canonical)
+  );
+  if (clash) return { ok: false, reason: "同じ名前がすでに名簿にあります（別人の統合はしません）" };
+  return { ok: true, members: members.map((m) => (m === oldName ? canonical : m)), canonical };
+}

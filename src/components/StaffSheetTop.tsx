@@ -21,7 +21,7 @@ import {
 import type { PromiseItem } from "@/lib/staff-growth-client";
 import type { GrowthTabKey } from "@/lib/growth-tabs";
 import { formatMonthDay, formatMonthDayW, presurveyDeadline } from "@/lib/one-on-one-schedule";
-import { daysBetween, pickLastPromise, pickMonthlyGoal, sheetActionKind } from "@/lib/staff-sheet";
+import { daysBetween, formatPersonName, pickLastPromise, pickMonthlyGoal, sheetActionKind } from "@/lib/staff-sheet";
 
 export type SheetSchedule = {
   id: string;
@@ -116,7 +116,7 @@ function NextOneOnOneBlock({
               {formatMonthDayW(schedule.date)}
               {schedule.time && ` ${schedule.time}`}
             </p>
-            {schedule.partnerName && <p className="text-[12px] text-gray-600">相手：{schedule.partnerName}</p>}
+            {schedule.partnerName && <p className="text-[12px] text-gray-600">相手：{formatPersonName(schedule.partnerName)}</p>}
           </div>
         </div>
       )}
@@ -321,7 +321,7 @@ function MonthlyGoalBlock({
           )}
           {lastComment && (
             <div className="space-y-0.5 border-t border-gray-100 pt-2">
-              <p className="text-[11px] font-bold text-gray-700">{lastComment.name || "院長"}さんからのひとこと</p>
+              <p className="text-[11px] font-bold text-gray-700">{formatPersonName(lastComment.name) || "院長"}さんからのひとこと</p>
               <p className="text-[13px] leading-relaxed text-gray-900 whitespace-pre-wrap">{lastComment.text}</p>
             </div>
           )}
@@ -381,7 +381,7 @@ function LastPromiseBlock({
         <h2 id="sheet-last" className="text-[15px] font-bold text-gray-900">前回の面談で決めたこと</h2>
         {p && (
           <span className="text-[11px] text-gray-500">
-            {formatMonthDay(p.heldOn)}・{p.partnerName}
+            {formatMonthDay(p.heldOn)}・{formatPersonName(p.partnerName)}
           </span>
         )}
       </div>

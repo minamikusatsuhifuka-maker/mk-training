@@ -14,7 +14,8 @@ import { authorizeGrowth, canViewStaff } from "@/lib/staff-growth-server";
 import { growthErrorResponse, hidden } from "@/lib/staff-growth-route";
 import { serverGetContentRow } from "@/lib/content-store-server";
 import { loadProfilesIndexServer } from "@/lib/staff-growth-roster-server";
-import { matchRosterNames } from "@/lib/staff-sheet";
+import { matchRosterNames, normalizePersonName } from "@/lib/staff-sheet";
+import { fetchAllStaffContacts } from "@/lib/staff-contacts-server";
 import { jstTodayYmd } from "@/lib/library";
 import { fetchSchedules, withAnswerState } from "@/lib/one-on-one-schedule-server";
 
@@ -29,6 +30,17 @@ export type RosterMemberView = {
   link: "open" | "unlinked" | "ambiguous" | "none";
   userId?: string;
   next?: { date: string; time: string; answered: boolean; state: string } | null;
+  /** 第2便：アカウントの状態（院長だけ）。disabled=無効化（退職の扱い・169-3-4） */
+  account?: "active" | "disabled";
+  /** 第2便：入職日 YYYY-MM-DD（院長だけ・スタッフ連絡先から。未登録は空） */
+  joinedOn?: string;
+};
+
+/** 第2便：アカウント（プロフィール登録済み）はあるのに名簿に載っていない人（院長だけ） */
+export type UnregisteredAccountView = {
+  userId: string;
+  name: string;
+  account: "active" | "disabled";
 };
 
 export async function GET() {
@@ -62,7 +74,59 @@ export async function GET() {
       if (auth.isAdmin && !m.userId) return { name: m.name, link: "unlinked" };
       return { name: m.name, link: "none" };
     });
-    return NextResponse.json({ members, isAdmin: auth.isAdmin });
+
+    // ── 第2便（§1・§3）：院長にだけ、アカウントの状態・入職日・「名簿に未登録のアカウント」を足す ──
+    // どれも**今ある情報を集めて見せるだけ**（新しい保存先は作らない）。取得に失敗しても名簿本体は返す。
+    let unregisteredAccounts: UnregisteredAccountView[] | undefined;
+    let profilelessAccountCount: number | undefined;
+    if (auth.isAdmin) {
+      try {
+        const now = Date.now();
+        const { data } = await auth.admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        const disabledIds = new Set<string>();
+        const authIds = new Set<string>();
+        for (const u of data?.users ?? []) {
+          authIds.add(u.id);
+          const until = (u as { banned_until?: string | null }).banned_until;
+          if (until && !Number.isNaN(new Date(until).getTime()) && new Date(until).getTime() > now) {
+            disabledIds.add(u.id);
+          }
+        }
+        for (const m of members) {
+          if (m.userId) m.account = disabledIds.has(m.userId) ? "disabled" : "active";
+        }
+        // 名簿（正規化名）に無いプロフィール登録者 ＝ 「一覧に出ないスタッフ」の主な原因
+        const rosterKeys = new Set(matches.map((m) => normalizePersonName(m.name)));
+        unregisteredAccounts = people
+          .filter((p) => p.name && !rosterKeys.has(normalizePersonName(p.name)))
+          .map((p) => ({
+            userId: p.userId,
+            name: p.name,
+            account: disabledIds.has(p.userId) ? ("disabled" as const) : ("active" as const),
+          }));
+        // アカウントはあるがプロフィール（表示名）も未登録の人は、名前が無いので件数だけ
+        const profiled = new Set(people.map((p) => p.userId));
+        profilelessAccountCount = [...authIds].filter((id) => !profiled.has(id)).length;
+      } catch {
+        // ベストエフォート（アカウント一覧が読めなくても名簿は出す）
+      }
+      try {
+        const { contacts } = await fetchAllStaffContacts(auth.admin);
+        const joined = new Map(contacts.map((c) => [c.userId, c.joinedOn] as const));
+        for (const m of members) {
+          if (m.userId) m.joinedOn = joined.get(m.userId) ?? "";
+        }
+      } catch {
+        // 連絡先テーブル未作成などでも名簿は出す
+      }
+    }
+
+    return NextResponse.json({
+      members,
+      isAdmin: auth.isAdmin,
+      ...(unregisteredAccounts !== undefined ? { unregisteredAccounts } : {}),
+      ...(profilelessAccountCount !== undefined ? { profilelessAccountCount } : {}),
+    });
   } catch (e) {
     return growthErrorResponse(e);
   }

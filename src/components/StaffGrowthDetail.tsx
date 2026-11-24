@@ -68,6 +68,7 @@ import { WellnessHistory, WellnessRecordBlock } from "@/components/WellnessPersp
 import { WeeklyReflections } from "@/components/gantt/GanttRhythm";
 import { fetchWellnessApi } from "@/lib/wellness-client";
 import type { WellnessEntry } from "@/lib/wellness";
+import { formatPersonName } from "@/lib/staff-sheet";
 
 // 220 §2-1: 帯と概要に出すぶんだけの軽い読み込み（読めない人には出さない＝null のまま）
 type ScheduleBrief = { id: string; date: string; time: string; answered: boolean; state: string; partnerName: string };
@@ -345,8 +346,8 @@ export function StaffGrowthDetail({ userId }: { userId: string }) {
 
       <header className="rounded-xl border border-gray-200 bg-white p-3">
         <h1 className="text-lg font-bold text-gray-900">
-          {entry.name}
-          {detail.contactAccess && <ContactQuickView userId={userId} name={entry.name} />}
+          {formatPersonName(entry.name)}
+          {detail.contactAccess && <ContactQuickView userId={userId} name={formatPersonName(entry.name)} />}
           {entry.testSeed && <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-900 font-normal" data-test-seed-badge>🧪 検証用</span>}
           {entry.roleLabel && (
             <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700 font-normal">

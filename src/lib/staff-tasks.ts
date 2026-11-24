@@ -720,3 +720,66 @@ export function isoToDateInput(iso: string | undefined): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
+
+// ─── 第2便：名簿の氏名変更（タスクとの関連を保ったまま）───
+
+import {
+  planRosterRename,
+  renameTaskAssignees,
+  canonicalRosterName,
+  normalizePersonName,
+} from "./staff-sheet";
+
+export type RenameStaffResult =
+  | { ok: true; canonical: string; tasksChanged: number; archiveChanged: number }
+  | { ok: false; reason: string };
+
+/**
+ * 名簿の氏名を変える。タスクの担当は**名前の文字列**で保存されているため、
+ * 名簿・タスク本体・タスクのアーカイブの3か所を同じ名前に付け替えて、過去の記録との関連を保つ。
+ * 1on1・面談・学習の記録は userId で結ばれているので、氏名を変えても影響しない。
+ * タスクの操作ログ（いつ誰が何をしたかの履歴）は、当時の記録としてそのまま残す。
+ * 同じ名前がすでに名簿にあるときは失敗を返す（**別人を自動で統合しない**）。
+ */
+export async function renameStaffMemberEverywhere(
+  oldName: string,
+  newName: string
+): Promise<RenameStaffResult> {
+  const members = await loadStaffMembers();
+  const plan = planRosterRename(members, oldName, newName);
+  if (!plan.ok) return plan;
+
+  // 名簿 → タスク本体 → アーカイブの順。途中で失敗したら、名簿を元に戻して報告する
+  if (!(await saveStaffMembers(plan.members))) {
+    return { ok: false, reason: "名簿の保存に失敗しました（権限か通信をご確認ください）" };
+  }
+  const tasks = await loadTasks();
+  const rt = renameTaskAssignees(tasks, oldName, plan.canonical);
+  if (rt.changed > 0 && !(await saveTasks(rt.tasks))) {
+    await saveStaffMembers(members); // 巻き戻し
+    return { ok: false, reason: "タスクの付け替えに失敗したため、名簿も元に戻しました" };
+  }
+  const archive = await loadTaskArchive();
+  const ra = renameTaskAssignees(archive, oldName, plan.canonical);
+  if (ra.changed > 0 && !(await saveTaskArchive(ra.tasks))) {
+    return {
+      ok: false,
+      reason: `アーカイブの付け替えに失敗しました（名簿とタスク${rt.changed}件は変更済み。もう一度お試しください）`,
+    };
+  }
+  return { ok: true, canonical: plan.canonical, tasksChanged: rt.changed, archiveChanged: ra.changed };
+}
+
+/** 名簿への追加（保存する形にそろえてから）。同じ名前（正規化後）が既にあれば追加しない */
+export async function addStaffMemberCanonical(
+  name: string
+): Promise<{ ok: boolean; canonical: string; reason?: string }> {
+  const canonical = canonicalRosterName(name);
+  if (!canonical) return { ok: false, canonical, reason: "名前が空です" };
+  const members = await loadStaffMembers();
+  if (members.some((m) => normalizePersonName(m) === normalizePersonName(canonical))) {
+    return { ok: false, canonical, reason: "同じ名前がすでに名簿にあります" };
+  }
+  const ok = await saveStaffMembers([...members, canonical]);
+  return ok ? { ok: true, canonical } : { ok: false, canonical, reason: "保存に失敗しました" };
+}
