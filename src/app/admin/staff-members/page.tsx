@@ -211,6 +211,21 @@ export default function StaffMembersAdminPage() {
           各行の「📇 連絡先」を押すと、その人の連絡先をすぐ開けます（まだ無ければ氏名入りの登録フォームが開きます）。
           🧭 はサーベイの入力様式の状態です（そろっている形＝結果画像あり・詳細15項目入力・公開範囲の統一。点数や回答の中身はこの画面に出ません）。
         </p>
+        {/* 第8便①: バッジの凡例（折りたたみ・いつでも確認できる） */}
+        <details className="text-xs">
+          <summary className="cursor-pointer select-none text-slate-600 hover:text-slate-900">
+            ❓ 名前の横のバッジ・下線の意味（押すと開きます）
+          </summary>
+          <ul className="mt-2 space-y-1 rounded-lg border border-slate-200 bg-slate-50 p-3 text-slate-700">
+            <li><strong>名前に下線</strong> … 押すとその人の📄個人シートが開く（開けるのは院長・担当の幹部・管理者だけ。下線が無くても連携切れではない）</li>
+            <li><strong>未連携</strong> … 同じ氏名のプロフィールが見つからない（本人がプロフィール未登録か、表記ゆれ。✏️変更でそろえると消える）</li>
+            <li><strong>同名あり</strong> … 同じ読みの氏名が2人以上いて自動で結び付けない（別人の統合はしない決まり）</li>
+            <li><strong>🤱 産休・育休／🌿 休職／退職</strong> … 📇連絡先の「在籍区分」。ログインの可否とは別</li>
+            <li><strong>🔒 ログイン停止中</strong> … アカウントの無効化（👤アカウント招待で変更）</li>
+            <li><strong>🧭 …</strong> … サーベイの状態（未回答／⏳公開の本人確認待ち／✅統一済み＋画像・15項目の不足。管理者だけに表示）</li>
+            <li><strong>次の1on1 …</strong> … 🗓1on1の日程に登録された直近の予定と、事前アンケートの提出状況</li>
+          </ul>
+        </details>
       </div>
 
       {/* 第7便: どこを押すか迷わないための「やることナビ」（順番つき・この画面が入口） */}

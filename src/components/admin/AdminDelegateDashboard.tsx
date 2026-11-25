@@ -5,16 +5,19 @@
 
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { AdminPurposeHub, type PurposeCard } from "@/components/admin/AdminPurposeHub";
 
 export type DelegateCard = { key: string; label: string; href: string; description: string; count?: string };
 
-export function AdminDelegateDashboard({ cards }: { cards: DelegateCard[] }) {
+export function AdminDelegateDashboard({ cards, hub = [] }: { cards: DelegateCard[]; hub?: PurposeCard[] }) {
   return (
     <div className="max-w-4xl space-y-6" data-admin-dashboard="delegate">
       <div>
         <h1 className="text-2xl font-bold text-slate-800">管理ダッシュボード</h1>
         <p className="text-sm text-slate-600 mt-1">院長から任されている機能です</p>
       </div>
+      {/* 第8便: 入口「やりたいことから選ぶ」（任されている範囲だけ） */}
+      <AdminPurposeHub cards={hub} />
       {cards.length === 0 ? (
         <p className="text-sm text-slate-600" data-admin-dashboard-empty>
           いま任されている機能はありません。

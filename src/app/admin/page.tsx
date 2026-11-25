@@ -12,6 +12,8 @@ import { ADMIN_ITEMS, PEOPLE_TRAINING_ITEM_KEY } from "@/lib/admin-items";
 import { canSeePeopleTraining } from "@/lib/people-training-server";
 import { AdminFullDashboard } from "@/components/admin/AdminFullDashboard";
 import { AdminDelegateDashboard, type DelegateCard } from "@/components/admin/AdminDelegateDashboard";
+import type { PurposeCard } from "@/components/admin/AdminPurposeHub";
+import { authorizeStaffContacts } from "@/lib/staff-contacts-server";
 import { diseases } from "@/data/diseases";
 import { drugs } from "@/data/drugs";
 import { quizQuestions } from "@/data/quiz";
@@ -39,5 +41,49 @@ export default async function AdminDashboardPage() {
     if (it.key === PEOPLE_TRAINING_ITEM_KEY && !(user && (await canSeePeopleTraining({ user, isAdmin: false })))) continue;
     cards.push({ key: it.key, label: it.label, href: it.href, description: it.reason, ...(COUNTS[it.key] ? { count: COUNTS[it.key] } : {}) });
   }
-  return <AdminDelegateDashboard cards={cards} />;
+
+  // 第8便: 任された幹部にも「やりたいことから選ぶ」入口を出す（任されている範囲・開ける画面だけ）
+  let contactsOk = false;
+  try {
+    contactsOk = (await authorizeStaffContacts()).ok;
+  } catch {
+    contactsOk = false;
+  }
+  const has = (k: string) => delegated.includes(k);
+  const hub: PurposeCard[] = [
+    {
+      icon: "👥",
+      title: "スタッフを管理する",
+      desc: "名簿・氏名の統一・在籍区分、住所や緊急連絡先の登録。新しいスタッフを迎える順番①〜⑤はスタッフ管理の先頭に出ます。",
+      share: "admin",
+      links: [
+        ...(has("staff-members") ? [{ label: "👥 スタッフ管理", href: "/admin/staff-members" }] : []),
+        ...(contactsOk ? [{ label: "📇 スタッフ連絡先", href: "/staff-contacts" }] : []),
+      ],
+    },
+    {
+      icon: "🌱",
+      title: "育てる・1on1",
+      desc: "流れ: 🗓 日程で1on1を登録 → 本人の画面に予定と事前アンケートが出る → 回答は「事前アンケートの回答」で確認。",
+      share: "personal",
+      links: [
+        ...(has("one-on-one-slots") ? [{ label: "🗓 1on1の日程", href: "/admin/one-on-one-slots" }] : []),
+        ...(has("presurvey-answers") ? [{ label: "📝 事前アンケートの回答", href: "/admin/presurvey-answers" }] : []),
+        ...(has("presurvey") ? [{ label: "📝 事前アンケートの質問", href: "/admin/presurvey" }] : []),
+      ],
+    },
+    {
+      icon: "📣",
+      title: "スタッフに見せるものを作る",
+      desc: "ここで保存した内容はスタッフ画面にそのまま出ます。",
+      share: "staff",
+      links: [
+        ...(has("portal") ? [{ label: "🏠 ポータル管理", href: "/admin/portal" }] : []),
+        ...(has("notice-attendance") ? [{ label: "📣 イベントの出欠", href: "/admin/notice-attendance" }] : []),
+        ...(has("nav") ? [{ label: "🧭 サイドバー構成", href: "/admin/nav" }] : []),
+      ],
+    },
+  ];
+
+  return <AdminDelegateDashboard cards={cards} hub={hub} />;
 }

@@ -12,6 +12,8 @@ import { EXPERT_ROLES } from "@/data/expertRoles";
 import { PriorityFocusMini } from "@/components/admin/PriorityFocusMini";
 // 219: 毎朝8時の定時処理の前回の結果。こちらも院長のみ（部品側で fail-close）
 import { CronStatusCard } from "@/components/admin/CronStatusCard";
+// 第8便: 入口「やりたいことから選ぶ」（目的別・共有範囲の色分き）
+import { AdminPurposeHub, ADMIN_PURPOSE_CARDS } from "@/components/admin/AdminPurposeHub";
 
 const stats = [
   { label: "疾患", count: diseases.length, unit: "件", href: "/admin/diseases" },
@@ -27,6 +29,8 @@ export function AdminFullDashboard() {
         <h1 className="text-2xl font-bold text-slate-800">管理ダッシュボード</h1>
         <p className="text-sm text-slate-600 mt-1">コンテンツの管理・編集が行えます</p>
       </div>
+
+      <AdminPurposeHub cards={ADMIN_PURPOSE_CARDS} />
 
       <PriorityFocusMini />
 
