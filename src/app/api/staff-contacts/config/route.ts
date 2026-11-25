@@ -16,7 +16,7 @@ import {
   ServiceRoleMissingError,
 } from "@/lib/staff-contacts-server";
 import { saveMenuAllowedUserIds } from "@/lib/menu-access-server";
-import { MENU_STAFF_CONTACTS } from "@/lib/menu-access";
+import { MENU_STAFF_CONTACTS, MENU_STAFF_CONTACTS_EDIT } from "@/lib/menu-access";
 
 export const runtime = "nodejs";
 
@@ -25,7 +25,7 @@ const hidden = () => NextResponse.json({ error: "Not Found" }, { status: 404 });
 export async function GET() {
   const auth = await authorizeStaffContacts();
   if (!auth.ok || !auth.isAdmin) return hidden();
-  return NextResponse.json({ viewerUserIds: auth.viewerUserIds });
+  return NextResponse.json({ viewerUserIds: auth.viewerUserIds, editorUserIds: auth.editorUserIds });
 }
 
 export async function PUT(req: Request) {
@@ -47,6 +47,11 @@ export async function PUT(req: Request) {
   );
   // 設定した本人が締め出される事故を防ぐ
   const viewerUserIds = ids.includes(auth.userId) ? ids : [...ids, auth.userId];
+  // 第5便: 「編集も任せる」の指名（閲覧の指名とは別リスト・同じ仕組み）
+  const rawEditors = Array.isArray(body.editorUserIds) ? body.editorUserIds : [];
+  const editorUserIds = Array.from(
+    new Set(rawEditors.filter((v): v is string => typeof v === "string" && v.trim() !== ""))
+  );
 
   try {
     const by = auth.userEmail || auth.userId;
@@ -58,11 +63,15 @@ export async function PUT(req: Request) {
     if (!ok) {
       return NextResponse.json({ error: "保存に失敗しました" }, { status: 500 });
     }
+    const okEditors = await saveMenuAllowedUserIds(MENU_STAFF_CONTACTS_EDIT, editorUserIds, by);
+    if (!okEditors) {
+      return NextResponse.json({ error: "「編集も任せる」の保存に失敗しました" }, { status: 500 });
+    }
     // 誰が開けるようにしたかは操作ログに残す（人数だけ・名前は残さない）。
     // 人数が同じでも入れ替わっていれば「変わった」ので、集合として比べる
     const same =
-      [...viewerUserIds].sort().join(",") ===
-      [...auth.viewerUserIds].sort().join(",");
+      [...viewerUserIds].sort().join(",") === [...auth.viewerUserIds].sort().join(",") &&
+      [...editorUserIds].sort().join(",") === [...auth.editorUserIds].sort().join(",");
     if (!same) {
       await recordStaffContactLog(auth.admin, {
         by,
@@ -74,10 +83,15 @@ export async function PUT(req: Request) {
             before: `${auth.viewerUserIds.length}人`,
             after: `${viewerUserIds.length}人`,
           },
+          {
+            field: "編集も任せる人",
+            before: `${auth.editorUserIds.length}人`,
+            after: `${editorUserIds.length}人`,
+          },
         ],
       });
     }
-    return NextResponse.json({ ok: true, viewerUserIds });
+    return NextResponse.json({ ok: true, viewerUserIds, editorUserIds });
   } catch (e) {
     if (e instanceof ServiceRoleMissingError) {
       return NextResponse.json({ error: e.message }, { status: 503 });

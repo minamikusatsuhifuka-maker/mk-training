@@ -26,6 +26,8 @@ export const MENU_DOC_TASKS = "doc-tasks";
  *   仮に値が書き込まれても指名制のまま動く）。
  */
 export const MENU_STAFF_CONTACTS = "staff-contacts";
+// 第5便: 連絡先の「編集」まで任せる人の指名（閲覧の指名とは別のリスト。157と同じ仕組みを流用）
+export const MENU_STAFF_CONTACTS_EDIT = "staff-contacts-edit";
 /**
  * 院長の振り返り記録（指示書173）。
  * 169と同じく **scope（「全員」モード）は使わない**。赤裸々な内容を書く場所で、

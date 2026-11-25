@@ -32,11 +32,13 @@ type RosterView = {
   next?: { date: string; time: string; answered: boolean; state: string } | null;
   account?: "active" | "disabled";
   joinedOn?: string;
+  employment?: "active" | "maternity" | "leave" | "left";
 };
 
 type RosterPayload = {
   members?: RosterView[];
   isAdmin?: boolean;
+  rosterManager?: boolean;
   unregisteredAccounts?: { userId: string; name: string; account: "active" | "disabled" }[];
   profilelessAccountCount?: number;
 };
@@ -61,6 +63,7 @@ export default function StaffMembersAdminPage() {
         setRoster(new Map((j.members ?? []).map((m) => [m.name, m])));
         setExtra({
           isAdmin: j.isAdmin,
+          rosterManager: j.rosterManager,
           unregisteredAccounts: j.unregisteredAccounts,
           profilelessAccountCount: j.profilelessAccountCount,
         });
@@ -177,7 +180,7 @@ export default function StaffMembersAdminPage() {
     setMessage(`表記をそろえました（タスク${moved}件の担当名も付け替え済み）`);
   };
 
-  const isAdmin = extra.isAdmin === true;
+  const isAdmin = extra.isAdmin === true || extra.rosterManager === true;
   const unregistered = extra.unregisteredAccounts ?? [];
 
   return (
@@ -219,7 +222,7 @@ export default function StaffMembersAdminPage() {
 
         {noAccess && (
           <p className="text-xs rounded-md bg-slate-50 border border-slate-200 text-slate-600 px-3 py-2">
-            シートへのリンク・アカウントとの連携状態・入職日・「名簿に未登録のアカウント」は、院長（と担当を任された幹部の範囲）にだけ表示されます。
+            連携状態・在籍区分・入職日・「名簿に未登録のアカウント」は、院長と「スタッフ管理」を任された人にだけ表示されます（シートへのリンクは、個人シートを見られる人だけ）。
           </p>
         )}
         {message && (
@@ -345,9 +348,25 @@ function RosterName({ name, view, isAdmin }: { name: string; view: RosterView | 
   const shown = formatPersonName(name);
   const badges = (
     <>
+      {/* 第5便: 在籍区分（📇スタッフ連絡先で編集）とログインの可否（👤アカウント招待の無効化）は別々に表示 */}
+      {isAdmin && view?.employment === "maternity" && (
+        <span className="rounded bg-pink-100 px-1.5 py-0.5 text-[10px] text-pink-800" title="在籍のまま。📇 スタッフ連絡先の「在籍区分」で変更できます">
+          🤱 産休・育休
+        </span>
+      )}
+      {isAdmin && view?.employment === "leave" && (
+        <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-800" title="在籍のまま。📇 スタッフ連絡先の「在籍区分」で変更できます">
+          🌿 休職
+        </span>
+      )}
+      {isAdmin && view?.employment === "left" && (
+        <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] text-slate-600" title="📇 スタッフ連絡先の「在籍区分」より">
+          退職
+        </span>
+      )}
       {isAdmin && view?.account === "disabled" && (
-        <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] text-slate-600" title="アカウントが無効化されています（退職の扱い）。戻すときは 👤 アカウント招待から">
-          退職（無効化）
+        <span className="rounded bg-slate-100 border border-slate-300 px-1.5 py-0.5 text-[10px] text-slate-600" title="ログインできない状態です（在籍区分とは別）。戻すときは 👤 アカウント招待から">
+          🔒 ログイン停止中
         </span>
       )}
       {view?.link === "unlinked" && (

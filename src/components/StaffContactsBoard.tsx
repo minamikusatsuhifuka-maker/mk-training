@@ -22,7 +22,10 @@ import {
   type FamilyMember,
   type StaffContact,
   type StaffContactInput,
+  EMPLOYMENT_OPTIONS,
+  employmentLabel,
 } from "@/lib/staff-contacts";
+import type { EmploymentStatus } from "@/lib/staff-contacts";
 import { FAMILY_NOTICE } from "@/lib/staff-growth";
 import { loadProfilesIndex } from "@/lib/staff-profiles";
 import type { StaffProfileIndexEntry } from "@/lib/staff-profiles";
@@ -352,6 +355,7 @@ function ContactDetail({ contact, isAdmin }: { contact: StaffContact; isAdmin: b
         <Row label="メール（私用）" value={contact.privateEmail} />
         <Row label="生年月日" value={contact.birthday} />
         <Row label="入職日" value={contact.joinedOn} />
+        <Row label="在籍区分" value={employmentLabel(contact.employment)} />
         <Row label="備考" value={contact.memo} />
       </dl>
 
@@ -485,6 +489,7 @@ function StaffContactForm({
     privateEmail: initial.privateEmail,
     birthday: initial.birthday,
     joinedOn: initial.joinedOn,
+    employment: initial.employment,
     memo: initial.memo,
     emergency: initial.emergency.length
       ? initial.emergency
@@ -609,6 +614,18 @@ function StaffContactForm({
             onChange={(e) => set("joinedOn", e.target.value)}
             className={inputClass}
           />
+        </Field>
+        <Field label="在籍区分">
+          {/* 第5便: ログインの可否（アカウントの無効化）とは別の事務情報。産休・育休・休職は在籍のまま区分だけ変える */}
+          <select
+            value={form.employment}
+            onChange={(e) => set("employment", e.target.value as EmploymentStatus)}
+            className={inputClass}
+          >
+            {EMPLOYMENT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
         </Field>
       </div>
 

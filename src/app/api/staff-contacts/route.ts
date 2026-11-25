@@ -137,8 +137,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const auth = await authorizeStaffContacts();
   if (!auth.ok) return hidden();
-  // 編集は管理者のみ。存在は隠したままにする（指名された人にも「作れない口」を見せない）
-  if (!auth.isAdmin) return hidden();
+  // 第5便: 登録・修正は、管理者と「編集も任せる」で指名された人（削除と家族構成は今までどおり管理者だけ）
+  if (!auth.canEdit) return hidden();
 
   let body: Record<string, unknown>;
   try {
@@ -181,7 +181,8 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   const auth = await authorizeStaffContacts();
   if (!auth.ok) return hidden();
-  if (!auth.isAdmin) return hidden();
+  // 第5便: 修正も、管理者と「編集も任せる」の指名の人（削除は管理者のみのまま）
+  if (!auth.canEdit) return hidden();
 
   let body: Record<string, unknown>;
   try {

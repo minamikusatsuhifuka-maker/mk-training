@@ -392,6 +392,15 @@ export function MyGrowthRecord() {
       ) : tab === "overview" ? (
         // 220 §2-3: 各タブの最新1件だけを小さなカードで並べる
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" data-tab-panel="overview">
+          {/* 第5便: 🧭 サーベイの入口（登録・修正はプロフィール画面で＝二重入力を作らない） */}
+          <Link
+            href="/profile"
+            className="sm:col-span-2 flex items-center justify-between rounded-xl border border-teal-200 bg-teal-50/50 p-3 hover:bg-teal-50"
+            data-survey-entry
+          >
+            <span className="text-sm text-gray-900">🧭 5つの基本的欲求サーベイを登録・修正する</span>
+            <span className="text-xs text-teal-800 underline underline-offset-2">プロフィール画面へ →</span>
+          </Link>
           <MyCard title="🎯 目標" onMore={() => setTab("goals")}>
             {purposeGoal || monthlyGoal ? (
               <>

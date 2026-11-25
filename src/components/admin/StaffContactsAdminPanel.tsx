@@ -3,8 +3,8 @@
 // スタッフ連絡先の設定（指示書169）— 管理画面側の入れ物
 // ページ（server component）で管理者チェック済み。ここは読み込みと体裁だけを持つ。
 //
-// できること: 「誰が連絡先を開けるか」の指名（157の menu_access を流用）と、操作ログの閲覧。
-// **編集できる人を増やす設定は無い**（編集は管理者に固定・169-1-3）。
+// できること: 「誰が連絡先を開けるか」の指名と、第5便の「編集も任せる人」の指名（157の menu_access を流用）、操作ログの閲覧。
+// 削除と家族構成の表示は、今までどおり管理者だけ。
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -18,6 +18,7 @@ import type { StaffProfileIndexEntry } from "@/lib/staff-profiles";
 
 export function StaffContactsAdminPanel() {
   const [viewers, setViewers] = useState<string[]>([]);
+  const [editors, setEditors] = useState<string[]>([]);
   /** 保存済みの指名リスト（名簿に出ないIDを壊さないために保持する） */
   const [saved, setSaved] = useState<string[]>([]);
   const [members, setMembers] = useState<StaffProfileIndexEntry[]>([]);
@@ -33,6 +34,7 @@ export function StaffContactsAdminPanel() {
         loadProfilesIndex(),
       ]);
       setViewers(cfg.viewerUserIds);
+      setEditors(cfg.editorUserIds);
       setSaved(cfg.viewerUserIds);
       setMembers(idx);
       setError("");
@@ -60,8 +62,9 @@ export function StaffContactsAdminPanel() {
       // 保存時にそのまま残す（157-Bと同じ・保存済みのIDを壊さない）
       const known = new Set(members.map((m) => m.userId));
       const next = [...viewers, ...saved.filter((id) => !known.has(id))];
-      const r = await saveStaffContactsConfig(next);
+      const r = await saveStaffContactsConfig(next, editors);
       setViewers(r.viewerUserIds);
+      setEditors(r.editorUserIds);
       setSaved(r.viewerUserIds);
       setError("");
       setMsg("💾 保存しました");
@@ -79,8 +82,8 @@ export function StaffContactsAdminPanel() {
           📇 スタッフ連絡先の設定
         </h1>
         <p className="text-xs text-gray-600 mt-1 leading-relaxed">
-          誰が連絡先を開けるかをここで指名します。登録・修正・削除は
-          <strong>管理者だけ</strong>が行えます（指名された人は閲覧のみ）。
+          誰が連絡先を開けるか・編集も任せるかをここで指名します。削除と家族構成は
+          <strong>管理者だけ</strong>です。
           連絡先そのものは
           <Link
             href="/staff-contacts"
@@ -139,6 +142,36 @@ export function StaffContactsAdminPanel() {
                 {m.role && (
                   <span className="text-xs text-gray-500">{m.role}</span>
                 )}
+              </label>
+            ))}
+          </div>
+        )}
+
+        <p className="text-xs font-medium text-gray-800 mt-4">
+          ✏️ 編集も任せる人（第5便）
+        </p>
+        <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">
+          チェックした人は、連絡先の<strong>登録・修正</strong>もできます（開く権限も自動で付きます）。
+          削除と、ご家族・保証人の情報の表示は、これからも管理者だけです。
+        </p>
+        {loaded && members.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mt-2" data-editors-list>
+            {members.map((m) => (
+              <label
+                key={m.userId}
+                className="flex items-center gap-2 p-2 border border-gray-200 rounded-lg text-sm cursor-pointer hover:bg-gray-50 min-h-[44px]"
+              >
+                <input
+                  type="checkbox"
+                  checked={editors.includes(m.userId)}
+                  onChange={(e) =>
+                    setEditors((prev) =>
+                      e.target.checked ? [...prev, m.userId] : prev.filter((id) => id !== m.userId)
+                    )
+                  }
+                />
+                <span className="truncate">{m.name}</span>
+                {m.role && <span className="text-xs text-gray-500">{m.role}</span>}
               </label>
             ))}
           </div>

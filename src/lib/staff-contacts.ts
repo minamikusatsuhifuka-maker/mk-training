@@ -68,6 +68,12 @@ export type StaffContact = {
   birthday: string;
   /** 入職日 YYYY-MM-DD */
   joinedOn: string;
+  /**
+   * 在籍区分（第5便）。**ログインの可否（アカウントの無効化）とは別**の事務情報。
+   * 産休・育休・休職は在籍のまま区分だけ変える（退職やアカウント無効として扱わない）。
+   * 旧データに無いときは「在籍」として扱う。
+   */
+  employment: EmploymentStatus;
   /** 備考（自由記述） */
   memo: string;
   /** 緊急連絡先・保証人（複数可） */
@@ -77,6 +83,20 @@ export type StaffContact = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type EmploymentStatus = "active" | "maternity" | "leave" | "left";
+export const EMPLOYMENT_OPTIONS: { value: EmploymentStatus; label: string; badge?: string }[] = [
+  { value: "active", label: "在籍" },
+  { value: "maternity", label: "産休・育休", badge: "🤱 産休・育休" },
+  { value: "leave", label: "休職", badge: "🌿 休職" },
+  { value: "left", label: "退職", badge: "退職" },
+];
+export function employmentLabel(v: EmploymentStatus): string {
+  return EMPLOYMENT_OPTIONS.find((o) => o.value === v)?.label ?? "在籍";
+}
+export function normalizeEmployment(v: unknown): EmploymentStatus {
+  return EMPLOYMENT_OPTIONS.some((o) => o.value === v) ? (v as EmploymentStatus) : "active";
+}
 
 export const NAME_MAX = 60;
 export const ADDRESS_MAX = 200;
@@ -159,6 +179,7 @@ export function normalizeStaffContact(
     privateEmail: text(g.privateEmail, EMAIL_MAX).trim(),
     birthday: ymd(g.birthday),
     joinedOn: ymd(g.joinedOn),
+    employment: normalizeEmployment(g.employment),
     memo: text(g.memo, MEMO_MAX),
     emergency: normalizeEmergency(g.emergency),
     family: normalizeFamily(g.family),
@@ -179,6 +200,7 @@ export function emptyStaffContact(): StaffContact {
     privateEmail: "",
     birthday: "",
     joinedOn: "",
+    employment: "active",
     memo: "",
     emergency: [],
     family: [],
@@ -313,24 +335,29 @@ export async function fetchStaffContacts(): Promise<StaffContactsListResponse> {
 /** 指名リストの取得（管理者のみ） */
 export async function fetchStaffContactsConfig(): Promise<{
   viewerUserIds: string[];
+  editorUserIds: string[];
 }> {
-  const j = await callApi<{ viewerUserIds?: string[] }>({
+  const j = await callApi<{ viewerUserIds?: string[]; editorUserIds?: string[] }>({
     method: "GET",
     path: "/config",
   });
-  return { viewerUserIds: Array.isArray(j.viewerUserIds) ? j.viewerUserIds : [] };
+  return {
+    viewerUserIds: Array.isArray(j.viewerUserIds) ? j.viewerUserIds : [],
+    editorUserIds: Array.isArray(j.editorUserIds) ? j.editorUserIds : [],
+  };
 }
 
-/** 指名リストの保存（管理者のみ・サーバー側で操作者自身が必ず含まれる） */
+/** 指名リストの保存（管理者のみ・サーバー側で操作者自身が必ず閲覧に含まれる）。第5便: 編集も任せる人も一緒に保存 */
 export async function saveStaffContactsConfig(
-  viewerUserIds: string[]
-): Promise<{ viewerUserIds: string[] }> {
-  const j = await callApi<{ viewerUserIds: string[] }>({
+  viewerUserIds: string[],
+  editorUserIds: string[] = []
+): Promise<{ viewerUserIds: string[]; editorUserIds: string[] }> {
+  const j = await callApi<{ viewerUserIds: string[]; editorUserIds?: string[] }>({
     method: "PUT",
     path: "/config",
-    body: JSON.stringify({ viewerUserIds }),
+    body: JSON.stringify({ viewerUserIds, editorUserIds }),
   });
-  return { viewerUserIds: j.viewerUserIds };
+  return { viewerUserIds: j.viewerUserIds, editorUserIds: j.editorUserIds ?? [] };
 }
 
 /** 登録・更新で送れる項目（id / createdAt / updatedAt はサーバーが決める） */

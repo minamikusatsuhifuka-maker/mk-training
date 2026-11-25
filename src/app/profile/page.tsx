@@ -67,7 +67,6 @@ import {
   PROFILE_ADMIN_NOTE_ON,
   PROFILE_FOCUS_NOTE_OFF,
   PROFILE_FOCUS_NOTE_ON,
-  directorViewOptions,
 } from "@/lib/needs-director-view";
 import {
   DEFAULT_VALUE_KEYWORDS_CONFIG,
@@ -212,7 +211,9 @@ export default function ProfilePage() {
       // サーベイの編集stateを初期化（指示書58）
       setSurveyValues(json.profile.needsSurvey?.values ?? {});
       setSurveyDetails(json.profile.needsSurvey?.details ?? {});
-      setSurveyVisibility(json.profile.needsSurvey?.visibility ?? "private");
+      // 第5便: まだサーベイが無い人（新規）は院内方針の公開範囲を既定に（保存した時に確定＝本人の確認を経る）。
+      // 保存済みの人は保存値のまま表示し、方針カードの確認→💾保存で統一する（無告知で変えない）
+      setSurveyVisibility(json.profile.needsSurvey ? (json.profile.needsSurvey.visibility ?? "private") : "public_details");
       setSurveyAiParsed(json.profile.needsSurvey?.aiParsed === true);
       // 182: 履歴と案内
       void loadSurveyHistory();
@@ -1271,33 +1272,33 @@ export default function ProfilePage() {
             </button>
           </div>
         )}
-        {/* 182 A-1/A-4: 公開設定は3択。各選択肢の横に「何が誰に見えるか」を書く（164の説明を引き継ぐ） */}
-        <fieldset className="space-y-1.5" data-survey-visibility>
-          <legend className="text-xs font-medium text-gray-800">公開設定（保存は「💾 保存」で確定）</legend>
-          {directorViewOptions(directorView?.on ? directorView.texts : null).map((opt) => (
-            <label
-              key={opt.value}
-              className={`flex items-start gap-2 rounded-md border p-2 cursor-pointer min-h-[44px] ${
-                surveyVisibility === opt.value
-                  ? "border-teal-300 bg-teal-50"
-                  : "border-border bg-white hover:bg-gray-50"
-              }`}
+        {/* 第5便（院長決定・2026-11-25）: 公開範囲は院内方針で統一。3択はやめ、方針の説明と「確認して保存」に整理。
+            過去の履歴にも公開設定が適用される仕様のため、無告知では変えない＝本人がこのカードで確認し💾保存した時に統一が完了する。
+            回答内容・履歴はここでは一切変更しない。 */}
+        {surveyVisibility === "public_details" ? (
+          <div className="rounded-md border border-teal-200 bg-teal-50 p-3 text-xs text-teal-900 leading-relaxed" data-survey-visibility data-survey-policy="done">
+            ✅ <strong>院内方針の公開範囲で共有中です。</strong>
+            レーダーチャート・結果画像・詳細15項目の「欲求」の値を、ログイン中のスタッフと管理者に共有しています。
+            「注力」「現況」はこれからも<strong>あなただけ</strong>に見えます。
+          </div>
+        ) : (
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 space-y-2" data-survey-visibility data-survey-policy="pending">
+            <p className="text-xs text-amber-900 leading-relaxed">
+              <strong>【院内方針のお知らせ】</strong>
+              当院では、お互いの違いを知って関わり方を工夫するため、全スタッフのサーベイ結果を同じ公開範囲にそろえることになりました：
+              <strong>レーダーチャート・結果画像・詳細15項目の「欲求」の値を、ログイン中のスタッフと管理者に共有</strong>します。
+              「注力」「現況」はこれからも<strong>あなただけ</strong>に見えます。過去の回答の中身が変わることはありません。
+            </p>
+            <button
+              type="button"
+              onClick={() => setSurveyVisibility("public_details")}
+              className="rounded-md bg-teal-600 px-3 py-2 text-xs font-medium text-white hover:bg-teal-700 min-h-[40px]"
+              data-survey-policy-agree
             >
-              <input
-                type="radio"
-                name="survey-visibility"
-                value={opt.value}
-                checked={surveyVisibility === opt.value}
-                onChange={() => setSurveyVisibility(opt.value)}
-                className="mt-1"
-              />
-              <span className="min-w-0">
-                <span className="block text-sm text-gray-900">{opt.label}</span>
-                <span className="block text-[11px] text-muted-foreground leading-relaxed">{opt.desc}</span>
-              </span>
-            </label>
-          ))}
-        </fieldset>
+              ✅ この公開範囲にする（下の「💾 保存」で確定します）
+            </button>
+          </div>
+        )}
         <p className="text-xs text-muted-foreground leading-relaxed">
           選択理論の「5つの基本的欲求」サーベイ結果を共有できます。お互いの違いを知り、関わり方を工夫するために使うものです。
           数値は相互理解のためのもので、評価や優劣付けには使いません。
@@ -1305,8 +1306,7 @@ export default function ProfilePage() {
           <strong data-survey-admin-note>{directorView?.on ? PROFILE_ADMIN_NOTE_ON : PROFILE_ADMIN_NOTE_OFF}</strong>
           <strong>{directorView?.on ? PROFILE_FOCUS_NOTE_ON : PROFILE_FOCUS_NOTE_OFF}</strong>
           <br />
-          <strong>いつでも変更でき、変更は保存するとすぐに反映されます。</strong>
-          非公開に戻すと、その時点から他の人には見えなくなります（過去の結果も含めて）。
+          公開範囲は院内方針で統一しています（上のとおり）。気になることがあれば院長へ直接どうぞ。
         </p>
         {/* 182 B-4: 履歴の説明（常時表示） */}
         <p className="text-xs text-muted-foreground leading-relaxed rounded-md border border-border bg-gray-50 p-2" data-survey-history-note>

@@ -186,6 +186,12 @@ export async function loadNeedsOverviewList(a: NeedsOverviewAuth): Promise<Needs
         : redactProfileForViewer(full, viewer.id).needsSurvey ?? null;
     const snap = snapshotOf(shared);
     Object.assign(cur, snap);
+    // 第5便: 統一状況（状態だけ。非公開の回答の中身は出さない）
+    cur.policy = !full.needsSurvey
+      ? "none"
+      : full.needsSurvey.visibility === "public_details"
+        ? "done"
+        : "pending";
   }
 
   // 今いる段（270・院長が決めたもの）

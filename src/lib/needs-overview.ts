@@ -36,6 +36,9 @@ export type NeedsPersonRow = {
   values: Partial<Record<NeedKey, number>>;
   /** 15項目の「欲求」（見られるものだけ・項目key → 値） */
   details: Record<string, number>;
+  /** 第5便: 公開範囲の統一状況。done=院内方針（詳細まで公開）で統一済み／pending=本人の確認待ち／none=未回答。
+   *  状態ラベルだけを返し、確認前の非公開の回答内容はこれまでどおり出さない */
+  policy?: "done" | "pending" | "none";
   /** 回答日 YYYY-MM-DD（見られる結果が無ければ空） */
   answeredOn: string;
   /** 高い欲求（上位3）・低い欲求（下位3）の15項目key（needs-survey の key） */

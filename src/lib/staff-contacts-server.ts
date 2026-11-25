@@ -28,7 +28,7 @@ import {
 import { getSessionUser } from "./staff-profiles-server";
 import { isAdminUser } from "./admin-role";
 import { loadMenuAllowedUserIds } from "./menu-access-server";
-import { MENU_STAFF_CONTACTS } from "./menu-access";
+import { MENU_STAFF_CONTACTS, MENU_STAFF_CONTACTS_EDIT } from "./menu-access";
 import {
   normalizeStaffContact,
   normalizeStaffContactLog,
@@ -107,8 +107,12 @@ export type StaffContactsAuth =
       userEmail: string;
       /** 編集できるのは管理者だけ（閲覧できる＝編集できる、ではない） */
       isAdmin: boolean;
+      /** 第5便: 編集もできる（管理者、または「編集も任せる」の指名。家族構成の表示は今までどおり管理者だけ） */
+      canEdit: boolean;
       /** 現在の指名リスト（管理者向けの設定画面でのみ使う） */
       viewerUserIds: string[];
+      /** 第5便: 「編集も任せる」の指名リスト（設定画面でのみ使う） */
+      editorUserIds: string[];
       testSeed: boolean;
     };
 
@@ -128,13 +132,17 @@ export async function authorizeStaffContacts(): Promise<StaffContactsAuth> {
   // 157の menu_access をそのまま流用。未設定（null）は空扱い＝管理者のみ。
   // 読み取りに失敗したときも menu-access-server 側が空を返す（fail-close）。
   let viewerUserIds: string[];
+  let editorUserIds: string[];
   try {
     viewerUserIds = (await loadMenuAllowedUserIds(MENU_STAFF_CONTACTS)) ?? [];
+    editorUserIds = (await loadMenuAllowedUserIds(MENU_STAFF_CONTACTS_EDIT)) ?? [];
   } catch {
     return { ok: false }; // 判定できないときは開けない
   }
 
-  const allowed = isAdmin || viewerUserIds.includes(user.id);
+  // 「編集も任せる」の指名は、閲覧の指名を兼ねる（編集できるのに開けない、を作らない）
+  const canEdit = isAdmin || editorUserIds.includes(user.id);
+  const allowed = canEdit || viewerUserIds.includes(user.id);
   if (!allowed) return { ok: false };
 
   // 無効化されたアカウントを通さない（指名リストに残ったまま無効化された人を通さない）。
@@ -147,7 +155,9 @@ export async function authorizeStaffContacts(): Promise<StaffContactsAuth> {
     userId: user.id,
     userEmail: user.email ?? "",
     isAdmin,
+    canEdit,
     viewerUserIds,
+    editorUserIds,
     /** 237: 見る人が検証用アカウントか（院長でも検証用でもない人には、検証用の連絡先を出さない） */
     testSeed: isTestSeedUser(user),
   };

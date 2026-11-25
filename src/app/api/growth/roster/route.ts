@@ -6,11 +6,16 @@
 // - userId と概要（次の1on1・事前アンケートの状態）を返すのは、見ている人が **canViewStaff** でその人を見られるときだけ
 //   （院長＝全員／担当の幹部＝担当スタッフだけ）。それ以外の名前は名前だけ（link: "none"）。
 // - 「未連携」「同名で決められない」と分かるのは院長だけ（幹部には none と同じに見せる）。
-// - 名簿の管理を任されているだけの人（可能性ノートの権限なし）は 404＝画面は名前だけの名簿のまま。
+// - 第5便: 名簿の管理（スタッフ管理）を任された人には「名簿の管理ビュー」を返す：連携・在籍区分・入職日・
+//   未登録アカウントまで（＝一つの一覧で管理業務ができる）。ただしシートへのリンク（userId）と
+//   1on1 の概要は出さない（個人シートの閲覧権限は今までどおり canViewStaff）。
 // - 回答の本文は返さない（「答えたか」だけ）。
 
 import { NextResponse } from "next/server";
 import { authorizeGrowth, canViewStaff } from "@/lib/staff-growth-server";
+import { getSessionUser } from "@/lib/staff-profiles-server";
+import { loadDelegatedItems, isActiveAccountId } from "@/lib/admin-delegation-server";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { growthErrorResponse, hidden } from "@/lib/staff-growth-route";
 import { serverGetContentRow } from "@/lib/content-store-server";
 import { loadProfilesIndexServer } from "@/lib/staff-growth-roster-server";
@@ -34,6 +39,8 @@ export type RosterMemberView = {
   account?: "active" | "disabled";
   /** 第2便：入職日 YYYY-MM-DD（院長だけ・スタッフ連絡先から。未登録は空） */
   joinedOn?: string;
+  /** 第5便：在籍区分（スタッフ連絡先から）。産休・育休/休職は在籍のまま・無効化とは別 */
+  employment?: "active" | "maternity" | "leave" | "left";
 };
 
 /** 第2便：アカウント（プロフィール登録済み）はあるのに名簿に載っていない人（院長だけ） */
@@ -45,18 +52,32 @@ export type UnregisteredAccountView = {
 
 export async function GET() {
   const auth = await authorizeGrowth();
-  // 院長、または担当スタッフを指定された幹部（183）だけ。本人としての権限だけの人・委任だけの人は 404
-  if (!auth.ok || (!auth.isAdmin && auth.assignedStaffIds.length === 0)) return hidden();
+  // 院長、または担当スタッフを指定された幹部（183）。第5便: 「スタッフ管理」を任された人は名簿の管理ビュー
+  let rosterManager = false;
+  if (!auth.ok || (!auth.isAdmin && auth.assignedStaffIds.length === 0)) {
+    const { user } = await getSessionUser();
+    if (!user) return hidden();
+    try {
+      rosterManager =
+        (await loadDelegatedItems(user.id)).includes("staff-members") &&
+        (await isActiveAccountId(user.id));
+    } catch {
+      rosterManager = false;
+    }
+    if (!rosterManager) return hidden();
+  }
+  const isAdmin = auth.ok && auth.isAdmin;
+  const adminClient = auth.ok ? auth.admin : createSupabaseAdminClient();
   try {
     const row = await serverGetContentRow(STAFF_MEMBERS_KEY);
     const names = Array.isArray(row?.data) ? (row.data as unknown[]).filter((n): n is string => typeof n === "string") : [];
     const people = await loadProfilesIndexServer();
     const matches = matchRosterNames(names, people);
 
-    const viewable = matches.filter((m) => m.userId && canViewStaff(auth, m.userId)).map((m) => m.userId);
+    const viewable = auth.ok ? matches.filter((m) => m.userId && canViewStaff(auth, m.userId)).map((m) => m.userId) : [];
     const today = jstTodayYmd();
     const nextByUser = new Map<string, RosterMemberView["next"]>();
-    if (viewable.length > 0) {
+    if (auth.ok && viewable.length > 0) {
       const { schedules } = await fetchSchedules(auth.admin, {});
       const mine = schedules.filter((s) => viewable.includes(s.userId));
       const views = await withAnswerState(auth.admin, mine, today);
@@ -67,11 +88,13 @@ export async function GET() {
     }
 
     const members: RosterMemberView[] = matches.map((m) => {
-      if (m.userId && canViewStaff(auth, m.userId)) {
+      if (auth.ok && m.userId && canViewStaff(auth, m.userId)) {
         return { name: m.name, link: "open", userId: m.userId, next: nextByUser.get(m.userId) ?? null };
       }
-      if (auth.isAdmin && m.ambiguous) return { name: m.name, link: "ambiguous" };
-      if (auth.isAdmin && !m.userId) return { name: m.name, link: "unlinked" };
+      // 第5便: 名簿の管理ビュー（院長・任された人）。連携済みでも userId は出さない（シートは開けない）
+      if ((isAdmin || rosterManager) && m.ambiguous) return { name: m.name, link: "ambiguous" };
+      if ((isAdmin || rosterManager) && !m.userId) return { name: m.name, link: "unlinked" };
+      if (rosterManager && m.userId) return { name: m.name, link: "open" };
       return { name: m.name, link: "none" };
     });
 
@@ -79,10 +102,10 @@ export async function GET() {
     // どれも**今ある情報を集めて見せるだけ**（新しい保存先は作らない）。取得に失敗しても名簿本体は返す。
     let unregisteredAccounts: UnregisteredAccountView[] | undefined;
     let profilelessAccountCount: number | undefined;
-    if (auth.isAdmin) {
+    if (isAdmin || rosterManager) {
       try {
         const now = Date.now();
-        const { data } = await auth.admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        const { data } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 1000 });
         const disabledIds = new Set<string>();
         const authIds = new Set<string>();
         for (const u of data?.users ?? []) {
@@ -111,10 +134,18 @@ export async function GET() {
         // ベストエフォート（アカウント一覧が読めなくても名簿は出す）
       }
       try {
-        const { contacts } = await fetchAllStaffContacts(auth.admin);
-        const joined = new Map(contacts.map((c) => [c.userId, c.joinedOn] as const));
+        const { contacts } = await fetchAllStaffContacts(adminClient);
+        // 第5便: 入職日と在籍区分（産休・育休/休職/退職）。名簿名→連絡先は userId、無ければ正規化名で引く
+        const byUser = new Map(contacts.map((c) => [c.userId, c] as const));
+        const byName = new Map(contacts.map((c) => [normalizePersonName(c.name), c] as const));
+        const matchByName = new Map(matches.map((m) => [m.name, m.userId] as const));
         for (const m of members) {
-          if (m.userId) m.joinedOn = joined.get(m.userId) ?? "";
+          const uid = matchByName.get(m.name);
+          const c = (uid ? byUser.get(uid) : undefined) ?? byName.get(normalizePersonName(m.name));
+          if (c) {
+            m.joinedOn = c.joinedOn;
+            m.employment = c.employment;
+          }
         }
       } catch {
         // 連絡先テーブル未作成などでも名簿は出す
@@ -123,7 +154,8 @@ export async function GET() {
 
     return NextResponse.json({
       members,
-      isAdmin: auth.isAdmin,
+      isAdmin,
+      rosterManager,
       ...(unregisteredAccounts !== undefined ? { unregisteredAccounts } : {}),
       ...(profilelessAccountCount !== undefined ? { profilelessAccountCount } : {}),
     });

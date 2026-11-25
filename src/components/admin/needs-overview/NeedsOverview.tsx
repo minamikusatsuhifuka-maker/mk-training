@@ -385,6 +385,9 @@ function NeedsTable({
                     </button>
                   </span>
                   {p.testSeed && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] text-amber-900" data-test-mark>🧪 検証用</span>}
+                  {/* 第5便: 公開範囲の統一状況（状態だけ・確認前の非公開の中身は出さない） */}
+                  {p.policy === "done" && <span className="ml-1 rounded bg-teal-100 px-1 text-[10px] text-teal-900" data-policy="done">✅ 統一済み</span>}
+                  {p.policy === "pending" && <span className="ml-1 rounded bg-amber-50 border border-amber-200 px-1 text-[10px] text-amber-900" data-policy="pending">⏳ 本人確認待ち</span>}
                 </td>
                 <td className="whitespace-nowrap px-1.5 py-1 text-gray-700">{p.roleLabel || "—"}</td>
                 <td className="whitespace-nowrap px-1.5 py-1 text-gray-700">{p.level ? p.levelName : <span className="text-gray-400">{NOT_DECIDED_LABEL}</span>}</td>
