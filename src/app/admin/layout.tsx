@@ -69,20 +69,11 @@ export default async function AdminLayout({
   // 未ログインは他と区別せず 404（存在しないパスと同じ応答にする）
   if (!user) notFound();
 
-  // 183: 委任された幹部（項目が1つ以上・有効なアカウント）。どのパスを開けるかは proxy が項目ごとに判定済み。
-  // メニューには指名された項目だけを出す（🔒の項目は delegatedItems に入らない）
-  const delegated = await loadDelegatedItems(user.id);
-  if (delegated.length > 0 && (await isActiveAccountId(user.id))) {
-    return (
-      <AdminShell isAdmin={false} allowedKeys={["dashboard", ...delegated]}>
-        {children}
-      </AdminShell>
-    );
-  }
-
-  // 例外: 管理者が0人のときだけ、ログイン済みの人に初回セットアップを見せる。
+  // 例外: 管理者が0人のときは、ログイン済みの人に初回セットアップ（復旧）を見せる。
   // これが無いと管理者を1人も作れない状態から復旧できなくなる（アプリ外の手段しか残らない）。
   // 「管理者が0人」はサイト全体の状態であって、パスごとに応答が変わるわけではない。
+  // 第7便修正: この判定を委任の分岐より**先**に行う。後ろにあると、委任を持つ人には
+  // 復旧画面が一生出ず、管理者0人のまま誰も「👑管理者にする」を押せなくなる。
   let adminCount = -1;
   try {
     const admin = createSupabaseAdminClient();
@@ -93,6 +84,19 @@ export default async function AdminLayout({
     if (!error) adminCount = countAdmins(data.users);
   } catch {
     adminCount = -1; // service-role未設定などは判定不能 → 404（開けない方向）
+  }
+
+  // 183: 委任された幹部（項目が1つ以上・有効なアカウント）。どのパスを開けるかは proxy が項目ごとに判定済み。
+  // メニューには指名された項目だけを出す（🔒の項目は delegatedItems に入らない）
+  if (adminCount !== 0) {
+    const delegated = await loadDelegatedItems(user.id);
+    if (delegated.length > 0 && (await isActiveAccountId(user.id))) {
+      return (
+        <AdminShell isAdmin={false} allowedKeys={["dashboard", ...delegated]}>
+          {children}
+        </AdminShell>
+      );
+    }
   }
 
   if (adminCount === 0) {

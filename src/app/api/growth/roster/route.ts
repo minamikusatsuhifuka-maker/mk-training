@@ -65,18 +65,21 @@ export type UnregisteredAccountView = {
 export async function GET() {
   const auth = await authorizeGrowth();
   // 院長、または担当スタッフを指定された幹部（183）。第5便: 「スタッフ管理」を任された人は名簿の管理ビュー
+  // 第7便修正: 委任の判定は**管理者以外の全員**で行う。これまで担当ありの幹部は判定を
+  // スキップしていたため、「スタッフ管理」を任されていても管理ビュー（連携・未登録・ナビ）が出なかった。
   let rosterManager = false;
-  if (!auth.ok || (!auth.isAdmin && auth.assignedStaffIds.length === 0)) {
-    const { user } = await getSessionUser();
-    if (!user) return hidden();
+  if (!auth.ok || !auth.isAdmin) {
+    const userId = auth.ok ? auth.userId : (await getSessionUser()).user?.id;
+    if (!userId) return hidden();
     try {
       rosterManager =
-        (await loadDelegatedItems(user.id)).includes("staff-members") &&
-        (await isActiveAccountId(user.id));
+        (await loadDelegatedItems(userId)).includes("staff-members") &&
+        (await isActiveAccountId(userId));
     } catch {
       rosterManager = false;
     }
-    if (!rosterManager) return hidden();
+    // 開ける条件は従来どおり: 院長／担当ありの幹部／任された人
+    if (!rosterManager && !(auth.ok && auth.assignedStaffIds.length > 0)) return hidden();
   }
   const isAdmin = auth.ok && auth.isAdmin;
   const adminClient = auth.ok ? auth.admin : createSupabaseAdminClient();
