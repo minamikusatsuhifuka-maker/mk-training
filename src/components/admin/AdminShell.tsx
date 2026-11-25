@@ -236,7 +236,13 @@ export function AdminShell({
           >
             ☰
           </button>
-          <span className="text-base md:text-lg font-bold">南草津皮フ科 管理画面</span>
+          <span className="text-base md:text-lg font-bold">
+            南草津皮フ科 管理画面
+            {/* 第7便: 2つの画面の違いを常に見える場所に（管理画面＝設定と運営／スタッフ画面＝毎日の利用） */}
+            <span className="hidden md:inline ml-2 text-[11px] font-normal text-slate-400">
+              設定・運営の作業はこちら／毎日の利用はスタッフ画面
+            </span>
+          </span>
         </div>
         <div className="flex items-center gap-4">
           {/* フォント切り替え（139・271・272 今の設定のボタン→押すと開く。デスクトップのみ。モバイルは☰内） */}
@@ -246,8 +252,9 @@ export function AdminShell({
           <Link
             href="/"
             className="text-xs md:text-sm text-slate-300 hover:text-white transition-colors"
+            title="ホーム・私の個人シート・タスクなど、毎日の利用はスタッフ画面"
           >
-            ← スタッフ画面
+            ← スタッフ画面へ（毎日の利用）
           </Link>
         </div>
       </header>

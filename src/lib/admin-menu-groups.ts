@@ -50,43 +50,50 @@ export const DEFAULT_PLACE_AFTER: Readonly<Record<string, string>> = { [NEEDS_OV
 export type AdminMenuGroup = { id: string; label: string; items: string[] };
 export type AdminMenuConfig = { groups: AdminMenuGroup[]; updatedAt?: string };
 
-/** はじめの振り分け（241 §1・グループの名前は仮。院長が画面で変えられる） */
+/** はじめの振り分け（241 §1・グループの名前は仮。院長が画面で変えられる）
+ *  第7便: 作業の種類ごとに並べ替え（よく使う「スタッフ」を上に。項目の中身・権限は不変） */
 export const DEFAULT_ADMIN_MENU_GROUPS: readonly AdminMenuGroup[] = [
   {
-    id: "g-ops",
-    label: "🏠 運営・ポータル",
+    id: "g-staff",
+    label: "👥 スタッフ（名簿・連絡先・権限）",
     items: [
-      "portal",
-      "font-default",
-      "nav",
       "staff-members",
-      "task-categories",
-      "operations",
-      "profile-fields",
-      "staff-accounts",
-      "x:doc-tasks",
-      "x:doc-tasks-settings",
       "x:staff-contacts",
       "x:staff-contacts-settings",
+      "staff-accounts",
+      "delegation",
+      "profile-fields",
     ],
   },
   {
     id: "g-growth",
-    label: "🌱 人材育成・1on1",
+    label: "🌱 育成・1on1・サーベイ",
     items: [
-      "presurvey",
-      "presurvey-answers",
-      "one-on-one-slots",
       "x:staff-growth",
       NEEDS_OVERVIEW_MENU_KEY,
-      "x:courses",
+      "presurvey-answers",
+      "one-on-one-slots",
+      "presurvey",
       "x:member-notes",
-      "expert",
-      "deep-research",
-      "notice-attendance",
+      "x:courses",
       "x:needs-guide",
       "people-training",
       "michishirube",
+      "expert",
+      "deep-research",
+    ],
+  },
+  {
+    id: "g-portal",
+    label: "📣 ポータルの中身・お知らせ",
+    items: [
+      "portal",
+      "nav",
+      "notice-attendance",
+      "task-categories",
+      "operations",
+      "x:doc-tasks",
+      "x:doc-tasks-settings",
     ],
   },
   { id: "g-org", label: "🏛 組織・理念", items: ["knowledge-system", "ai-background", "x:retro", "priority-matrix"] },
@@ -96,7 +103,7 @@ export const DEFAULT_ADMIN_MENU_GROUPS: readonly AdminMenuGroup[] = [
     items: ["knowledge", "diseases", "drugs", "contraindications", "interactions", "pregnancy", "biologics", "medical-fees", "quiz"],
   },
   { id: "g-beauty", label: "✨ 美容・カウンセリング", items: ["counseling", "cosmetic", "skincare"] },
-  { id: "g-settings", label: "⚙ 設定・検証", items: ["delegation", "settings", "test-seed", "delete-password", "terminals", "changelog"] },
+  { id: "g-settings", label: "⚙ 設定・検証", items: ["font-default", "settings", "test-seed", "delete-password", "terminals", "changelog"] },
   { id: OTHER_GROUP_ID, label: OTHER_GROUP_LABEL, items: [] },
 ];
 

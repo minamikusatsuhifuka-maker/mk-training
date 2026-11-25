@@ -255,6 +255,14 @@ export default function StaffMembersAdminPage() {
           </Button>
         </div>
 
+        {/* 第7便: 「名前が押せない＝連携していない」と見えないように、リンクが出る条件を明示 */}
+        {extra.rosterManager === true && extra.isAdmin !== true && (
+          <p className="text-xs rounded-md bg-slate-50 border border-slate-200 text-slate-600 px-3 py-2">
+            この画面では名簿の管理（追加・✏️変更・削除・📇連絡先・未登録アカウント）ができます。
+            名前を押して個人シートを開けるのは、個人シートを見られる人（院長・担当の幹部・管理者）だけ、
+            🧭サーベイ状態は管理者だけに出ます（リンクが無くても連携が切れているわけではありません）。
+          </p>
+        )}
         {noAccess && (
           <p className="text-xs rounded-md bg-slate-50 border border-slate-200 text-slate-600 px-3 py-2">
             連携状態・在籍区分・入職日・「名簿に未登録のアカウント」は、院長と「スタッフ管理」を任された人にだけ表示されます（シートへのリンクは、個人シートを見られる人だけ）。
