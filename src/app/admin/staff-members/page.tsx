@@ -213,6 +213,30 @@ export default function StaffMembersAdminPage() {
         </p>
       </div>
 
+      {/* 第7便: どこを押すか迷わないための「やることナビ」（順番つき・この画面が入口） */}
+      {isAdmin && (
+        <div className="bg-teal-50/60 border border-teal-200 rounded-2xl p-4 space-y-2" data-staff-nav-guide>
+          <p className="text-sm font-bold text-slate-800">📌 新しいスタッフを迎えるとき（上から順に）</p>
+          <ol className="space-y-1.5 text-xs text-slate-700">
+            <li>
+              ①{" "}
+              <Link href="/admin/staff-accounts" className="text-teal-700 underline underline-offset-2 font-medium">
+                👤 アカウント招待
+              </Link>{" "}
+              でメールアドレスを招待する（ログインできるようにする）
+            </li>
+            <li>② 本人が初回ログインで氏名・職種を登録する → この画面の「🔗 名簿に未登録のアカウント」に名前が出る</li>
+            <li>③ その枠の［名簿に追加］を押す（タスクの担当候補・個人シートの入口になる）</li>
+            <li>④ 下の一覧でその人の行の「📇 連絡先」→ ✏️編集 →「住所・電話・緊急連絡先・入職日・在籍区分」を入れて 💾保存</li>
+            <li>⑤ サーベイ・写真は本人がスマホで登録 → 進み具合はこの一覧の 🧭 に出る</li>
+          </ol>
+          <p className="text-[11px] text-slate-600">
+            アカウントより先に名前だけ載せたいときは、下の入力欄に氏名を入れて「追加」。
+            氏名の直しは行の「✏️ 変更」（過去のタスク担当名も自動で付け替え）。ログイン停止（退職）は 👤 アカウント招待で。
+          </p>
+        </div>
+      )}
+
       <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
         <div className="flex gap-2">
           <Input
