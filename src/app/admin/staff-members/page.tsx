@@ -33,6 +33,15 @@ type RosterView = {
   account?: "active" | "disabled";
   joinedOn?: string;
   employment?: "active" | "maternity" | "leave" | "left";
+  /** 第6便: サーベイの入力様式の状態（管理者だけ返る・点数は含まれない） */
+  survey?: {
+    policy: "done" | "pending" | "none";
+    image: boolean;
+    values: boolean;
+    details: number;
+    aiParsed: boolean;
+    updatedOn: string;
+  };
 };
 
 type RosterPayload = {
@@ -199,6 +208,8 @@ export default function StaffMembersAdminPage() {
           <Link href="/admin/staff-accounts" className="text-teal-700 underline underline-offset-2 mx-0.5">👤 アカウント招待</Link>、
           職種は本人のプロフィールで登録します（管理者は書き換えません）。
           📇 スタッフ連絡先を開けるのは院長と指名された人だけです（それ以外の人には404が出ます。指名は連絡先画面の「⚙ 設定」から）。
+          各行の「📇 連絡先」を押すと、その人の連絡先をすぐ開けます（まだ無ければ氏名入りの登録フォームが開きます）。
+          🧭 はサーベイの入力様式の状態です（そろっている形＝結果画像あり・詳細15項目入力・公開範囲の統一。点数や回答の中身はこの画面に出ません）。
         </p>
       </div>
 
@@ -279,6 +290,15 @@ export default function StaffMembersAdminPage() {
                   <>
                     <RosterName name={m} view={roster.get(m)} isAdmin={isAdmin} />
                     <span className="flex shrink-0 items-center gap-2">
+                      {isAdmin && (
+                        <Link
+                          href={`/staff-contacts?q=${encodeURIComponent(formatPersonName(m))}`}
+                          className="text-xs text-slate-500 hover:text-teal-700 min-h-[32px] inline-flex items-center"
+                          title="住所・電話・緊急連絡先・入職日・在籍区分の登録・編集（📇 スタッフ連絡先で、この人を開きます。開けるのは院長と指名された人だけ）"
+                        >
+                          📇 連絡先
+                        </Link>
+                      )}
                       <button
                         type="button"
                         onClick={() => startEdit(m)}
@@ -410,14 +430,52 @@ function RosterName({ name, view, isAdmin }: { name: string; view: RosterView | 
           )}
           {isAdmin && view.joinedOn && <>{" ・ "}入職 {view.joinedOn.replaceAll("-", "/")}</>}
         </span>
+        {view.survey && <SurveyCheck s={view.survey} />}
       </span>
     );
   }
 
   return (
-    <span className="flex items-center gap-2 min-w-0">
-      <span className="text-sm text-slate-800 min-h-[32px] inline-flex items-center truncate">{shown}</span>
-      {badges}
+    <span className="flex min-w-0 flex-col">
+      <span className="flex items-center gap-2 min-w-0">
+        <span className="text-sm text-slate-800 min-h-[32px] inline-flex items-center truncate">{shown}</span>
+        {badges}
+      </span>
+      {view?.survey && <SurveyCheck s={view.survey} />}
+    </span>
+  );
+}
+
+/** 第6便: サーベイの入力様式の状態（管理者だけ・点数は出さない）。
+ *  そろっている形＝結果画像あり・詳細15項目入力・公開範囲の統一。
+ *  足りないものは「本人にお願いすること」の形で出す（本人入力の決まりのまま・管理者は書き換えない）。 */
+function SurveyCheck({ s }: { s: NonNullable<RosterView["survey"]> }) {
+  if (s.policy === "none") {
+    return (
+      <span className="text-[11px] text-slate-500" data-survey-check="none">
+        🧭 サーベイ未回答 ・ お願い: プロフィール画面で回答（画像アップロードまたは手入力）
+      </span>
+    );
+  }
+  const asks: string[] = [];
+  if (!s.image) asks.push("結果画像（またはPDF）のアップロード");
+  if (s.details < 15) asks.push(`詳細15項目の入力（いま ${s.details}/15）`);
+  if (!s.values && s.details === 0) asks.push("5欲求の値の入力");
+  if (s.policy === "pending") asks.push("公開範囲の確認（✅ この公開範囲にする → 💾 保存）");
+  return (
+    <span className="text-[11px]" data-survey-check={s.policy}>
+      🧭{" "}
+      {s.policy === "done" ? (
+        <span className="text-teal-700">公開統一済み</span>
+      ) : (
+        <span className="text-amber-700">公開の本人確認待ち</span>
+      )}
+      {s.updatedOn && <span className="text-slate-500">・回答 {s.updatedOn.replaceAll("-", "/")}</span>}
+      {asks.length > 0 ? (
+        <span className="text-amber-800">・お願い: {asks.join("、")}</span>
+      ) : (
+        <span className="text-slate-500">・そろっています（画像・15項目）</span>
+      )}
     </span>
   );
 }

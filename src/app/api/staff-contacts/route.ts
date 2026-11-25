@@ -147,6 +147,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "不正なリクエストです" }, { status: 400 });
   }
 
+  // 第6便: 家族構成（179 D）は管理者以外に**見せていない**ので、書かせもしない。
+  // 指名された編集者のフォームには家族欄が無いが、送られてきても落とす（クライアントを信じない）。
+  if (!auth.isAdmin) delete body.family;
+
   const contact = buildContact(genId(), body, null);
   if (!contact) {
     return NextResponse.json({ error: "氏名は必須です" }, { status: 400 });
@@ -172,7 +176,8 @@ export async function POST(req: Request) {
       target: contact.name,
       changes: staffContactSnapshot(contact),
     });
-    return NextResponse.json({ contact });
+    // 家族構成は管理者以外に返さない（GETと同じ基準で渡す前に落とす）
+    return NextResponse.json({ contact: auth.isAdmin ? contact : withoutFamily(contact) });
   } catch (e) {
     return errorResponse(e);
   }
@@ -194,6 +199,10 @@ export async function PATCH(req: Request) {
   if (!id) {
     return NextResponse.json({ error: "id は必須です" }, { status: 400 });
   }
+  // 第6便: 管理者以外は家族構成を受け取らない。GETで家族を落とした値がそのまま
+  // 送り返されると {...base, ...body} の重ね合わせで**保存済みの家族が消える**ため、
+  // ここで落として base（保存済み）の家族を守る。
+  if (!auth.isAdmin) delete body.family;
 
   try {
     const prev = await fetchStaffContactRow(auth.admin, id);
@@ -225,7 +234,7 @@ export async function PATCH(req: Request) {
         changes,
       });
     }
-    return NextResponse.json({ contact: next });
+    return NextResponse.json({ contact: auth.isAdmin ? next : withoutFamily(next) });
   } catch (e) {
     return errorResponse(e);
   }

@@ -13,11 +13,25 @@ import { StaffContactsBoard } from "@/components/StaffContactsBoard";
 // セッション依存のため常に動的レンダリング
 export const dynamic = "force-dynamic";
 
-export default async function StaffContactsPage() {
+export default async function StaffContactsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
   const auth = await authorizeStaffContacts();
   if (!auth.ok) notFound();
 
-  // 編集できるのは管理者のみ（169-1-2）。表示の出し分けはここで渡した値に従うが、
-  // 実際の可否はAPI側でも管理者判定をやり直している。
-  return <StaffContactsBoard isAdmin={auth.isAdmin} />;
+  // 第6便: 👥スタッフ管理の行から「📇 連絡先」で来たとき、?q=氏名 で検索欄を埋めて
+  // その人をすぐ開けるようにする（スタッフ管理 → 対象者 → 編集 → 保存、の一本道）。
+  const { q } = await searchParams;
+
+  // 登録・修正は管理者と「編集も任せる人」（第5便）。削除・家族構成の表示は管理者のみ。
+  // 表示の出し分けはここで渡した値に従うが、実際の可否はAPI側でも判定をやり直している。
+  return (
+    <StaffContactsBoard
+      isAdmin={auth.isAdmin}
+      canEdit={auth.canEdit}
+      initialKeyword={(q ?? "").trim()}
+    />
+  );
 }

@@ -4,8 +4,11 @@
 // 画面に到達できている時点でサーバー側の認可は通っている（ここでの出し分けは体裁のみ）。
 //
 // 一覧は氏名と主要な連絡先だけ、詳細は全項目（169-3-3）。
-// 編集・削除は管理者のみ（169-1-2。API側でも管理者判定をやり直している）。
+// 登録・修正は管理者と「編集も任せる人」（第5便 canEdit。API側でも判定をやり直している）。
+// 削除と家族構成の表示・編集は管理者のみ（169-1-2・179 D）。
 // 退職者（無効化されたアカウント）は既定で隠し、切り替えで見られる（169-3-4）。
+// 第6便: ?q=氏名 で来たとき検索欄を埋め、1人に決まればその人を開く。連絡先が
+// まだ無ければ（編集できる人には）氏名入りの登録フォームを開く＝スタッフ管理からの一本道。
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -27,10 +30,21 @@ import {
 } from "@/lib/staff-contacts";
 import type { EmploymentStatus } from "@/lib/staff-contacts";
 import { FAMILY_NOTICE } from "@/lib/staff-growth";
+import { normalizePersonName } from "@/lib/staff-sheet";
 import { loadProfilesIndex } from "@/lib/staff-profiles";
 import type { StaffProfileIndexEntry } from "@/lib/staff-profiles";
 
-export function StaffContactsBoard({ isAdmin }: { isAdmin: boolean }) {
+export function StaffContactsBoard({
+  isAdmin,
+  canEdit = isAdmin,
+  initialKeyword = "",
+}: {
+  isAdmin: boolean;
+  /** 登録・修正ができる人（管理者＋「編集も任せる人」）。削除・家族構成は isAdmin のみ */
+  canEdit?: boolean;
+  /** ?q=氏名（スタッフ管理の行の「📇 連絡先」から） */
+  initialKeyword?: string;
+}) {
   const [contacts, setContacts] = useState<StaffContact[]>([]);
   const [retired, setRetired] = useState<Set<string>>(new Set());
   const [testIds, setTestIds] = useState<Set<string>>(new Set());
@@ -41,7 +55,9 @@ export function StaffContactsBoard({ isAdmin }: { isAdmin: boolean }) {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const [keyword, setKeyword] = useState("");
+  const [keyword, setKeyword] = useState(initialKeyword);
+  /** ?q= から来た1回だけの自動オープンを済ませたか */
+  const [autoOpened, setAutoOpened] = useState(false);
   const [showRetired, setShowRetired] = useState(false);
   const [expanded, setExpanded] = useState("");
   /** "" = 閉じている / "new" = 新規登録 / それ以外 = そのidを編集中 */
@@ -53,8 +69,8 @@ export function StaffContactsBoard({ isAdmin }: { isAdmin: boolean }) {
       const [json, idx] = await Promise.all([
         fetchStaffContacts(),
         // 名簿は「アカウントの紐付け」を選ぶ登録フォームでしか使わないので、
-        // 編集できない人（＝管理者以外）のためには取りに行かない
-        isAdmin
+        // 編集できない人のためには取りに行かない（第5便: 編集を任された人も使う）
+        canEdit
           ? loadProfilesIndex().catch(() => [] as StaffProfileIndexEntry[])
           : Promise.resolve([] as StaffProfileIndexEntry[]),
       ]);
@@ -68,7 +84,7 @@ export function StaffContactsBoard({ isAdmin }: { isAdmin: boolean }) {
     } finally {
       setLoaded(true);
     }
-  }, [isAdmin]);
+  }, [canEdit]);
 
   useEffect(() => {
     void load();
@@ -79,18 +95,49 @@ export function StaffContactsBoard({ isAdmin }: { isAdmin: boolean }) {
     [retired]
   );
 
+  // 氏名は空白の有無で揺れるため、正規化名の一致も「同じ人」とみなす（統合はしない・開くだけ）
+  const hitsName = useCallback(
+    (c: StaffContact, q: string) =>
+      matchStaffContact(c, q) || normalizePersonName(c.name) === normalizePersonName(q),
+    []
+  );
+
   const visible = useMemo(() => {
     const list = contacts.filter(
       (c) =>
-        (showRetired || !isRetired(c)) && matchStaffContact(c, keyword)
+        (showRetired || !isRetired(c)) && hitsName(c, keyword)
     );
     return sortStaffContacts(list);
-  }, [contacts, showRetired, keyword, isRetired]);
+  }, [contacts, showRetired, keyword, isRetired, hitsName]);
 
   const retiredCount = useMemo(
     () => contacts.filter(isRetired).length,
     [contacts, isRetired]
   );
+
+  // 第6便: ?q=氏名 で来たとき（スタッフ管理の「📇 連絡先」）、読み込み後に1回だけ
+  // その人を自動で開く。1人に決まらなければ検索欄に入れるだけ（推測で開かない）。
+  // まだ連絡先が無い人なら、編集できる人には氏名入りの登録フォームを開く。
+  useEffect(() => {
+    if (autoOpened || !loaded || !initialKeyword) return;
+    setAutoOpened(true);
+    const hits = contacts.filter((c) => hitsName(c, initialKeyword));
+    if (hits.length === 1) {
+      setExpanded(hits[0].id);
+      if (isRetired(hits[0])) setShowRetired(true);
+      return;
+    }
+    if (hits.length === 0 && canEdit) setEditing("new");
+  }, [autoOpened, loaded, initialKeyword, contacts, canEdit, isRetired, hitsName]);
+
+  /** 新規登録フォームの初期値（?q= の氏名がまだ無ければ入れておく） */
+  const newInitial = useMemo(() => {
+    const e = emptyStaffContact();
+    if (initialKeyword && !contacts.some((c) => hitsName(c, initialKeyword))) {
+      e.name = initialKeyword;
+    }
+    return e;
+  }, [initialKeyword, contacts, hitsName]);
 
   const flash = (text: string) => {
     setMsg(text);
@@ -171,7 +218,12 @@ export function StaffContactsBoard({ isAdmin }: { isAdmin: boolean }) {
           {isAdmin ? (
             <>
               <br />
-              登録・修正・削除は管理者だけが行えます。
+              登録・修正は管理者と「編集も任せる人」（⚙ 設定で指名）、削除と家族構成は管理者だけが行えます。
+            </>
+          ) : canEdit ? (
+            <>
+              <br />
+              あなたは<strong>登録・修正ができます</strong>（削除と、ご家族・保証人の情報の表示は管理者のみです）。
             </>
           ) : (
             <>
@@ -220,12 +272,13 @@ export function StaffContactsBoard({ isAdmin }: { isAdmin: boolean }) {
         </p>
       </div>
 
-      {isAdmin && (
+      {canEdit && (
         <div>
           {editing === "new" ? (
             <StaffContactForm
               key="new"
-              initial={emptyStaffContact()}
+              initial={newInitial}
+              allowFamily={isAdmin}
               members={members}
               busy={busy}
               onCancel={() => setEditing("")}
@@ -266,6 +319,7 @@ export function StaffContactsBoard({ isAdmin }: { isAdmin: boolean }) {
                   <StaffContactForm
                     key={c.id}
                     initial={c}
+                    allowFamily={isAdmin}
                     members={members}
                     busy={busy}
                     onCancel={() => setEditing("")}
@@ -309,7 +363,7 @@ export function StaffContactsBoard({ isAdmin }: { isAdmin: boolean }) {
                     <div className="px-3 pb-3 border-t border-gray-100 pt-2 space-y-2">
                       <ContactDetail contact={c} isAdmin={isAdmin} />
 
-                      {isAdmin && (
+                      {canEdit && (
                         <div className="flex flex-wrap gap-2 pt-1">
                           <button
                             type="button"
@@ -321,14 +375,16 @@ export function StaffContactsBoard({ isAdmin }: { isAdmin: boolean }) {
                           >
                             ✏️ 編集
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => remove(c)}
-                            disabled={busy}
-                            className="px-3 py-2 border border-red-300 text-red-700 rounded-full text-xs hover:bg-red-50 disabled:opacity-40 min-h-[40px]"
-                          >
-                            🗑 削除
-                          </button>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => remove(c)}
+                              disabled={busy}
+                              className="px-3 py-2 border border-red-300 text-red-700 rounded-full text-xs hover:bg-red-50 disabled:opacity-40 min-h-[40px]"
+                            >
+                              🗑 削除
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -463,19 +519,22 @@ function Row({
 }
 
 /**
- * 登録・編集フォーム（管理者のみ到達する）。
+ * 登録・編集フォーム（管理者と「編集も任せる人」が到達する・第5便）。
  * 項目は指示書169-2-1／2-2のものだけ。2-3のものは型に無いので入力欄も作れない。
+ * 家族構成（179 D）は管理者のみ（allowFamily）。API側でも管理者以外の family は受け取らない。
  */
 function StaffContactForm({
   initial,
   members,
   busy,
+  allowFamily,
   onCancel,
   onSubmit,
 }: {
   initial: StaffContact;
   members: StaffProfileIndexEntry[];
   busy: boolean;
+  allowFamily: boolean;
   onCancel: () => void;
   onSubmit: (input: StaffContactInput) => void;
 }) {
@@ -705,7 +764,14 @@ function StaffContactForm({
         )}
       </section>
 
-      {/* 家族構成（本人申告・179 D）。このフォームに到達できるのは管理者だけ */}
+      {/* 家族構成（本人申告・179 D）: 管理者だけが見る・書く（第6便: 編集を任された人には出さない。
+          サーバーも管理者以外の family は受け取らず、保存済みの値を守る） */}
+      {!allowFamily && (
+        <p className="text-[10px] text-gray-500 rounded-md border border-gray-200 bg-gray-50 p-2">
+          👪 家族構成（本人申告）の表示・編集は管理者のみです。この保存で消えることはありません。
+        </p>
+      )}
+      {allowFamily && (
       <section className="rounded-lg border border-gray-200 bg-white p-2 space-y-2">
         <p className="text-xs font-medium text-gray-800">👪 家族構成（本人申告・最大{FAMILY_MAX}行）</p>
         <p className="text-[10px] text-gray-700 leading-relaxed bg-amber-50 border border-amber-200 rounded-md p-2">
@@ -772,6 +838,7 @@ function StaffContactForm({
           </button>
         )}
       </section>
+      )}
 
       <div className="flex flex-wrap gap-2">
         <button

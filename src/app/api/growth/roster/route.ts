@@ -17,9 +17,10 @@ import { getSessionUser } from "@/lib/staff-profiles-server";
 import { loadDelegatedItems, isActiveAccountId } from "@/lib/admin-delegation-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { growthErrorResponse, hidden } from "@/lib/staff-growth-route";
-import { serverGetContentRow } from "@/lib/content-store-server";
+import { serverGetContentRow, serverGetContentRowsByPrefix } from "@/lib/content-store-server";
 import { loadProfilesIndexServer } from "@/lib/staff-growth-roster-server";
 import { matchRosterNames, normalizePersonName } from "@/lib/staff-sheet";
+import { NEED_DETAIL_ITEMS, radarValuesOf, type NeedsSurvey } from "@/lib/needs-survey";
 import { fetchAllStaffContacts } from "@/lib/staff-contacts-server";
 import { jstTodayYmd } from "@/lib/library";
 import { fetchSchedules, withAnswerState } from "@/lib/one-on-one-schedule-server";
@@ -41,6 +42,17 @@ export type RosterMemberView = {
   joinedOn?: string;
   /** 第5便：在籍区分（スタッフ連絡先から）。産休・育休/休職は在籍のまま・無効化とは別 */
   employment?: "active" | "maternity" | "leave" | "left";
+  /** 第6便：サーベイの入力様式の状態（管理者だけ）。
+   *  「答えたか・結果画像・詳細15項目の入力数・公開範囲の統一状況」の**状態だけ**で、
+   *  点数・画像・注力・現況は返さない（見える範囲はこれまでどおり本人の公開設定で決まる） */
+  survey?: {
+    policy: "done" | "pending" | "none";
+    image: boolean;
+    values: boolean;
+    details: number;
+    aiParsed: boolean;
+    updatedOn: string;
+  };
 };
 
 /** 第2便：アカウント（プロフィール登録済み）はあるのに名簿に載っていない人（院長だけ） */
@@ -149,6 +161,37 @@ export async function GET() {
         }
       } catch {
         // 連絡先テーブル未作成などでも名簿は出す
+      }
+    }
+
+    // ── 第6便: サーベイの入力様式の状態（管理者だけ。委任の rosterManager には出さない）──
+    // 第5便の確定事項「管理者に統一済み／本人確認待ちを表示・確認前の非公開の回答内容は表示しない」の
+    // スタッフ管理版。状態フラグだけを集め、点数・画像・注力・現況は一切返さない。
+    if (isAdmin) {
+      try {
+        const rows = await serverGetContentRowsByPrefix("staff_profile:");
+        const surveyByUser = new Map<string, NeedsSurvey | null>();
+        for (const row of rows) {
+          const p = row.data as { userId?: unknown; needsSurvey?: NeedsSurvey } | null;
+          if (p && typeof p.userId === "string") surveyByUser.set(p.userId, p.needsSurvey ?? null);
+        }
+        const uidByName = new Map(matches.map((m) => [m.name, m.userId] as const));
+        for (const m of members) {
+          const uid = uidByName.get(m.name);
+          if (!uid || !surveyByUser.has(uid)) continue; // アカウント未連携・プロフィール未登録は出さない（推測しない）
+          const s = surveyByUser.get(uid);
+          const details = s?.details ?? {};
+          m.survey = {
+            policy: !s ? "none" : s.visibility === "public_details" ? "done" : "pending",
+            image: !!s?.imageUrl,
+            values: Object.keys(radarValuesOf(s ?? null)).length > 0,
+            details: NEED_DETAIL_ITEMS.filter((i) => typeof details[i.key]?.desire === "number").length,
+            aiParsed: s?.aiParsed === true,
+            updatedOn: (s?.updatedAt ?? "").slice(0, 10),
+          };
+        }
+      } catch {
+        // プロフィールが読めなくても名簿は出す
       }
     }
 
