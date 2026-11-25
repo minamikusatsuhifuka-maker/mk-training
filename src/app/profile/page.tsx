@@ -1306,7 +1306,7 @@ export default function ProfilePage() {
           <strong data-survey-admin-note>{directorView?.on ? PROFILE_ADMIN_NOTE_ON : PROFILE_ADMIN_NOTE_OFF}</strong>
           <strong>{directorView?.on ? PROFILE_FOCUS_NOTE_ON : PROFILE_FOCUS_NOTE_OFF}</strong>
           <br />
-          公開範囲は院内方針で統一しています（上のとおり）。気になることがあれば院長へ直接どうぞ。
+          公開範囲は院内方針で統一しています（上のとおり）。
         </p>
         {/* 182 B-4: 履歴の説明（常時表示） */}
         <p className="text-xs text-muted-foreground leading-relaxed rounded-md border border-border bg-gray-50 p-2" data-survey-history-note>

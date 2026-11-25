@@ -155,8 +155,8 @@ export function directorViewOptions(texts: NeedsDirectorTexts | null): { value: 
 }
 
 /** 公開設定の画面の説明の段落の「管理者にも…」の文（OFF は今のまま） */
-export const PROFILE_ADMIN_NOTE_OFF = "管理者にも、選んだ設定と同じ範囲だけが見えます。";
-export const PROFILE_ADMIN_NOTE_ON = "院長以外の管理者には、選んだ設定と同じ範囲だけが見えます。院長が見る範囲は上のとおりです。";
+export const PROFILE_ADMIN_NOTE_OFF = "管理者にも、上の公開範囲で共有している内容だけが見えます（「注力」「現況」や、共有していないものは見えません）。";
+export const PROFILE_ADMIN_NOTE_ON = "院長以外の管理者には、上の公開範囲で共有している内容だけが見えます。院長が見る範囲は上のお知らせのとおりです。";
 
 /** 「注力」「現況」の文（ON のときは原本で院長の目に入ることを書く） */
 export const PROFILE_FOCUS_NOTE_OFF = "「注力」「現況」の値は、どの設定でも自分以外には見えません。";
