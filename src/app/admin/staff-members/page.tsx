@@ -190,6 +190,14 @@ export default function StaffMembersAdminPage() {
   };
 
   const isAdmin = extra.isAdmin === true || extra.rosterManager === true;
+  /** 第9便: 👤アカウント招待は管理者専用（委任できない項目）。任された人にはリンクを出さず「院長が行います」と書く（押して404にしない） */
+  const realAdmin = extra.isAdmin === true;
+  const accountsLink = (cls: string) =>
+    realAdmin ? (
+      <Link href="/admin/staff-accounts" className={cls}>👤 アカウント招待</Link>
+    ) : (
+      <span className="text-slate-600">👤 アカウント招待（院長が行います）</span>
+    );
   const unregistered = extra.unregisteredAccounts ?? [];
 
   return (
@@ -205,7 +213,7 @@ export default function StaffMembersAdminPage() {
           氏名の追加・変更はここで。住所・電話・緊急連絡先・入職日は
           <Link href="/staff-contacts" className="text-teal-700 underline underline-offset-2 mx-0.5">📇 スタッフ連絡先</Link>、
           アカウントの招待・無効化（退職）は
-          <Link href="/admin/staff-accounts" className="text-teal-700 underline underline-offset-2 mx-0.5">👤 アカウント招待</Link>、
+          {accountsLink("text-teal-700 underline underline-offset-2 mx-0.5")}、
           職種は本人のプロフィールで登録します（管理者は書き換えません）。
           📇 スタッフ連絡先を開けるのは院長と指名された人だけです（それ以外の人には404が出ます。指名は連絡先画面の「⚙ 設定」から）。
           各行の「📇 連絡先」を押すと、その人の連絡先をすぐ開けます（まだ無ければ氏名入りの登録フォームが開きます）。
@@ -235,9 +243,7 @@ export default function StaffMembersAdminPage() {
           <ol className="space-y-1.5 text-xs text-slate-700">
             <li>
               ①{" "}
-              <Link href="/admin/staff-accounts" className="text-teal-700 underline underline-offset-2 font-medium">
-                👤 アカウント招待
-              </Link>{" "}
+              {accountsLink("text-teal-700 underline underline-offset-2 font-medium")}{" "}
               でメールアドレスを招待する（ログインできるようにする）
             </li>
             <li>② 本人が初回ログインで氏名・職種を登録する → この画面の「🔗 名簿に未登録のアカウント」に名前が出る</li>
@@ -403,7 +409,7 @@ export default function StaffMembersAdminPage() {
         <p className="text-xs text-slate-500 px-1">
           このほかに、アカウントはあるがプロフィール（表示名）が未登録の人が {extra.profilelessAccountCount} 人います。
           名前が分からないためここには出せません。
-          <Link href="/admin/staff-accounts" className="text-teal-700 underline underline-offset-2 ml-1">👤 アカウント招待</Link>
+          {accountsLink("text-teal-700 underline underline-offset-2 ml-1")}
           のメールアドレス一覧でご確認ください。
         </p>
       )}
